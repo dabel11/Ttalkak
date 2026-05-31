@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: true
+
+jwt:
+  secret: test-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm
+  access-token-expiry: 3600000
+  refresh-token-expiry: 604800000
+
+ai:
+  openai:
+    api-key: test-key
+    base-url: https://api.openai.com/v1
+    default-model: gpt-4o
+  anthropic:
+    api-key: test-key
+    base-url: https://api.anthropic.com
+    default-model: claude-opus-4-5-20251001
+    version: 2023-06-01
+
+rate-limit:
+  improve:
+    anonymous-max-requests: 5
+    window-hours: 24
+
+cors:
+  allowed-origins: http://localhost:3000

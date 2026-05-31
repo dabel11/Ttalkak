@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Prompt Polish",
+  "description": "A Chrome extension UI for improving prompts before using them in AI tools.",
+  "version": "1.0.0",
+  "permissions": ["sidePanel", "scripting", "activeTab", "tabs", "clipboardWrite", "debugger"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_title": "Prompt Polish"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  }
+}

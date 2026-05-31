@@ -1,0 +1,9 @@
+# application.yml에 추가할 RAG 서버 설정
+
+rag:
+  server:
+    url: http://localhost:8000   # FastAPI 서버 주소
+                                 # Railway 배포 시 → https://your-rag-server.railway.app
+                                 
+
+implementation 'org.springframework.boot:spring-boot-starter-webflux'
