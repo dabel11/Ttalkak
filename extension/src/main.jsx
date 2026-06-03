@@ -272,9 +272,10 @@ function App() {
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
 
-    // 직전 대화를 LLM 으로 보낼 history 로 변환 (에러/미매칭 메시지는 제외)
+    // 직전 대화를 LLM 으로 보낼 history 로 변환.
+    // 에러/미매칭만 제외하고, 어시스턴트의 '질문'도 포함해야 의도를 이어서 파악함.
     const history = messages
-      .filter((m) => !m.isError && (m.role === "user" || m.executablePrompt))
+      .filter((m) => !m.isError && !m.excludeFromHistory)
       .map((m) => ({ role: m.role, content: m.content }));
 
     setMessages((prev) => [...prev, userMsg]);
@@ -310,6 +311,7 @@ function App() {
           sources:          [],
           saved:            false,
           isError:          false,
+          excludeFromHistory: true,   // 안내 메시지 → 대화 맥락에서 제외
         };
         setMessages((prev) => [...prev, noMatch]);
         setIsLoading(false);
@@ -343,8 +345,8 @@ function App() {
         id:               assistantId,
         role:             "assistant",
         content:          data.answer,
-        // Execute 시엔 개선된 프롬프트만 전송 (기법 설명/개선포인트 제외)
-        executablePrompt: data.improved_prompt || data.answer,
+        // 개선 모드일 때만 Execute 대상 존재. 질문 모드(improved_prompt 빈값)면 null → Execute 숨김
+        executablePrompt: data.improved_prompt ? data.improved_prompt : null,
         sourcePrompt:     prompt,
         sources:          data.sources || [],
         saved:            false,
@@ -625,20 +627,6 @@ function Header({
   const meta = MODE_META[ragMode] || MODE_META.prompt_techniques;
   return (
     <header className="header">
-      <label className="target-select">
-        <span>Execute</span>
-        <select
-          value={executeTarget}
-          onChange={(e) => setExecuteTarget(e.target.value)}
-          aria-label="Execute 대상 선택"
-        >
-          <option value="claude">Claude</option>
-          <option value="chatgpt">ChatGPT</option>
-          <option value="gemini">Gemini</option>
-          <option value="auto">Auto</option>
-        </select>
-      </label>
-
       <button
         className={`rag-mode-toggle ${ragMode}`}
         type="button"
@@ -676,8 +664,51 @@ function Header({
 // ── ChatFeed ──────────────────────────────────────────────────
 function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ragMode }) {
   const isEmpty = messages.length === 0 && !isLoading;
+  const scrollRef      = useRef(null);
+  const spacerRef      = useRef(null);
+  const lastUserIdRef  = useRef(null);
+
+  // 새 메시지를 보내면, 방금 보낸 사용자 메시지를 화면 최상단에 고정시킨다(ChatGPT 방식).
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) return;
+
+    const el = container.querySelector(`[data-mid="${lastUser.id}"]`);
+    if (!el) return;
+
+    const TOP_GAP = 16;
+
+    // 1) 스페이서를 0으로 두고 실제 내용 높이 측정
+    if (spacerRef.current) spacerRef.current.style.height = "0px";
+    const stack = el.parentElement;
+    const contentBelow =
+      stack.getBoundingClientRect().bottom - el.getBoundingClientRect().top;
+
+    // 2) 마지막 사용자 메시지가 상단까지 올라올 수 있도록 부족한 만큼 스페이서 확보
+    const need = Math.max(0, container.clientHeight - contentBelow - TOP_GAP);
+    if (spacerRef.current) spacerRef.current.style.height = `${need}px`;
+
+    // 3) '새로' 보낸 사용자 메시지일 때만 상단으로 스크롤
+    const isNew = lastUser.id !== lastUserIdRef.current;
+    if (isNew) {
+      lastUserIdRef.current = lastUser.id;
+      requestAnimationFrame(() => {
+        const eRect = el.getBoundingClientRect();
+        const cRect = container.getBoundingClientRect();
+        container.scrollBy({ top: eRect.top - cRect.top - TOP_GAP, behavior: "smooth" });
+      });
+    }
+  }, [messages, isLoading]);
+
   return (
-    <section className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="채팅 메시지">
+    <section
+      ref={scrollRef}
+      className={`chat-feed ${isEmpty ? "empty" : ""}`}
+      aria-label="채팅 메시지"
+    >
       {isEmpty ? (
         <Intro ragMode={ragMode} />
       ) : (
@@ -693,6 +724,8 @@ function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ra
             />
           ))}
           {isLoading && <TypingIndicator />}
+          {/* 마지막 메시지를 상단에 고정하기 위한 가변 여백 */}
+          <div ref={spacerRef} className="scroll-spacer" aria-hidden="true" />
         </div>
       )}
     </section>
@@ -739,7 +772,10 @@ function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
   const hasSources = isAssistant && message.sources?.length > 0;
 
   return (
-    <article className={`message-row ${message.role}${message.isError ? " error" : ""}`}>
+    <article
+      className={`message-row ${message.role}${message.isError ? " error" : ""}`}
+      data-mid={message.id}
+    >
       <div className="message-card">
         <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
         {hasSources && (
@@ -835,6 +871,8 @@ function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
+          // 한글 IME 조합 중 Enter 는 무시 (마지막 음절 '줘' 잔류 방지)
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             onSubmit();

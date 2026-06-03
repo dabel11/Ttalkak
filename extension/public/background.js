@@ -32,7 +32,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       });
 
       if (domResult?.[0]?.result?.ok) {
-        sendResponse({ ok: true, method: domResult[0].result.method });
+        await sleep(150);
+        await submitInPage(tab.id, targetKind);
+        sendResponse({ ok: true, method: domResult[0].result.method, submitted: true });
         return;
       }
 
@@ -56,7 +58,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         throw new Error("Prompt text was not detected in the target input.");
       }
 
-      sendResponse({ ok: true, method: "debugger" });
+      await sleep(150);
+      await submitInPage(tab.id, targetKind);
+      sendResponse({ ok: true, method: "debugger", submitted: true });
     } catch (error) {
       sendResponse({ ok: false, error: String(error) });
     }
@@ -134,6 +138,18 @@ function flattenPromptForGemini(prompt = "") {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function submitInPage(tabId, targetKind) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: submitPromptInPage,
+      args: [targetKind],
+    });
+  } catch (_error) {
+    // 전송 실패는 치명적 아님 — 사용자가 직접 Enter 가능
+  }
 }
 
 async function insertTextWithDebugger(tabId, text) {
@@ -603,4 +619,66 @@ function moveCaretToEnd(target) {
   range.collapse(false);
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+// 입력 후 실제 '전송'까지 수행 — 전송 버튼 클릭을 우선, 없으면 Enter 키 디스패치
+function submitPromptInPage(targetKind = "generic") {
+  const sendSelectorsByKind = {
+    chatgpt: [
+      "button[data-testid='send-button']",
+      "button[data-testid='composer-send-button']",
+      "button[aria-label*='Send' i]",
+      "form button[type='submit']",
+    ],
+    gemini: [
+      "button[aria-label*='Send' i]",
+      "button[aria-label*='보내기']",
+      "button.send-button",
+    ],
+    generic: [
+      "button[data-testid='send-button']",
+      "button[aria-label*='Send' i]",
+      "button[aria-label*='보내기']",
+      "button[type='submit']",
+    ],
+  };
+
+  function isClickable(el) {
+    if (!el) return false;
+    if (el.disabled || el.getAttribute("aria-disabled") === "true") return false;
+    const rect = el.getBoundingClientRect?.();
+    if (!rect || rect.width < 4 || rect.height < 4) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden" && style.pointerEvents !== "none";
+  }
+
+  const selectors = sendSelectorsByKind[targetKind] || sendSelectorsByKind.generic;
+  for (const selector of selectors) {
+    const button = Array.from(document.querySelectorAll(selector)).find(isClickable);
+    if (button) {
+      button.click();
+      return { ok: true, method: "send-button" };
+    }
+  }
+
+  // 폴백: 입력창에 Enter 키 이벤트 디스패치
+  const input =
+    document.activeElement ||
+    document.querySelector("#prompt-textarea, [contenteditable='true'], textarea, [role='textbox']");
+  if (input) {
+    for (const type of ["keydown", "keypress", "keyup"]) {
+      input.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+    return { ok: true, method: "enter-key" };
+  }
+  return { ok: false };
 }

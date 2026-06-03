@@ -59,7 +59,14 @@ def extract_improved_prompt(answer: str) -> str:
     """
     LLM 응답에서 '개선된 프롬프트' 섹션만 추출.
     포맷: **개선된 프롬프트:** ... --- **적용한 기법:**
+
+    응답이 '질문 모드'(개선 프롬프트 블록 없음)면 빈 문자열을 반환한다.
+    → 프론트는 improved_prompt 가 비면 Execute 버튼을 숨긴다.
     """
+    # 개선 프롬프트 블록(마커)이 없으면 질문 모드 → Execute 대상 없음
+    if '개선된 프롬프트' not in answer:
+        return ""
+
     # 1) **개선된 프롬프트:** 이후 ~ 다음 --- 또는 **적용한 기법 이전까지
     stop = r'(?=\n\s*---|\n\s*\*\*적용한 기법|\n\s*\*\*개선\s*포인트|\n\s*적용한 기법|\n\s*개선\s*포인트|\Z)'
     patterns = [
@@ -92,8 +99,8 @@ def extract_improved_prompt(answer: str) -> str:
     if collected:
         return '\n'.join(collected).strip()
 
-    # 최후 수단 → 전체 반환
-    return answer.strip()
+    # 마커는 있었으나 추출 실패 → Execute 대상 없음으로 처리
+    return ""
 
 
 # ── 엔드포인트 ───────────────────────────────────────────────

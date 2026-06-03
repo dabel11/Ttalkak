@@ -322,8 +322,10 @@ button:disabled {
 }
 
 .login-button {
+  flex: none;
+  white-space: nowrap;
   min-height: 36px;
-  padding: 0 18px;
+  padding: 0 16px;
   color: #fff;
   background: #020211;
   border: 0;
@@ -425,6 +427,12 @@ button:disabled {
   gap: 18px;
   margin: 0 auto;
   padding: 58px 24px 88px;
+}
+
+.scroll-spacer {
+  flex: none;
+  height: 0;
+  pointer-events: none;
 }
 
 .message-row {
@@ -842,6 +850,8 @@ button:disabled {
 
 /* ── RAG Settings Button ─────────────────────────────────── */
 .rag-settings-button {
+  flex: none;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -982,6 +992,9 @@ button:disabled {
 
 /* ── RAG Mode Toggle Button ──────────────────────────────── */
 .rag-mode-toggle {
+  flex: none;
+  white-space: nowrap;
+  line-height: 1.4;
   display: inline-flex;
   align-items: center;
   gap: 4px;
