@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Bookmark,
@@ -10,21 +10,94 @@ import {
   Eye,
   EyeOff,
   Play,
+  Plus,
   Save,
   Search,
   Send,
   Settings,
-  Sparkles,
   X,
 } from "lucide-react";
 import "./styles.css";
 
-// ── localStorage 유틸 ─────────────────────────────────────────
 const STORAGE = {
-  SAVED:   "pp_saved_prompts",
+  SAVED: "pp_saved_prompts",
   RECENTS: "pp_recent_threads",
-  CONFIG:  "pp_rag_config",
+  CONFIG: "pp_rag_config",
 };
+
+const DEFAULT_RAG_CONFIG = {
+  serverUrl: "http://localhost:8000",
+  collectionName: "prompt_techniques",
+  topK: 5,
+  model: "gemini-2.0-flash",
+};
+
+const MODE_META = {
+  prompt_techniques: {
+    label: "기법 모드",
+    desc: "프롬프트 엔지니어링 기법 기반",
+    examples: [
+      "역할 프롬프트 예시를 보여줘",
+      "Chain-of-Thought 기법을 설명해줘",
+      "Few-shot 프롬프팅 예시를 보여줘",
+      "제약 조건을 포함한 프롬프트로 바꿔줘",
+    ],
+  },
+  papers: {
+    label: "논문 모드",
+    desc: "프롬프트 엔지니어링 논문 기반",
+    examples: [
+      "프롬프트 엔지니어링 연구 흐름을 요약해줘",
+      "LLM에서 Few-shot 학습 원리를 설명해줘",
+      "Promptware Engineering이 뭐야?",
+      "논문 기반으로 메타프롬프트 작성법을 알려줘",
+    ],
+  },
+};
+
+const PROMPT_LIBRARY = [
+  {
+    id: "library-marketing-campaign",
+    title: "Marketing Campaign Strategy",
+    preview: "Plan campaign channels and execution steps from product and audience details.",
+    content: "You are a professional marketing strategist. Based on the product value, target audience, budget, and timeline, propose channel-specific campaign strategies and an execution schedule.",
+    tags: ["marketing", "campaign", "strategy"],
+  },
+  {
+    id: "library-blog-seo",
+    title: "SEO Blog Writing",
+    preview: "Suggest keyword intent, title options, structure, and CTA direction.",
+    content: "You are an SEO content editor. Based on the primary keyword, suggest search intent, title options, heading structure, body direction, and CTA.",
+    tags: ["SEO", "blog", "writing"],
+  },
+  {
+    id: "library-email",
+    title: "Business Email Draft",
+    preview: "Write a concise and polite email for the recipient and purpose.",
+    content: "You are a business communication expert. Based on the email purpose, recipient, and desired outcome, draft a concise and polite business email.",
+    tags: ["email", "business", "communication"],
+  },
+  {
+    id: "library-code-question",
+    title: "Coding Question Builder",
+    preview: "Structure a coding question with context, error, and attempted solutions.",
+    content: "You are a development mentor. Organize the problem, expected result, actual result, error message, and attempted solutions into a clear question that is easy to answer.",
+    tags: ["coding", "question", "debugging"],
+  },
+  {
+    id: "library-summary",
+    title: "Long Text Summary",
+    preview: "Summarize long text by claims, evidence, key points, and next actions.",
+    content: "You are a professional summarizer. Summarize the text into core claims, key evidence, easily missed points, and next actions.",
+    tags: ["summary", "analysis", "organizing"],
+  },
+];
+
+const tips = [
+  { icon: "1", title: "Set A Clear Goal", description: "Describe the desired output and usage context clearly." },
+  { icon: "2", title: "Add Context", description: "Include audience, tone, constraints, and output criteria." },
+  { icon: "3", title: "Specify Format", description: "Ask for bullets, tables, steps, or another concrete format." },
+];
 
 function loadStorage(key, fallback) {
   try {
@@ -41,56 +114,23 @@ function saveStorage(key, value) {
   } catch {}
 }
 
-// ── 기본 RAG 설정 ─────────────────────────────────────────────
-const DEFAULT_RAG_CONFIG = {
-  serverUrl:      "http://localhost:8000",
-  collectionName: "prompt_techniques",
-  topK:           5,
-  model:          "gemini-2.0-flash",
-};
-
-// ── 모드 메타 ─────────────────────────────────────────────────
-const MODE_META = {
-  prompt_techniques: {
-    icon: "📖",
-    label: "기법 모드",
-    desc: "100가지 프롬프트 엔지니어링 기법 기반",
-    examples: [
-      "역할 프롬프트(Role Prompting)란?",
-      "Chain-of-Thought 기법 설명해줘",
-      "Few-shot 프롬프팅 예시 보여줘",
-      "Constraint Prompting 어떻게 사용해?",
-    ],
-  },
-  papers: {
-    icon: "📄",
-    label: "논문 모드",
-    desc: "프롬프트 엔지니어링 논문 기반",
-    examples: [
-      "프롬프트 엔지니어링의 최신 연구 동향은?",
-      "LLM에서 Few-shot 학습 원리 설명해줘",
-      "Promptware Engineering이란?",
-      "TDD 기반 멀티에이전트 코드 생성 방법은?",
-    ],
-  },
-};
-
-const tips = [
-  { icon: "💡", title: "명확한 목표 설정",  description: "원하는 결과를 구체적으로 설명해주세요" },
-  { icon: "🎯", title: "컨텍스트 제공",     description: "배경 정보와 제약사항을 포함하세요" },
-  { icon: "📝", title: "구조화된 형식",     description: "출력 형식을 명시하면 더 좋은 결과를 얻을 수 있습니다" },
-];
-
-// ── 유틸 ─────────────────────────────────────────────────────
 function makeTitle(text = "") {
   const t = text.replace(/\s+/g, " ").trim();
-  if (!t) return "저장한 프롬프트";
-  return t.length > 20 ? `${t.slice(0, 20)}…` : t;
+  if (!t) return "???꾨＼?꾪듃";
+  return t.length > 20 ? `${t.slice(0, 20)}...` : t;
 }
 
 function makePreview(text = "") {
   const p = text.replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
-  return p.length > 40 ? `${p.slice(0, 40)}…` : p;
+  return p.length > 44 ? `${p.slice(0, 44)}...` : p;
+}
+
+function promptMatches(item, query) {
+  const q = query.trim().replace(/^#/, "").toLowerCase();
+  if (!q) return true;
+  return `${item.title} ${item.preview} ${item.content || ""} ${(item.tags || []).join(" ")}`
+    .toLowerCase()
+    .includes(q);
 }
 
 async function copyText(text) {
@@ -107,81 +147,82 @@ async function copyText(text) {
   }
 }
 
-// ── App ───────────────────────────────────────────────────────
 function App() {
-  const [activeTab,     setActiveTab]     = useState("search");
-  const [collapsed,     setCollapsed]     = useState(() => window.innerWidth <= 760);
-  const [query,         setQuery]         = useState("");
-  const [messages,      setMessages]      = useState([]);
-  const activeThreadId = useRef(null);   // 진행 중인 대화 스레드 id
+  const [activeTab, setActiveTab] = useState("search");
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 760);
+  const [query, setQuery] = useState("");
+  const [messages, setMessages] = useState([]);
   const [composerValue, setComposerValue] = useState("");
-  const [isLoading,     setIsLoading]     = useState(false);
-  const [copiedId,      setCopiedId]      = useState("");
-  const [notice,        setNotice]        = useState("");
-  const [authMode,      setAuthMode]      = useState(null);
-  const [currentUser,   setCurrentUser]   = useState(null);
-  const [executeTarget, setExecuteTarget] = useState("auto");
+  const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState("");
+  const [notice, setNotice] = useState("");
+  const [authMode, setAuthMode] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [executeTarget] = useState("auto");
   const [showRagSettings, setShowRagSettings] = useState(false);
+  const [ragStatus, setRagStatus] = useState("idle");
+  const [confirmAction, setConfirmAction] = useState(null);
+  const activeThreadId = useRef(null);
 
-  // localStorage 에서 초기값 로드
-  const [ragConfig, setRagConfig] = useState(() =>
-    loadStorage(STORAGE.CONFIG, DEFAULT_RAG_CONFIG)
-  );
-  const [savedItems, setSavedItems] = useState(() =>
-    loadStorage(STORAGE.SAVED, [])
-  );
-  const [recentThreads, setRecentThreads] = useState(() =>
-    loadStorage(STORAGE.RECENTS, [])
-  );
+  const [ragConfig, setRagConfig] = useState(() => loadStorage(STORAGE.CONFIG, DEFAULT_RAG_CONFIG));
+  const [savedItems, setSavedItems] = useState(() => loadStorage(STORAGE.SAVED, []));
+  const [recentThreads, setRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
 
-  // ragConfig / savedItems / recentThreads 변경 시 자동 저장
-  useEffect(() => { saveStorage(STORAGE.CONFIG,  ragConfig);      }, [ragConfig]);
-  useEffect(() => { saveStorage(STORAGE.SAVED,   savedItems);     }, [savedItems]);
-  useEffect(() => { saveStorage(STORAGE.RECENTS, recentThreads);  }, [recentThreads]);
+  useEffect(() => saveStorage(STORAGE.CONFIG, ragConfig), [ragConfig]);
+  useEffect(() => saveStorage(STORAGE.SAVED, savedItems), [savedItems]);
+  useEffect(() => saveStorage(STORAGE.RECENTS, recentThreads), [recentThreads]);
 
-  const ragMode = Object.keys(MODE_META).includes(ragConfig.collectionName)
-    ? ragConfig.collectionName
-    : "prompt_techniques";
+  const ragMode = MODE_META[ragConfig.collectionName] ? ragConfig.collectionName : "prompt_techniques";
 
-  // ── 검색 필터 ──────────────────────────────────────────────
-  const filteredSavedItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return savedItems;
-    return savedItems.filter((item) =>
-      `${item.title} ${item.preview}`.toLowerCase().includes(q)
-    );
+  const searchItems = useMemo(() => {
+    const generated = savedItems
+      .filter((item) => item.content)
+      .map((item) => ({ ...item, source: "saved" }));
+    const merged = [...PROMPT_LIBRARY.map((item) => ({ ...item, source: "library" })), ...generated];
+    const seen = new Set();
+    return merged
+      .filter((item) => {
+        const key = `${item.title}:${item.content || item.preview}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .filter((item) => promptMatches(item, query));
   }, [query, savedItems]);
 
+  const filteredSavedItems = useMemo(
+    () => savedItems.filter((item) => promptMatches(item, query)),
+    [query, savedItems]
+  );
+
   const filteredRecentThreads = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || activeTab !== "recents") return recentThreads;
-    return recentThreads.filter((t) =>
-      t.title.toLowerCase().includes(q)
-    );
+    if (activeTab !== "recents") return recentThreads;
+    return recentThreads.filter((thread) => promptMatches({ ...thread, content: thread.title }, query));
   }, [query, recentThreads, activeTab]);
 
-  // ── 저장된 프롬프트 열기 ───────────────────────────────────
+  function showNotice(message) {
+    setNotice(message);
+    window.clearTimeout(showNotice._timer);
+    showNotice._timer = window.setTimeout(() => setNotice(""), 1800);
+  }
+
   function openPrompt(item) {
-    // 저장된 대화 내용이 있으면 그대로 복원 (새 스레드로 이어감)
-    if (item.messages && item.messages.length > 0) {
+    if (item.messages?.length) {
       activeThreadId.current = null;
       setMessages(item.messages);
       return;
     }
-    // 단순 텍스트만 있으면 RAG로 재질의
-    const prompt = item.sourcePrompt || item.prompt || item.title;
     activeThreadId.current = null;
-    setComposerValue(prompt);
+    setComposerValue(item.sourcePrompt || item.content || item.prompt || item.title);
     setMessages([]);
+    showNotice("?꾨＼?꾪듃媛 ?낅젰李쎌뿉 以鍮꾨릺?덉뒿?덈떎.");
   }
 
-  // ── 최근 대화 열기 (이어서 대화) ───────────────────────────
   function openRecentThread(thread) {
     activeThreadId.current = thread.id;
     setMessages(thread.messages || []);
   }
 
-  // ── 새 대화 시작 ───────────────────────────────────────────
   function startNewChat() {
     activeThreadId.current = null;
     setMessages([]);
@@ -189,15 +230,43 @@ function App() {
     setQuery("");
   }
 
-  // ── 복사 ──────────────────────────────────────────────────
+  function saveLibraryPrompt(item) {
+    const id = item.id.startsWith("library-") ? item.id : `saved-${item.id}`;
+    setSavedItems((items) => {
+      const alreadySaved = items.some((saved) => saved.id === id || saved.id === item.id || saved.content === item.content);
+      if (alreadySaved) {
+        showNotice("??μ쓣 ?댁젣?덉뒿?덈떎.");
+        return items.filter((saved) => saved.id !== id && saved.id !== item.id && saved.content !== item.content);
+      }
+      showNotice("Saved????ν뻽?듬땲??");
+      return [
+        {
+          id,
+          title: item.title,
+          preview: item.preview || makePreview(item.content),
+          content: item.content,
+          executablePrompt: item.content,
+          sourcePrompt: item.content,
+          tags: item.tags || [],
+        },
+        ...items,
+      ];
+    });
+    return;
+    showNotice("Saved????ν뻽?듬땲??");
+  }
+
+  function isSaved(item) {
+    return savedItems.some((saved) => saved.id === item.id || saved.id === `saved-${item.id}` || saved.content === item.content);
+  }
+
   async function copyMessage(message) {
-    await copyText(message.content);
+    await copyText(message.executablePrompt || message.content);
     setCopiedId(message.id);
-    showNotice("프롬프트를 복사했습니다.");
+    showNotice("?꾨＼?꾪듃瑜?蹂듭궗?덉뒿?덈떎.");
     window.setTimeout(() => setCopiedId(""), 1100);
   }
 
-  // ── 저장 / 해제 ───────────────────────────────────────────
   function toggleSave(messageId) {
     const message = messages.find((m) => m.id === messageId);
     if (!message) return;
@@ -206,7 +275,6 @@ function App() {
     setMessages((items) =>
       items.map((m) => (m.id === messageId ? { ...m, saved: nextSaved } : m))
     );
-    showNotice(nextSaved ? "저장했습니다." : "저장을 해제했습니다.");
 
     if (nextSaved) {
       setSavedItems((items) =>
@@ -214,30 +282,33 @@ function App() {
           ? items
           : [
               {
-                id:             message.id,
-                title:          makeTitle(message.sourcePrompt || message.content),
-                preview:        makePreview(message.content),
-                content:        message.content,
+                id: message.id,
+                title: makeTitle(message.sourcePrompt || message.content),
+                preview: makePreview(message.content),
+                content: message.content,
                 executablePrompt: message.executablePrompt,
-                sourcePrompt:   message.sourcePrompt || message.content,
-                messages:       messages, // 전체 대화 저장
+                sourcePrompt: message.sourcePrompt || message.content,
+                messages,
+                tags: ["泥⑥궘"],
               },
               ...items,
             ]
       );
+      showNotice("Saved????ν뻽?듬땲??");
     } else {
       setSavedItems((items) => items.filter((i) => i.id !== messageId));
+      showNotice("??μ쓣 ?댁젣?덉뒿?덈떎.");
     }
   }
 
-  // ── Execute ───────────────────────────────────────────────
   async function executeMessage(message) {
     const prompt = message.executablePrompt || message.content;
+    const targetLabel = executeTarget === "claude" ? "Claude" : executeTarget === "gemini" ? "Gemini" : "selected AI site";
 
     if (executeTarget === "claude") {
       await copyText(prompt);
-      showNotice("Claude용 프롬프트를 복사했습니다.");
-      window.alert("Claude에서는 프롬프트를 클립보드에 복사했습니다.");
+      showNotice("Prompt copied.");
+      window.alert("The final prompt was copied to the clipboard. Open Claude and paste it into the input field.");
       return;
     }
 
@@ -246,34 +317,27 @@ function App() {
         { type: "EXECUTE_PROMPT", prompt, target: executeTarget },
         async (response) => {
           if (response?.ok) {
-            showNotice("선택한 AI 입력창에 넣었습니다.");
+            showNotice(`Prompt inserted into ${targetLabel}.`);
             return;
           }
           await copyText(prompt);
-          showNotice("자동 입력 대신 클립보드에 복사했습니다.");
-          window.alert(
-            response?.fallback === "clipboard"
-              ? "Claude에서는 프롬프트를 클립보드에 복사했습니다."
-              : "입력창에 자동 입력하지 못해 프롬프트를 클립보드에 복사했습니다."
-          );
+          showNotice("Prompt copied.");
+          window.alert(`Automatic insertion into ${targetLabel} failed. The final prompt was copied, so paste it into the AI site's input field.`);
         }
       );
       return;
     }
 
     await copyText(prompt);
-    showNotice("프롬프트를 복사했습니다.");
+    showNotice("Prompt copied.");
+    window.alert("Automatic insertion is unavailable in preview mode. The final prompt was copied, so paste it into the AI site you want to use.");
   }
 
-  // ── RAG 질의 ─────────────────────────────────────────────
   async function submitPrompt() {
     const prompt = composerValue.trim();
     if (!prompt || isLoading) return;
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
-
-    // 직전 대화를 LLM 으로 보낼 history 로 변환.
-    // 에러/미매칭만 제외하고, 어시스턴트의 '질문'도 포함해야 의도를 이어서 파악함.
     const history = messages
       .filter((m) => !m.isError && !m.excludeFromHistory)
       .map((m) => ({ role: m.role, content: m.content }));
@@ -281,112 +345,92 @@ function App() {
     setMessages((prev) => [...prev, userMsg]);
     setComposerValue("");
     setIsLoading(true);
+    setRagStatus("checking");
 
     try {
       const res = await fetch(`${ragConfig.serverUrl}/query`, {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query:           prompt,
+          query: prompt,
           collection_name: ragConfig.collectionName,
-          top_k:           ragConfig.topK,
-          model:           ragConfig.model,
+          top_k: ragConfig.topK,
+          model: ragConfig.model,
           history,
         }),
       });
 
-      // ── 상태 코드별 처리 ──────────────────────────────────
+      setRagStatus("connected");
+
       if (res.status === 404) {
-        const meta     = MODE_META[ragMode] || MODE_META.prompt_techniques;
-        const examples = meta.examples.map((e) => `• "${e}"`).join("\n");
-        const noMatch  = {
-          id:    `assistant-${Date.now()}`,
-          role:  "assistant",
-          content:
-            `🔍 "${prompt}" 와 관련된 내용을 찾지 못했습니다.\n\n` +
-            `현재 모드: ${meta.icon} ${meta.label}\n\n` +
-            `💡 이런 질문을 입력해보세요:\n${examples}`,
-          executablePrompt: null,
-          sourcePrompt:     prompt,
-          sources:          [],
-          saved:            false,
-          isError:          false,
-          excludeFromHistory: true,   // 안내 메시지 → 대화 맥락에서 제외
-        };
-        setMessages((prev) => [...prev, noMatch]);
-        setIsLoading(false);
+        const meta = MODE_META[ragMode];
+        const examples = meta.examples.map((example) => `- ${example}`).join("\n");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: "assistant",
+            content: `"${prompt}"? 愿?⑤맂 ?댁슜??李얠? 紐삵뻽?듬땲??\n\n?꾩옱 紐⑤뱶: ${meta.label}\n\n?대윴 吏덈Ц???낅젰?대낫?몄슂:\n${examples}`,
+            executablePrompt: null,
+            sourcePrompt: prompt,
+            sources: [],
+            saved: false,
+            excludeFromHistory: true,
+          },
+        ]);
         return;
       }
 
       if (res.status === 503) {
-        const body   = await res.json().catch(() => ({}));
-        const detail = body.detail || "Gemini API 할당량 초과";
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`, role: "assistant",
-            content: `⛔ ${detail}`,
-            executablePrompt: null, sourcePrompt: prompt,
-            sources: [], saved: false, isError: true,
-          },
-        ]);
-        setIsLoading(false);
-        return;
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Gemini API ?ъ슜?됱씠 珥덇낵?섏뿀?듬땲??");
       }
 
       if (!res.ok) {
         const errText = await res.text().catch(() => res.statusText);
-        throw new Error(`서버 오류 (${res.status}): ${errText}`);
+        throw new Error(`?쒕쾭 ?ㅻ쪟 (${res.status}): ${errText}`);
       }
 
-      const data      = await res.json();
-      const assistantId = `assistant-${Date.now()}`;
+      const data = await res.json();
       const assistantMsg = {
-        id:               assistantId,
-        role:             "assistant",
-        content:          data.answer,
-        // 개선 모드일 때만 Execute 대상 존재. 질문 모드(improved_prompt 빈값)면 null → Execute 숨김
-        executablePrompt: data.improved_prompt ? data.improved_prompt : null,
-        sourcePrompt:     prompt,
-        sources:          data.sources || [],
-        saved:            false,
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: data.answer,
+        executablePrompt: data.improved_prompt || null,
+        sourcePrompt: prompt,
+        sources: data.sources || [],
+        saved: false,
       };
-
       const nextMessages = [...messages, userMsg, assistantMsg];
-
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // ── 최근 대화 자동 저장 (대화 단위로 in-place 갱신) ─────
-      if (!activeThreadId.current) {
-        activeThreadId.current = `thread-${Date.now()}`;
-      }
-      const threadId      = activeThreadId.current;
-      const firstUserMsg  = nextMessages.find((m) => m.role === "user");
-      const updatedThread = {
-        id:       threadId,
-        title:    makeTitle(firstUserMsg ? firstUserMsg.content : prompt),
-        time:     "방금",
-        messages: nextMessages,
-      };
+      if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+      const threadId = activeThreadId.current;
       setRecentThreads((prev) => {
-        const rest = prev.filter((t) => t.id !== threadId);
-        return [updatedThread, ...rest].slice(0, 30); // 최대 30개
+        const updatedThread = {
+          id: threadId,
+          title: makeTitle(prompt),
+          time: "諛⑷툑",
+          messages: nextMessages,
+        };
+        return [updatedThread, ...prev.filter((t) => t.id !== threadId)].slice(0, 30);
       });
-
     } catch (err) {
       const isNetwork = err instanceof TypeError;
+      setRagStatus("error");
       setMessages((prev) => [
         ...prev,
         {
-          id: `assistant-${Date.now()}`, role: "assistant",
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
           content: isNetwork
-            ? `🔌 RAG 서버에 연결할 수 없습니다.\n\n` +
-              `설정된 서버: ${ragConfig.serverUrl}\n\n` +
-              `터미널에서 RAG 서버를 실행해주세요:\n` +
-              `python3 main.py`
-            : `⚠️ 오류가 발생했습니다.\n\n${err.message}`,
-          executablePrompt: null, sourcePrompt: prompt,
-          sources: [], saved: false, isError: true,
+            ? `RAG ?쒕쾭???곌껐?????놁뒿?덈떎.\n\n?꾩옱 ?ㅼ젙???쒕쾭: ${ragConfig.serverUrl}\n\n?곕え ?붾㈃? 怨꾩냽 ?ъ슜?????덉?留??ㅼ젣 泥⑥궘??諛쏆쑝?ㅻ㈃ RAG ?쒕쾭瑜??ㅽ뻾?섍굅???곷떒??RAG ?ㅼ젙?먯꽌 ?쒕쾭 二쇱냼瑜??뺤씤?댁＜?몄슂.`
+            : `?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.\n\n${err.message}`,
+          executablePrompt: null,
+          sourcePrompt: prompt,
+          sources: [],
+          saved: false,
+          isError: true,
         },
       ]);
     } finally {
@@ -394,24 +438,26 @@ function App() {
     }
   }
 
-  function showNotice(message) {
-    setNotice(message);
-    window.clearTimeout(showNotice._timer);
-    showNotice._timer = window.setTimeout(() => setNotice(""), 1600);
+  function requestDeleteRecentThread(id) {
+    setConfirmAction({
+      title: "理쒓렐 ?????젣",
+      message: "??理쒓렐 ??붾? ??젣?좉퉴??",
+      confirmLabel: "??젣",
+      onConfirm: () => setRecentThreads((prev) => prev.filter((t) => t.id !== id)),
+    });
   }
 
-  // ── 최근 대화 삭제 ────────────────────────────────────────
-  function deleteRecentThread(id) {
-    setRecentThreads((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  // ── 저장 아이템 삭제 ──────────────────────────────────────
-  function deleteSavedItem(id) {
-    setSavedItems((prev) => prev.filter((i) => i.id !== id));
+  function requestDeleteSavedItem(id) {
+    setConfirmAction({
+      title: "??λ맂 ?꾨＼?꾪듃 ??젣",
+      message: "????λ맂 ?꾨＼?꾪듃瑜???젣?좉퉴??",
+      confirmLabel: "??젣",
+      onConfirm: () => setSavedItems((prev) => prev.filter((i) => i.id !== id)),
+    });
   }
 
   return (
-    <main className="extension-frame" aria-label="AI 프롬프트 첨삭 크롬 확장 프로그램">
+    <main className="extension-frame" aria-label="AI ?꾨＼?꾪듃 泥⑥궘 ?щ＼ ?뺤옣 ?꾨줈洹몃옩">
       <section className="extension-shell">
         <Sidebar
           activeTab={activeTab}
@@ -420,33 +466,35 @@ function App() {
           setCollapsed={setCollapsed}
           query={query}
           setQuery={setQuery}
+          searchItems={searchItems}
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
-          onOpenSavedPrompt={openPrompt}
+          isSaved={isSaved}
+          onOpenPrompt={openPrompt}
+          onSavePrompt={saveLibraryPrompt}
           onOpenRecentThread={openRecentThread}
-          onDeleteSaved={deleteSavedItem}
-          onDeleteRecent={deleteRecentThread}
+          onDeleteSaved={requestDeleteSavedItem}
+          onDeleteRecent={requestDeleteRecentThread}
         />
-        <section className="work-area" aria-label="프롬프트 첨삭 영역">
+        <section className="work-area" aria-label="?꾨＼?꾪듃 泥⑥궘 ?곸뿭">
           <Header
             currentUser={currentUser}
-            executeTarget={executeTarget}
-            setExecuteTarget={setExecuteTarget}
             onLogin={() => setAuthMode("login")}
             onLogout={() => setCurrentUser(null)}
             onToggleRagSettings={() => setShowRagSettings((v) => !v)}
             ragMode={ragMode}
+            ragStatus={ragStatus}
             onToggleRagMode={() =>
-              setRagConfig((c) => ({
-                ...c,
-                collectionName:
-                  c.collectionName === "papers" ? "prompt_techniques" : "papers",
+              setRagConfig((config) => ({
+                ...config,
+                collectionName: config.collectionName === "papers" ? "prompt_techniques" : "papers",
               }))
             }
           />
           {showRagSettings && (
             <RagSettingsPanel
               config={ragConfig}
+              status={ragStatus}
               onChange={setRagConfig}
               onClose={() => setShowRagSettings(false)}
             />
@@ -482,70 +530,88 @@ function App() {
           }}
         />
       )}
+      {confirmAction && (
+        <ConfirmModal
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmLabel={confirmAction.confirmLabel}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => {
+            confirmAction.onConfirm();
+            setConfirmAction(null);
+          }}
+        />
+      )}
     </main>
   );
 }
 
-// ── Sidebar ───────────────────────────────────────────────────
 function Sidebar({
-  activeTab, setActiveTab, collapsed, setCollapsed,
-  query, setQuery,
-  savedItems, recentItems,
-  onOpenSavedPrompt, onOpenRecentThread,
-  onDeleteSaved, onDeleteRecent,
+  activeTab,
+  setActiveTab,
+  collapsed,
+  setCollapsed,
+  query,
+  setQuery,
+  searchItems,
+  savedItems,
+  recentItems,
+  isSaved,
+  onOpenPrompt,
+  onSavePrompt,
+  onOpenRecentThread,
+  onDeleteSaved,
+  onDeleteRecent,
 }) {
   function selectTab(tabId) {
     setActiveTab(tabId);
+    setQuery("");
     if (collapsed) setCollapsed(false);
   }
 
+  const placeholder =
+    activeTab === "search"
+      ? "Search all prompts..."
+      : activeTab === "saved"
+        ? "Search saved prompts..."
+        : "Search recent chats...";
+
   return (
-    <aside
-      className={`sidebar ${collapsed ? "collapsed" : ""}`}
-      aria-label="검색, 저장, 최근 대화 사이드바"
-    >
+    <aside className={`sidebar ${collapsed ? "collapsed" : ""}`} aria-label="Search, saved prompts, and recent chats">
       <div className="sidebar-top">
-        <button
-          className="collapse-button"
-          type="button"
-          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-          onClick={() => setCollapsed((v) => !v)}
-        >
+        <button className="collapse-button" type="button" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed((v) => !v)}>
           <ChevronLeft size={16} />
         </button>
       </div>
-      <nav className="tab-list" aria-label="사이드바 탭">
-        <TabButton id="search"  activeTab={activeTab} onClick={selectTab} icon={<Search size={15} />} label="Search" />
-        <TabButton id="saved"   activeTab={activeTab} onClick={selectTab} icon={<Save size={15} />}   label="Saved" />
+      <nav className="tab-list" aria-label="Sidebar tabs">
+        <TabButton id="search" activeTab={activeTab} onClick={selectTab} icon={<Search size={15} />} label="Search" />
+        <TabButton id="saved" activeTab={activeTab} onClick={selectTab} icon={<Save size={15} />} label="Saved" />
         <TabButton id="recents" activeTab={activeTab} onClick={selectTab} icon={<Clock3 size={15} />} label="Recents" />
       </nav>
       <div className="sidebar-content">
-        {(activeTab === "search" || activeTab === "saved") && (
-          <>
-            <label className="search-input">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={activeTab === "search" ? "프롬프트 검색" : "저장된 프롬프트 검색..."}
-                aria-label="프롬프트 검색"
-              />
-            </label>
-            <PromptList items={savedItems} onOpenPrompt={onOpenSavedPrompt} onDelete={onDeleteSaved} />
-          </>
+        <label className="search-input">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} aria-label={placeholder} />
+        </label>
+        {activeTab === "search" && (
+          <PromptList
+            items={searchItems}
+            emptyText="寃?됲븷 ???덈뒗 ?꾨＼?꾪듃媛 ?놁뒿?덈떎."
+            mode="search"
+            isSaved={isSaved}
+            onOpenPrompt={onOpenPrompt}
+            onSavePrompt={onSavePrompt}
+          />
         )}
-        {activeTab === "recents" && (
-          <>
-            <label className="search-input">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="최근 대화 검색..."
-                aria-label="최근 대화 검색"
-              />
-            </label>
-            <RecentList items={recentItems} onOpenThread={onOpenRecentThread} onDelete={onDeleteRecent} />
-          </>
+        {activeTab === "saved" && (
+          <PromptList
+            items={savedItems}
+            emptyText="??λ맂 ?꾨＼?꾪듃媛 ?놁뒿?덈떎."
+            mode="saved"
+            onOpenPrompt={onOpenPrompt}
+            onDelete={onDeleteSaved}
+          />
         )}
+        {activeTab === "recents" && <RecentList items={recentItems} onOpenThread={onOpenRecentThread} onDelete={onDeleteRecent} />}
       </div>
     </aside>
   );
@@ -553,50 +619,79 @@ function Sidebar({
 
 function TabButton({ id, activeTab, onClick, icon, label }) {
   return (
-    <button
-      className={`tab-button ${activeTab === id ? "active" : ""}`}
-      type="button"
-      onClick={() => onClick(id)}
-    >
+    <button className={`tab-button ${activeTab === id ? "active" : ""}`} type="button" onClick={() => onClick(id)}>
       {icon}
       <span>{label}</span>
     </button>
   );
 }
 
-function PromptList({ items, onOpenPrompt, onDelete }) {
-  if (items.length === 0) {
-    return <p className="empty-list">저장된 프롬프트가 없습니다.</p>;
-  }
+function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePrompt, onDelete }) {
+  if (items.length === 0) return <p className="empty-list">{emptyText}</p>;
+
   return (
-    <div className="prompt-list" aria-label="저장된 프롬프트 목록">
-      {items.map((item) => (
-        <div className="saved-item-wrap" key={item.id}>
-          <button className="saved-item" type="button" onClick={() => onOpenPrompt(item)}>
-            <strong>{item.title}</strong>
-            <span>{item.preview}</span>
-          </button>
-          <button
-            className="delete-item-btn"
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-            aria-label="삭제"
-            title="삭제"
-          >
-            <X size={11} />
-          </button>
-        </div>
-      ))}
+    <div className="prompt-list" aria-label={mode === "search" ? "?꾩껜 ?꾨＼?꾪듃 寃??寃곌낵" : "??λ맂 ?꾨＼?꾪듃 紐⑸줉"}>
+      {items.map((item) => {
+        const saved = isSaved?.(item);
+        return (
+          <div className="saved-item-wrap" key={item.id}>
+            <div
+              className="saved-item"
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenPrompt(item)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpenPrompt(item);
+                }
+              }}
+            >
+              <strong>{item.title}</strong>
+              <span>{item.preview}</span>
+              {item.tags?.length > 0 && <small>{item.tags.map((tag) => `#${tag}`).join(" ")}</small>}
+              {mode === "search" && (
+                <button
+                  className={`save-card-action ${saved ? "saved" : ""}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSavePrompt(item);
+                  }}
+                  aria-label={saved ? "Unsave" : "Save"}
+                  title={saved ? "Unsave" : "Save"}
+                >
+                  {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                  {saved ? "Saved" : "Save"}
+                </button>
+              )}
+            </div>
+            {mode === "saved" && (
+              <button
+                className="delete-item-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(item.id);
+                }}
+                aria-label="??젣"
+                title="??젣"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function RecentList({ items, onOpenThread, onDelete }) {
-  if (items.length === 0) {
-    return <p className="empty-list">최근 대화가 없습니다.</p>;
-  }
+  if (items.length === 0) return <p className="empty-list">理쒓렐 ??붽? ?놁뒿?덈떎.</p>;
+
   return (
-    <div className="recent-list" aria-label="최근 대화 목록">
+    <div className="recent-list" aria-label="理쒓렐 ???紐⑸줉">
       {items.map((item) => (
         <div className="saved-item-wrap" key={item.id}>
           <button className="recent-item" type="button" onClick={() => onOpenThread(item)}>
@@ -606,9 +701,12 @@ function RecentList({ items, onOpenThread, onDelete }) {
           <button
             className="delete-item-btn"
             type="button"
-            onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-            aria-label="삭제"
-            title="삭제"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(item.id);
+            }}
+            aria-label="??젣"
+            title="??젣"
           >
             <X size={11} />
           </button>
@@ -618,132 +716,77 @@ function RecentList({ items, onOpenThread, onDelete }) {
   );
 }
 
-// ── Header ────────────────────────────────────────────────────
-function Header({
-  currentUser, executeTarget, setExecuteTarget,
-  onLogin, onLogout, onToggleRagSettings,
-  ragMode, onToggleRagMode,
-}) {
+function Header({ currentUser, onLogin, onLogout, onToggleRagSettings, ragMode, ragStatus, onToggleRagMode }) {
   const meta = MODE_META[ragMode] || MODE_META.prompt_techniques;
   return (
     <header className="header">
-      <button
-        className={`rag-mode-toggle ${ragMode}`}
-        type="button"
-        onClick={onToggleRagMode}
-        title={`현재: ${meta.label} — 클릭 시 전환`}
-        aria-label="RAG 모드 전환"
-      >
-        {meta.icon} {meta.label === "기법 모드" ? "기법" : "논문"}
-      </button>
-
-      <button
-        className="rag-settings-button"
-        type="button"
-        onClick={onToggleRagSettings}
-        title="RAG 서버 설정"
-        aria-label="RAG 서버 설정 열기"
-      >
-        <Settings size={15} />
-        <span>RAG</span>
-      </button>
-
-      {currentUser ? (
-        <button className="login-button" type="button" onClick={onLogout}>
-          {currentUser}님
+      <div className="brand-mark" aria-label="TTALKAK">
+        <span className="brand-dot">T</span>
+        <span className="brand-name">TTALKAK</span>
+      </div>
+      <div className="header-actions">
+        <button className={`rag-mode-toggle ${ragMode}`} type="button" onClick={onToggleRagMode} title={`Current: ${meta.label}`}>
+          {meta.label === "기법 모드" ? "기법" : "논문"}
         </button>
-      ) : (
-        <button className="login-button" type="button" onClick={onLogin}>
-          로그인
+        <button className="rag-settings-button" type="button" onClick={onToggleRagSettings} title="RAG settings">
+          <Settings size={15} />
+          <span>RAG</span>
         </button>
-      )}
+        <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
+        {currentUser ? (
+          <button className="login-button" type="button" onClick={onLogout}>{currentUser}님</button>
+        ) : (
+          <button className="login-button" type="button" onClick={onLogin}>로그인</button>
+        )}
+      </div>
     </header>
   );
 }
 
-// ── ChatFeed ──────────────────────────────────────────────────
+function getRagStatusText(status) {
+  if (status === "connected") return "Connected";
+  if (status === "checking") return "Checking";
+  if (status === "error") return "Error";
+  return "Not connected";
+}
+
 function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ragMode }) {
   const isEmpty = messages.length === 0 && !isLoading;
-  const scrollRef      = useRef(null);
-  const spacerRef      = useRef(null);
-  const lastUserIdRef  = useRef(null);
+  const scrollRef = useRef(null);
 
-  // 새 메시지를 보내면, 방금 보낸 사용자 메시지를 화면 최상단에 고정시킨다(ChatGPT 방식).
   useEffect(() => {
     const container = scrollRef.current;
-    if (!container) return;
-
-    const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUser) return;
-
-    const el = container.querySelector(`[data-mid="${lastUser.id}"]`);
-    if (!el) return;
-
-    const TOP_GAP = 16;
-
-    // 1) 스페이서를 0으로 두고 실제 내용 높이 측정
-    if (spacerRef.current) spacerRef.current.style.height = "0px";
-    const stack = el.parentElement;
-    const contentBelow =
-      stack.getBoundingClientRect().bottom - el.getBoundingClientRect().top;
-
-    // 2) 마지막 사용자 메시지가 상단까지 올라올 수 있도록 부족한 만큼 스페이서 확보
-    const need = Math.max(0, container.clientHeight - contentBelow - TOP_GAP);
-    if (spacerRef.current) spacerRef.current.style.height = `${need}px`;
-
-    // 3) '새로' 보낸 사용자 메시지일 때만 상단으로 스크롤
-    const isNew = lastUser.id !== lastUserIdRef.current;
-    if (isNew) {
-      lastUserIdRef.current = lastUser.id;
-      requestAnimationFrame(() => {
-        const eRect = el.getBoundingClientRect();
-        const cRect = container.getBoundingClientRect();
-        container.scrollBy({ top: eRect.top - cRect.top - TOP_GAP, behavior: "smooth" });
-      });
-    }
-  }, [messages, isLoading]);
+    if (!container || isEmpty) return;
+    requestAnimationFrame(() => container.scrollTo({ top: container.scrollHeight, behavior: "smooth" }));
+  }, [messages, isLoading, isEmpty]);
 
   return (
-    <section
-      ref={scrollRef}
-      className={`chat-feed ${isEmpty ? "empty" : ""}`}
-      aria-label="채팅 메시지"
-    >
+    <section ref={scrollRef} className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="梨꾪똿 硫붿떆吏">
       {isEmpty ? (
         <Intro ragMode={ragMode} />
       ) : (
         <div className="message-stack">
           {messages.map((message) => (
-            <MessageCard
-              message={message}
-              copied={copiedId === message.id}
-              onCopy={onCopy}
-              onSave={onSave}
-              onExecute={onExecute}
-              key={message.id}
-            />
+            <MessageCard message={message} copied={copiedId === message.id} onCopy={onCopy} onSave={onSave} onExecute={onExecute} key={message.id} />
           ))}
           {isLoading && <TypingIndicator />}
-          {/* 마지막 메시지를 상단에 고정하기 위한 가변 여백 */}
-          <div ref={spacerRef} className="scroll-spacer" aria-hidden="true" />
         </div>
       )}
     </section>
   );
 }
 
-// ── Intro ─────────────────────────────────────────────────────
 function Intro({ ragMode }) {
   const meta = MODE_META[ragMode] || MODE_META.prompt_techniques;
   return (
     <div className="intro">
-      <div className="intro-icon"><Sparkles size={34} /></div>
-      <h1>AI 프롬프트 첨삭 도우미</h1>
+      <div className="intro-icon"><Plus size={34} /></div>
+      <h1>AI Prompt Assistant</h1>
       <div className="mode-badge">
-        <span>{meta.icon} {meta.label}</span>
+        <span>{meta.label}</span>
         <span className="mode-desc">{meta.desc}</span>
       </div>
-      <p>AI 툴에 입력할 프롬프트를 작성하면, 더 나은 결과를 얻을 수 있도록 첨삭해 드립니다.</p>
+      <p>Write a prompt for an AI tool, and TTALKAK will improve it into a clearer, executable prompt.</p>
       <div className="tip-list">
         {tips.map((tip) => (
           <article className="tip-card" key={tip.title}>
@@ -756,47 +799,37 @@ function Intro({ ragMode }) {
         ))}
       </div>
       <div className="example-queries">
-        <p className="example-label">💬 이런 질문을 해보세요</p>
-        {meta.examples.map((ex) => (
-          <span className="example-chip" key={ex}>{ex}</span>
-        ))}
+        <p className="example-label">Try one of these</p>
+        {meta.examples.map((example) => <span className="example-chip" key={example}>{example}</span>)}
       </div>
     </div>
   );
 }
 
-// ── MessageCard ───────────────────────────────────────────────
 function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
   const isAssistant = message.role === "assistant";
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
 
   return (
-    <article
-      className={`message-row ${message.role}${message.isError ? " error" : ""}`}
-      data-mid={message.id}
-    >
+    <article className={`message-row ${message.role}${message.isError ? " error" : ""}`} data-mid={message.id}>
       <div className="message-card">
         <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
         {hasSources && (
           <div className="sources-section">
-            <button
-              className="sources-toggle"
-              type="button"
-              onClick={() => setShowSources((v) => !v)}
-            >
-              📚 참고 문서 {message.sources.length}건 {showSources ? "▲" : "▼"}
+            <button className="sources-toggle" type="button" onClick={() => setShowSources((v) => !v)}>
+              李멸퀬 臾몄꽌 {message.sources.length}嫄?{showSources ? "?묎린" : "蹂닿린"}
             </button>
             {showSources && (
               <ul className="sources-list">
-                {message.sources.map((src, idx) => (
+                {message.sources.map((source, idx) => (
                   <li key={idx} className="source-item">
                     <span className="source-meta">
-                      [{idx + 1}] {src.metadata?.source || src.metadata?.technique || "알 수 없음"}
-                      {src.metadata?.category ? ` (${src.metadata.category})` : ""}
-                      {" "}(유사도: {(src.score * 100).toFixed(1)}%)
+                      [{idx + 1}] {source.metadata?.source || source.metadata?.technique || "?????놁쓬"}
+                      {source.metadata?.category ? ` (${source.metadata.category})` : ""}
+                      {typeof source.score === "number" ? ` ?좎궗??${(source.score * 100).toFixed(1)}%` : ""}
                     </span>
-                    <p className="source-text">{src.text}</p>
+                    <p className="source-text">{source.text}</p>
                   </li>
                 ))}
               </ul>
@@ -805,23 +838,9 @@ function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
         )}
         {isAssistant && !message.isError && (
           <div className="card-actions">
-            <ActionButton
-              icon={copied ? <Check size={14} /> : <Copy size={14} />}
-              label={copied ? "Copied" : "Copy"}
-              onClick={() => onCopy(message)}
-            />
-            <ActionButton
-              icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-              label={message.saved ? "Saved" : "Save"}
-              onClick={() => onSave(message.id)}
-            />
-            {message.executablePrompt && (
-              <ActionButton
-                icon={<Play size={14} />}
-                label="Execute"
-                onClick={() => onExecute(message)}
-              />
-            )}
+            <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "Copied" : "Copy"} onClick={() => onCopy(message)} />
+            <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "Saved" : "Save"} onClick={() => onSave(message.id)} />
+            {message.executablePrompt && <ActionButton icon={<Play size={14} />} label="Execute" onClick={() => onExecute(message)} />}
           </div>
         )}
       </div>
@@ -841,37 +860,23 @@ function ActionButton({ icon, label, onClick }) {
 function TypingIndicator() {
   return (
     <div className="message-row assistant">
-      <div className="typing-message" aria-label="첨삭 중">
-        <span /><span /><span />
-      </div>
+      <div className="typing-message" aria-label="Improving prompt"><span /><span /><span /></div>
     </div>
   );
 }
 
-// ── Composer ──────────────────────────────────────────────────
 function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages }) {
   return (
-    <form
-      className="composer"
-      onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
-    >
+    <form className="composer" onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       {hasMessages && (
-        <button
-          className="newchat-button"
-          type="button"
-          onClick={onNewChat}
-          disabled={disabled}
-          aria-label="새 대화 시작"
-          title="새 대화 시작"
-        >
-          <Sparkles size={16} />
+        <button className="newchat-button" type="button" onClick={onNewChat} disabled={disabled} aria-label="New chat" title="New chat">
+          <Plus size={16} />
         </button>
       )}
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          // 한글 IME 조합 중 Enter 는 무시 (마지막 음절 '줘' 잔류 방지)
           if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -879,32 +884,23 @@ function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages 
           }
         }}
         rows={1}
-        placeholder={hasMessages
-          ? "이어서 개선 요청을 입력하세요 (예: 더 짧게, 페르소나 빼줘)..."
-          : "개선할 프롬프트를 입력하세요..."}
-        aria-label="첨삭받을 프롬프트 입력"
+        placeholder={hasMessages ? "Enter a follow-up improvement request..." : "Enter a prompt to improve..."}
+        aria-label="Prompt input"
       />
-      <button
-        className="send-button"
-        type="submit"
-        disabled={!value.trim() || disabled}
-        aria-label="프롬프트 보내기"
-      >
+      <button className="send-button" type="submit" disabled={!value.trim() || disabled} aria-label="Send prompt">
         <Send size={18} />
       </button>
     </form>
   );
 }
 
-// ── RagSettingsPanel ──────────────────────────────────────────
-function RagSettingsPanel({ config, onChange, onClose }) {
+function RagSettingsPanel({ config, status, onChange, onClose }) {
   const [local, setLocal] = useState({ ...config });
 
-  // config 바뀌면 (외부에서 모드 토글 등) 동기화
-  useEffect(() => { setLocal({ ...config }); }, [config]);
+  useEffect(() => setLocal({ ...config }), [config]);
 
   function update(field, value) {
-    setLocal((s) => ({ ...s, [field]: value }));
+    setLocal((state) => ({ ...state, [field]: value }));
   }
 
   function apply(e) {
@@ -914,43 +910,30 @@ function RagSettingsPanel({ config, onChange, onClose }) {
   }
 
   return (
-    <div className="rag-settings-panel" role="dialog" aria-label="RAG 서버 설정">
+    <div className="rag-settings-panel" role="dialog" aria-label="RAG ?쒕쾭 ?ㅼ젙">
       <div className="rag-settings-header">
-        <span>RAG 서버 설정</span>
-        <button type="button" onClick={onClose} aria-label="닫기"><X size={15} /></button>
+        <span>RAG ?쒕쾭 ?ㅼ젙</span>
+        <span className={`rag-status ${status}`}>{getRagStatusText(status)}</span>
+        <button type="button" onClick={onClose} aria-label="?リ린"><X size={15} /></button>
       </div>
       <form className="rag-settings-form" onSubmit={apply}>
         <label>
-          서버 URL
-          <input
-            value={local.serverUrl}
-            onChange={(e) => update("serverUrl", e.target.value)}
-            placeholder="http://localhost:8000"
-          />
+          ?쒕쾭 URL
+          <input value={local.serverUrl} onChange={(e) => update("serverUrl", e.target.value)} placeholder="http://localhost:8000" />
         </label>
         <label>
-          컬렉션 (RAG 모드)
-          <select
-            value={local.collectionName}
-            onChange={(e) => update("collectionName", e.target.value)}
-          >
-            <option value="prompt_techniques">📖 기법 모드 (PDF 100개 기법)</option>
-            <option value="papers">📄 논문 모드 (프롬프트 엔지니어링 논문)</option>
+          而щ젆??          <select value={local.collectionName} onChange={(e) => update("collectionName", e.target.value)}>
+            <option value="prompt_techniques">湲곕쾿 紐⑤뱶</option>
+            <option value="papers">?쇰Ц 紐⑤뱶</option>
           </select>
         </label>
         <div className="rag-settings-row">
           <label>
             Top-K
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={local.topK}
-              onChange={(e) => update("topK", e.target.value)}
-            />
+            <input type="number" min={1} max={20} value={local.topK} onChange={(e) => update("topK", e.target.value)} />
           </label>
           <label>
-            모델
+            紐⑤뜽
             <select value={local.model} onChange={(e) => update("model", e.target.value)}>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
               <option value="gemini-1.5-flash">gemini-1.5-flash</option>
@@ -958,107 +941,124 @@ function RagSettingsPanel({ config, onChange, onClose }) {
             </select>
           </label>
         </div>
-        <button className="rag-settings-apply" type="submit">적용</button>
+        <button className="rag-settings-apply" type="submit">?곸슜</button>
       </form>
     </div>
   );
 }
 
-// ── AuthModal ─────────────────────────────────────────────────
 function AuthModal({ mode, setMode, onClose, onLogin }) {
   const isSignup = mode === "signup";
+  const isFindId = mode === "findId";
+  const isFindPassword = mode === "findPassword";
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ userId: "", password: "", name: "", phone: "" });
+  const [result, setResult] = useState("");
+
+  const title = isSignup ? "Sign up" : isFindId ? "Find ID" : isFindPassword ? "Find password" : "Login";
+  const description = isSignup
+    ? "Create an account with your name and phone number."
+    : isFindId
+      ? "Enter your name and phone number to find your ID."
+      : isFindPassword
+        ? "Enter your ID and phone number to request a password reset."
+        : "Continue using your saved prompts and previous chats.";
 
   function updateField(field, value) {
-    setForm((s) => ({ ...s, [field]: value }));
+    setResult("");
+    setForm((state) => ({ ...state, [field]: value }));
+  }
+
+  function moveMode(nextMode) {
+    setResult("");
+    setMode(nextMode);
+  }
+
+  function submitAuth(e) {
+    e.preventDefault();
+    if (isFindId) {
+      setResult("After backend account API integration, the matching ID will be shown here.");
+      return;
+    }
+    if (isFindPassword) {
+      setResult("After backend account API integration, this will start the password reset flow.");
+      return;
+    }
+    onLogin(isSignup ? form.name || "User" : form.userId || "User");
   }
 
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="auth-modal" role="dialog" aria-modal="true">
-        <button className="close-button" type="button" onClick={onClose} aria-label="닫기">
-          <X size={18} />
-        </button>
+        <button className="close-button" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
         <div className="auth-heading">
-          <div className="auth-icon"><Sparkles size={22} /></div>
-          <h2>{isSignup ? "회원가입" : "로그인"}</h2>
-          <p>
-            {isSignup
-              ? "이름과 전화번호를 입력해 계정을 만들어보세요."
-              : "저장한 프롬프트와 이전 대화를 계속 사용하세요."}
-          </p>
+          <div className="auth-icon"><Plus size={22} /></div>
+          <h2>{title}</h2>
+          <p>{description}</p>
         </div>
-        <form
-          className="auth-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onLogin(isSignup ? form.name || "사용자" : form.userId || "사용자");
-          }}
-        >
-          {isSignup && (
-            <>
-              <label>
-                이름
-                <input
-                  value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                  placeholder="홍길동"
-                  required
-                />
-              </label>
-              <label>
-                전화번호
-                <input
-                  value={form.phone}
-                  onChange={(e) => updateField("phone", e.target.value)}
-                  placeholder="010-0000-0000"
-                  required
-                />
-              </label>
-            </>
+        <form className="auth-form" onSubmit={submitAuth}>
+          {(isSignup || isFindId) && (
+            <label>
+              Name
+              <input value={form.name} onChange={(e) => updateField("name", e.target.value)} placeholder="Name" required />
+            </label>
           )}
-          <label>
-            아이디
-            <input
-              value={form.userId}
-              onChange={(e) => updateField("userId", e.target.value)}
-              placeholder="아이디를 입력하세요"
-              required
-            />
-          </label>
-          <label>
-            비밀번호
-            <div className="password-field">
-              <input
-                value={form.password}
-                onChange={(e) => updateField("password", e.target.value)}
-                placeholder="비밀번호를 입력하세요"
-                type={showPassword ? "text" : "password"}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label="비밀번호 표시 전환"
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </label>
+          {(isSignup || isFindId || isFindPassword) && (
+            <label>
+              Phone
+              <input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="010-0000-0000" required />
+            </label>
+          )}
+          {(!isFindId || isFindPassword) && (
+            <label>
+              ID
+              <input value={form.userId} onChange={(e) => updateField("userId", e.target.value)} placeholder="Enter your ID" required />
+            </label>
+          )}
+          {!isFindId && !isFindPassword && (
+            <label>
+              Password
+              <div className="password-field">
+                <input value={form.password} onChange={(e) => updateField("password", e.target.value)} placeholder="Enter your password" type={showPassword ? "text" : "password"} required />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label="Toggle password visibility">
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+          )}
+          {result && <p className="auth-result">{result}</p>}
           <button className="auth-submit" type="submit">
-            {isSignup ? "가입하기" : "로그인"}
+            {isFindId ? "Find ID" : isFindPassword ? "Find password" : isSignup ? "Sign up" : "Login"}
           </button>
         </form>
-        <p className="auth-switch">
-          {isSignup ? "이미 계정이 있나요?" : "계정이 없나요?"}
-          <button type="button" onClick={() => setMode(isSignup ? "login" : "signup")}>
-            {isSignup ? "로그인" : "회원가입"}
-          </button>
-        </p>
+        {isSignup || isFindId || isFindPassword ? (
+          <p className="auth-switch"><button type="button" onClick={() => moveMode("login")}>Back to login</button></p>
+        ) : (
+          <div className="auth-link-row" aria-label="Account help">
+            <button type="button" onClick={() => moveMode("findId")}>Find ID</button>
+            <button type="button" onClick={() => moveMode("findPassword")}>Find password</button>
+            <button type="button" onClick={() => moveMode("signup")}>Sign up</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ConfirmModal({ title, message, confirmLabel, onCancel, onConfirm }) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="confirm-modal" role="dialog" aria-modal="true">
+        <h2>{title}</h2>
+        <p>{message}</p>
+        <div className="confirm-actions">
+          <button className="confirm-cancel" type="button" onClick={onCancel}>痍⑥냼</button>
+          <button className="confirm-danger" type="button" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
       </section>
     </div>
   );
 }
 
 createRoot(document.getElementById("root")).render(<App />);
+
