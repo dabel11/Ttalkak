@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Ttalkak",
+  "description": "딸깍 — AI 프롬프트 첨삭 도우미. 프롬프트를 더 효과적으로 개선해 줍니다.",
+  "version": "1.0.0",
+  "permissions": ["sidePanel", "scripting", "activeTab", "tabs", "clipboardWrite", "debugger"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_title": "Ttalkak"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  }
+}
