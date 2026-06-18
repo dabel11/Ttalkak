@@ -349,7 +349,7 @@ const state = {
   templateCollapsed: false,
   guestImproveCount: 0,
   shareDraft: null,
-  savedFilter: { community: true, mine: true },
+  savedFilter: { community: true, mine: true, liked: false },
   messages: [],
   recentThreads: [],
   activeThreadId: null,
@@ -594,11 +594,25 @@ function normalizeSavedPromptOwnership() {
     if (prompt.savedByMe != null) return;
     prompt.savedByMe = prompt.source === "community" || (!prompt.isShared && prompt.saves > 0);
   });
+  normalizeSavedCounts();
 }
 
 function isPromptSaved(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   return Boolean(prompt?.savedByMe) && !state.pendingUnsaveIds.has(promptId);
+}
+
+function getPromptSaveCount(prompt) {
+  const saves = Number(prompt?.saves || 0);
+  return isPromptSaved(prompt?.id) ? Math.max(1, saves) : saves;
+}
+
+function normalizeSavedCounts() {
+  savedPrompts.forEach((prompt) => {
+    if (prompt.savedByMe && Number(prompt.saves || 0) < 1) {
+      prompt.saves = 1;
+    }
+  });
 }
 
 function isPromptPendingUnsave(promptId) {
@@ -630,11 +644,11 @@ function PromptCard(prompt, options = {}) {
   const isSaved = isPromptSaved(prompt.id);
   const isPendingUnsave = isPromptPendingUnsave(prompt.id);
   const canDelete = prompt.source === "mine";
-  const opensMakeThread = Boolean(prompt.messages?.length);
   const isMine = prompt.source === "mine";
   const isLiked = state.likedPromptIds.has(prompt.id);
   const isReported = state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
+  const hasMakeHistory = isMine && Array.isArray(prompt.messages) && prompt.messages.length > 0;
   const commentCount = getPromptCommentCount(prompt);
   const showStatus = options.showStatus !== false;
   const statusBadges = [
@@ -645,16 +659,17 @@ function PromptCard(prompt, options = {}) {
   ].join("");
 
   return `
-    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${prompt.id}" ${opensMakeThread ? `data-open-make-prompt="${prompt.id}"` : ""} tabindex="0" role="button" aria-label="${prompt.title} 전체 보기">
+    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${prompt.id}" tabindex="0" role="button" aria-label="${prompt.title} 전체 보기">
       <div class="card-head">
         <h2>${prompt.title}</h2>
         <div class="card-actions">
           ${isMine && !isShared ? `<button class="icon-button share-card-button" data-share-saved="${prompt.id}" aria-label="공유">${icons.share}</button>` : ""}
           ${isMine && isShared ? `<button class="icon-button unshare-card-button" data-unshare-prompt="${prompt.id}" aria-label="공유 취소">${icons.share}</button>` : ""}
+          ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${prompt.id}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
           ${canDelete ? `<button class="icon-button delete-card-button" data-delete-prompt="${prompt.id}" aria-label="삭제">${icons.trash}</button>` : ""}
           <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${prompt.id}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
           <button class="icon-button metric-action comment-card-button" data-open-comments="${prompt.id}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
-          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(prompt.saves)}</span></button>
+          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
         </div>
       </div>
       ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}
@@ -729,7 +744,7 @@ function PromptDetailModal() {
         <div class="modal-actions detail-actions">
           <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
           <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-          <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(prompt.saves)}</span></button>
+          <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
           ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">공유하기</button>` : ""}
           ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">공유 취소</button>` : ""}
           ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">삭제</button>` : ""}
@@ -987,9 +1002,10 @@ function MessageBubble(message) {
 }
 
 function SavedPage() {
-  const filtered = applyReportedVisibility(savedPrompts).filter(
-    (prompt) => (prompt.source === "community" && state.savedFilter.community) || (prompt.source === "mine" && state.savedFilter.mine),
-  ).sort((a, b) => b.saves - a.saves || b.views - a.views || b.comments - a.comments);
+  const savedPagePrompts = getSavedPagePrompts();
+  const filtered = applyReportedVisibility(savedPagePrompts)
+    .filter((prompt) => matchesSavedFilter(prompt))
+    .sort((a, b) => b.saves - a.saves || b.views - a.views || b.comments - a.comments);
   const pendingUnsaveCount = filtered.filter((prompt) => state.pendingUnsaveIds.has(prompt.id)).length;
   const totalPages = Math.max(1, Math.ceil(filtered.length / SAVED_PAGE_SIZE));
   if (state.savedPage > totalPages) state.savedPage = totalPages;
@@ -1001,11 +1017,20 @@ function SavedPage() {
       <div class="page-head">
         <div class="page-title">
           <span>${icons.bookmark}</span>
-          <h1 id="saved-heading">저장한 프롬프트</h1>
+          <h1 id="saved-heading">내 보관함</h1>
         </div>
-        <div class="filter-row" role="group" aria-label="저장 목록 필터">
-          <label><input type="checkbox" data-filter="community" ${state.savedFilter.community ? "checked" : ""} /> 다른 사용자 프롬프트</label>
-          <label><input type="checkbox" data-filter="mine" ${state.savedFilter.mine ? "checked" : ""} /> 내 프롬프트</label>
+        <div class="filter-groups" aria-label="저장 목록 필터">
+          <div class="filter-group" role="group" aria-label="소유자 필터">
+            <label><input type="checkbox" data-filter="community" ${state.savedFilter.community ? "checked" : ""} /> 다른 사용자</label>
+            <label><input type="checkbox" data-filter="mine" ${state.savedFilter.mine ? "checked" : ""} /> 내 프롬프트</label>
+          </div>
+          <div class="filter-group" role="group" aria-label="상태 필터">
+            <label class="toggle-filter">
+              <input type="checkbox" data-filter="liked" ${state.savedFilter.liked ? "checked" : ""} />
+              <span class="toggle-track" aria-hidden="true"><span></span></span>
+              <span>좋아요만 보기</span>
+            </label>
+          </div>
         </div>
       </div>
       ${
@@ -1018,8 +1043,8 @@ function SavedPage() {
           ? `<div class="prompt-grid saved-grid">${pagePrompts.map(PromptCard).join("")}</div>
              ${SavedPagination(totalPages, currentPage)}`
           : `<div class="empty-state saved-empty">
-              <span>${icons.bookmark}</span>
-              <p>로그인하여 프롬프트를 저장해보세요.</p>
+              <span>${state.savedFilter.liked ? icons.heart : icons.bookmark}</span>
+              <p>${SavedEmptyMessage()}</p>
             </div>`
       }
     </section>
@@ -1037,6 +1062,12 @@ function SavedPagination(totalPages, currentPage) {
       }).join("")}
     </nav>
   `;
+}
+
+function SavedEmptyMessage() {
+  if (state.savedFilter.liked) return "좋아요를 누른 프롬프트가 아직 없습니다.";
+  if (!state.savedFilter.community && !state.savedFilter.mine) return "표시할 필터를 선택해주세요.";
+  return "저장한 프롬프트나 내 프롬프트가 아직 없습니다.";
 }
 
 function SharePage() {
@@ -1062,6 +1093,7 @@ function SharePage() {
           <span>${icons.share}</span>
           <h1 id="share-title">프롬프트 공유하기</h1>
         </div>
+        <p class="share-policy">공유되는 내용은 제목, 최종 프롬프트, 해시태그입니다. Make에서 작성한 개인 대화 기록은 공유되지 않습니다.</p>
         <form class="share-form">
           <label>
             <span>제목</span>
@@ -1076,7 +1108,7 @@ function SharePage() {
           <input name="tags" type="text" value="${escapeHtml(draftTags)}" placeholder="예: 마케팅, SEO, 콘텐츠" />
           </label>
           <div class="share-helper">
-            <span>${state.shareError || "공유된 프롬프트는 홈의 인기 프롬프트와 검색 결과에 노출됩니다."}</span>
+            <span>${state.shareError || "공유 후 Home으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다."}</span>
           </div>
           <div class="form-actions">
             <button class="primary-button" type="submit">공유하기</button>
@@ -1292,19 +1324,11 @@ function bindEvents() {
 
   document.querySelectorAll("[data-open-prompt]").forEach((card) => {
     card.addEventListener("click", () => {
-      if (card.dataset.openMakePrompt) {
-        openSavedMakePrompt(card.dataset.openMakePrompt);
-        return;
-      }
       openPromptDetail(card.dataset.openPrompt);
     });
     card.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      if (card.dataset.openMakePrompt) {
-        openSavedMakePrompt(card.dataset.openMakePrompt);
-        return;
-      }
       openPromptDetail(card.dataset.openPrompt);
     });
   });
@@ -1362,6 +1386,14 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       unshareOwnPrompt(button.dataset.unsharePrompt);
+    });
+  });
+
+  document.querySelectorAll("[data-open-make-history]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openSavedMakePrompt(button.dataset.openMakeHistory);
     });
   });
 
@@ -2432,9 +2464,7 @@ function removePromptById(list, promptId) {
 }
 
 function normalizeSavedPage() {
-  const filteredCount = savedPrompts.filter(
-    (prompt) => (prompt.source === "community" && state.savedFilter.community) || (prompt.source === "mine" && state.savedFilter.mine),
-  ).length;
+  const filteredCount = getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
   const totalPages = Math.max(1, Math.ceil(filteredCount / SAVED_PAGE_SIZE));
   state.savedPage = Math.min(state.savedPage, totalPages);
 }
@@ -2457,6 +2487,28 @@ function restoreSearchFocus() {
 
   nextInput.focus();
   nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+}
+
+function getSavedPagePrompts() {
+  const merged = [...savedPrompts];
+  const seen = new Set(merged.map((prompt) => prompt.id));
+
+  popularPrompts.forEach((prompt) => {
+    if (!state.likedPromptIds.has(prompt.id) || seen.has(prompt.id)) return;
+    merged.push({ ...prompt, source: prompt.source === "mine" ? "mine" : "community" });
+    seen.add(prompt.id);
+  });
+
+  return merged;
+}
+
+function matchesSavedFilter(prompt) {
+  const matchesSource =
+    (prompt.source === "community" && state.savedFilter.community) ||
+    (prompt.source === "mine" && state.savedFilter.mine);
+
+  if (!state.savedFilter.liked) return matchesSource;
+  return state.likedPromptIds.has(prompt.id) && matchesSource;
 }
 
 function showSearchTipOnce() {
@@ -2543,17 +2595,23 @@ function sharePrompt(formData) {
     createdAt: existingPrompt?.createdAt || Date.now(),
   };
 
+  const existingSavedPrompt = savedPrompts.find((item) => item.id === prompt.id);
+  if (existingSavedPrompt) {
+    delete existingSavedPrompt.messages;
+  }
+
   upsertPrompt(popularPrompts, prompt);
   upsertPrompt(savedPrompts, prompt);
   if (!commentsByPrompt[prompt.id]) {
     commentsByPrompt[prompt.id] = [];
   }
   state.searchQuery = "";
+  state.popularSort = "latest";
   state.popularPage = 1;
   state.shareError = "";
   state.shareDraft = null;
   state.route = "home";
-  showNotice("프롬프트를 공유했습니다.");
+  showNotice("최종 프롬프트가 공유되었습니다. Home 최신 목록에서 확인할 수 있습니다.");
 }
 
 function upsertPrompt(list, prompt) {
@@ -2622,7 +2680,7 @@ function sortPopularPrompts(prompts) {
 }
 
 function getPromptLikes(prompt) {
-  return prompt.likes ?? Math.round((prompt.saves || 0) / 3);
+  return prompt.likes ?? Math.round(getPromptSaveCount(prompt) / 3);
 }
 
 function getPromptCreatedAt(prompt) {

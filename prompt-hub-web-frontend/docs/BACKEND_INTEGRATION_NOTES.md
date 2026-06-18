@@ -13,6 +13,7 @@ This frontend prototype currently uses local in-memory arrays plus `localStorage
 - Comment/reply objects can include `edited: true`.
 - `state.popularSort`: `popular | saves | comments | likes | latest`.
 - `state.pendingUnsaveIds`: prompts unsaved from Saved but not committed until the user leaves Saved.
+- Shared community posts should contain the final prompt only. Do not expose Make conversation history in public prompt responses.
 
 ## Backend Fields Needed By The UI
 
@@ -70,6 +71,7 @@ For backend integration, call the real unsave endpoint when pending state is com
 - Home and search results share the same sort dropdown.
 - Supported sorts: `popular`, `saves`, `comments`, `likes`, `latest`.
 - Popular tags should be returned by tag usage count descending.
+- Saved supports a liked-only view. Backend can expose this through `GET /api/prompts/my?filter=liked`.
 
 ## Modal Flows
 
