@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from indexer import Indexer
 from retriever import Retriever
 from generator import Generator
+import query_transform
 
 # main.py 위치 기준 절대경로
 _BASE = pathlib.Path(__file__).parent
@@ -24,10 +25,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_CHROMA_PATH = str(_BASE / "chroma_db")
-
-indexer  = Indexer(chroma_path=_CHROMA_PATH)
-retriever = Retriever(chroma_path=_CHROMA_PATH)
+indexer  = Indexer()
+retriever = Retriever(use_reranker=True, use_hybrid=True)  # 최적 조합 (평가 검증)
 generator = Generator()
 
 
@@ -42,11 +41,14 @@ class IndexResponse(BaseModel):
     collection_name: str
 
 class QueryRequest(BaseModel):
-    query:           str
-    collection_name: str = "prompt_techniques"
-    top_k:           int = 5
-    model:           str = "gemini-2.0-flash"
-    history:         Optional[list[dict]] = None   # [{role, content}, ...] 대화 기록
+    query:               str
+    collection_name:     str = "prompt_techniques"
+    top_k:               int = 5
+    model:               str = "gemini-2.0-flash"
+    history:             Optional[list[dict]] = None   # [{role, content}, ...] 대화 기록
+    use_reranker:        bool = True    # 2단계 리랭크 (검증: Hit@1↑)
+    use_hybrid:          bool = True    # dense+BM25 하이브리드 (리랭커와 함께 쓸 때 최적)
+    use_query_transform: bool = False   # 쿼리 변환(실험적) — 현 코퍼스에선 검색 악화로 기본 off
 
 class QueryResponse(BaseModel):
     answer:           str          # 전체 응답 (화면 표시용)
@@ -123,10 +125,18 @@ def index_chunks(req: IndexRequest):
 def query(req: QueryRequest):
     history = req.history or []
 
+    # 검색에는 '기법 검색용 쿼리'를 쓰고, 생성에는 원본 프롬프트를 그대로 쓴다.
+    search_query = (
+        query_transform.transform(req.query, history)
+        if req.use_query_transform else req.query
+    )
+
     retrieved = retriever.search(
-        query=req.query,
+        query=search_query,
         collection_name=req.collection_name,
         top_k=req.top_k,
+        use_reranker=req.use_reranker,
+        use_hybrid=req.use_hybrid,
     )
     # 첫 턴(대화 기록 없음)에 매칭 결과가 없을 때만 404.
     # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.

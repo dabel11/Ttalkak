@@ -1,0 +1,48 @@
+# Ttalkak — RAG 스택 (MySQL + rag-server)
+# 사용:
+#   docker compose up -d mysql       # MySQL만
+#   docker compose up -d             # MySQL + rag-server 전체
+#   docker compose down              # 중지 (데이터는 볼륨에 보존)
+#   docker compose down -v           # 데이터까지 삭제
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: ttalkak-mysql
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"   # root 비번 없음 (Spring 기본값과 동일)
+      MYSQL_DATABASE: ttalkak
+    ports:
+      - "3306:3306"
+    volumes:
+      - ttalkak-mysql-data:/var/lib/mysql   # 데이터 영속
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rag-server:
+    build: ./rag-server
+    container_name: ttalkak-rag
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - ./rag-server/python-reg-server/.env   # GROQ_API_KEY 등 LLM 키
+    environment:
+      DB_HOST: mysql          # 컨테이너 네트워크에선 호스트가 서비스명
+      DB_PORT: "3306"
+      DB_NAME: ttalkak
+      DB_USER: root
+      DB_PASSWORD: ""
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface   # bge-m3 모델 캐시(재다운로드 방지)
+    restart: unless-stopped
+
+volumes:
+  ttalkak-mysql-data:
+  hf-cache:

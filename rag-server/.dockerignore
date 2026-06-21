@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+spring-integration-example/
+python-reg-server/.env

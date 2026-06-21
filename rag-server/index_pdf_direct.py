@@ -1,8 +1,11 @@
 """
 index_pdf_direct.py
 ────────────────────────────────────────────────────────────
-RAG 서버 없이 직접 ChromaDB에 인덱싱 (서버 불필요)
-rag_prompt_engineering_100_chunks_v1.pdf → 'prompt_techniques' 컬렉션
+프롬프트 기법 PDF를 파싱해 MySQL(rag_chunk)에 직접 인덱싱한다.
+(RAG 서버 기동 불필요 — Indexer를 직접 사용)
+
+기본 대상: data/rag_prompt_engineering_100_chunks_v1.pdf → 'prompt_techniques'
+DB 접속 정보는 db.py가 .env/환경변수에서 읽는다.
 
 사용법:
     python index_pdf_direct.py
@@ -10,80 +13,109 @@ rag_prompt_engineering_100_chunks_v1.pdf → 'prompt_techniques' 컬렉션
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
-# 같은 폴더의 파싱 유틸 재사용
-from index_pdf_techniques import extract_full_text, parse_chunks, COLLECTION, DEFAULT_PDF
+import pypdf
 
-# ── 자동 디바이스 선택 (indexer.py 와 동일) ──────────────────
-import sys as _sys
-import torch
-import chromadb
-import uuid
-from sentence_transformers import SentenceTransformer
+from indexer import Indexer
+
+DEFAULT_PDF = Path(__file__).parent / "data" / "rag_prompt_engineering_100_chunks_v1.pdf"
+COLLECTION  = "prompt_techniques"
 
 
-def _select_device() -> str:
-    if _sys.platform == "darwin":
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
+# ── PDF 전체 텍스트 추출 ──────────────────────────────────────
+def extract_full_text(pdf_path: Path) -> str:
+    reader = pypdf.PdfReader(str(pdf_path))
+    pages = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text = re.sub(r"^Page \d+\s*\n?", "", text.strip())  # "Page N" 헤더 제거
+        pages.append(text)
+    return "\n\n".join(pages)
 
 
-BATCH_EMBED = 10   # 임베딩 배치 크기
+# ── 청크 파싱 ────────────────────────────────────────────────
+def parse_chunks(full_text: str) -> list[dict]:
+    """
+    'Chunk NNN. Title' 패턴으로 분리하고 각 청크에서
+    Technique/Category/Definition/Use When/Avoid When/Prompt Template/
+    Project Usage Example/Sources 필드를 추출한다.
+    """
+    chunk_starts = [(m.start(), m.group(1), m.group(2).strip())
+                    for m in re.finditer(r"Chunk\s+(\d{3})\.\s+(.+)", full_text)]
+
+    chunks = []
+    for i, (start, num, title) in enumerate(chunk_starts):
+        end  = chunk_starts[i + 1][0] if i + 1 < len(chunk_starts) else len(full_text)
+        body = full_text[start:end].strip()
+
+        def field(key: str) -> str:
+            m = re.search(rf"{re.escape(key)}:\s*(.+?)(?=\n[A-Z][a-zA-Z /]+:|$)", body, re.DOTALL)
+            return m.group(1).strip() if m else ""
+
+        technique  = field("Technique")
+        category   = field("Category")
+        definition = field("Definition")
+        use_when   = field("Use When")
+        avoid_when = field("Avoid When")
+        template   = field("Prompt Template")
+        example    = field("Project Usage Example")
+        sources    = field("Sources")
+
+        text = (
+            f"[Chunk {num}] {title}\n"
+            f"Technique: {technique}\n"
+            f"Category: {category}\n"
+            f"Definition: {definition}\n"
+            f"Use When: {use_when}\n"
+            f"Avoid When: {avoid_when}\n"
+            f"Prompt Template:\n{template}\n"
+            f"Example: {example}"
+        ).strip()
+
+        chunks.append({
+            "chunk_id":  f"pdf_{num}",
+            "title":     title,
+            "technique": technique,
+            "category":  category,
+            "text":      text,
+            "sources":   sources[:300] if sources else "",
+        })
+
+    return chunks
 
 
+# ── 메인 ─────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="PDF를 직접 ChromaDB에 인덱싱")
-    parser.add_argument("--pdf",        type=Path, default=DEFAULT_PDF)
-    parser.add_argument("--chroma_path", default="./chroma_db")
-    parser.add_argument("--model",      default="BAAI/bge-m3")
+    parser = argparse.ArgumentParser(description="프롬프트 기법 PDF를 MySQL에 직접 인덱싱")
+    parser.add_argument("--pdf",   type=Path, default=DEFAULT_PDF)
+    parser.add_argument("--model", default="BAAI/bge-m3")
     args = parser.parse_args()
 
     if not args.pdf.exists():
         print(f"❌ PDF 파일 없음: {args.pdf}")
         sys.exit(1)
 
-    # 파싱
     print(f"📄 PDF 파싱 중: {args.pdf.name}")
     full_text = extract_full_text(args.pdf)
     chunks    = parse_chunks(full_text)
     print(f"   파싱된 청크 수: {len(chunks)}개\n")
 
-    # 모델 로드
-    device = _select_device()
-    print(f"🤖 임베딩 모델 로드 중: {args.model} (device={device})")
-    model  = SentenceTransformer(args.model, device=device)
+    if not chunks:
+        print("❌ 청크를 파싱하지 못했습니다. PDF 형식을 확인해주세요.")
+        sys.exit(1)
 
-    # ChromaDB 연결
-    client     = chromadb.PersistentClient(path=args.chroma_path)
-    collection = client.get_or_create_collection(
-        name=COLLECTION,
-        metadata={"hnsw:space": "cosine"},
-    )
-    print(f"💾 ChromaDB 컬렉션: '{COLLECTION}'\n")
+    texts = [c["text"] for c in chunks]
+    metas = [{"chunk_id": c["chunk_id"], "source": c["title"],
+              "technique": c["technique"], "category": c["category"],
+              "sources": c["sources"]} for c in chunks]
 
-    # 배치 임베딩 + 저장
-    total = 0
-    for i in range(0, len(chunks), BATCH_EMBED):
-        batch  = chunks[i: i + BATCH_EMBED]
-        texts  = [c["text"] for c in batch]
-        metas  = [{"chunk_id": c["chunk_id"], "source": c["title"],
-                   "technique": c["technique"], "category": c["category"],
-                   "sources": c["sources"]} for c in batch]
-        ids    = [str(uuid.uuid4()) for _ in batch]
+    indexer = Indexer(model_name=args.model)
+    total = indexer.index(chunks=texts, metadata=metas, collection_name=COLLECTION)
 
-        print(f"   배치 {i // BATCH_EMBED + 1} ({len(batch)}개) 임베딩 중...")
-        vectors = model.encode(texts, batch_size=BATCH_EMBED, show_progress_bar=False)
-        collection.upsert(ids=ids, documents=texts,
-                          embeddings=vectors.tolist(), metadatas=metas)
-        total += len(batch)
-        print(f"   ✓ {total}개 누적 저장")
-
-    print(f"\n🎉 완료: 총 {total}개 → '{COLLECTION}' 컬렉션")
-    print(f"   익스텐션 RAG 설정 → 컬렉션: '{COLLECTION}' 또는 'papers' 선택 가능")
+    print(f"\n🎉 완료: 총 {total}개 → '{COLLECTION}' 컬렉션 (MySQL)")
 
 
 if __name__ == "__main__":
