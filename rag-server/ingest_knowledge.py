@@ -243,6 +243,51 @@ def dedupe(techs: list[Technique]) -> list[Technique]:
     return list(best.values())
 
 
+def semantic_dedupe(techs: list[Technique], collection: str, threshold: float,
+                    model, compare_existing: bool
+                    ) -> tuple[list[Technique], list[Technique]]:
+    """임베딩 코사인 기반 중복 제거(이름이 달라도 의미가 같으면 제거).
+    - 기존 코퍼스(collection)와 비교(compare_existing) + 배치 내부끼리도 비교.
+    - max 유사도 >= threshold 면 신규 카드를 폐기. (survivors, dropped) 반환."""
+    import numpy as np
+    from sqlalchemy import select
+    from db import SessionLocal, RagChunk
+
+    if not techs:
+        return [], []
+
+    existing = None
+    if compare_existing:
+        with SessionLocal() as s:
+            rows = s.execute(
+                select(RagChunk.embedding).where(RagChunk.collection_name == collection)
+            ).all()
+        if rows:
+            existing = np.asarray([r[0] for r in rows], dtype=np.float32)
+
+    new_vecs = np.asarray(model.encode([t.to_document() for t in techs]), dtype=np.float32)
+
+    def _max_cos(v: "np.ndarray", mat: "np.ndarray") -> float:
+        vn = v / (np.linalg.norm(v) + 1e-12)
+        mn = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-12)
+        return float((mn @ vn).max())
+
+    survivors, dropped, kept_vecs = [], [], []
+    for t, v in zip(techs, new_vecs):
+        sim = 0.0
+        if existing is not None:
+            sim = max(sim, _max_cos(v, existing))
+        if kept_vecs:
+            sim = max(sim, _max_cos(v, np.asarray(kept_vecs, dtype=np.float32)))
+        if sim >= threshold:
+            t.suitability_reason = f"[의미중복 {sim:.2f}] {t.suitability_reason}"
+            dropped.append(t)
+        else:
+            survivors.append(t)
+            kept_vecs.append(v)
+    return survivors, dropped
+
+
 def _loads_loose(s: str) -> dict:
     """LLM JSON 응답 파서 — 코드펜스/잡텍스트가 섞여도 최대한 복구."""
     s = s.strip()
@@ -504,6 +549,10 @@ def main() -> None:
                     help="DB에 저장하지 않고 검수 산출물(JSONL)만 생성")
     ap.add_argument("--replace", action="store_true",
                     help="인덱싱 전 컬렉션을 비운다")
+    ap.add_argument("--no-semantic-dedup", action="store_true",
+                    help="기존 코퍼스와의 임베딩 기반 중복 제거를 끈다")
+    ap.add_argument("--sim-threshold", type=float, default=0.90,
+                    help="의미 중복 판정 코사인 임계값 (기본 0.90)")
     args = ap.parse_args()
 
     pdfs = collect_pdfs(args.pdf)
@@ -546,6 +595,23 @@ def main() -> None:
         return
     if not all_kept:
         print("\n저장할 청크가 없어 종료합니다.")
+        return
+
+    # ── 의미 기반 중복 제거 (이름이 달라도 같은 기법이면 코퍼스 오염 방지) ──
+    if not args.no_semantic_dedup:
+        from embeddings import get_model
+        all_kept, sem_dropped = semantic_dedupe(
+            all_kept, args.collection, args.sim_threshold,
+            get_model("BAAI/bge-m3"),
+            compare_existing=not args.replace,  # replace면 기존을 비울 거라 비교 불필요
+        )
+        print(f"🔁 의미 중복 제거: {len(sem_dropped)}개 스킵 (임계 {args.sim_threshold}) "
+              f"→ 인덱싱 대상 {len(all_kept)}개")
+        if sem_dropped:
+            write_jsonl(CURATED_DIR / "semantic_dropped.jsonl", sem_dropped)
+
+    if not all_kept:
+        print("\n중복 제거 후 저장할 청크가 없어 종료합니다.")
         return
 
     # ── MySQL 인덱싱 (기존 인프라 재사용) ──

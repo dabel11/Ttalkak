@@ -15,6 +15,23 @@ query_transform.py
 import os
 
 _TRANSFORM_MODEL = "llama-3.1-8b-instant"
+_HYDE_MODEL      = "llama-3.3-70b-versatile"   # 가상 문서 품질이 중요 → 더 큰 모델
+
+# HyDE: 키워드 확장(미스매치) 대신 '기법 카드처럼 생긴 가상 문서'를 생성해 임베딩한다.
+# 코퍼스(기법 청크)와 글의 모양이 비슷해져 검색이 살아난다.
+_HYDE_SYSTEM = """너는 '프롬프트 엔지니어링 기법 사전'의 항목을 쓰는 작성자다.
+사용자의 거친 요청을 보고, 그 요청을 개선하는 데 쓸 프롬프트 기법을 설명하는
+짧은 '가상 사전 항목'을 작성한다.
+
+규칙:
+- 결과물 자체(예: 마케팅 글)를 쓰지 마라. '기법 설명'만 쓴다.
+- 실제 기법명이 떠오르면 쓰고(예: Role Prompting, Chain-of-Thought, Output Format,
+  Few-Shot, Audience, Constraint), 없으면 일반 원칙으로.
+- 아래 형식, 3~5문장, 군더더기 없이.
+
+Technique: <기법명들>
+Definition: <무엇인지>
+Use When: <이런 요청일 때>"""
 
 _SYSTEM = """너는 '프롬프트 엔지니어링 기법' 벡터 검색을 위한 검색 쿼리 생성기다.
 사용자가 입력한 '개선 대상 프롬프트'를 보고, 이 프롬프트를 더 좋게 만드는 데
@@ -78,4 +95,35 @@ def transform(query: str, history: list[dict] | None = None) -> str:
         return out if out else query
     except Exception as e:
         print(f"[QueryTransform] 변환 실패 → 원본 쿼리 사용: {e}")
+        return query
+
+
+def hyde(query: str, history: list[dict] | None = None) -> str:
+    """HyDE: 기법 카드형 가상 문서를 생성해 '원본 + 가상문서'를 검색 쿼리로 반환.
+    가상문서가 코퍼스(기법 청크)와 모양이 닮아 매칭이 살아난다. 실패 시 원본."""
+    client = _get_client()
+    if client is None:
+        return query
+
+    user_msg = query
+    if history:
+        recent = [h.get("content", "") for h in history[-2:] if h.get("content")]
+        if recent:
+            user_msg = "이전 맥락: " + " / ".join(recent) + "\n이번 입력: " + query
+
+    try:
+        resp = client.chat.completions.create(
+            model=_HYDE_MODEL,
+            messages=[
+                {"role": "system", "content": _HYDE_SYSTEM},
+                {"role": "user",   "content": user_msg},
+            ],
+            max_tokens=300,
+            temperature=0.3,
+        )
+        doc = (resp.choices[0].message.content or "").strip()
+        # 원본 쿼리 신호를 유지하면서 가상문서로 보강(견고한 HyDE 변형)
+        return f"{query}\n{doc}" if doc else query
+    except Exception as e:
+        print(f"[QueryTransform] HyDE 실패 → 원본 쿼리 사용: {e}")
         return query

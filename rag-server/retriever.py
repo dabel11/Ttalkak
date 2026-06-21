@@ -26,9 +26,39 @@ from embeddings import get_model, get_reranker
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
 _TOKEN_RE = re.compile(r"[a-zA-Z]+|[0-9]+|[가-힣]+")
 
+# BM25에 의미 있는 형태소만 남긴다(조사·어미·기호 제거) → 한국어 매칭 품질↑
+_KEEP_TAGS = ("NNG", "NNP", "NNB", "NR", "NP",   # 명사류
+              "VV", "VA", "VX", "XR",            # 용언·어근
+              "SL", "SH", "SN",                  # 외국어·한자·숫자
+              "MAG")                             # 일반부사(차근차근 등)
+_kiwi = None
+_kiwi_failed = False
+
+
+def _get_kiwi():
+    """kiwipiepy 형태소 분석기를 1회만 로드. 실패하면 None(정규식 폴백)."""
+    global _kiwi, _kiwi_failed
+    if _kiwi is None and not _kiwi_failed:
+        try:
+            from kiwipiepy import Kiwi
+            _kiwi = Kiwi()
+        except Exception as e:
+            print(f"[Retriever] kiwipiepy 미사용 → 정규식 토큰화 폴백: {e}")
+            _kiwi_failed = True
+    return _kiwi
+
 
 def _tokenize(text: str) -> list[str]:
-    """BM25용 단순 토크나이저 — 영문/숫자/한글 음절런 단위 (소문자화)."""
+    """BM25용 토크나이저 — kiwipiepy로 내용 형태소 추출(소문자화).
+    kiwipiepy 없으면 영문/숫자/한글 음절런 정규식으로 폴백."""
+    kiwi = _get_kiwi()
+    if kiwi is not None:
+        try:
+            toks = [t.form.lower() for t in kiwi.tokenize(text) if t.tag in _KEEP_TAGS]
+            if toks:
+                return toks
+        except Exception:
+            pass
     return _TOKEN_RE.findall(text.lower())
 
 
@@ -47,6 +77,7 @@ class Retriever:
         self.use_hybrid   = use_hybrid
         self.fetch_k      = fetch_k
         self._reranker    = None  # 지연 로드
+        self._bm25_cache  = {}    # {collection: (BM25Okapi, row_count)} — 토큰화 재사용
         init_db()
         print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid})")
 
@@ -70,7 +101,7 @@ class Retriever:
         # ── 1단계: 후보 추리기 (dense 또는 dense+BM25 하이브리드) ──
         # 리랭크할 거면 넓게(n_fetch), 아니면 top_k만
         stage1_k   = max(n_fetch, top_k) if do_rerank else top_k
-        candidates = self._candidates(query, rows, stage1_k, do_hybrid)
+        candidates = self._candidates(query, rows, stage1_k, do_hybrid, collection_name)
 
         if not do_rerank:
             return candidates[:top_k]
@@ -83,13 +114,14 @@ class Retriever:
             return candidates[:top_k]
 
     # ── 내부 ──────────────────────────────────────────────────
-    def _candidates(self, query: str, rows: list[dict], k: int, hybrid: bool) -> list[dict]:
+    def _candidates(self, query: str, rows: list[dict], k: int, hybrid: bool,
+                    collection_name: str) -> list[dict]:
         """후보 순위를 만든다. hybrid면 dense+BM25를 RRF로 융합. score는 dense 코사인."""
         dense_scores = self._dense_scores(query, rows)
         k = min(k, len(rows))
 
         if hybrid:
-            bm25_scores = self._bm25_scores(query, rows)
+            bm25_scores = self._bm25_scores(query, rows, collection_name)
             order = self._rrf_order(dense_scores, bm25_scores)[:k]
         else:
             order = np.argsort(-dense_scores)[:k]
@@ -108,11 +140,16 @@ class Retriever:
         matrix    = np.asarray([r["embedding"] for r in rows], dtype=np.float32)
         return self._cosine(query_vec, matrix)
 
-    def _bm25_scores(self, query: str, rows: list[dict]) -> np.ndarray:
+    def _bm25_scores(self, query: str, rows: list[dict], collection_name: str) -> np.ndarray:
+        """BM25 점수. 코퍼스 토큰화는 컬렉션별로 캐시(행수 변하면 재구축).
+        _load_collection이 id 순으로 정렬해 캐시와 rows 정렬이 일치한다."""
         from rank_bm25 import BM25Okapi
-        corpus = [_tokenize(r["document"]) for r in rows]
-        bm25   = BM25Okapi(corpus)
-        return np.asarray(bm25.get_scores(_tokenize(query)), dtype=np.float32)
+        cached = self._bm25_cache.get(collection_name)
+        if cached is None or cached[1] != len(rows):
+            corpus = [_tokenize(r["document"]) for r in rows]
+            cached = (BM25Okapi(corpus), len(rows))
+            self._bm25_cache[collection_name] = cached
+        return np.asarray(cached[0].get_scores(_tokenize(query)), dtype=np.float32)
 
     @staticmethod
     def _rrf_order(dense: np.ndarray, sparse: np.ndarray) -> np.ndarray:
@@ -148,6 +185,7 @@ class Retriever:
                     RagChunk.chunk_metadata,
                     RagChunk.embedding,
                 ).where(RagChunk.collection_name == collection_name)
+                .order_by(RagChunk.id)   # 안정적 정렬 → BM25 캐시와 rows 정렬 일치
             ).all()
 
         return [

@@ -32,10 +32,13 @@ def _ranks_of_relevant(retrieved_ids: list[str], relevant: set[str]) -> list[int
     return [i + 1 for i, cid in enumerate(retrieved_ids) if cid in relevant]
 
 
-def evaluate(items, retriever, collection, use_rerank, use_qt, use_hybrid, show_fails):
+def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_fails):
+    # qmode: None / "qt"(키워드 변환) / "hyde"(가상문서)
     transform = None
-    if use_qt:
-        from query_transform import transform as transform  # noqa: F811
+    if qmode == "qt":
+        from query_transform import transform
+    elif qmode == "hyde":
+        from query_transform import hyde as transform
 
     recall_hits = mrr_sum = hit1 = 0
     fails = []
@@ -64,7 +67,7 @@ def evaluate(items, retriever, collection, use_rerank, use_qt, use_hybrid, show_
             fails.append((query, sorted(relevant), retrieved_ids[:K_RECALL]))
 
     n = len(items)
-    print(f"\n변형: hybrid={use_hybrid}  rerank={use_rerank}  query_transform={use_qt}  (질문 {n}개)")
+    print(f"\n변형: hybrid={use_hybrid}  rerank={use_rerank}  query={qmode or 'raw'}  (질문 {n}개)")
     print("─" * 48)
     print(f"  Hit@1       : {hit1/n:.3f}  ({hit1}/{n})")
     print(f"  Recall@{K_RECALL}    : {recall_hits/n:.3f}  ({recall_hits}/{n})")
@@ -82,12 +85,14 @@ def main():
     ap = argparse.ArgumentParser(description="RAG 검색 품질 평가")
     ap.add_argument("--rerank", action="store_true", help="리랭커 적용")
     ap.add_argument("--hybrid", action="store_true", help="dense+BM25 하이브리드 적용")
-    ap.add_argument("--query-transform", action="store_true", help="쿼리 변환 적용")
+    ap.add_argument("--query-transform", action="store_true", help="키워드 쿼리 변환 적용")
+    ap.add_argument("--hyde", action="store_true", help="HyDE 가상문서 쿼리 적용")
     ap.add_argument("--show-fails", action="store_true", help="실패 케이스 출력")
     ap.add_argument("--qa", default="qa_set.json", help="평가셋 파일명 (eval/ 기준)")
     ap.add_argument("--all", action="store_true",
                     help="dense / +hybrid / +rerank / +both 4개 변형을 한 번에 비교")
     args = ap.parse_args()
+    qmode = "hyde" if args.hyde else ("qt" if args.query_transform else None)
 
     qa_path = Path(__file__).parent / args.qa
     data = json.loads(qa_path.read_text(encoding="utf-8"))
@@ -98,12 +103,12 @@ def main():
     retriever = Retriever()  # 모델 1회 로드 후 변형 간 공유
 
     if args.all:
-        # (hybrid, rerank) 조합 — 쿼리 변환은 코퍼스 부적합으로 제외
+        # (hybrid, rerank) 조합 — 쿼리 모드는 raw로 고정 비교
         for hy, rr in [(False, False), (True, False), (False, True), (True, True)]:
-            evaluate(items, retriever, collection, rr, False, hy, args.show_fails)
+            evaluate(items, retriever, collection, rr, hy, None, args.show_fails)
     else:
         evaluate(items, retriever, collection, args.rerank,
-                 args.query_transform, args.hybrid, args.show_fails)
+                 args.hybrid, qmode, args.show_fails)
 
 
 if __name__ == "__main__":

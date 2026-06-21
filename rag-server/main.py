@@ -26,7 +26,7 @@ app.add_middleware(
 )
 
 indexer  = Indexer()
-retriever = Retriever(use_reranker=True, use_hybrid=True)  # 최적 조합 (평가 검증)
+retriever = Retriever(use_reranker=True, use_hybrid=False)  # 리랭커 단독 (평가상 최적)
 generator = Generator()
 
 
@@ -46,9 +46,10 @@ class QueryRequest(BaseModel):
     top_k:               int = 5
     model:               str = "gemini-2.0-flash"
     history:             Optional[list[dict]] = None   # [{role, content}, ...] 대화 기록
-    use_reranker:        bool = True    # 2단계 리랭크 (검증: Hit@1↑)
-    use_hybrid:          bool = True    # dense+BM25 하이브리드 (리랭커와 함께 쓸 때 최적)
-    use_query_transform: bool = False   # 쿼리 변환(실험적) — 현 코퍼스에선 검색 악화로 기본 off
+    use_reranker:        bool = True    # 2단계 리랭크 (검증: 단독이 최고)
+    use_hybrid:          bool = False   # dense+BM25 하이브리드 — 이 코퍼스에선 악화로 기본 off(opt-in)
+    use_query_transform: bool = False   # 키워드 쿼리변환(실험적) — 코퍼스 미스매치로 기본 off
+    use_hyde:            bool = False   # HyDE 가상문서 쿼리(실험적)
 
 class QueryResponse(BaseModel):
     answer:           str          # 전체 응답 (화면 표시용)
@@ -126,10 +127,12 @@ def query(req: QueryRequest):
     history = req.history or []
 
     # 검색에는 '기법 검색용 쿼리'를 쓰고, 생성에는 원본 프롬프트를 그대로 쓴다.
-    search_query = (
-        query_transform.transform(req.query, history)
-        if req.use_query_transform else req.query
-    )
+    if req.use_hyde:
+        search_query = query_transform.hyde(req.query, history)
+    elif req.use_query_transform:
+        search_query = query_transform.transform(req.query, history)
+    else:
+        search_query = req.query
 
     retrieved = retriever.search(
         query=search_query,
