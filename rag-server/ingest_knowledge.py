@@ -26,7 +26,7 @@ ingest_knowledge.py
     python ingest_knowledge.py --pdf x.pdf --min-score 8    # 더 엄격하게
 
 LLM 백엔드는 generator.py 와 동일하게 GROQ_API_KEY → GEMINI_API_KEY 순으로
-자동 선택한다(.env: python-reg-server/.env).
+자동 선택한다(.env: rag-server/.env).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ import pypdf
 from dotenv import load_dotenv
 
 _BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / "python-reg-server" / ".env")
+load_dotenv(dotenv_path=_BASE / ".env")
 
 DEFAULT_COLLECTION = "prompt_techniques"
 CURATED_DIR = _BASE / "data" / "curated"

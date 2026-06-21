@@ -27,7 +27,7 @@ from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from dotenv import load_dotenv
 
 _BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / "python-reg-server" / ".env")
+load_dotenv(dotenv_path=_BASE / ".env")
 
 Base = declarative_base()
 

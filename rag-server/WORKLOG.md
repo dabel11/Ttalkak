@@ -141,6 +141,22 @@
 
 ---
 
+## [2026-06-21] `.env` 위치 정리 (python-reg-server 폴더 제거)
+**목적**: `.env` 하나만 담고 이름도 오타(`reg`←`rag`)인 중첩 폴더 제거로 구조 단순화.
+
+**Before**: `rag-server/python-reg-server/.env` — 코드 3곳·docker-compose·.dockerignore가 이 경로 참조.
+**After**: `rag-server/.env`로 이동, `python-reg-server/` 폴더 삭제.
+
+**변경 파일**
+- 이동: `python-reg-server/.env` → `.env` (폴더 삭제)
+- 수정: `main.py`·`db.py`·`ingest_knowledge.py`(load_dotenv 경로), `.dockerignore`, `../docker-compose.yml`(env_file 경로)
+
+**검증**: 새 경로에서 GROQ_API_KEY·DB 설정 로드 OK, `rag_chunk` 100행 조회 성공, `python-reg-server` 참조 0건. `.env`는 `.gitignore`의 `**/.env`로 계속 보호.
+
+**결정·근거**: 단순 위치 정리. `.env`는 untracked라 git 이력엔 경로 변경만 코드/설정 쪽에 반영됨.
+
+---
+
 # 다음 작업 / 보류 항목 (백로그)
 
 - [ ] **리랭커 점수 표시**: 짧은 쿼리에서 reranker 로짓이 0 근처라 `score`가 ~0.50으로 평탄. 순위는 정상이나 UI "유사도 %"가 단조로움 → 표시 점수를 dense 코사인으로 바꾸는 옵션 검토.

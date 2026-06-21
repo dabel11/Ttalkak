@@ -30,7 +30,7 @@ services:
       mysql:
         condition: service_healthy
     env_file:
-      - ./rag-server/python-reg-server/.env   # GROQ_API_KEY 등 LLM 키
+      - ./rag-server/.env   # GROQ_API_KEY 등 LLM 키
     environment:
       DB_HOST: mysql          # 컨테이너 네트워크에선 호스트가 서비스명
       DB_PORT: "3306"

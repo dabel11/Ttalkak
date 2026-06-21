@@ -14,7 +14,7 @@ import query_transform
 
 # main.py 위치 기준 절대경로
 _BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / "python-reg-server" / ".env")
+load_dotenv(dotenv_path=_BASE / ".env")
 
 app = FastAPI(title="RAG Server", description="bge-m3 + ChromaDB + LLM")
 
