@@ -14,19 +14,19 @@ pdf_crawler.py — 딸각 RAG 지식 수집기 (크롤링 → 점수화 → PDF 
     각 단계를 따로 돌릴 수 있어 재현·디버깅이 쉽다.
   • 산출물이 곧바로 ingest_knowledge.py 의 입력 — data/downloaded_pdfs/ 트리.
 
-[전체 흐름 — 두 프로그램]
-  1) python pdf_crawler.py                         # 수집+다운로드
-  2) python ingest_knowledge.py --mode paper \\     # 파싱+청킹+적합도 큐레이션
+[전체 흐름 — 두 프로그램] (rag-server/ 에서 실행)
+  1) python -m ingestion.pdf_crawler                 # 수집+다운로드
+  2) python -m ingestion.ingest_knowledge --mode paper \\   # 파싱+청킹+적합도 큐레이션
        --pdf data/downloaded_pdfs/ --collection pe_auto
 
 설치: pip install requests beautifulsoup4 tqdm reportlab
 사용:
-  python pdf_crawler.py                       # 전체(crawl→download)
-  python pdf_crawler.py --stage crawl         # 메타데이터만 수집
-  python pdf_crawler.py --stage download      # manifest 기반 PDF만
-  python pdf_crawler.py --source arxiv_paper  # 특정 출처만
-  python pdf_crawler.py --dry-run             # 계획만 출력
-  python pdf_crawler.py --min-score 5         # 사전 필터 강화(최종 품질은 ingest가 LLM으로)
+  python -m ingestion.pdf_crawler                       # 전체(crawl→download)
+  python -m ingestion.pdf_crawler --stage crawl         # 메타데이터만 수집
+  python -m ingestion.pdf_crawler --stage download      # manifest 기반 PDF만
+  python -m ingestion.pdf_crawler --source arxiv_paper  # 특정 출처만
+  python -m ingestion.pdf_crawler --dry-run             # 계획만 출력
+  python -m ingestion.pdf_crawler --min-score 5         # 사전 필터 강화(최종은 ingest LLM)
 """
 
 from __future__ import annotations
@@ -46,11 +46,12 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 # ════════════════════════════════════════════════════════════
-# 설정 / 경로 (스크립트 기준 절대경로 → 어디서 실행해도 동일)
+# 설정 / 경로 (프로젝트 루트 기준 절대경로 → 어디서 실행해도 동일)
 # ════════════════════════════════════════════════════════════
-_BASE       = pathlib.Path(__file__).parent
-CRAWL_DIR   = _BASE / "data" / "prompt_data"        # manifest.json
-PDF_DIR     = _BASE / "data" / "downloaded_pdfs"    # 다운로드/생성된 PDF
+from app import DATA_DIR
+
+CRAWL_DIR   = DATA_DIR / "prompt_data"        # manifest.json
+PDF_DIR     = DATA_DIR / "downloaded_pdfs"    # 다운로드/생성된 PDF
 MANIFEST    = CRAWL_DIR / "manifest.json"
 GH_RAW      = "https://raw.githubusercontent.com"
 DEFAULT_DELAY = 1.5

@@ -18,12 +18,12 @@ ingest_knowledge.py
   data/curated/<원본이름>.rejected.jsonl  ← 탈락 청크(점수·사유 포함)
   표준출력 요약표
 
-사용법:
-    python ingest_knowledge.py --pdf data/some_paper.pdf
-    python ingest_knowledge.py --pdf data/ --collection prompt_techniques
-    python ingest_knowledge.py --pdf x.pdf --dry-run        # DB 미저장(검수만)
-    python ingest_knowledge.py --pdf x.pdf --replace        # 컬렉션 비우고 새로
-    python ingest_knowledge.py --pdf x.pdf --min-score 8    # 더 엄격하게
+사용법 (rag-server/ 에서 실행):
+    python -m ingestion.ingest_knowledge --pdf data/some_paper.pdf
+    python -m ingestion.ingest_knowledge --pdf data/ --collection prompt_techniques
+    python -m ingestion.ingest_knowledge --pdf x.pdf --dry-run     # DB 미저장(검수만)
+    python -m ingestion.ingest_knowledge --pdf x.pdf --replace     # 컬렉션 비우고 새로
+    python -m ingestion.ingest_knowledge --pdf x.pdf --min-score 8 # 더 엄격하게
 
 LLM 백엔드는 generator.py 와 동일하게 GROQ_API_KEY → GEMINI_API_KEY 순으로
 자동 선택한다(.env: rag-server/.env).
@@ -42,13 +42,24 @@ import time
 from dataclasses import dataclass, field, asdict
 
 import pypdf
-from dotenv import load_dotenv
 
-_BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / ".env")
+from app import DATA_DIR  # app.__init__ 가 .env 를 로드함
 
 DEFAULT_COLLECTION = "prompt_techniques"
-CURATED_DIR = _BASE / "data" / "curated"
+CURATED_DIR = DATA_DIR / "curated"
+
+# 한국어 별칭 맵 — 재인덱싱 시 Technique 라인에 한국어 동의어를 추가해
+# 한국어 쿼리와의 임베딩 매칭 정확도를 높인다.
+def _load_aliases() -> dict[str, list[str]]:
+    p = DATA_DIR / "technique_aliases.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+_ALIASES: dict[str, list[str]] = {}  # 프로세스당 1회 로드
 
 # 카테고리 통제 어휘 — 일관된 라벨은 필터링·검색 품질을 높인다(제약조건 2/3).
 CATEGORY_VOCAB = [
@@ -145,9 +156,16 @@ class Technique:
 
     def to_document(self) -> str:
         """generator.py 가 읽는 것과 동일한 구조의 청크 본문.
-        빈 필드는 줄을 생략해 청크를 깔끔하게 유지한다(검색 친화)."""
+        빈 필드는 줄을 생략해 청크를 깔끔하게 유지한다(검색 친화).
+        technique_aliases.json 에 한국어 별칭이 있으면 Technique 라인에 병기한다."""
+        global _ALIASES
+        if not _ALIASES:
+            _ALIASES = _load_aliases()
+        aliases = _ALIASES.get(self.name, [])
+        name_with_aliases = f"{self.name} ({', '.join(aliases)})" if aliases else self.name
+
         lines = [f"[{self.name}]"]
-        lines.append(f"Technique: {self.name}")
+        lines.append(f"Technique: {name_with_aliases}")
         if self.category:
             lines.append(f"Category: {self.category}")
         if self.definition:
@@ -251,7 +269,7 @@ def semantic_dedupe(techs: list[Technique], collection: str, threshold: float,
     - max 유사도 >= threshold 면 신규 카드를 폐기. (survivors, dropped) 반환."""
     import numpy as np
     from sqlalchemy import select
-    from db import SessionLocal, RagChunk
+    from app.core.db import SessionLocal, RagChunk
 
     if not techs:
         return [], []
@@ -599,7 +617,7 @@ def main() -> None:
 
     # ── 의미 기반 중복 제거 (이름이 달라도 같은 기법이면 코퍼스 오염 방지) ──
     if not args.no_semantic_dedup:
-        from embeddings import get_model
+        from app.core.embeddings import get_model
         all_kept, sem_dropped = semantic_dedupe(
             all_kept, args.collection, args.sim_threshold,
             get_model("BAAI/bge-m3"),
@@ -615,7 +633,7 @@ def main() -> None:
         return
 
     # ── MySQL 인덱싱 (기존 인프라 재사용) ──
-    from indexer import Indexer
+    from app.rag.indexer import Indexer
     indexer = Indexer(model_name="BAAI/bge-m3")
     if args.replace:
         removed = indexer.clear_collection(args.collection)

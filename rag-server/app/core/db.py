@@ -15,7 +15,6 @@ MySQL 8.0/9.x 어디서나 동작하며(벡터 인덱스 불필요), 현재 규�
 """
 
 import os
-import pathlib
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -24,10 +23,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Mapped, mapped_column
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
-from dotenv import load_dotenv
 
-_BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / ".env")
+# .env 는 app/__init__.py 에서 이미 로드됨 (app.core.db import 시 패키지 init 선실행).
 
 Base = declarative_base()
 

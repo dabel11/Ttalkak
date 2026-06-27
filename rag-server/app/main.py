@@ -1,22 +1,17 @@
 import re
-import pathlib
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from dotenv import load_dotenv
 
-from indexer import Indexer
-from retriever import Retriever
-from generator import Generator
-import query_transform
+# .env 는 app/__init__.py 에서 로드됨
+from app.rag.indexer import Indexer
+from app.rag.retriever import Retriever
+from app.rag.generator import Generator
+from app.rag import query_transform
 
-# main.py 위치 기준 절대경로
-_BASE = pathlib.Path(__file__).parent
-load_dotenv(dotenv_path=_BASE / ".env")
-
-app = FastAPI(title="RAG Server", description="bge-m3 + ChromaDB + LLM")
+app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,7 +21,7 @@ app.add_middleware(
 )
 
 indexer  = Indexer()
-retriever = Retriever(use_reranker=True, use_hybrid=False)  # 리랭커 단독 (평가상 최적)
+retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=50)  # 리랭커 단독 (평가상 최적)
 generator = Generator()
 
 
@@ -52,9 +47,11 @@ class QueryRequest(BaseModel):
     use_hyde:            bool = False   # HyDE 가상문서 쿼리(실험적)
 
 class QueryResponse(BaseModel):
-    answer:           str          # 전체 응답 (화면 표시용)
-    improved_prompt:  str          # 개선된 프롬프트만 (Execute용)
-    sources:          list[dict]
+    answer:              str            # 전체 응답 (화면 표시용)
+    improved_prompt:     str            # 개선된 프롬프트만 (Execute용)
+    sources:             list[dict]
+    techniques_applied:  list[str] = []  # 적용한 기법명 목록
+    changes:             list[str] = []  # 개선 포인트 줄 목록
 
 
 # ── 개선된 프롬프트 추출 ─────────────────────────────────────
@@ -63,6 +60,10 @@ def extract_improved_prompt(answer: str) -> str:
     LLM 응답에서 '개선된 프롬프트' 섹션만 추출.
     포맷: **개선된 프롬프트:** ... --- **적용한 기법:**
 
+    종료점은 구조 마커('적용한 기법'/'개선 포인트')를 우선 사용한다. 개선 프롬프트가
+    사용자 원문(회의록·코드·마크다운 등)을 통째로 담으면서 그 안에 '---' 구분선이
+    들어와도, 그 지점에서 잘리지 않게 하기 위함이다. (중간 '---'는 보존, 꼬리만 제거)
+
     응답이 '질문 모드'(개선 프롬프트 블록 없음)면 빈 문자열을 반환한다.
     → 프론트는 improved_prompt 가 비면 Execute 버튼을 숨긴다.
     """
@@ -70,40 +71,56 @@ def extract_improved_prompt(answer: str) -> str:
     if '개선된 프롬프트' not in answer:
         return ""
 
-    # 1) **개선된 프롬프트:** 이후 ~ 다음 --- 또는 **적용한 기법 이전까지
-    stop = r'(?=\n\s*---|\n\s*\*\*적용한 기법|\n\s*\*\*개선\s*포인트|\n\s*적용한 기법|\n\s*개선\s*포인트|\Z)'
-    patterns = [
-        r'\*\*개선된 프롬프트:\*\*\s*\n+' + f'(.*?){stop}',
-        r'개선된 프롬프트[:\s]*\n+' + f'(.*?){stop}',
-    ]
-    for pat in patterns:
-        m = re.search(pat, answer, re.DOTALL | re.IGNORECASE)
-        if m:
-            extracted = m.group(1).strip()
-            if extracted:
-                return extracted
+    # 1) '개선된 프롬프트' 헤더 위치 (볼드·콜론 유무 허용)
+    header = re.search(r'\*\*\s*개선된 프롬프트\s*:?\s*\*\*|개선된 프롬프트\s*:',
+                       answer, re.IGNORECASE)
+    if not header:
+        return ""
+    body = answer[header.end():]
 
-    # 파싱 실패 → 줄 단위로 추출
-    lines = answer.split('\n')
-    in_section = False
-    collected  = []
-    stop_keywords = ('---', '**적용한', '**개선 포인트', '**개선포인트', '적용한 기법', '개선 포인트')
-    for line in lines:
-        if '개선된 프롬프트' in line:
-            in_section = True
-            continue
-        if in_section:
-            stripped = line.strip()
-            if any(stripped.startswith(kw) or stripped == kw.strip('*') for kw in stop_keywords):
-                if collected:
-                    break
-                continue
-            collected.append(line)
-    if collected:
-        return '\n'.join(collected).strip()
+    # 2) 종료점 = 구조 마커(사용자 원문엔 등장하지 않음). 가장 먼저 나오는 것에서 끊는다.
+    #    바 '---' 는 종료점으로 쓰지 않는다(원문에 포함될 수 있으므로).
+    end = re.search(
+        r'\n\s*\*\*\s*적용한\s*기법|\n\s*\*\*\s*개선\s*포인트'
+        r'|\n\s*적용한\s*기법\s*[:：]|\n\s*개선\s*포인트\s*[:：]',
+        body, re.IGNORECASE,
+    )
+    section = body[:end.start()] if end else body
 
-    # 마커는 있었으나 추출 실패 → Execute 대상 없음으로 처리
-    return ""
+    # 3) 앞쪽 구분선/공백, 꼬리 구분선('---')만 제거 (중간 '---'는 원문이므로 보존)
+    section = re.sub(r'^\s*-{3,}\s*\n', '', section.lstrip('\n'))
+    section = re.sub(r'\n\s*-{3,}\s*$', '', section.rstrip())
+    return section.strip()
+
+
+def extract_applied_techniques(answer: str) -> list[str]:
+    """**적용한 기법:** 섹션에서 기법명만 추출 (bullet 첫 콜론 앞 토큰)."""
+    m = re.search(
+        r'\*\*적용한\s*기법[:\s]*\*\*\s*\n+(.*?)(?=\n\s*\*\*|\n\s*---|\Z)',
+        answer, re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return []
+    techs = []
+    for line in m.group(1).split('\n'):
+        line = line.strip()
+        if line and line[0] in ('•', '-', '*'):
+            name = re.sub(r'^[•\-\*]\s*', '', line).split(':')[0].strip()
+            if name:
+                techs.append(name)
+    return techs
+
+
+def extract_changes(answer: str) -> list[str]:
+    """**개선 포인트:** 섹션 텍스트를 줄 단위 리스트로 반환."""
+    m = re.search(
+        r'\*\*개선\s*포인트[:\s]*\*\*\s*\n+(.*?)(?=\n\s*\*\*|\n\s*---|\Z)',
+        answer, re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return []
+    lines = [ln.strip() for ln in m.group(1).strip().splitlines() if ln.strip()]
+    return lines
 
 
 # ── 엔드포인트 ───────────────────────────────────────────────
@@ -159,6 +176,14 @@ def query(req: QueryRequest):
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
+    # LLM이 빈/None 응답을 주면 그대로 추출 단계에 넘기지 않고 명확히 실패시킨다
+    # (None → extract_improved_prompt(None) TypeError로 500 나던 것을 방지).
+    if not (answer and answer.strip()):
+        raise HTTPException(
+            status_code=503,
+            detail="생성 결과가 비어 있습니다. 잠시 후 다시 시도해주세요."
+        )
+
     # 개선된 프롬프트만 별도 추출 → Execute 시 이 값만 전송
     improved_prompt = extract_improved_prompt(answer)
 
@@ -170,8 +195,10 @@ def query(req: QueryRequest):
         answer=answer,
         improved_prompt=improved_prompt,
         sources=sources,
+        techniques_applied=extract_applied_techniques(answer),
+        changes=extract_changes(answer),
     )
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

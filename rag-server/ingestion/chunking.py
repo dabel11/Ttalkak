@@ -11,8 +11,8 @@ naive 고정길이 분할은 문장·문단·구조를 끊어 청크가 문맥�
    필요 없다. 이 유틸은 앞으로 논문·가이드 같은 자유형식 문서를 인덱싱할 때 쓴다.
 
 사용 예:
-    from chunking import semantic_chunks
-    from indexer import Indexer
+    from ingestion.chunking import semantic_chunks
+    from app.rag.indexer import Indexer
     chunks = semantic_chunks(open("guide.md").read())
     Indexer().index(chunks=chunks, metadata=None, collection_name="guides")
 """

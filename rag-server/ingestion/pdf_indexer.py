@@ -7,9 +7,9 @@ index_pdf_direct.py
 기본 대상: data/rag_prompt_engineering_100_chunks_v1.pdf → 'prompt_techniques'
 DB 접속 정보는 db.py가 .env/환경변수에서 읽는다.
 
-사용법:
-    python index_pdf_direct.py
-    python index_pdf_direct.py --pdf /path/to/file.pdf
+사용법 (rag-server/ 에서 실행):
+    python -m ingestion.pdf_indexer
+    python -m ingestion.pdf_indexer --pdf /path/to/file.pdf
 """
 
 import argparse
@@ -19,9 +19,10 @@ from pathlib import Path
 
 import pypdf
 
-from indexer import Indexer
+from app import DATA_DIR
+from app.rag.indexer import Indexer
 
-DEFAULT_PDF = Path(__file__).parent / "data" / "rag_prompt_engineering_100_chunks_v1.pdf"
+DEFAULT_PDF = DATA_DIR / "rag_prompt_engineering_100_chunks_v1.pdf"
 COLLECTION  = "prompt_techniques"
 
 

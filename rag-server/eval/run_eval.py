@@ -2,45 +2,75 @@
 eval/run_eval.py
 ────────────────────────────────────────────────────────────
 검색 품질 평가. qa_set.json(질문 + 정답 chunk_id)을 Retriever로 검색해
-Recall@5 / MRR@10 / Hit@1 을 계산한다. 개선 전후 비교용.
+랭킹 지표를 계산한다. 개선 전후 비교용.
 
-사용법:
-    python eval/run_eval.py                      # dense 기준선
-    python eval/run_eval.py --rerank             # 리랭커 적용 (작업1 이후)
-    python eval/run_eval.py --query-transform    # 쿼리 변환 적용 (작업2 이후)
-    python eval/run_eval.py --rerank --query-transform   # 둘 다
-    python eval/run_eval.py --show-fails         # 실패 케이스 출력
+측정 지표 (relevant 가 항목당 1~3개인 이진 관련도):
+  Hit@1        — top1 이 정답인 비율
+  Recall@1/3/5 — 정답 중 상위 k 안에 든 비율(정답 ∩ top_k / 정답수). ★변별력 핵심
+  Precision@5  — top5 중 정답 비율(정답 ∩ top5 / 5)
+  MRR@10       — 첫 정답의 역순위 평균
+  NDCG@5       — 순위 가중(정답이 위에 있을수록 가점). 이진 관련도 기준
+
+  ※ 기존 'Recall@5'는 사실 "top5에 하나라도 있으면 hit"(=Hit@5)이라 0.95+로
+    천장에 닿아 변별이 안 됐다. 위 진짜 Recall@k·NDCG·Precision 으로 교체.
+
+사용법 (rag-server/ 에서 실행):
+    python -m eval.run_eval --qa qa_set_realistic.json   # 기본(dense)
+    python -m eval.run_eval --rerank --qa qa_set_realistic.json
+    python -m eval.run_eval --all --qa qa_set_realistic.json   # 4변형 비교
+    python -m eval.run_eval --show-fails                 # 실패 케이스 출력
 """
 
 import argparse
 import json
-import sys
+import math
 from pathlib import Path
 
-# rag-server 루트를 import 경로에 추가 (eval/ 하위에서 실행해도 동작)
-_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT))
-
-from retriever import Retriever  # noqa: E402
+from app.rag.retriever import Retriever
 
 K_RETRIEVE = 10   # 검색해 올 후보 수 (MRR@10 기준)
-K_RECALL   = 5    # Recall 컷오프
 
 
-def _ranks_of_relevant(retrieved_ids: list[str], relevant: set[str]) -> list[int]:
-    """retrieved_ids에서 relevant에 속하는 항목들의 1-based 순위 목록."""
-    return [i + 1 for i, cid in enumerate(retrieved_ids) if cid in relevant]
+def _recall_at_k(retrieved_ids: list[str], relevant: set[str], k: int) -> float:
+    """정답 중 상위 k 안에 든 비율 = |정답 ∩ top_k| / |정답|."""
+    if not relevant:
+        return 0.0
+    found = sum(1 for cid in retrieved_ids[:k] if cid in relevant)
+    return found / len(relevant)
+
+
+def _precision_at_k(retrieved_ids: list[str], relevant: set[str], k: int) -> float:
+    """top_k 중 정답 비율 = |정답 ∩ top_k| / k."""
+    found = sum(1 for cid in retrieved_ids[:k] if cid in relevant)
+    return found / k
+
+
+def _ndcg_at_k(retrieved_ids: list[str], relevant: set[str], k: int) -> float:
+    """이진 관련도 NDCG@k. 정답이 위쪽에 있을수록 높다."""
+    dcg = sum(1.0 / math.log2(i + 2)
+              for i, cid in enumerate(retrieved_ids[:k]) if cid in relevant)
+    ideal = sum(1.0 / math.log2(i + 2) for i in range(min(len(relevant), k)))
+    return (dcg / ideal) if ideal else 0.0
+
+
+def _first_relevant_rank(retrieved_ids: list[str], relevant: set[str]) -> int | None:
+    """첫 정답의 1-based 순위(없으면 None)."""
+    for i, cid in enumerate(retrieved_ids):
+        if cid in relevant:
+            return i + 1
+    return None
 
 
 def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_fails):
     # qmode: None / "qt"(키워드 변환) / "hyde"(가상문서)
     transform = None
     if qmode == "qt":
-        from query_transform import transform
+        from app.rag.query_transform import transform
     elif qmode == "hyde":
-        from query_transform import hyde as transform
+        from app.rag.query_transform import hyde as transform
 
-    recall_hits = mrr_sum = hit1 = 0
+    agg = {"hit1": 0.0, "r1": 0.0, "r3": 0.0, "r5": 0.0,
+           "p5": 0.0, "mrr": 0.0, "ndcg5": 0.0}
     fails = []
 
     for it in items:
@@ -55,27 +85,33 @@ def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_f
         )
 
         retrieved_ids = [r["metadata"].get("chunk_id") for r in results]
-        ranks = _ranks_of_relevant(retrieved_ids, relevant)
+        first = _first_relevant_rank(retrieved_ids, relevant)
 
-        if ranks and ranks[0] == 1:
-            hit1 += 1
-        if any(r <= K_RECALL for r in ranks):
-            recall_hits += 1
-        mrr_sum += (1.0 / ranks[0]) if ranks else 0.0
+        agg["hit1"]  += 1.0 if first == 1 else 0.0
+        agg["r1"]    += _recall_at_k(retrieved_ids, relevant, 1)
+        agg["r3"]    += _recall_at_k(retrieved_ids, relevant, 3)
+        agg["r5"]    += _recall_at_k(retrieved_ids, relevant, 5)
+        agg["p5"]    += _precision_at_k(retrieved_ids, relevant, 5)
+        agg["mrr"]   += (1.0 / first) if first else 0.0
+        agg["ndcg5"] += _ndcg_at_k(retrieved_ids, relevant, 5)
 
-        if show_fails and not any(r <= K_RECALL for r in ranks):
-            fails.append((query, sorted(relevant), retrieved_ids[:K_RECALL]))
+        if show_fails and _recall_at_k(retrieved_ids, relevant, 5) == 0.0:
+            fails.append((query, sorted(relevant), retrieved_ids[:5]))
 
     n = len(items)
     print(f"\n변형: hybrid={use_hybrid}  rerank={use_rerank}  query={qmode or 'raw'}  (질문 {n}개)")
     print("─" * 48)
-    print(f"  Hit@1       : {hit1/n:.3f}  ({hit1}/{n})")
-    print(f"  Recall@{K_RECALL}    : {recall_hits/n:.3f}  ({recall_hits}/{n})")
-    print(f"  MRR@{K_RETRIEVE}      : {mrr_sum/n:.3f}")
+    print(f"  Hit@1       : {agg['hit1']/n:.3f}")
+    print(f"  Recall@1    : {agg['r1']/n:.3f}")
+    print(f"  Recall@3    : {agg['r3']/n:.3f}")
+    print(f"  Recall@5    : {agg['r5']/n:.3f}   (진짜 recall — 천장 아님)")
+    print(f"  Precision@5 : {agg['p5']/n:.3f}")
+    print(f"  MRR@{K_RETRIEVE}      : {agg['mrr']/n:.3f}")
+    print(f"  NDCG@5      : {agg['ndcg5']/n:.3f}")
     print("─" * 48)
 
     if fails:
-        print(f"\n실패 케이스 ({len(fails)}건):")
+        print(f"\n실패 케이스 (top5에 정답 0개, {len(fails)}건):")
         for q, rel, got in fails:
             print(f"  Q: {q}")
             print(f"     정답={rel}  검색={got}")

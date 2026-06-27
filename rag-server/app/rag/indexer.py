@@ -9,8 +9,8 @@ upsert(있으면 갱신, 없으면 삽입)하고, chunk_id가 없으면 매번 �
 
 from sqlalchemy import delete, select
 
-from db import SessionLocal, RagChunk, init_db
-from embeddings import get_model
+from app.core.db import SessionLocal, RagChunk, init_db
+from app.core.embeddings import get_model
 
 
 class Indexer:

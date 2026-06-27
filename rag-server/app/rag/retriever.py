@@ -20,8 +20,8 @@ import re
 import numpy as np
 from sqlalchemy import select
 
-from db import SessionLocal, RagChunk, init_db
-from embeddings import get_model, get_reranker
+from app.core.db import SessionLocal, RagChunk, init_db
+from app.core.embeddings import get_model, get_reranker
 
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
 _TOKEN_RE = re.compile(r"[a-zA-Z]+|[0-9]+|[가-힣]+")
@@ -68,7 +68,7 @@ class Retriever:
         model_name: str = "BAAI/bge-m3",
         use_reranker: bool = True,
         use_hybrid: bool = False,
-        fetch_k: int = 20,
+        fetch_k: int = 50,
         **_ignore,
     ):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)
@@ -128,9 +128,10 @@ class Retriever:
 
         return [
             {
-                "text":     rows[i]["document"],
-                "metadata": rows[i]["metadata"] or {},
-                "score":    round(float(dense_scores[i]), 4),  # 해석 가능한 0~1 유지
+                "text":        rows[i]["document"],
+                "metadata":    rows[i]["metadata"] or {},
+                "score":       round(float(dense_scores[i]), 4),  # 해석 가능한 0~1 유지
+                "dense_score": round(float(dense_scores[i]), 4),  # 리랭크 후 표시 점수로 보존
             }
             for i in order
         ]
@@ -173,7 +174,8 @@ class Retriever:
         out = []
         for i in order:
             c = dict(candidates[i])
-            c["score"] = round(float(probs[i]), 4)              # 리랭커 점수로 교체
+            # 순위는 reranker 기준 유지, 표시 점수는 평탄한 sigmoid 대신 dense 코사인 사용
+            c["score"] = c.pop("dense_score", round(float(probs[i]), 4))
             out.append(c)
         return out
 
