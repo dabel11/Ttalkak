@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ttalkak-backend
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ttalkak
+    password: ttalkak
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_batch_fetch_size: 100
+    show-sql: true
+
+jwt:
+  secret: change-this-secret-key-to-long-random-string-for-development
+  access-token-expiration-ms: 3600000
+  refresh-token-expiration-ms: 1209600000
+
+rag:
+  server:
+    base-url: http://localhost:8000
+
+app:
+  anonymous:
+    improve-limit: 3
+    reset-hours: 24
+
+cors:
+  allowed-origins:
+    - http://localhost:3000
+    - http://localhost:5173
