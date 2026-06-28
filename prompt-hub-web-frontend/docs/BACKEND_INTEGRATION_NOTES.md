@@ -126,6 +126,7 @@ Modal behavior:
 - Nickname and user ID duplicate checks are frontend demo buttons and should be backed by real availability-check endpoints.
 - Account withdrawal is demo-only. Backend must define account deletion, authored prompt ownership, saved prompt cleanup, comments, reports, and audit policy.
 - Admin edit/delete UI is exposed through a demo toggle. Real service should drive this from a backend role such as `role: "admin"` and enforce all edit/delete actions server-side.
+- When admin mode is active, the prototype hides normal user navigation and exposes only the `Admin` area. This reflects the intended role separation: admin accounts operate moderation/management tools rather than liking, saving, sharing, or commenting as community users.
 - Prompt edit updates title, text, and tags in the prototype. Backend should provide an update endpoint with owner/admin authorization.
 - Admin page is prototype-only but should map to real role-based access control. Backend must enforce admin permissions server-side; hiding UI is not sufficient.
 

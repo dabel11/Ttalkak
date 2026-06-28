@@ -141,7 +141,7 @@ The sidebar currently exposes `Saved` as a top-level navigation item. In this pr
 - `댓글 관리`: comments and replies written by the current user, with edit/delete entry points.
 - `신고 내역`: report history submitted by the current user.
 
-Backend integration should treat `Saved` as the current user activity area. The name can later be changed to `My page` or `Library`, but the source code and current UI handed off here use `Saved`.
+Backend integration should treat `Saved` as the current user activity area. The source code and current UI handed off here use `Saved` as the sidebar label.
 
 ## Execute Flow Note
 

@@ -421,6 +421,12 @@ function render() {
 }
 
 function navigateTo(route) {
+  if (state.adminMode && route !== "admin") {
+    state.route = "admin";
+    render();
+    return;
+  }
+
   if (route === "home" && state.route === "home") {
     resetHomeView();
     render();
@@ -498,11 +504,16 @@ function Sidebar() {
   return `
     <aside class="sidebar" aria-label="주요 메뉴">
       <nav class="nav-list">
-        ${item("home", "Home", icons.home)}
-        ${item("make", "Make", icons.make)}
-        ${item("saved", "Saved", icons.save)}
-        ${item("share", "Share", icons.share)}
-        ${state.adminMode ? item("admin", "Admin", icons.shield) : ""}
+        ${
+          state.adminMode
+            ? item("admin", "Admin", icons.shield)
+            : `
+              ${item("home", "Home", icons.home)}
+              ${item("make", "Make", icons.make)}
+              ${item("saved", "Saved", icons.save)}
+              ${item("share", "Share", icons.share)}
+            `
+        }
       </nav>
     </aside>
   `;
@@ -513,7 +524,7 @@ function Header() {
   const hasReportedPrompts = state.reportedPromptIds.size > 0;
   const showPromptTools = state.route === "home" || state.route === "saved";
   const authButton = state.isLoggedIn
-    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo>관리자 데모</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo>${state.adminMode ? "관리자 데모 해제" : "관리자 데모"}</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
     : `<button class="login-button" type="button" data-open-auth="login">로그인</button>`;
 
   return `
@@ -539,6 +550,7 @@ function Header() {
 }
 
 function Page() {
+  if (state.adminMode) return AdminPage();
   if (state.route === "make") return MakePage();
   if (state.route === "saved") return SavedPage();
   if (state.route === "share") return SharePage();
@@ -1378,7 +1390,6 @@ function AdminPage() {
                           <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
                         </div>
                         <div class="admin-actions">
-                          ${record.promptId ? `<button type="button" data-open-prompt="${record.promptId}">보기</button>` : ""}
                           ${record.promptId ? `<button type="button" data-edit-prompt="${record.promptId}">수정</button>` : ""}
                           ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "숨김 해제" : "숨김"}</button>` : ""}
                           <button type="button" data-admin-report-status="${record.key}:resolved">처리 완료</button>
@@ -1405,7 +1416,6 @@ function AdminPage() {
                     <p>${prompt.source === "mine" ? "내 프롬프트" : "커뮤니티"} · ${prompt.isShared || prompt.source === "community" ? "공유됨" : "비공개"}</p>
                   </div>
                   <div class="admin-actions">
-                    <button type="button" data-open-prompt="${prompt.id}">보기</button>
                     <button type="button" data-edit-prompt="${prompt.id}">수정</button>
                     <button type="button" data-admin-hide-prompt="${prompt.id}">${state.adminHiddenPromptIds.has(prompt.id) ? "숨김 해제" : "숨김"}</button>
                     <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
@@ -1685,7 +1695,7 @@ function bindEvents() {
   document.querySelectorAll("[data-toggle-admin-demo]").forEach((button) => {
     button.addEventListener("click", () => {
       state.adminMode = !state.adminMode;
-      if (!state.adminMode && state.route === "admin") state.route = "home";
+      state.route = state.adminMode ? "admin" : "home";
       showNotice(state.adminMode ? "관리자 데모 UI를 켰습니다." : "관리자 데모 UI를 껐습니다.");
     });
   });
@@ -3989,6 +3999,7 @@ function loadPersistedState() {
     state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
     state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
     state.adminMode = Boolean(savedState.adminMode);
+    if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
     state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
