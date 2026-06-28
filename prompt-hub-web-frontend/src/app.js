@@ -510,7 +510,7 @@ function Sidebar() {
             : `
               ${item("home", "Home", icons.home)}
               ${item("make", "Make", icons.make)}
-              ${item("saved", "Saved", icons.save)}
+              ${item("saved", "My page", icons.user)}
               ${item("share", "Share", icons.share)}
             `
         }
@@ -757,7 +757,7 @@ function PromptDetailModal() {
               <h3>댓글</h3>
               <div class="comments-head-actions">
                 <span>${formatNumber(commentCount)}개</span>
-                <button type="button" data-toggle-comments="${prompt.id}">${isCommentsExpanded ? "접기" : "펼치기"}</button>
+                <button class="comment-panel-toggle" type="button" data-toggle-comments="${prompt.id}">${isCommentsExpanded ? "접기" : "펼치기"}</button>
               </div>
             </div>
             ${
@@ -780,7 +780,7 @@ function PromptDetailModal() {
                           <button class="secondary-button" type="button" data-open-auth="login">로그인</button>
                         </div>`
                   }`
-                : `<p class="comment-empty">댓글 ${formatNumber(commentCount)}개가 접혀 있습니다.</p>`
+                : ""
             }
           </section>
         </div>
@@ -1204,6 +1204,7 @@ function SavedLibraryPanel() {
         <div class="page-title">
           <span>${icons.bookmark}</span>
           <h1 id="saved-heading">내 보관함</h1>
+          <p>저장한 프롬프트, 좋아요한 프롬프트, 내가 만든 프롬프트를 한곳에서 확인합니다.</p>
         </div>
         <div class="filter-groups" aria-label="저장 목록 필터">
           <label class="sort-select saved-sort-select" aria-label="내 보관함 정렬">
@@ -1365,7 +1366,10 @@ function AdminPage() {
   const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
   const reportRecords = getAdminReportRecords();
   const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
-  const pendingTags = getKnownTags().filter((tag) => !state.adminTagDecisions[normalizeTag(tag)]).slice(0, 12);
+  const adminTags = getKnownTags()
+    .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
+    .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
+    .slice(0, 16);
 
   return `
     <section class="admin-page" aria-labelledby="admin-heading">
@@ -1378,6 +1382,7 @@ function AdminPage() {
       <div class="admin-grid">
         <section class="admin-panel">
           <h2>신고 관리</h2>
+          <p class="admin-panel-note">접수된 신고는 처리 완료 또는 기각할 수 있고, 완료/기각 후에도 다시 접수 상태로 재처리할 수 있습니다.</p>
           ${
             reportRecords.length
               ? reportRecords
@@ -1392,8 +1397,9 @@ function AdminPage() {
                         <div class="admin-actions">
                           ${record.promptId ? `<button type="button" data-edit-prompt="${record.promptId}">수정</button>` : ""}
                           ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "숨김 해제" : "숨김"}</button>` : ""}
-                          <button type="button" data-admin-report-status="${record.key}:resolved">처리 완료</button>
-                          <button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>
+                          ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">처리 완료</button>` : ""}
+                          ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
+                          ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
                           ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
                           ${record.promptId ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>` : ""}
                         </div>
@@ -1406,6 +1412,7 @@ function AdminPage() {
         </section>
         <section class="admin-panel">
           <h2>프롬프트 관리</h2>
+          <p class="admin-panel-note">관리자는 운영 목적의 수정, 숨김, 삭제만 수행합니다. 좋아요, 저장, 댓글 같은 커뮤니티 사용자 행동은 제한됩니다.</p>
           ${allPrompts
             .slice(0, 8)
             .map(
@@ -1427,22 +1434,27 @@ function AdminPage() {
         </section>
         <section class="admin-panel">
           <h2>태그 관리</h2>
+          <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
           ${
-            pendingTags.length
-              ? pendingTags
+            adminTags.length
+              ? adminTags
                   .map(
                     (tag) => `
-                      <article class="admin-row">
-                        <strong>#${escapeHtml(tag)}</strong>
+                      <article class="admin-row tag-status-${tag.status}">
+                        <div>
+                          <strong>#${escapeHtml(tag.label)}</strong>
+                          <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
+                        </div>
                         <div class="admin-actions">
-                          <button type="button" data-admin-tag-action="approved:${escapeHtml(normalizeTag(tag))}">검토 완료</button>
-                          <button type="button" data-admin-tag-action="rejected:${escapeHtml(normalizeTag(tag))}">추천 제외</button>
+                          ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
+                          ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
+                          ${tag.status !== "pending" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
                         </div>
                       </article>
                     `,
                   )
                   .join("")
-              : `<p class="admin-empty">검토할 태그가 없습니다.</p>`
+              : `<p class="admin-empty">관리할 태그가 없습니다.</p>`
           }
         </section>
       </div>
@@ -2072,8 +2084,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
       if (!tag) return;
-      state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
-      showNotice("태그 검토 상태를 변경했습니다.");
+      if (decision === "pending") {
+        const nextDecisions = { ...state.adminTagDecisions };
+        delete nextDecisions[tag];
+        state.adminTagDecisions = nextDecisions;
+      } else {
+        state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
+      }
+      showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
     });
   });
 
@@ -3783,6 +3801,30 @@ function getReportStatusLabel(status) {
   if (status === "dismissed") return "기각";
   if (status === "resolved") return "처리 완료";
   return "접수";
+}
+
+function getAdminTagStatus(tag) {
+  const decision = state.adminTagDecisions[normalizeTag(tag)];
+  if (decision === "approved" || decision === "rejected") return decision;
+  return "pending";
+}
+
+function getAdminTagStatusLabel(status) {
+  if (status === "approved") return "검토 완료";
+  if (status === "rejected") return "추천 제외";
+  return "검토 중";
+}
+
+function getAdminTagStatusClass(status) {
+  if (status === "approved") return "public";
+  if (status === "rejected") return "private";
+  return "pending-unsave";
+}
+
+function getAdminTagStatusOrder(status) {
+  if (status === "pending") return 0;
+  if (status === "approved") return 1;
+  return 2;
 }
 
 function updateReportRecordStatus(key, status) {

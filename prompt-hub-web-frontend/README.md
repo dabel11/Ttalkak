@@ -6,6 +6,10 @@
 
 현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage`를 사용합니다. 실제 백엔드 연동 시에는 `src/api.js`와 `docs/API_SPEC.md`를 기준으로 API 호출로 교체하면 됩니다.
 
+## 팀 공유 메모
+
+이 브랜치는 정식 병합 전 UX 확인용입니다. 팀원은 Home, Make, My page, Share, Admin 흐름을 직접 눌러보며 현재 프론트엔드 데모 수준을 확인하면 됩니다. 인증, Google OAuth, 관리자 권한, 중복 확인, 신고/태그 처리 등은 백엔드 연동 전 데모 동작입니다.
+
 ## 실행 방법
 
 ```powershell
@@ -29,7 +33,7 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 
 - `Home`: 인기 프롬프트, 해시태그 검색, 복수 태그 안내, 정렬 드롭다운, 추천 태그, 상세 팝업
 - `Make`: 프롬프트 첨삭 채팅, 분야 버튼, 최근 대화, Copy/Save/Execute
-- `Saved`: 내 보관함 화면. 저장한 프롬프트, 내 프롬프트, 저장 취소 보류, 공유/공유 취소
+- `My page`: 내 활동 화면. 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역, 저장 취소 보류, 공유/공유 취소
 - `Share`: 로그인 기반 프롬프트 공유
 - `Auth`: 로그인, 회원가입, 아이디 찾기, 비밀번호 찾기
 
@@ -46,7 +50,7 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - 댓글/대댓글 수정/삭제
 - 댓글/대댓글 좋아요/신고
 - 댓글/대댓글 좋아요 수 기준 정렬
-- Saved의 좋아요만 보기 필터
+- My page의 좋아요만 보기 필터
 - Make 대화 기록이 있는 내 프롬프트의 별도 대화 보기 버튼
 
 ## 주요 파일
@@ -80,7 +84,7 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 
 - 이 프로토타입은 정적 프론트엔드 데모입니다. 현재 화면 동작은 `src/app.js`의 로컬 배열과 `localStorage`가 담당합니다.
 - `src/api.js`와 `docs/API_SPEC.md`는 백엔드 연동 계약 초안이며, 아직 모든 화면 동작에 직접 연결된 상태는 아닙니다.
-- 사이드바의 `Saved` 화면 안에 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역 탭이 함께 들어 있습니다. 문서에서 이 영역을 설명할 때는 현재 UI 기준으로 `Saved`라고 부릅니다.
+- 사이드바의 `My page` 화면 안에 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역 탭이 함께 들어 있습니다. 내부 route 이름은 기존 구현 호환을 위해 `saved`를 유지하지만, 사용자-facing 명칭은 `My page`입니다.
 - Admin 화면은 프론트엔드 데모 토글로 노출되지만, 실제 서비스에서는 반드시 백엔드의 관리자 권한 검증과 감사 로그가 필요합니다.
 - 관리자 데모가 켜진 상태에서는 일반 사용자 메뉴를 숨기고 `Admin`만 노출합니다. 관리자는 커뮤니티 사용자 행동보다 신고/콘텐츠/태그 관리에 집중하는 역할로 가정합니다.
 
@@ -92,6 +96,6 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - Share 직후 내 프롬프트는 Home에 노출되지만 저장 상태는 아닙니다.
 - `내 프롬프트`와 `내가 저장한 프롬프트`는 별도 상태입니다.
 - `saves`는 전체 저장 수, `isSaved`는 현재 사용자의 저장 여부입니다. 저장 아이콘 활성화는 `isSaved`를 기준으로 해야 합니다.
-- Saved에서 저장 취소를 누르면 즉시 사라지지 않고, 다른 화면으로 이동할 때 확정됩니다.
+- My page에서 저장 취소를 누르면 즉시 사라지지 않고, 다른 화면으로 이동할 때 확정됩니다.
 - 본인 댓글/대댓글은 수정/삭제만 가능하고, 다른 사용자 댓글/대댓글은 좋아요/신고가 가능합니다.
 - 외부 AI 사이트 입력란에 직접 자동 입력하려면 Chrome Extension content script 또는 공식 API 연동이 필요합니다.

@@ -29,7 +29,7 @@ App
 │  ├─ CategoryButtons
 │  ├─ ChatFeed
 │  └─ Composer
-├─ SavedPage
+├─ SavedPage / MyPage
 │  ├─ SavedLibraryTab
 │  ├─ MyPromptsTab
 │  ├─ MyCommentsTab
@@ -106,9 +106,9 @@ type Prompt = {
 - 추천 해시태그 8개는 태그 사용 횟수 내림차순입니다.
 - Share 화면의 태그 입력은 기존 태그 검색/선택을 우선합니다. 검색 결과가 없을 때만 `새 태그로 추가`를 보여주며, 새 태그는 관리자 검토 또는 사용 횟수 기준으로 추천 태그에 승격하는 정책을 권장합니다.
 - Prompt 상세 팝업을 여는 것을 조회로 간주하고 조회수를 증가시킵니다.
-- Saved에서 저장 취소를 누르면 즉시 사라지지 않고 `저장 취소 예정`으로 남습니다.
-- Saved를 벗어날 때 실제 저장 취소가 확정됩니다.
-- Saved의 `좋아요만 보기` 필터를 켜면 현재 소유자 필터 범위 안에서 좋아요한 프롬프트만 볼 수 있습니다.
+- My page에서 저장 취소를 누르면 즉시 사라지지 않고 `저장 취소 예정`으로 남습니다.
+- My page를 벗어날 때 실제 저장 취소가 확정됩니다.
+- My page의 `좋아요만 보기` 필터를 켜면 현재 소유자 필터 범위 안에서 좋아요한 프롬프트만 볼 수 있습니다.
 - Make에서 저장한 내 프롬프트는 카드 클릭 시 최종 프롬프트 상세를 열고, 별도 `대화 보기` 버튼으로 개인 대화 기록을 확인합니다.
 - 내가 작성한 댓글/대댓글은 수정/삭제만 가능하고 신고는 표시하지 않습니다.
 - 다른 사용자의 댓글/대댓글은 좋아요/신고가 가능합니다.
@@ -117,7 +117,7 @@ type Prompt = {
 ## Demo And LocalStorage
 
 - 저장 키: `prompt_hub_web_state_v2`
-- 데모 초기화 버튼은 Home/Saved 상단 도구에 있습니다.
+- 데모 초기화 버튼은 Home/My page 상단 도구에 있습니다.
 - Make/Share에는 신고 숨김/데모 초기화 도구를 노출하지 않는 것이 현재 UI 정책입니다.
 - QA 중 상태가 꼬이면 데모 초기화를 눌러 localStorage를 비우고 새로 시작하면 됩니다.
 
@@ -132,16 +132,16 @@ type Prompt = {
 7. Make Improve API
 8. Make 최근 대화 동기화
 
-## Saved Navigation Update
+## My Page Navigation Update
 
-The sidebar currently exposes `Saved` as a top-level navigation item. In this prototype, `Saved` is broader than a simple saved-list page and groups account-owned activity:
+The sidebar currently exposes `My page` as a top-level navigation item. Internally, the route/function names still use `saved` for implementation compatibility, but the user-facing screen is broader than a simple saved-list page and groups account-owned activity:
 
 - `내 보관함`: saved prompts, liked-only filter, community/mine filters, delayed unsave UX.
 - `내가 만든 프롬프트`: prompts authored by the current user, including private/shared state.
 - `댓글 관리`: comments and replies written by the current user, with edit/delete entry points.
 - `신고 내역`: report history submitted by the current user.
 
-Backend integration should treat `Saved` as the current user activity area. The source code and current UI handed off here use `Saved` as the sidebar label.
+Backend integration should treat `My page` as the current user activity area. The implementation route may remain `saved`, but product copy and navigation should use `My page`.
 
 ## Execute Flow Note
 

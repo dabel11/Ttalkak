@@ -43,7 +43,7 @@
 - `GET /api/make/threads`
 - Make 결과 저장 API
 
-## Saved
+## My page
 
 목적: 내 보관함. 저장한 프롬프트, 내가 만든 프롬프트, 댓글, 신고 내역 관리
 
@@ -67,7 +67,7 @@
 - `PATCH /api/prompts/:id/visibility`
 - `DELETE /api/prompts/:id`
 
-Additional Saved tabs:
+Additional My page tabs:
 
 - `내 보관함`: saved prompts and liked-only filtering.
 - `내가 만든 프롬프트`: owned prompts, private/shared state, edit/delete/share controls.

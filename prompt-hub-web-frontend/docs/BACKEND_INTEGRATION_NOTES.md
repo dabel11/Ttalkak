@@ -6,13 +6,13 @@ This frontend prototype currently uses local in-memory arrays plus `localStorage
 
 - Storage key: `prompt_hub_web_state_v2`
 - `popularPrompts`: public prompts shown on Home.
-- `savedPrompts`: saved community prompts plus owned prompts shown on Saved.
+- `savedPrompts`: saved community prompts plus owned prompts shown on My page.
 - `savedByMe`: prototype-only flag equivalent to backend `isSaved`.
 - `commentsByPrompt`: comments keyed by prompt id.
 - Comment objects can include one-level `replies`.
 - Comment/reply objects can include `edited: true`.
 - `state.popularSort`: `popular | saves | comments | likes | latest`.
-- `state.pendingUnsaveIds`: prompts unsaved from Saved but not committed until the user leaves Saved.
+- `state.pendingUnsaveIds`: prompts unsaved from My page but not committed until the user leaves My page.
 - Shared community posts should contain the final prompt only. Do not expose Make conversation history in public prompt responses.
 
 ## Backend Fields Needed By The UI
@@ -52,31 +52,37 @@ Comment/reply responses should include:
 - comments/replies CRUD
 - comment/reply like
 - prompt/comment reports
-- Saved list filters
+- My page list filters
 
-## Saved Unsave UX
+## My Page Unsave UX
 
-When a user unsaves a prompt from the Saved page:
+When a user unsaves a prompt from the My page screen:
 
 - The card remains visible as `저장 취소 예정`.
 - Pressing the save icon again restores it.
-- Leaving Saved commits the removal.
+- Leaving My page commits the removal.
 
-For backend integration, call the real unsave endpoint when pending state is committed, not when the user first clicks inside Saved. On Home, prompt detail, and Make save toggles can call save/unsave immediately.
+For backend integration, call the real unsave endpoint when pending state is committed, not when the user first clicks inside My page. On Home, prompt detail, and Make save toggles can call save/unsave immediately.
 
-## Saved Visibility Toggle
+## My Page Visibility Toggle
 
-Owned prompts in Saved can switch between private and shared without opening the Share screen when the prompt already has tags. Use `PATCH /api/prompts/:id/visibility` with `isShared: true | false`. If a private prompt has no valid tags, route the user to Share so tags can be selected before publishing.
+Owned prompts in My page can switch between private and shared without opening the Share screen when the prompt already has tags. Use `PATCH /api/prompts/:id/visibility` with `isShared: true | false`. If a private prompt has no valid tags, route the user to Share so tags can be selected before publishing.
 
 ## Admin Operations
 
 The Admin screen contains three demo panels:
 
-- Report management: review prompt/comment/reply reports, dismiss reports, mark reports resolved, or delete the reported target.
+- Report management: review prompt/comment/reply reports, dismiss reports, mark reports resolved, return resolved/dismissed reports to pending for reprocessing, or delete the reported target.
 - Prompt management: edit/delete all prompts regardless of owner, and toggle visibility for owned prompts.
 - Tag management: review tag usage and prepare future flows for approval, merge, and recommendation promotion.
 
 Recommended backend endpoints are documented in `docs/API_SPEC.md`. Admin actions must be authorization-checked and logged server-side.
+
+Admin moderation states should be reversible:
+
+- Reports use `pending`, `resolved`, and `dismissed`. Resolved and dismissed reports can return to `pending` for reprocessing.
+- Tags use `pending`, `approved`, and `rejected`. Approved or rejected tags can return to `pending` for re-review.
+- Every state change should store reviewer, timestamp, and optional memo for auditability.
 
 ## Search And Sort
 
@@ -88,7 +94,7 @@ Recommended backend endpoints are documented in `docs/API_SPEC.md`. Admin action
 - Share tag input should search existing tags first. If matching existing tags exist, show only those existing tags.
 - Show `새 태그로 추가` only when the tag search has no existing result.
 - New tags should not immediately become popular/recommended tags. Promote them after admin review or after they pass a usage-count threshold.
-- Saved supports a liked-only view. Backend can expose this through `GET /api/prompts/my?filter=liked`.
+- My page supports a liked-only view. Backend can expose this through `GET /api/prompts/my?filter=liked`.
 
 ## Modal Flows
 
@@ -110,10 +116,10 @@ Modal behavior:
 
 ## Demo Tools
 
-- Demo reset and reported-prompt hide controls are exposed on Home/Saved only.
+- Demo reset and reported-prompt hide controls are exposed on Home/My page only.
 - Reset clears `prompt_hub_web_state_v2` from localStorage and reloads the page.
 - Make/Share intentionally do not show these demo controls to keep task screens clean.
-- If demo state looks inconsistent during QA, go to Home or Saved and use Demo reset.
+- If demo state looks inconsistent during QA, go to Home or My page and use Demo reset.
 
 ## Auth And Admin Demo
 
@@ -130,20 +136,20 @@ Modal behavior:
 - Prompt edit updates title, text, and tags in the prototype. Backend should provide an update endpoint with owner/admin authorization.
 - Admin page is prototype-only but should map to real role-based access control. Backend must enforce admin permissions server-side; hiding UI is not sufficient.
 
-## Saved Navigation And User Activity
+## My Page Navigation And User Activity
 
-The current sidebar still exposes `Saved` as a top-level navigation item. In this prototype, `Saved` contains user activity tabs and is not limited to only prompts that the user explicitly saved.
+The current sidebar exposes `My page` as a top-level navigation item. In this prototype, My page contains user activity tabs and is not limited to only prompts that the user explicitly saved. Some frontend route/function names still use `saved` for implementation compatibility.
 
 Role boundary:
 
-- Saved is for the current user's own activity only.
+- My page is for the current user's own activity only.
 - Admin is for service-wide moderation and operations.
-- Saved/user-activity APIs must be scoped to the authenticated user.
+- My page/user-activity APIs must be scoped to the authenticated user.
 - Admin APIs must require an admin role and server-side audit logging.
 
-Current Saved tabs:
+Current My page tabs:
 
-- Saved library: prompts saved by the current user, liked-only filter, owner filters, and delayed unsave UX.
+- Library: prompts saved by the current user, liked-only filter, owner filters, and delayed unsave UX.
 - Created prompts: prompts authored or saved from Make by the current user, including private/shared visibility switching.
 - Comment management: comments and replies written by the current user. The UI can open the related prompt detail and enter edit/delete flows.
 - Report history: reports submitted by the current user, including target type, reason, submitted time, and review status.
@@ -162,7 +168,7 @@ Report records should include `reporterId` or equivalent ownership metadata so u
 Concept boundary:
 
 - Make folders organize private conversation threads while the user is drafting or improving prompts.
-- Saved library manages final prompt artifacts: saved prompts, liked prompts, and prompts authored by the user.
+- My page library manages final prompt artifacts: saved prompts, liked prompts, and prompts authored by the user.
 - Moving a Make conversation between folders must not change whether a final prompt is saved, liked, private, or shared.
 - Saving or sharing a final prompt must not require exposing the original Make conversation thread.
 

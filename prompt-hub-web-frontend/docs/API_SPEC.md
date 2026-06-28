@@ -41,8 +41,8 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | --- | --- | --- | --- |
 | 프롬프트 공유 | `POST /api/prompts` | `{ title, text, tags }` | 내 프롬프트를 공유 상태로 생성 |
 | 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자 또는 관리자만 가능 |
-| 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, Saved에는 내 프롬프트로 유지 |
-| 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | Saved의 내 프롬프트를 Home에 노출 |
+| 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, My page에는 내 프롬프트로 유지 |
+| 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | My page의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
 | 관리자 프롬프트 수정/삭제 | `PATCH/DELETE /api/admin/prompts/:id` | varies | 관리자 권한 및 감사 로그 필요 |
 | 저장 | `POST /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
@@ -62,13 +62,13 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 로그아웃 | `POST /api/auth/logout` | none | 세션/token 종료 |
 | 회원탈퇴 | `DELETE /api/users/me` | confirmation payload | 계정/작성물/댓글/저장/신고 정책 필요 |
 
-## Saved / User Activity
+## My Page / User Activity
 
-The current UI exposes this area as `Saved`. It groups saved prompts, owned prompts, comments/replies, and report history for the current authenticated user.
+The current UI exposes this area as `My page`. It groups saved prompts, owned prompts, comments/replies, and report history for the current authenticated user. The frontend implementation route may still be named `saved` for compatibility.
 
 | Feature | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
-| Saved library | `GET /api/me/library?filter=all&sort=saves&page=1&pageSize=16` | none | Saved tab data. Saved prompts plus liked-only filter support. Keep `isSaved` separate from `saves`. |
+| My page library | `GET /api/me/library?filter=all&sort=saves&page=1&pageSize=16` | none | My page library tab data. Saved prompts plus liked-only filter support. Keep `isSaved` separate from `saves`. |
 | My prompts | `GET /api/me/prompts?sort=latest` | none | Prompts authored by the current user, including private/shared status. |
 | My comments | `GET /api/me/comments` | none | Comments and replies written by the current user with prompt summary and edit/delete permissions. |
 | My reports | `GET /api/me/reports` | none | Report history submitted by the current user with target type, reason, submitted time, and status. |
@@ -82,10 +82,17 @@ The current UI exposes this area as `Saved`. It groups saved prompts, owned prom
 | 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 작성자, 처리 상태 |
 | 신고 처리 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 처리자와 처리 시각 감사 로그 필요 |
 | 신고 기각 | `PATCH /api/admin/reports/:id` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
+| 신고 재처리 | `PATCH /api/admin/reports/:id` | `{ status: "pending", memo? }` | 처리 완료/기각 상태를 다시 접수 상태로 되돌림 |
 | 신고 대상 삭제 | `DELETE /api/admin/reports/:id/target` | `{ memo? }` | 대상이 프롬프트/댓글/대댓글인지에 따라 삭제 |
 | 전체 프롬프트 수정 | `PATCH /api/admin/prompts/:id` | `{ title, text, tags, isShared? }` | 소유자와 무관하게 관리자 권한으로 수정 |
 | 전체 프롬프트 삭제 | `DELETE /api/admin/prompts/:id` | `{ memo? }` | 삭제 사유와 관리자 감사 로그 필요 |
-| 태그 관리 | `GET/PATCH /api/admin/tags` | varies | 새 태그 승인/반려, 유사 태그 병합, 추천 태그 승격 |
+| 태그 관리 | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected` 상태와 사용 횟수 반환 |
+| 태그 상태 변경 | `PATCH /api/admin/tags/:id` | `{ status: "pending" \| "approved" \| "rejected", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
+
+Admin status model:
+
+- Report status: `pending` = 접수, `resolved` = 처리 완료, `dismissed` = 기각. 처리 완료/기각 상태는 `pending`으로 되돌려 재처리할 수 있어야 합니다.
+- Tag status: `pending` = 검토 중, `approved` = 검토 완료, `rejected` = 추천 제외. 승인/제외된 태그도 `pending`으로 되돌려 재검토할 수 있어야 합니다.
 
 회원가입 필수값은 `nickname`, `name`, `userId`, `password`, `passwordConfirm`, `agreeTerms`, `agreePrivacy`입니다. `birth`, `phone`, `email`은 선택값이며, 입력된 경우에만 형식 검증을 권장합니다. 이메일은 아이디 찾기 보조 수단으로 사용할 수 있으나, 이메일을 등록하지 않은 사용자는 이메일 방식 아이디 찾기를 사용할 수 없습니다. 커뮤니티 화면에는 실명 `name`이 아니라 `nickname`을 표시해야 합니다. 약관/개인정보 동의는 실제 서비스에서 동의 버전과 동의 시각 저장이 필요합니다.
 
@@ -110,13 +117,13 @@ The current UI exposes this area as `Saved`. It groups saved prompts, owned prom
 - 저장 버튼 클릭 후: `isSaved: true`, `saves: 1`
 - 저장 취소 후: `isSaved: false`, `saves: 0`
 
-Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함께 보여줍니다. Saved 화면에서 저장 취소를 누르면 즉시 목록에서 사라지지 않고, 사용자가 다른 화면으로 이동할 때 저장 취소를 확정하는 UX입니다.
-Saved의 내 프롬프트는 `공유됨`/`비공개` 상태를 버튼 한 번으로 전환합니다. 이미 제목, 본문, 태그가 있는 비공개 프롬프트는 `PATCH /api/prompts/:id/visibility`로 즉시 공유 상태가 되며, 태그가 없는 경우에만 Share 화면에서 태그를 보완하도록 안내합니다.
+My page 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함께 보여줍니다. My page 화면에서 저장 취소를 누르면 즉시 목록에서 사라지지 않고, 사용자가 다른 화면으로 이동할 때 저장 취소를 확정하는 UX입니다.
+My page의 내 프롬프트는 `공유됨`/`비공개` 상태를 버튼 한 번으로 전환합니다. 이미 제목, 본문, 태그가 있는 비공개 프롬프트는 `PATCH /api/prompts/:id/visibility`로 즉시 공유 상태가 되며, 태그가 없는 경우에만 Share 화면에서 태그를 보완하도록 안내합니다.
 
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
-| Saved 목록 | `GET /api/prompts/my?filter=all&page=1&pageSize=16` | none | `filter=all|community|mine|liked` 권장 |
-| 저장 취소 확정 | `DELETE /api/prompts/:id/save` | none | Saved 이탈 시 pending 항목에 대해 호출 |
+| My page 목록 | `GET /api/prompts/my?filter=all&page=1&pageSize=16` | none | `filter=all|community|mine|liked` 권장 |
+| 저장 취소 확정 | `DELETE /api/prompts/:id/save` | none | My page 이탈 시 pending 항목에 대해 호출 |
 
 ## Comments And Replies
 
