@@ -5,11 +5,14 @@
 ## 전체 구조
 
 ```
-Spring Boot (8080)
-    │
-    │  POST /api/rag/index   → 청크 인덱싱
-    │  POST /api/rag/query   → 검색 + 응답
-    ▼
+호출 경로
+  Chrome 확장  ──────────────────────────────────────────────────▶│
+  Spring(:8080) /api/prompts/improve ─(프록시)──────────────────▶│
+    │                                                              │
+    │  POST /query   → 검색 + LLM 응답 생성 (기법 개선)          │
+    │  POST /index   → 청크 인덱싱                                │
+    │  GET  /health  → 헬스체크                                   │
+    ▼                                                              ▼
 FastAPI RAG Server (8000)
     ├── app/                      # ── 서버 런타임 ──
     │   ├── main.py               : FastAPI 앱·엔드포인트(/query·/index·/health)
@@ -79,11 +82,6 @@ MySQL (3306, ttalkak) — Spring 백엔드와 동일 DB, rag_chunk 테이블
 > 🔴 **즉시 발견된 회귀**: "사용자가 변환할 원문을 직접 준 작업"(회의록 요약·영어 이메일 번역)에서 개선 결과가 **1.0점**으로 폭락 — 딸각이 지시문으로 재작성하며 **원문 페이로드를 누락**("회의록 내용이 제공되지 않았습니다"). 순수 생성 작업(카피·공고)에선 강한 70b 실행모델 기준 개선 효과가 미미~소폭(–). → generator가 user-provided 원문을 개선프롬프트에 보존하도록 수정 필요(백로그). 도구가 의도대로 실효용 회귀를 정량 포착.
 
 새 자유형식 문서: `ingestion.chunking.semantic_chunks(text)`로 청킹. 새 기법 자료: `ingestion.ingest_knowledge`(LLM 카드 추출 + 의미 중복제거)로 인덱싱.
-
-> 벡터 저장소로 MySQL을 사용한다(설계 문서의 "동일 DB 사용" 원칙). MySQL에는
-> 벡터 ANN 인덱스가 없어 유사도 계산은 Python(numpy)에서 정확(brute-force)
-> 코사인으로 수행한다. 현재 규모(수백~수천 청크)에서 충분히 빠르며, 규모가
-> 커지면 retriever.py에서 ANN/캐시를 도입하면 된다.
 
 ## 실행 순서
 
@@ -225,10 +223,14 @@ implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
 ## API 사용 예시
 
-### 인덱싱 (논문 청크 저장)
+> FastAPI 서버(`localhost:8000`)에 직접 호출하는 예시다.
+> Swagger UI: `http://localhost:8000/docs`
+> Spring Boot에서 연동 시 `/api/prompts/improve` → rag-server `:8000/query` 로 프록시된다.
+
+### 인덱싱 (`POST /index`)
 
 ```bash
-curl -X POST http://localhost:8080/api/rag/index \
+curl -X POST http://localhost:8000/index \
   -H "Content-Type: application/json" \
   -d '{
     "chunks": [
@@ -238,19 +240,25 @@ curl -X POST http://localhost:8080/api/rag/index \
     "metadata": [
       {"source": "Wei et al. 2022", "page": 1},
       {"source": "Brown et al. 2020", "page": 3}
-    ]
+    ],
+    "collection_name": "pe_manual"
   }'
 ```
 
-### 질의 응답
+### 질의 응답 (`POST /query`)
 
 ```bash
-curl -X POST http://localhost:8080/api/rag/query \
+curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "chain-of-thought 프롬프팅이란 무엇인가요?"}'
+  -d '{
+    "query": "chain-of-thought 프롬프팅이란 무엇인가요?",
+    "collection_name": "prompt_techniques",
+    "top_k": 5,
+    "use_reranker": true
+  }'
 ```
 
-응답:
+응답 (v2.0 스키마):
 ```json
 {
   "answer": "Chain-of-thought prompting은 모델이 복잡한 추론 과정을...",
@@ -258,10 +266,12 @@ curl -X POST http://localhost:8080/api/rag/query \
   "sources": [
     {
       "text": "Chain-of-thought prompting enables...",
-      "metadata": {"source": "Wei et al. 2022", "page": 1},
+      "metadata": {"technique": "Chain-of-Thought", "source": "Wei et al. 2022", "page": 1},
       "score": 0.923
     }
-  ]
+  ],
+  "techniques_applied": ["Chain-of-Thought Prompting"],
+  "changes": ["단계적 추론 구조 추가", "목적 명시"]
 }
 ```
 
@@ -295,8 +305,6 @@ rag-server/
 │   ├── gen_set.json           #   생성 평가셋 (거친 프롬프트→기대 모드)
 │   └── uplift_set.json        #   상향 평가셋 (거친 요청→결과물 A/B)
 ├── data/                      # 원본 PDF·산출물 (git 미추적)
-├── spring-integration-example/  # Spring 연동 참고 (Java)
-│   ├── RagDto.java  RagService.java  RagController.java  application-rag.yml
 ├── requirements.txt  Dockerfile  .dockerignore  .env
 └── README.md  WORKLOG.md
 ```

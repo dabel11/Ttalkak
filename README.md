@@ -11,13 +11,14 @@ RAG로 프롬프팅 기법을 검색하고, 대화를 통해 사용자의 프롬
 
 ```
 Ttalkak/
-├── backend/      Spring Boot 백엔드 (인증·프롬프트·커뮤니티, OpenAI/Anthropic 연동)
-├── rag-server/   Python FastAPI RAG 서버 (bge-m3 + ChromaDB + Groq/Gemini)
-└── extension/    크롬 확장 (React + Vite) — RAG 서버를 직접 호출
+├── backend/                   Spring Boot 백엔드 (인증·프롬프트·커뮤니티, OpenAI/Anthropic 연동)
+├── rag-server/                Python FastAPI RAG 서버 (bge-m3 + MySQL + Groq/Gemini)
+├── extension/                 크롬 확장 (React + Vite) — RAG 서버를 직접 호출
+└── prompt-hub-web-frontend/   웹 커뮤니티 프론트엔드 프로토타입 (Vanilla JS, 백엔드 없이 동작)
 ```
 
 > 두 가지 AI 경로가 있다.
-> - **확장 → rag-server**: ChromaDB에서 프롬프팅 기법을 검색해 개선 (대화형)
+> - **확장 → rag-server**: MySQL(rag_chunk)에서 프롬프팅 기법을 검색해 개선 (대화형)
 > - **backend → OpenAI/Anthropic**: 웹 서비스용 프롬프트 개선 API
 
 ---
@@ -39,16 +40,28 @@ cd backend
 ```bash
 cd rag-server
 pip install -r requirements.txt
-python3 main.py          # http://localhost:8000
+
+# MySQL 접속 (.env 또는 환경변수)
+#   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
+# LLM 키
+export GROQ_API_KEY=...        # 또는 GEMINI_API_KEY=...
+
+# (최초 1회) 지식 PDF 인덱싱
+python -m ingestion.ingest_knowledge --mode technique \
+  --pdf data/rag_prompt_engineering_100_chunks_v1.pdf
+
+# 서버 실행
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+# → http://localhost:8000/docs
 ```
 
-- `main.py` — `/query`(개선), `/index`(인덱싱), `/health`
-- `generator.py` — Groq(우선)/Gemini 백엔드, 대화형 시스템 프롬프트
-- `retriever.py` / `indexer.py` — ChromaDB 검색·인덱싱 (bge-m3 임베딩)
-- `index_*.py` — PDF/논문 청크 인덱싱 스크립트
-- 컬렉션: `prompt_techniques`(PDF 100기법), `papers`(논문 청크)
-- 비밀키: `python-reg-server/.env` 에 `GROQ_API_KEY` / `GEMINI_API_KEY`
-- 데이터·벡터DB는 `data/`, `chroma_db/` (gitignore 대상)
+- `app/main.py` — FastAPI 앱, `/query` · `/index` · `/health`
+- `app/rag/generator.py` — Groq(우선)/Gemini 백엔드, 대화형 시스템 프롬프트
+- `app/rag/retriever.py` / `app/rag/indexer.py` — MySQL(rag_chunk) 검색·인덱싱 (bge-m3 임베딩 + bge-reranker-v2-m3)
+- `ingestion/` — 오프라인 PDF 수집·청킹·인덱싱 파이프라인 (`python -m ingestion.*`)
+- 컬렉션: `prompt_techniques`(기법 카드), `papers`(논문 청크)
+- 비밀키: `rag-server/.env` 에 `GROQ_API_KEY` / `GEMINI_API_KEY`
+- 데이터는 `data/` (gitignore 대상); 벡터는 MySQL `rag_chunk` 테이블
 
 ## extension (크롬 확장)
 
@@ -64,9 +77,3 @@ npm run dev              # 개발 서버
 - 대화형 개선: 직전 개선 결과를 이어받아 "더 짧게", "페르소나 빼줘" 등 피드백 반영
 - Execute: 개선된 프롬프트만 ChatGPT/Claude/Gemini 입력창에 자동 입력
 
----
-
-## 참고
-
-`rag-server/spring-integration-example/` — Spring에서 rag-server를 호출하는 예제 코드(WebClient).
-현재 backend는 OpenAI/Anthropic 직접 연동을 사용하며, RAG 연동 시 참고용.

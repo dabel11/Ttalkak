@@ -418,6 +418,56 @@ eval/  run_eval.py(+__init__.py)
 
 ---
 
+## [2026-06-28] spring-integration-example 삭제 — v2.0 계약과 불일치한 stale 예제 제거
+**목적**: 설계 문서(v2.0)와 대조 중 `spring-integration-example/`가 v1.0에 멈춰 있어 그대로 따라하면 오히려 오연동을 유발함을 확인. 불필요 판단으로 제거.
+
+**Before**
+- `spring-integration-example/`(RagDto·RagService·RagController·application-rag.yml)가 구버전 계약:
+  - `QueryResponse`에 `improved_prompt`/`techniques_applied`/`changes` 누락(실제 `/query`는 반환) → Execute·기법표시 연동 불가
+  - `QueryRequest` 기본값 `collection="papers"`, `model="claude-3-haiku-20240307"`(폐기된 값), `history` 필드 없음
+  - README 2곳에서 이 디렉터리를 "Spring 연동 참고"로 안내
+
+**After**
+- `spring-integration-example/` 디렉터리 전체 삭제.
+- 참조 정리: 루트 `README.md`의 "참고" 섹션 제거, `rag-server/README.md` 디렉터리 트리에서 항목 제거.
+
+**변경 파일**
+- 삭제: `spring-integration-example/`(RagDto.java, RagService.java, RagController.java, application-rag.yml)
+- 수정: `README.md`(참고 섹션), `rag-server/README.md`(디렉터리 트리)
+
+**결정·근거**
+- rag-server `/query` 코어는 v2.0 계약과 이미 일치 — 예제만 stale이라 유지 가치보다 오연동 위험이 큼. Spring 실연동은 별도 백엔드 레포에서 진행하므로 이 스텁은 불필요.
+- 파이프라인 코드 무변경 → `RAG_PIPELINE.md` 갱신 불필요.
+
+---
+
+## [2026-06-28] 문서 무결성 수정 — API 예시 경로 교체 · MySQL 노트 중복 제거 · 잔재 파일 삭제
+**목적**: spring-integration-example 삭제 이후 남아 있던 문서 불일치 3건 정리.
+
+**Before**
+1. `rag-server/README.md` 상단 아키텍처 다이어그램이 `Spring Boot → POST /api/rag/index · /api/rag/query` 형태로 삭제된 RagController.java의 v1.0 Spring 경로를 노출.
+2. "API 사용 예시" 섹션이 `http://localhost:8080/api/rag/index`, `http://localhost:8080/api/rag/query` 로 curl 예시 제공 — 삭제된 Spring 스텁 경로, 응답 스키마도 v1.0(techniques_applied·changes 누락).
+3. MySQL brute-force 설명 blockquote이 README 내 2곳에 동일 내용으로 중복(§전체 구조 + §평가 섹션).
+4. `rag-server/main.py` 0바이트 빈 파일이 untracked으로 존재 — 2026-06-22 패키지 리팩터링 때 `app/main.py`로 이동 후 루트에 남은 잔재.
+
+**After**
+1. 아키텍처 다이어그램 → 실제 FastAPI 엔드포인트(`POST /query`, `POST /index`, `GET /health`)와 두 가지 호출 경로(Chrome 확장 직접 / Spring 프록시 `/api/prompts/improve`) 명시.
+2. API 예시 → `http://localhost:8000/query`, `http://localhost:8000/index` 직접 호출로 교체. 응답 스키마에 `techniques_applied`, `changes` 추가(v2.0 계약 반영). Swagger UI 안내 추가.
+3. 중복 MySQL 노트 제거(§평가 섹션 내 중복분 삭제, §전체 구조 내 원문 유지).
+4. `rag-server/main.py` 빈 파일 삭제.
+
+**변경 파일**
+- 수정: `rag-server/README.md`(아키텍처 다이어그램·API 예시·중복 제거)
+- 삭제: `rag-server/main.py`(0바이트 잔재)
+
+**검증**: `grep` 으로 `localhost:8080/api/rag` 0건, MySQL 노트 1건 확인. `main.py` 삭제 확인.
+
+**결정·근거**
+- API 예시는 RAG 서버 자체의 엔드포인트를 기준으로 두고, Spring 연동 경로는 주석으로 안내하는 것이 rag-server README의 역할에 맞음. Spring 실연동은 백엔드 레포 담당.
+- 파이프라인 코드 무변경 → `RAG_PIPELINE.md` 갱신 불필요.
+
+---
+
 # 다음 작업 / 보류 항목 (백로그)
 
 - [x] 🔴 **generator 원문 페이로드 누락(uplift_eval 발견)** — 완료(위 [2026-06-26] 항목). 사용자가 변환할 원문(회의록·번역 대상 이메일·리뷰 대상 코드 등)을 직접 준 경우, 개선프롬프트가 그 원문을 **조건·재료로 그대로 포함**하도록 SYSTEM_PROMPT 규칙 추가. 회의록 개선점수 1.0→5.0, 이메일 원문 verbatim 포함 확인(8b/70b). ⚠️ 70b TPD 회복 후 동일조건 전체 재측정 권장.
