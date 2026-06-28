@@ -1159,10 +1159,10 @@ function MessageBubble(message) {
             </form>`
           : `<article class="message ${message.role}">
               <p>${message.content}</p>
-            </article>
-            <footer class="user-message-actions">
-              <button class="user-message-edit-button" type="button" data-edit-message="${message.id}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
-            </footer>`
+              <div class="user-message-actions">
+                <button class="user-message-edit-button" type="button" data-edit-message="${message.id}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
+              </div>
+            </article>`
       }
     </div>
   `;
