@@ -1819,16 +1819,36 @@ h1 {
 }
 
 .user-message-actions {
+  display: flex;
   justify-content: flex-end;
   width: auto;
-  margin: 4px clamp(10px, 2vw, 24px) 0 auto;
+  margin: 6px clamp(10px, 2vw, 24px) 0 auto;
 }
 
-.user-message-actions button {
-  border-color: transparent;
+.user-message-edit-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
   background: #eef4ef;
   color: var(--brand-green);
   box-shadow: var(--edge-shadow);
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s, box-shadow 0.16s, transform 0.16s;
+}
+
+.user-message-edit-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.user-message-edit-button:hover {
+  background: var(--brand-green);
+  color: #fff;
+  box-shadow: var(--edge-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .message-actions button {

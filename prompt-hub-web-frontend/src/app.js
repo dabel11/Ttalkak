@@ -373,6 +373,7 @@ const state = {
 
 let searchCommitTimer = null;
 let searchTipTimer = null;
+let pendingMessageScrollId = null;
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -418,6 +419,25 @@ function render() {
   `;
   bindEvents();
   focusActiveModal();
+  restorePendingMessageScroll();
+}
+
+function restorePendingMessageScroll() {
+  if (!pendingMessageScrollId) return;
+  const messageId = pendingMessageScrollId;
+  pendingMessageScrollId = null;
+  requestAnimationFrame(() => {
+    const safeId = String(messageId).replace(/"/g, '\\"');
+    const target = document.querySelector(`[data-message-id="${safeId}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    const textarea = target.querySelector("textarea");
+    if (textarea) {
+      textarea.focus({ preventScroll: true });
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    }
+  });
 }
 
 function navigateTo(route) {
@@ -1127,7 +1147,7 @@ function MessageBubble(message) {
   }
 
   return `
-    <div class="message-group user-group">
+    <div class="message-group user-group" data-message-id="${escapeHtml(message.id)}">
       ${
         state.editingMessageId === message.id
           ? `<form class="message-edit-form" data-edit-message-form="${message.id}">
@@ -1141,7 +1161,7 @@ function MessageBubble(message) {
               <p>${message.content}</p>
             </article>
             <footer class="user-message-actions">
-              <button type="button" data-edit-message="${message.id}">${icons.edit}<span>수정</span></button>
+              <button class="user-message-edit-button" type="button" data-edit-message="${message.id}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
             </footer>`
       }
     </div>
@@ -1204,7 +1224,6 @@ function SavedLibraryPanel() {
         <div class="page-title">
           <span>${icons.bookmark}</span>
           <h1 id="saved-heading">내 보관함</h1>
-          <p>저장한 프롬프트, 좋아요한 프롬프트, 내가 만든 프롬프트를 한곳에서 확인합니다.</p>
         </div>
         <div class="filter-groups" aria-label="저장 목록 필터">
           <label class="sort-select saved-sort-select" aria-label="내 보관함 정렬">
@@ -2037,12 +2056,15 @@ function bindEvents() {
   document.querySelectorAll("[data-edit-message]").forEach((button) => {
     button.addEventListener("click", () => {
       state.editingMessageId = button.dataset.editMessage;
+      pendingMessageScrollId = button.dataset.editMessage;
       render();
     });
   });
 
   document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
     button.addEventListener("click", () => {
+      const form = button.closest("[data-edit-message-form]");
+      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
       state.editingMessageId = null;
       render();
     });
@@ -3189,6 +3211,7 @@ function resendEditedMessage(messageId, value) {
     sourcePrompt: cleanValue,
   });
   state.editingMessageId = null;
+  pendingMessageScrollId = messageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
   showNotice("수정한 메시지로 다시 전송했습니다.");
   render();
