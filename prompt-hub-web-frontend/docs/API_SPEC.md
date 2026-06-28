@@ -7,8 +7,8 @@
 | 기능 | Method + path | Request body | Response |
 | --- | --- | --- | --- |
 | 로그인 | `POST /api/auth/login` | `{ userId, password }` | `{ user, accessToken }` |
-| 회원가입 | `POST /api/auth/signup` | `{ name, birth, phone, userId, password }` | `{ user, accessToken }` |
-| 아이디 찾기 | `POST /api/auth/find-id` | `{ name, phone }` | `{ maskedUserId }` |
+| 회원가입 | `POST /api/auth/signup` | `{ nickname, name, birth?, phone?, email?, userId, password, agreeTerms, agreePrivacy }` | `{ user, accessToken }` |
+| 아이디 찾기 | `POST /api/auth/find-id` | `{ method: "phone", name, phone }` 또는 `{ method: "email", name, email }` | `{ maskedUserId }` |
 | 비밀번호 재설정 요청 | `POST /api/auth/password-reset/request` | `{ userId, phone }` | `{ ok: true }` |
 
 ## Prompt List And Search
@@ -30,6 +30,8 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 프롬프트 목록 | `GET /api/prompts?sort=popular&page=1&pageSize=16` | none | 공유 프롬프트 16개 단위 페이지 |
 | 해시태그 검색 | `GET /api/prompts?tags=marketing,seo&sort=popular&page=1&pageSize=16` | none | 복수 태그 AND 검색 |
 | 인기 태그 | `GET /api/tags/popular?limit=8` | none | 태그 사용 횟수 내림차순 상위 8개 |
+| 태그 검색/추천 | `GET /api/tags?query=marketing&limit=8` | none | Share 화면에서 기존 태그 우선 선택용. 기존 태그가 있으면 기존 태그만 반환 |
+| 새 태그 생성 후보 | `POST /api/tags/proposals` | `{ name }` | 검색 결과가 없을 때만 호출 권장. 관리자 검토 또는 사용 횟수 기준 승격 대상 |
 | 프롬프트 상세 | `GET /api/prompts/:id` | none | 본문, 태그, 카운트, 작성자, 소유 여부, 저장/좋아요/신고 여부 |
 | 조회수 증가 | `POST /api/prompts/:id/view` | none | 상세 팝업 오픈 시 호출 |
 
@@ -38,14 +40,56 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
 | 프롬프트 공유 | `POST /api/prompts` | `{ title, text, tags }` | 내 프롬프트를 공유 상태로 생성 |
+| 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자 또는 관리자만 가능 |
 | 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, Saved에는 내 프롬프트로 유지 |
 | 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | Saved의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
+| 관리자 프롬프트 수정/삭제 | `PATCH/DELETE /api/admin/prompts/:id` | varies | 관리자 권한 및 감사 로그 필요 |
 | 저장 | `POST /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 저장 취소 | `DELETE /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 좋아요 | `POST /api/prompts/:id/like` | none | 좋아요 수와 `isLiked` 반환 |
 | 좋아요 취소 | `DELETE /api/prompts/:id/like` | none | 좋아요 수와 `isLiked` 반환 |
 | 프롬프트 신고 | `POST /api/reports/prompts/:id` | `{ reason }` | 동일 사용자 중복 신고 방지 |
+
+## Auth Actions
+
+| 기능 | Method + path | Request body | Response notes |
+| --- | --- | --- | --- |
+| Google OAuth2 시작 | `GET /api/auth/google` | none | OAuth provider redirect |
+| Google OAuth2 callback | `GET /api/auth/google/callback` | provider params | session/token 발급 |
+| 닉네임 중복 확인 | `GET /api/auth/check-nickname?nickname=...` | none | 사용 가능 여부 반환 |
+| 아이디 중복 확인 | `GET /api/auth/check-user-id?userId=...` | none | 사용 가능 여부 반환 |
+| 로그아웃 | `POST /api/auth/logout` | none | 세션/token 종료 |
+| 회원탈퇴 | `DELETE /api/users/me` | confirmation payload | 계정/작성물/댓글/저장/신고 정책 필요 |
+
+## Saved / User Activity
+
+The current UI exposes this area as `Saved`. It groups saved prompts, owned prompts, comments/replies, and report history for the current authenticated user.
+
+| Feature | Method + path | Request body | Response notes |
+| --- | --- | --- | --- |
+| Saved library | `GET /api/me/library?filter=all&sort=saves&page=1&pageSize=16` | none | Saved tab data. Saved prompts plus liked-only filter support. Keep `isSaved` separate from `saves`. |
+| My prompts | `GET /api/me/prompts?sort=latest` | none | Prompts authored by the current user, including private/shared status. |
+| My comments | `GET /api/me/comments` | none | Comments and replies written by the current user with prompt summary and edit/delete permissions. |
+| My reports | `GET /api/me/reports` | none | Report history submitted by the current user with target type, reason, submitted time, and status. |
+
+## Admin
+
+관리자 화면은 신고 관리, 전체 프롬프트 관리, 태그 관리를 담당합니다. 프론트엔드 데모에서는 `관리자 데모` 토글로 노출하지만, 실제 서비스에서는 서버 권한 검증이 필요합니다.
+
+| 기능 | Method + path | Request body | Response notes |
+| --- | --- | --- | --- |
+| 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 작성자, 처리 상태 |
+| 신고 처리 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 처리자와 처리 시각 감사 로그 필요 |
+| 신고 기각 | `PATCH /api/admin/reports/:id` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
+| 신고 대상 삭제 | `DELETE /api/admin/reports/:id/target` | `{ memo? }` | 대상이 프롬프트/댓글/대댓글인지에 따라 삭제 |
+| 전체 프롬프트 수정 | `PATCH /api/admin/prompts/:id` | `{ title, text, tags, isShared? }` | 소유자와 무관하게 관리자 권한으로 수정 |
+| 전체 프롬프트 삭제 | `DELETE /api/admin/prompts/:id` | `{ memo? }` | 삭제 사유와 관리자 감사 로그 필요 |
+| 태그 관리 | `GET/PATCH /api/admin/tags` | varies | 새 태그 승인/반려, 유사 태그 병합, 추천 태그 승격 |
+
+회원가입 필수값은 `nickname`, `name`, `userId`, `password`, `passwordConfirm`, `agreeTerms`, `agreePrivacy`입니다. `birth`, `phone`, `email`은 선택값이며, 입력된 경우에만 형식 검증을 권장합니다. 이메일은 아이디 찾기 보조 수단으로 사용할 수 있으나, 이메일을 등록하지 않은 사용자는 이메일 방식 아이디 찾기를 사용할 수 없습니다. 커뮤니티 화면에는 실명 `name`이 아니라 `nickname`을 표시해야 합니다. 약관/개인정보 동의는 실제 서비스에서 동의 버전과 동의 시각 저장이 필요합니다.
+
+프롬프트 카드, 프롬프트 상세, 댓글, 대댓글 등 공개 커뮤니티 응답의 작성자 표시는 `author.nickname`을 사용합니다. 실명 `name`은 계정 확인용 정보로만 사용하고 공개 API 응답에는 포함하지 않는 것을 권장합니다. 닉네임은 회원가입 필수값이며 중복 불가입니다.
 
 ## Saved And Ownership
 
@@ -67,6 +111,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 - 저장 취소 후: `isSaved: false`, `saves: 0`
 
 Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함께 보여줍니다. Saved 화면에서 저장 취소를 누르면 즉시 목록에서 사라지지 않고, 사용자가 다른 화면으로 이동할 때 저장 취소를 확정하는 UX입니다.
+Saved의 내 프롬프트는 `공유됨`/`비공개` 상태를 버튼 한 번으로 전환합니다. 이미 제목, 본문, 태그가 있는 비공개 프롬프트는 `PATCH /api/prompts/:id/visibility`로 즉시 공유 상태가 되며, 태그가 없는 경우에만 Share 화면에서 태그를 보완하도록 안내합니다.
 
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
@@ -95,6 +140,11 @@ Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함�
 | 프롬프트 첨삭 | `POST /api/prompts/improve` | `{ prompt, category? }` | 개선된 최종 프롬프트 반환 |
 | Make 대화 저장 | `POST /api/make/threads` | `{ messages }` | 로그인 사용자 최근 대화 동기화 |
 | Make 대화 목록 | `GET /api/make/threads` | none | 최근 대화 목록 반환 |
+| Make 폴더 목록 | `GET /api/make/folders` | none | `전체`은 프론트 가상 필터, 서버는 사용자 폴더와 미분류 상태를 반환 |
+| Make 폴더 생성 | `POST /api/make/folders` | `{ name }` | 사용자 개인 폴더 생성 |
+| Make 폴더 수정 | `PATCH /api/make/folders/:id` | `{ name }` | 폴더 이름 변경 |
+| Make 폴더 삭제 | `DELETE /api/make/folders/:id` | none | 폴더 안 대화는 삭제하지 않고 미분류로 이동 |
+| Make 대화 폴더 이동 | `PATCH /api/make/threads/:id/folder` | `{ folderId }` | `folderId: null` 또는 `"uncategorized"`는 미분류 |
 
 ## Suggested Prompt Response
 
@@ -109,7 +159,7 @@ Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함�
   "comments": 1980,
   "saves": 35670,
   "createdAt": "2026-06-17T01:00:00Z",
-  "author": { "id": "user-1", "name": "김지수" },
+  "author": { "id": "user-1", "nickname": "지수봇" },
   "isMine": false,
   "isShared": true,
   "isSaved": true,
@@ -123,7 +173,7 @@ Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함�
 ```json
 {
   "id": "comment-1",
-  "author": { "id": "user-2", "name": "이서연" },
+  "author": { "id": "user-2", "nickname": "서연" },
   "text": "브랜드 톤앤매너를 추가하면 결과가 더 정확해질 것 같습니다.",
   "likes": 2,
   "edited": true,
@@ -133,7 +183,7 @@ Saved 화면은 저장한 커뮤니티 프롬프트와 내 프롬프트를 함�
   "replies": [
     {
       "id": "reply-1",
-      "author": { "id": "user-3", "name": "박민준" },
+      "author": { "id": "user-3", "nickname": "민준" },
       "text": "맞아요. 바로 복사해서 쓰기 좋은 형태입니다.",
       "likes": 0,
       "edited": false,

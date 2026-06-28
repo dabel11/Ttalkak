@@ -45,7 +45,7 @@
 
 ## Saved
 
-목적: 내 보관함. 저장한 프롬프트와 내 프롬프트 관리
+목적: 내 보관함. 저장한 프롬프트, 내가 만든 프롬프트, 댓글, 신고 내역 관리
 
 주요 기능:
 
@@ -56,6 +56,8 @@
 - 내 비공개 프롬프트 공유
 - 내 공유 프롬프트 공유 취소
 - 내 프롬프트 삭제
+- 댓글 관리 탭
+- 신고 내역 탭
 
 필요 데이터/API:
 
@@ -64,6 +66,13 @@
 - `DELETE /api/prompts/:id/save`
 - `PATCH /api/prompts/:id/visibility`
 - `DELETE /api/prompts/:id`
+
+Additional Saved tabs:
+
+- `내 보관함`: saved prompts and liked-only filtering.
+- `내가 만든 프롬프트`: owned prompts, private/shared state, edit/delete/share controls.
+- `댓글 관리`: current user's comments and replies with edit/delete entry points.
+- `신고 내역`: current user's report history and review status.
 
 ## Share
 
@@ -80,6 +89,29 @@
 
 - `POST /api/prompts`
 - Auth token
+
+## Admin
+
+목적: 커뮤니티 운영과 신고 처리
+
+주요 기능:
+
+- 신고된 프롬프트, 댓글, 대댓글 목록 확인
+- 신고 사유, 신고 대상, 처리 상태 확인
+- 신고 처리 완료, 신고 기각, 신고 대상 삭제
+- 모든 프롬프트 수정 및 삭제
+- 내 프롬프트 공개/비공개 상태 전환
+- 태그 사용량 확인과 향후 태그 승인/병합/추천 승격 관리
+
+필요 API:
+
+- `GET /api/admin/reports`
+- `PATCH /api/admin/reports/:id`
+- `DELETE /api/admin/reports/:id/target`
+- `PATCH /api/admin/prompts/:id`
+- `DELETE /api/admin/prompts/:id`
+- `GET/PATCH /api/admin/tags`
+- 관리자 권한 검증 및 감사 로그
 
 ## Prompt Detail Modal
 

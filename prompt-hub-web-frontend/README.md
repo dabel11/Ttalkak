@@ -7,7 +7,7 @@
 ## 실행 방법
 
 ```powershell
-cd C:\Users\com\OneDrive\문서\prompt\prompt-hub-web-frontend
+cd prompt-hub-web-frontend
 node preview-server.cjs
 ```
 
@@ -20,7 +20,7 @@ http://127.0.0.1:4173/
 Windows에서 백그라운드로 서버를 띄우려면:
 
 ```powershell
-Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDirectory "C:\Users\com\OneDrive\문서\prompt\prompt-hub-web-frontend" -WindowStyle Hidden
+Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDirectory "<프로젝트를 받은 경로>\prompt-hub-web-frontend" -WindowStyle Hidden
 ```
 
 ## 주요 화면
@@ -53,7 +53,7 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - `src/app.js`: 화면 렌더링, 상태, 로컬 데모 동작
 - `src/styles.css`: 전체 UI 스타일
 - `src/demo-data.js`: 데모 텍스트 보정 데이터
-- `src/api.js`: 백엔드 연동용 API wrapper 초안
+- `src/api.js`: 백엔드 연동용 API wrapper 초안. 현재 데모 UI는 대부분 `src/app.js`의 로컬 상태로 동작하며, 실제 연동 단계에서 이 wrapper 기준으로 교체합니다.
 - `preview-server.cjs`: 정적 미리보기 서버
 
 ## 백엔드 전달 문서
@@ -73,6 +73,13 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - 댓글/대댓글 CRUD, 좋아요, 신고
 - Make 첨삭 API
 - Make 최근 대화 저장/불러오기
+
+## 백엔드 공유 시 주의
+
+- 이 프로토타입은 정적 프론트엔드 데모입니다. 현재 화면 동작은 `src/app.js`의 로컬 배열과 `localStorage`가 담당합니다.
+- `src/api.js`와 `docs/API_SPEC.md`는 백엔드 연동 계약 초안이며, 아직 모든 화면 동작에 직접 연결된 상태는 아닙니다.
+- 사이드바의 `Saved` 화면 안에 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역 탭이 함께 들어 있습니다. 문서에서 이 영역을 설명할 때는 현재 UI 기준으로 `Saved`라고 부릅니다.
+- Admin 화면은 프론트엔드 데모 토글로 노출되지만, 실제 서비스에서는 반드시 백엔드의 관리자 권한 검증과 감사 로그가 필요합니다.
 
 ## 참고 정책
 

@@ -7,7 +7,7 @@ TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 ## 실행
 
 ```powershell
-cd C:\Users\com\OneDrive\문서\prompt\prompt-hub-web-frontend
+cd prompt-hub-web-frontend
 node preview-server.cjs
 ```
 
@@ -22,7 +22,7 @@ http://127.0.0.1:4173/
 - `index.html`: 진입 파일
 - `src/app.js`: 화면 렌더링, 로컬 상태, 데모 동작
 - `src/styles.css`: 전체 UI 스타일
-- `src/api.js`: 백엔드 연동용 API wrapper 초안
+- `src/api.js`: 백엔드 연동용 API wrapper 초안. 현재 데모 화면은 아직 대부분 `src/app.js`의 로컬 상태로 동작합니다.
 - `docs/API_SPEC.md`: API 명세 초안
 - `docs/FRONTEND_HANDOFF.md`: 프론트 상태/정책 문서
 - `docs/BACKEND_INTEGRATION_NOTES.md`: 백엔드 연동 메모
@@ -47,6 +47,7 @@ http://127.0.0.1:4173/
 - Share: 커뮤니티에 공개되는 것은 최종 프롬프트만이며 Make 개인 대화 기록은 공개하지 않음
 - Comment: 댓글/대댓글 작성, 수정, 삭제, 좋아요, 신고
 - Make: 프롬프트 첨삭 API와 최근 대화 동기화
+- Admin: 현재는 프론트엔드 데모 토글로 노출됩니다. 실제 서비스에서는 백엔드 `ADMIN` 권한 검증과 감사 로그가 필요합니다.
 
 ## UI 정책
 

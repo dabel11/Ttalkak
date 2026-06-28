@@ -30,6 +30,10 @@ App
 │  ├─ ChatFeed
 │  └─ Composer
 ├─ SavedPage
+│  ├─ SavedLibraryTab
+│  ├─ MyPromptsTab
+│  ├─ MyCommentsTab
+│  ├─ MyReportsTab
 │  ├─ SavedFilter
 │  └─ PromptGrid
 ├─ SharePage
@@ -60,6 +64,8 @@ type Prompt = {
   messages?: Message[];
 };
 ```
+
+`author`는 공개 표시명이며 실명이 아니라 `nickname`을 사용합니다. 회원가입의 `name`은 계정 확인용이고, 프롬프트 카드/상세/댓글/대댓글에는 노출하지 않습니다.
 
 `내 프롬프트`와 `저장한 프롬프트`는 분리해서 다뤄야 합니다.
 
@@ -94,10 +100,11 @@ type Prompt = {
 - 커뮤니티에 공유되는 대상은 최종 프롬프트이며, Make에서 작성한 개인 대화 기록은 공유하지 않습니다.
 - 내 프롬프트 카드를 눌러도 Make 대화 기록으로 이동하지 않고 최종 프롬프트 상세 팝업을 엽니다.
 - 검색은 쉼표를 이용한 복수 해시태그 검색을 지원합니다.
-- 검색창의 `!` 아이콘은 처음 focus 시 다중 검색 안내를 잠깐 보여주고, hover 시 다시 보여줍니다.
+- 검색창의 전구 아이콘은 처음 focus 시 다중 검색 안내를 잠깐 보여주고, hover 시 다시 보여줍니다.
 - 검색 결과 상태에서 TTALKAK 로고를 누르면 Home 기본 상태로 돌아갑니다.
 - Home 정렬 드롭다운은 `인기`, `저장`, `댓글`, `좋아요`, `최신`을 지원합니다.
 - 추천 해시태그 8개는 태그 사용 횟수 내림차순입니다.
+- Share 화면의 태그 입력은 기존 태그 검색/선택을 우선합니다. 검색 결과가 없을 때만 `새 태그로 추가`를 보여주며, 새 태그는 관리자 검토 또는 사용 횟수 기준으로 추천 태그에 승격하는 정책을 권장합니다.
 - Prompt 상세 팝업을 여는 것을 조회로 간주하고 조회수를 증가시킵니다.
 - Saved에서 저장 취소를 누르면 즉시 사라지지 않고 `저장 취소 예정`으로 남습니다.
 - Saved를 벗어날 때 실제 저장 취소가 확정됩니다.
@@ -124,6 +131,17 @@ type Prompt = {
 6. Reports
 7. Make Improve API
 8. Make 최근 대화 동기화
+
+## Saved Navigation Update
+
+The sidebar currently exposes `Saved` as a top-level navigation item. In this prototype, `Saved` is broader than a simple saved-list page and groups account-owned activity:
+
+- `내 보관함`: saved prompts, liked-only filter, community/mine filters, delayed unsave UX.
+- `내가 만든 프롬프트`: prompts authored by the current user, including private/shared state.
+- `댓글 관리`: comments and replies written by the current user, with edit/delete entry points.
+- `신고 내역`: report history submitted by the current user.
+
+Backend integration should treat `Saved` as the current user activity area. The name can later be changed to `My page` or `Library`, but the source code and current UI handed off here use `Saved`.
 
 ## Execute Flow Note
 
