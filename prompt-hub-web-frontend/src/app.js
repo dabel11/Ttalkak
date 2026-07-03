@@ -783,6 +783,7 @@ function PromptDetailModal() {
   const isLiked = state.likedPromptIds.has(prompt.id);
   const isReported = state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
+  const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-detail-title">
@@ -2016,7 +2017,9 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-open-prompt]").forEach((card) => {
-    card.addEventListener("click", () => {
+    card.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       openPromptDetail(card.dataset.openPrompt);
     });
     card.addEventListener("keydown", (event) => {
@@ -2712,13 +2715,17 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-delete-comment]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       deleteOwnComment(button.dataset.deleteComment);
     });
   });
 
   document.querySelectorAll("[data-edit-comment]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       toggleEditComment(button.dataset.editComment);
     });
   });
