@@ -135,6 +135,11 @@ Modal behavior:
 - Real service should drive Admin access from authenticated account metadata such as `role: "admin"` and enforce every Admin API server-side. Hiding or showing the Admin menu in the frontend is only a convenience layer, not authorization.
 - Admin accounts should enter an operator-oriented Admin area. They should not perform normal community actions such as liking, saving, sharing, or commenting as users while in Admin mode.
 - Admins should not directly edit user-authored prompt content; they can request revisions, hide content, dismiss/resolve reports, or delete clear violations with an audit log.
+- Admin prompt detail views are read-only review surfaces. Execute, like, save, share, report, comment, and reply actions are hidden in Admin mode.
+- Comment and reply reports should include enough target context for moderation: target comment/reply id, parent prompt id, prompt author nickname, comment author nickname, report reason, report status, reviewer, reviewed time, and memo.
+- When an admin opens a reported comment from the report list, the frontend highlights that comment in the prompt detail view. Backend responses should preserve the target id so the client can keep that context.
+- Admin hide actions apply to the prompt/post unless a separate comment-level hide workflow is explicitly designed. The demo labels this as post hiding to avoid ambiguity.
+- Admin deletion confirmation copy should identify the target type, for example reported comment deletion versus prompt deletion.
 - Prompt edit updates title, text, and tags for the owner. Admins should use revision requests instead of directly editing user-authored prompt content.
 - Admin page is prototype-only but should map to real role-based access control. Backend must enforce admin permissions server-side; hiding UI is not sufficient.
 

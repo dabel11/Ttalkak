@@ -79,7 +79,7 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
-| 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 작성자, 처리 상태 |
+| 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 게시물 작성자, 댓글 작성자, 처리 상태, 원문 강조용 target id |
 | 신고 검토 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
 | 신고 기각 | `PATCH /api/admin/reports/:id` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
 | 신고 재처리 | `PATCH /api/admin/reports/:id` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |

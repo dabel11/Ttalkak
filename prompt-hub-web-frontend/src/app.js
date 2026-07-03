@@ -321,6 +321,7 @@ const state = {
   route: "home",
   authView: null,
   detailPromptId: null,
+  detailHighlightCommentId: null,
   reportPromptId: null,
   reportCommentId: null,
   editingPromptId: null,
@@ -431,6 +432,17 @@ function render() {
   focusActiveModal();
   restorePendingMessageScroll();
   scrollToPendingLatestMessage();
+  scrollToHighlightedComment();
+}
+
+function scrollToHighlightedComment() {
+  if (!state.detailHighlightCommentId) return;
+  window.setTimeout(() => {
+    document.querySelector(`[data-comment-id="${CSS.escape(state.detailHighlightCommentId)}"]`)?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
+  }, 40);
 }
 
 function restorePendingMessageScroll() {
@@ -501,6 +513,7 @@ function resetHomeView() {
   state.searchQuery = "";
   state.popularPage = 1;
   state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
 }
 
 function closeTopModal() {
@@ -522,6 +535,7 @@ function closeTopModal() {
     state.editingPromptId = null;
   } else if (state.detailPromptId) {
     state.detailPromptId = null;
+    state.detailHighlightCommentId = null;
   } else {
     return;
   }
@@ -783,16 +797,27 @@ function PromptDetailModal() {
   const isLiked = state.likedPromptIds.has(prompt.id);
   const isReported = state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
-  const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
+  const isAdminReview = Boolean(state.adminMode);
+  const isHiddenByAdmin = state.adminHiddenPromptIds.has(prompt.id);
+  const revisionRequest = canDelete || isAdminReview ? getPromptRevisionRequest(prompt.id) : null;
+  const adminStatusBadges = isAdminReview
+    ? [
+        `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`,
+        isHiddenByAdmin ? `<span class="status-badge private">숨김</span>` : "",
+        isReported ? `<span class="status-badge pending-unsave">신고됨</span>` : "",
+        revisionRequest ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : "",
+      ].join("")
+    : "";
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-detail-title">
-      <article class="modal prompt-detail-modal">
+      <article class="modal prompt-detail-modal ${isAdminReview ? "admin-review-modal" : ""}">
         <div class="modal-head">
           <h2 id="prompt-detail-title">${prompt.title}</h2>
         </div>
         <div class="prompt-detail-layout">
           <section class="prompt-detail-main" aria-label="프롬프트 내용">
+            ${isAdminReview && adminStatusBadges ? `<div class="status-row admin-detail-status">${adminStatusBadges}</div>` : ""}
             <p class="prompt-detail-text">${prompt.text}</p>
             ${
               revisionRequest
@@ -827,7 +852,9 @@ function PromptDetailModal() {
                     }
                   </div>
                   ${
-                    state.isLoggedIn
+                    isAdminReview
+                      ? `<p class="comment-empty">관리자 검토 모드에서는 댓글을 읽기 전용으로 확인합니다.</p>`
+                      : state.isLoggedIn
                       ? `<form class="comment-form" data-comment-form="${prompt.id}">
                           <input name="comment" type="text" placeholder="댓글을 입력하세요." autocomplete="off" />
                           <button class="primary-button" type="submit">등록</button>
@@ -842,14 +869,21 @@ function PromptDetailModal() {
           </section>
         </div>
         <div class="modal-actions detail-actions">
-          <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-          <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
-          <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-          <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-          ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">공유하기</button>` : ""}
-          ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">공유 취소</button>` : ""}
-          ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">삭제</button>` : ""}
-          <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>
+          ${
+            isAdminReview
+              ? `<button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
+                 <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                 <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
+                 <button class="secondary-button danger-button" type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>`
+              : `<button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
+                 <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
+                 <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
+                 <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
+                 ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">공유하기</button>` : ""}
+                 ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">공유 취소</button>` : ""}
+                 ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">삭제</button>` : ""}
+                 <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>`
+          }
         </div>
       </article>
     </div>
@@ -922,24 +956,30 @@ function CommentItem(comment) {
   const canDelete = canDeleteComment(comment);
   const isReported = state.reportedCommentIds.has(comment.id);
   const isLiked = state.likedCommentIds.has(comment.id);
+  const isAdminReview = Boolean(state.adminMode);
+  const isHighlighted = isAdminReview && state.detailHighlightCommentId === comment.id;
   const replies = getSortedCommentReplies(comment);
   const isReplying = state.replyingCommentId === comment.id;
-  const isEditing = state.editingCommentId === comment.id;
+  const isEditing = !isAdminReview && state.editingCommentId === comment.id;
 
   return `
-    <article class="comment-item ${isReported ? "reported-comment" : ""}">
+    <article class="comment-item ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
       <div class="comment-item-head">
         <strong>${comment.author}</strong>
-        <div class="comment-actions">
-          ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
-          <button class="comment-reply-button" type="button" data-reply-comment="${comment.id}" title="답글" aria-label="답글">${icons.comment}</button>
-          ${
-            canDelete
-              ? `<button class="comment-edit-button" type="button" data-edit-comment="${comment.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                 <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
-              : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${comment.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
-          }
-        </div>
+        ${
+          isAdminReview
+            ? ""
+            : `<div class="comment-actions">
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
+                <button class="comment-reply-button" type="button" data-reply-comment="${comment.id}" title="답글" aria-label="답글">${icons.comment}</button>
+                ${
+                  canDelete
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${comment.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${comment.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
+                }
+              </div>`
+        }
       </div>
       ${
         isEditing
@@ -950,11 +990,11 @@ function CommentItem(comment) {
           : `<p>${comment.text}${comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
       ${
-        replies.length || isReplying
+        replies.length || (!isAdminReview && isReplying)
           ? `<div class="reply-thread">
               ${replies.map(ReplyItem).join("")}
               ${
-                isReplying
+                !isAdminReview && isReplying
                   ? `<form class="reply-form" data-reply-form="${comment.id}">
                       <input name="reply" type="text" placeholder="답글을 입력하세요." autocomplete="off" />
                       <button class="primary-button" type="submit">등록</button>
@@ -972,21 +1012,27 @@ function ReplyItem(reply) {
   const canDelete = canDeleteComment(reply);
   const isReported = state.reportedCommentIds.has(reply.id);
   const isLiked = state.likedCommentIds.has(reply.id);
-  const isEditing = state.editingCommentId === reply.id;
+  const isAdminReview = Boolean(state.adminMode);
+  const isHighlighted = isAdminReview && state.detailHighlightCommentId === reply.id;
+  const isEditing = !isAdminReview && state.editingCommentId === reply.id;
 
   return `
-    <article class="reply-item ${isReported ? "reported-reply" : ""}">
+    <article class="reply-item ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(reply.id)}">
       <div class="reply-item-head">
         <strong>${reply.author}</strong>
-        <div class="reply-actions">
-          ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${reply.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
-          ${
-            canDelete
-              ? `<button class="comment-edit-button" type="button" data-edit-comment="${reply.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                 <button class="comment-delete-button" type="button" data-delete-comment="${reply.id}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
-              : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${reply.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
-          }
-        </div>
+        ${
+          isAdminReview
+            ? ""
+            : `<div class="reply-actions">
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${reply.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
+                ${
+                  canDelete
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${reply.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${reply.id}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${reply.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
+                }
+              </div>`
+        }
       </div>
       ${
         isEditing
@@ -1530,21 +1576,36 @@ function AdminPage() {
           ? reportRecords
               .map(
                 (record) => `
-                  <article class="admin-row report-status-${record.status}">
+                  <article class="admin-row admin-report-row report-status-${record.status}">
                     <div>
                       <strong>${escapeHtml(record.title)}</strong>
+                      ${record.contextTitle ? `<p class="admin-report-context">게시물: ${escapeHtml(record.contextTitle)}</p>` : ""}
+                      ${record.targetPreview ? `<p class="admin-report-target">${escapeHtml(record.targetPreview)}</p>` : ""}
                       <p>${escapeHtml(record.summary)}</p>
                       <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
+                      ${record.promptAuthor ? `<span class="status-badge private">게시물 작성자 ${escapeHtml(record.promptAuthor)}</span>` : ""}
+                      ${record.commentAuthor ? `<span class="status-badge private">댓글 작성자 ${escapeHtml(record.commentAuthor)}</span>` : ""}
                       ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
                     </div>
                     <div class="admin-actions">
+                      ${
+                        record.promptId
+                          ? `<button type="button" data-open-prompt="${record.promptId}" ${record.type === "comment" ? `data-highlight-comment="${record.targetId}"` : ""}>원문 보기</button>`
+                          : ""
+                      }
                       <button type="button" data-admin-request-revision="${record.key}">수정 요청</button>
-                      ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "숨김 해제" : "숨김"}</button>` : ""}
+                      ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "게시물 숨김 해제" : "게시물 숨김"}</button>` : ""}
                       ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">검토 완료</button>` : ""}
                       ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
                       ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
                       ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
-                      ${record.promptId ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>` : ""}
+                      ${
+                        record.type === "comment"
+                          ? `<button type="button" data-delete-comment="${record.targetId}">댓글 삭제</button>`
+                          : record.promptId
+                            ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>`
+                            : ""
+                      }
                     </div>
                   </article>
                 `,
@@ -1557,7 +1618,7 @@ function AdminPage() {
   const promptsPanel = `
     <section class="admin-panel">
       <h2>프롬프트 관리</h2>
-      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청, 숨김, 삭제 같은 운영 조치만 수행합니다.</p>
+      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청, 게시물 숨김, 삭제 같은 운영 조치만 수행합니다.</p>
       <div class="admin-filter-list" aria-label="프롬프트 분류">
         ${adminPromptFilters
           .map(
@@ -1573,20 +1634,49 @@ function AdminPage() {
       ${filteredAdminPrompts.length ? filteredAdminPrompts
         .slice(0, 8)
         .map(
-          (prompt) => `
-            <article class="admin-row">
-              <div>
-                <strong>${escapeHtml(prompt.title)}</strong>
-                <p>${prompt.source === "mine" ? "내 프롬프트" : "커뮤니티"} · ${prompt.isShared || prompt.source === "community" ? "공유됨" : "비공개"}</p>
-                ${getPromptRevisionRequest(prompt.id) ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
-              </div>
-              <div class="admin-actions">
-                <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
-                <button type="button" data-admin-hide-prompt="${prompt.id}">${state.adminHiddenPromptIds.has(prompt.id) ? "숨김 해제" : "숨김"}</button>
-                <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
-              </div>
-            </article>
-          `,
+          (prompt) => {
+            const isShared = prompt.isShared || prompt.source === "community";
+            const isHidden = state.adminHiddenPromptIds.has(prompt.id);
+            const isReported = state.reportedPromptIds.has(prompt.id);
+            const revisionRequest = getPromptRevisionRequest(prompt.id);
+            return `
+              <article class="admin-row admin-prompt-row">
+                <div>
+                  <strong>${escapeHtml(prompt.title)}</strong>
+                  <p class="admin-prompt-preview">${escapeHtml(makePreview(prompt.text))}</p>
+                  <div class="admin-prompt-meta">
+                    <span>${icons.eye}${formatNumber(prompt.views || 0)}</span>
+                    <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
+                    <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
+                    <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
+                    <span>작성자 ${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
+                    <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
+                  </div>
+                  <div class="tag-row admin-prompt-tags">${(prompt.tags || []).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}</div>
+                  <div class="status-row">
+                    <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
+                    ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
+                    ${isReported ? `<span class="status-badge pending-unsave">신고됨</span>` : ""}
+                    ${revisionRequest ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
+                  </div>
+                  ${
+                    revisionRequest
+                      ? `<div class="revision-request-notice admin-revision-summary">
+                          <strong>수정 요청 사유</strong>
+                          <p>${escapeHtml(revisionRequest.reason)}</p>
+                        </div>`
+                      : ""
+                  }
+                </div>
+                <div class="admin-actions">
+                  <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
+                  <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                  <button type="button" data-admin-hide-prompt="${prompt.id}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
+                  <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
+                </div>
+              </article>
+            `;
+          },
         )
         .join("") : `<p class="admin-empty">검색 결과가 없습니다.</p>`}
     </section>
@@ -1627,7 +1717,7 @@ function AdminPage() {
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 임시 관리자 화면입니다. 실제 서비스에서는 관리자 계정 권한으로만 접근합니다.</p>
+        <p class="admin-demo-note">프론트엔드 검수용 임시 관리자 화면입니다. 실제 서비스에서는 관리자 계정 권한으로만 접근하며, 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 게시물 숨김, 삭제, 검토 상태 변경 같은 운영 조치만 수행합니다.</p>
       </div>
       <div class="admin-workspace">
         <aside class="admin-side-panel" aria-label="관리자 메뉴">
@@ -1969,6 +2059,7 @@ function bindEvents() {
   document.querySelectorAll("[data-close-detail]").forEach((button) => {
     button.addEventListener("click", () => {
       state.detailPromptId = null;
+      state.detailHighlightCommentId = null;
       render();
     });
   });
@@ -2020,12 +2111,12 @@ function bindEvents() {
     card.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openPromptDetail(card.dataset.openPrompt);
+      openPromptDetail(card.dataset.openPrompt, { highlightCommentId: card.dataset.highlightComment || null });
     });
     card.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      openPromptDetail(card.dataset.openPrompt);
+      openPromptDetail(card.dataset.openPrompt, { highlightCommentId: card.dataset.highlightComment || null });
     });
   });
 
@@ -2883,10 +2974,14 @@ function reportComment(commentId, reason) {
     return;
   }
 
+  const context = findCommentContextById(commentId);
   state.reportedCommentIds.add(commentId);
   state.reportRecords[`comment:${commentId}`] = {
     type: "comment",
     targetId: commentId,
+    promptId: context?.promptId || "",
+    targetAuthor: context?.comment?.author || context?.comment?.owner || "",
+    targetPreview: makePreview(context?.comment?.text || ""),
     status: "pending",
     reason: content,
     createdAt: Date.now(),
@@ -3016,15 +3111,20 @@ function updatePromptField(promptId, field, delta) {
   }
 }
 
-function openPromptDetail(promptId) {
+function openPromptDetail(promptId, options = {}) {
   incrementPromptViews(promptId);
   state.detailPromptId = promptId;
+  state.detailHighlightCommentId = options.highlightCommentId || null;
+  if (state.detailHighlightCommentId) {
+    state.expandedComments[promptId] = true;
+  }
   render();
 }
 
 function openPromptComments(promptId) {
   incrementPromptViews(promptId);
   state.detailPromptId = promptId;
+  state.detailHighlightCommentId = null;
   state.expandedComments[promptId] = true;
   render();
 }
@@ -3233,8 +3333,8 @@ function deleteOwnComment(commentId) {
     openConfirmAction({
       type: "delete-comment",
       targetId: commentId,
-      title: "댓글 삭제",
-      message: "이 댓글을 삭제할까요?",
+      title: state.adminMode ? "신고 댓글 삭제" : "댓글 삭제",
+      message: state.adminMode ? "신고된 댓글을 삭제할까요? 이 작업은 운영 조치로 기록되어야 합니다." : "이 댓글을 삭제할까요?",
       confirmLabel: "삭제",
       danger: true,
     });
@@ -3244,6 +3344,7 @@ function deleteOwnComment(commentId) {
 
 function canDeleteComment(comment) {
   if (!comment) return false;
+  if (state.adminMode) return true;
   const owner = comment.owner || comment.author;
   return owner === "나" || owner === state.currentUser || comment.author === state.currentUser;
 }
@@ -4182,23 +4283,32 @@ function getAdminReportRecords() {
     records.push({
       key,
       type: "prompt",
+      targetId: promptId,
       promptId,
       status: record.status || "pending",
       title: prompt?.title || "삭제된 프롬프트",
+      promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
       summary: record.reason || makePreview(prompt?.text || ""),
     });
   });
   [...state.reportedCommentIds].forEach((commentId) => {
-    const comment = findCommentById(commentId);
+    const context = findCommentContextById(commentId);
+    const comment = context?.comment || findCommentById(commentId);
     const key = `comment:${commentId}`;
     const record = getReportRecord(key);
+    const prompt = context?.prompt || findPromptById(record.promptId);
     records.push({
       key,
       type: "comment",
-      promptId: findPromptIdByCommentId(commentId),
+      targetId: commentId,
+      promptId: record.promptId || context?.promptId || "",
       status: record.status || "pending",
       title: "댓글 신고",
-      summary: record.reason || comment?.text || "삭제된 댓글",
+      contextTitle: prompt?.title || "삭제된 게시물",
+      promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
+      commentAuthor: record.targetAuthor || comment?.author || comment?.owner || "",
+      targetPreview: record.targetPreview || makePreview(comment?.text || "삭제된 댓글"),
+      summary: record.reason ? `신고 사유: ${record.reason}` : "신고 사유 없음",
     });
   });
   return records.sort((a, b) => Number(getReportRecord(b.key).createdAt || 0) - Number(getReportRecord(a.key).createdAt || 0));
@@ -4307,6 +4417,20 @@ function findPromptIdByCommentId(commentId) {
     if (findCommentInList(comments, commentId)) return promptId;
   }
   return "";
+}
+
+function findCommentContextById(commentId) {
+  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
+    const comment = findCommentInList(comments, commentId);
+    if (comment) {
+      return {
+        promptId,
+        prompt: findPromptById(promptId),
+        comment,
+      };
+    }
+  }
+  return null;
 }
 
 function sortPopularPrompts(prompts) {
