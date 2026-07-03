@@ -1534,7 +1534,7 @@ function AdminPage() {
       <section class="admin-page">
         <div class="empty-state saved-empty">
           <span>${icons.shield}</span>
-          <p>관리자 데모를 켜야 Admin 페이지를 볼 수 있습니다.</p>
+          <p>${state.isLoggedIn ? "관리자 데모를 켜야 Admin 페이지를 볼 수 있습니다." : "관리자 데모는 로그인 후 사용할 수 있습니다."}</p>
         </div>
       </section>
     `;
@@ -1712,12 +1712,12 @@ function AdminPage() {
 
   return `
     <section class="admin-page" aria-labelledby="admin-heading">
-      <div class="page-head">
+      <div class="page-head admin-head">
         <div class="page-title">
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 임시 관리자 화면입니다. 실제 서비스에서는 관리자 계정 권한으로만 접근하며, 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 게시물 숨김, 삭제, 검토 상태 변경 같은 운영 조치만 수행합니다.</p>
+        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 숨김, 삭제, 검토 상태 변경만 수행합니다.</p>
       </div>
       <div class="admin-workspace">
         <aside class="admin-side-panel" aria-label="관리자 메뉴">
@@ -1993,6 +1993,12 @@ function bindEvents() {
 
   document.querySelectorAll("[data-toggle-admin-demo]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!state.isLoggedIn) {
+        state.adminMode = false;
+        state.route = state.route === "admin" ? "home" : state.route;
+        showNotice("관리자 데모는 로그인 후 사용할 수 있습니다.");
+        return;
+      }
       state.adminMode = !state.adminMode;
       state.route = state.adminMode ? "admin" : "home";
       showNotice(state.adminMode ? "관리자 데모 UI를 켰습니다." : "관리자 데모 UI를 껐습니다.");
@@ -3382,9 +3388,12 @@ function runConfirmedAction() {
 
   if (action.type === "logout") {
     stampCurrentUserOwnedPrompts();
+    const wasAdminMode = state.adminMode;
     state.isLoggedIn = false;
     state.currentUser = null;
-    showNotice("로그아웃했습니다.");
+    state.adminMode = false;
+    if (state.route === "admin") state.route = "home";
+    showNotice(wasAdminMode ? "로그아웃하여 관리자 데모를 종료했습니다." : "로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {

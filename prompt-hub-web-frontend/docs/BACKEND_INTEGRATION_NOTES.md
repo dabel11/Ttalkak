@@ -132,7 +132,9 @@ Modal behavior:
 - Nickname and user ID duplicate checks are frontend demo buttons and should be backed by real availability-check endpoints.
 - Account withdrawal is demo-only. Backend must define account deletion, authored prompt ownership, saved prompt cleanup, comments, reports, and audit policy.
 - Admin moderation UI is exposed through a demo toggle only for frontend review. This toggle is not a production access model.
+- In the frontend demo, the Admin toggle is available only after login. If the user logs out while Admin demo mode is active, the frontend exits Admin mode and returns to Home.
 - Real service should drive Admin access from authenticated account metadata such as `role: "admin"` and enforce every Admin API server-side. Hiding or showing the Admin menu in the frontend is only a convenience layer, not authorization.
+- In production, logout must terminate any admin session state on both client and server so the Admin area cannot remain accessible after authentication ends.
 - Admin accounts should enter an operator-oriented Admin area. They should not perform normal community actions such as liking, saving, sharing, or commenting as users while in Admin mode.
 - Admins should not directly edit user-authored prompt content; they can request revisions, hide content, dismiss/resolve reports, or delete clear violations with an audit log.
 - Admin prompt detail views are read-only review surfaces. Execute, like, save, share, report, comment, and reply actions are hidden in Admin mode.
