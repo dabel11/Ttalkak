@@ -1,4 +1,4 @@
-const popularPrompts = [
+﻿const popularPrompts = [
   {
     id: "post-1",
     title: "전문적인 인스타그램 캡션 작성",
@@ -7,7 +7,7 @@ const popularPrompts = [
     views: 150420,
     comments: 1835,
     saves: 62880,
-    author: "박민준",
+    author: "카피메이커",
     source: "community",
   },
   {
@@ -18,7 +18,7 @@ const popularPrompts = [
     views: 89340,
     comments: 3210,
     saves: 44820,
-    author: "박민준",
+    author: "카피메이커",
     source: "community",
   },
   {
@@ -29,7 +29,7 @@ const popularPrompts = [
     views: 72450,
     comments: 1980,
     saves: 35670,
-    author: "김지수",
+    author: "태그지니",
     source: "community",
   },
   {
@@ -40,7 +40,7 @@ const popularPrompts = [
     views: 68920,
     comments: 2340,
     saves: 33560,
-    author: "이서연",
+    author: "콘텐츠랩",
     source: "community",
   },
   {
@@ -51,7 +51,7 @@ const popularPrompts = [
     views: 58720,
     comments: 2140,
     saves: 29450,
-    author: "이서연",
+    author: "콘텐츠랩",
     source: "community",
   },
   {
@@ -62,7 +62,7 @@ const popularPrompts = [
     views: 54230,
     comments: 1450,
     saves: 27890,
-    author: "이서연",
+    author: "콘텐츠랩",
     source: "community",
   },
   {
@@ -73,7 +73,7 @@ const popularPrompts = [
     views: 47560,
     comments: 1120,
     saves: 21340,
-    author: "김지수",
+    author: "태그지니",
     source: "community",
   },
   {
@@ -84,7 +84,7 @@ const popularPrompts = [
     views: 35680,
     comments: 892,
     saves: 18920,
-    author: "이서연",
+    author: "콘텐츠랩",
     source: "community",
   },
 ];
@@ -125,49 +125,49 @@ const demoPromptTextOverrides = {
     title: "전문적인 인스타그램 캡션 작성",
     text: "당신은 전문적인 콘텐츠 마케터입니다. 브랜드의 핵심 메시지를 살려 인스타그램 캡션을 작성해주세요. 해시태그도 5개 포함해주세요.",
     tags: ["마케팅", "인스타그램", "콘텐츠"],
-    author: "박민준",
+    author: "카피메이커",
   },
   "post-2": {
     title: "글쓰기 첨삭 프롬프트",
     text: "더 매력적인 글쓰기를 위한 첨삭봇입니다. 글의 흐름, 문법, 가독성을 모두 고려해서 개선안을 제안해주세요.",
     tags: ["첨삭", "글쓰기", "편집"],
-    author: "박민준",
+    author: "카피메이커",
   },
   "post-3": {
     title: "SEO 블로그 포스팅",
     text: "검색엔진 상위 노출을 위한 키워드 중심의 블로그 글을 작성해주세요. 제목, 소제목, 본문 구조를 함께 제안해주세요.",
     tags: ["SEO", "블로그", "검색최적화"],
-    author: "김지수",
+    author: "태그지니",
   },
   "post-4": {
     title: "소셜미디어 캠페인 전략",
     text: "특정 제품이나 서비스를 위한 소셜미디어 마케팅 캠페인 전략을 수립해주세요. 플랫폼별 접근 방법을 포함해주세요.",
     tags: ["소셜미디어", "캠페인", "전략"],
-    author: "이서연",
+    author: "콘텐츠랩",
   },
   "post-5": {
     title: "클릭을 유도하는 제목 작성",
     text: "특정 키워드를 중심으로 클릭을 유도할 수 있는 제목을 10개 만들어주세요. 숫자와 질문 형식을 활용해주세요.",
     tags: ["제목", "클릭베이트", "SEO"],
-    author: "이서연",
+    author: "콘텐츠랩",
   },
   "post-6": {
     title: "유튜브 영상 기획안",
     text: "시청자의 관심을 끌 수 있는 유튜브 영상 기획안을 작성해주세요. 훅, 본문, 마무리 CTA를 포함해주세요.",
     tags: ["유튜브", "영상", "기획"],
-    author: "이서연",
+    author: "콘텐츠랩",
   },
   "post-7": {
     title: "브레인스토밍 도우미",
     text: "새로운 아이디어나 프로젝트를 위한 창의적인 발상을 도와주세요. 다양한 관점에서 아이디어를 제시해주세요.",
     tags: ["브레인스토밍", "아이디어", "창의성"],
-    author: "김지수",
+    author: "태그지니",
   },
   "post-8": {
     title: "협찬 제안서 만들기",
     text: "브랜드와의 협업을 위한 전문적인 제안서를 작성해주세요. 나의 채널 특성과 타깃 오디언스를 강조해주세요.",
     tags: ["협찬", "제안서", "비즈니스"],
-    author: "이서연",
+    author: "콘텐츠랩",
   },
   "mine-1": {
     title: "딸깍 확장 프로그램 소개문",
@@ -187,44 +187,44 @@ const demoCommentTextOverrides = {
   "post-1": [
     {
       id: "comment-1",
-      author: "김지수",
+      author: "태그지니",
       text: "해시태그까지 같이 요청하는 구조라서 바로 활용하기 좋네요.",
       likes: 4,
-      replies: [{ id: "reply-1", author: "박민준", text: "맞아요. 바로 복사해서 쓰기 좋은 형태라 편합니다.", likes: 0, edited: true }],
+      replies: [{ id: "reply-1", author: "카피메이커", text: "맞아요. 바로 복사해서 쓰기 좋은 형태라 편합니다.", likes: 0, edited: true }],
     },
-    { id: "comment-2", author: "이서연", text: "브랜드 톤앤매너를 추가하면 결과가 더 정확해질 것 같아요.", likes: 2, edited: true },
+    { id: "comment-2", author: "콘텐츠랩", text: "브랜드 톤앤매너를 추가하면 결과가 더 정확해질 것 같아요.", likes: 2, edited: true },
   ],
   "post-2": [
     {
       id: "comment-3",
-      author: "박민준",
+      author: "카피메이커",
       text: "문법, 흐름, 가독성을 나눠서 첨삭하는 방식이 마음에 듭니다.",
       likes: 1,
-      replies: [{ id: "reply-2", author: "이서연", text: "여기에 톤 조정까지 넣으면 더 좋을 것 같아요.", likes: 0 }],
+      replies: [{ id: "reply-2", author: "콘텐츠랩", text: "여기에 톤 조정까지 넣으면 더 좋을 것 같아요.", likes: 0 }],
     },
   ],
   "post-3": [
-    { id: "comment-4", author: "이서연", text: "검색 키워드와 독자 수준을 함께 넣으면 더 좋겠어요.", likes: 3 },
+    { id: "comment-4", author: "콘텐츠랩", text: "검색 키워드와 독자 수준을 함께 넣으면 더 좋겠어요.", likes: 3 },
   ],
   "post-4": [
-    { id: "comment-5", author: "김지수", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞습니다." },
-    { id: "comment-6", author: "박민준", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같아요." },
+    { id: "comment-5", author: "태그지니", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞습니다." },
+    { id: "comment-6", author: "카피메이커", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같아요." },
   ],
   "post-5": [
-    { id: "comment-7", author: "이서연", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나오네요." },
-    { id: "comment-8", author: "김지수", text: "타깃 독자까지 넣으면 클릭률을 더 고려할 수 있겠어요." },
+    { id: "comment-7", author: "콘텐츠랩", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나오네요." },
+    { id: "comment-8", author: "태그지니", text: "타깃 독자까지 넣으면 클릭률을 더 고려할 수 있겠어요." },
   ],
   "post-6": [
-    { id: "comment-9", author: "박민준", text: "훅, 본문, 마무리 CTA로 나누는 구성이 좋습니다." },
-    { id: "comment-10", author: "이서연", text: "영상 길이와 업로드 채널을 추가하면 더 바로 쓰기 좋겠어요." },
+    { id: "comment-9", author: "카피메이커", text: "훅, 본문, 마무리 CTA로 나누는 구성이 좋습니다." },
+    { id: "comment-10", author: "콘텐츠랩", text: "영상 길이와 업로드 채널을 추가하면 더 바로 쓰기 좋겠어요." },
   ],
   "post-7": [
-    { id: "comment-11", author: "김지수", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
-    { id: "comment-12", author: "박민준", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
+    { id: "comment-11", author: "태그지니", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
+    { id: "comment-12", author: "카피메이커", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
   ],
   "post-8": [
-    { id: "comment-13", author: "이서연", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
-    { id: "comment-14", author: "김지수", text: "목표와 핵심 메시지를 분리하면 더 설득력 있을 것 같아요." },
+    { id: "comment-13", author: "콘텐츠랩", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
+    { id: "comment-14", author: "태그지니", text: "목표와 핵심 메시지를 분리하면 더 설득력 있을 것 같아요." },
   ],
 };
 
@@ -263,57 +263,57 @@ const SEARCH_DEBOUNCE_MS = 320;
 
 const commentsByPrompt = {
   "post-1": [
-    { id: "comment-1", author: "김지수", text: "해시태그까지 같이 요청하는 구성이 실무에서 쓰기 좋네요." },
-    { id: "comment-2", author: "이서연", text: "브랜드 톤앤매너를 추가하면 더 정확한 결과가 나올 것 같아요." },
+    { id: "comment-1", author: "태그지니", text: "해시태그까지 같이 요청하는 구성이 실무에서 쓰기 좋네요." },
+    { id: "comment-2", author: "콘텐츠랩", text: "브랜드 톤앤매너를 추가하면 더 정확한 결과가 나올 것 같아요." },
   ],
   "post-2": [
-    { id: "comment-3", author: "박민준", text: "문법, 흐름, 가독성을 나눠서 첨삭하는 방식이 마음에 듭니다." },
+    { id: "comment-3", author: "카피메이커", text: "문법, 흐름, 가독성을 나눠서 첨삭하는 방식이 마음에 듭니다." },
   ],
   "post-3": [
-    { id: "comment-4", author: "이서연", text: "검색 키워드와 독자 페르소나도 함께 넣으면 더 좋겠어요." },
+    { id: "comment-4", author: "콘텐츠랩", text: "검색 키워드와 독자 페르소나도 함께 넣으면 더 좋겠어요." },
   ],
   "post-4": [
-    { id: "comment-5", author: "김지수", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
-    { id: "comment-6", author: "박민준", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
+    { id: "comment-5", author: "태그지니", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
+    { id: "comment-6", author: "카피메이커", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
   ],
   "post-5": [
-    { id: "comment-7", author: "이서연", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
-    { id: "comment-8", author: "김지수", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
+    { id: "comment-7", author: "콘텐츠랩", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
+    { id: "comment-8", author: "태그지니", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
   ],
   "post-6": [
-    { id: "comment-9", author: "박민준", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
-    { id: "comment-10", author: "이서연", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
+    { id: "comment-9", author: "카피메이커", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
+    { id: "comment-10", author: "콘텐츠랩", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
   ],
   "post-7": [
-    { id: "comment-11", author: "김지수", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
-    { id: "comment-12", author: "박민준", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
+    { id: "comment-11", author: "태그지니", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
+    { id: "comment-12", author: "카피메이커", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
   ],
   "post-8": [
-    { id: "comment-13", author: "이서연", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
-    { id: "comment-14", author: "김지수", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
+    { id: "comment-13", author: "콘텐츠랩", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
+    { id: "comment-14", author: "태그지니", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
   ],
 };
 
 const demoCommentBackfill = {
   "post-4": [
-    { id: "comment-5", author: "김지수", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
-    { id: "comment-6", author: "박민준", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
+    { id: "comment-5", author: "태그지니", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
+    { id: "comment-6", author: "카피메이커", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
   ],
   "post-5": [
-    { id: "comment-7", author: "이서연", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
-    { id: "comment-8", author: "김지수", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
+    { id: "comment-7", author: "콘텐츠랩", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
+    { id: "comment-8", author: "태그지니", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
   ],
   "post-6": [
-    { id: "comment-9", author: "박민준", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
-    { id: "comment-10", author: "이서연", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
+    { id: "comment-9", author: "카피메이커", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
+    { id: "comment-10", author: "콘텐츠랩", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
   ],
   "post-7": [
-    { id: "comment-11", author: "김지수", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
-    { id: "comment-12", author: "박민준", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
+    { id: "comment-11", author: "태그지니", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
+    { id: "comment-12", author: "카피메이커", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
   ],
   "post-8": [
-    { id: "comment-13", author: "이서연", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
-    { id: "comment-14", author: "김지수", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
+    { id: "comment-13", author: "콘텐츠랩", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
+    { id: "comment-14", author: "태그지니", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
   ],
 };
 
@@ -324,6 +324,7 @@ const state = {
   reportPromptId: null,
   reportCommentId: null,
   editingPromptId: null,
+  adminRequestTargetKey: null,
   editingMessageId: null,
   executeMessageId: null,
   executePromptId: null,
@@ -332,6 +333,10 @@ const state = {
   adminMode: false,
   adminHiddenPromptIds: new Set(),
   adminTagDecisions: {},
+  adminTab: "reports",
+  adminPromptQuery: "",
+  adminPromptFilter: "all",
+  adminPromptRevisionRequests: {},
   reportRecords: {},
   isLoggedIn: false,
   currentUser: null,
@@ -339,6 +344,8 @@ const state = {
   isComposingShareTag: false,
   searchTipShown: false,
   searchTipVisible: false,
+  openFolderMenuId: null,
+  openThreadMenuId: null,
   searchQuery: "",
   popularSort: "popular",
   popularPage: 1,
@@ -374,6 +381,7 @@ const state = {
 let searchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
+let pendingLatestMessageScrollId = null;
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -396,6 +404,7 @@ const icons = {
   play: `<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>`,
   trash: `<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>`,
   edit: `<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  more: `<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>`,
   close: `<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
 };
 
@@ -410,6 +419,7 @@ function render() {
       </main>
       ${state.detailPromptId ? PromptDetailModal() : ""}
       ${state.editingPromptId ? PromptEditModal() : ""}
+      ${state.adminRequestTargetKey ? AdminRevisionRequestModal() : ""}
       ${state.authView ? AuthModal() : ""}
       ${state.reportPromptId || state.reportCommentId ? ReportModal() : ""}
       ${state.executeMessageId || state.executePromptId ? ExecuteModal() : ""}
@@ -420,6 +430,7 @@ function render() {
   bindEvents();
   focusActiveModal();
   restorePendingMessageScroll();
+  scrollToPendingLatestMessage();
 }
 
 function restorePendingMessageScroll() {
@@ -437,6 +448,18 @@ function restorePendingMessageScroll() {
       textarea.selectionStart = textarea.value.length;
       textarea.selectionEnd = textarea.value.length;
     }
+  });
+}
+
+function scrollToPendingLatestMessage() {
+  if (pendingMessageScrollId || !pendingLatestMessageScrollId) return;
+  const messageId = pendingLatestMessageScrollId;
+  pendingLatestMessageScrollId = null;
+  requestAnimationFrame(() => {
+    const safeId = String(messageId).replace(/"/g, '\\"');
+    const target = document.querySelector(`[data-message-id="${safeId}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "end" });
   });
 }
 
@@ -493,6 +516,8 @@ function closeTopModal() {
     state.reportCommentId = null;
   } else if (state.authView) {
     state.authView = null;
+  } else if (state.adminRequestTargetKey) {
+    state.adminRequestTargetKey = null;
   } else if (state.editingPromptId) {
     state.editingPromptId = null;
   } else if (state.detailPromptId) {
@@ -544,7 +569,7 @@ function Header() {
   const hasReportedPrompts = state.reportedPromptIds.size > 0;
   const showPromptTools = state.route === "home" || state.route === "saved";
   const authButton = state.isLoggedIn
-    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo>${state.adminMode ? "관리자 데모 해제" : "관리자 데모"}</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="프론트엔드 검수용 임시 관리자 진입입니다." aria-label="프론트엔드 검수용 관리자 데모">${state.adminMode ? "데모 해제" : "관리자 데모"}</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
     : `<button class="login-button" type="button" data-open-auth="login">로그인</button>`;
 
   return `
@@ -582,6 +607,7 @@ function HomePage() {
   const prompts = applyReportedVisibility(getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
   const displayTags = popularTags.length ? popularTags : fallbackPopularTags;
+  const searchCriteria = parsePromptSearchQuery(state.searchQuery);
   const totalPages = getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
   const pagePrompts = prompts.slice((currentPage - 1) * 16, currentPage * 16);
@@ -591,14 +617,14 @@ function HomePage() {
     <section class="home-page" aria-labelledby="popular-heading">
       <label class="search-field">
         <span>${icons.search}</span>
-        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="해시태그로 프롬프트를 검색하세요..." aria-label="해시태그 검색" />
+        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="#해시태그와 키워드로 검색하세요. 예: #마케팅 CTA" aria-label="프롬프트 검색" />
         <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="다중 해시태그 검색 안내">
           <span>${icons.bulb}</span>
-          <small role="tooltip">쉼표로 여러 해시태그를 함께 검색할 수 있습니다.</small>
+          <small role="tooltip">#해시태그와 키워드를 함께 검색할 수 있습니다.</small>
         </button>
       </label>
       <div class="popular-tags" aria-label="인기 태그">
-        ${displayTags.map((tag) => `<button class="${normalizeTag(state.searchQuery) === normalizeTag(tag) ? "active" : ""}" type="button" data-popular-tag="${tag}">#${tag}</button>`).join("")}
+        ${displayTags.map((tag) => `<button class="${searchCriteria.tagTokens.includes(normalizeTag(tag)) ? "active" : ""}" type="button" data-popular-tag="${tag}">#${tag}</button>`).join("")}
       </div>
       <div class="section-title">
         <div class="section-title-main">
@@ -705,6 +731,7 @@ function PromptCard(prompt, options = {}) {
   const isLiked = state.likedPromptIds.has(prompt.id);
   const isReported = state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
+  const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
   const hasMakeHistory = isMine && Array.isArray(prompt.messages) && prompt.messages.length > 0;
   const commentCount = getPromptCommentCount(prompt);
   const showStatus = options.showStatus !== false;
@@ -712,6 +739,7 @@ function PromptCard(prompt, options = {}) {
     isMine
       ? `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`
       : "",
+    isMine && getPromptRevisionRequest(prompt.id) ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : "",
     isPendingUnsave ? `<span class="status-badge pending-unsave">저장 취소 예정</span>` : "",
   ].join("");
 
@@ -735,7 +763,7 @@ function PromptCard(prompt, options = {}) {
       <div class="tag-row">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
       <footer class="card-meta">
         <span>${icons.eye}${formatNumber(prompt.views)}</span>
-        <span>${prompt.author}</span>
+        <span>${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
       </footer>
     </article>
   `;
@@ -765,10 +793,18 @@ function PromptDetailModal() {
         <div class="prompt-detail-layout">
           <section class="prompt-detail-main" aria-label="프롬프트 내용">
             <p class="prompt-detail-text">${prompt.text}</p>
+            ${
+              revisionRequest
+                ? `<div class="revision-request-notice">
+                    <strong>수정 요청됨</strong>
+                    <p>${escapeHtml(revisionRequest.reason)}</p>
+                  </div>`
+                : ""
+            }
             <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
               <span>${icons.eye}${formatNumber(prompt.views)}</span>
-              <span>${prompt.author}</span>
+              <span>${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
               <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
             </footer>
           </section>
@@ -821,7 +857,7 @@ function PromptDetailModal() {
 
 function PromptEditModal() {
   const prompt = findPromptById(state.editingPromptId);
-  if (!prompt || (prompt.source !== "mine" && !state.adminMode)) return "";
+  if (!prompt || prompt.source !== "mine") return "";
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title">
@@ -845,6 +881,36 @@ function PromptEditModal() {
         <div class="form-actions">
           <button class="secondary-button" type="button" data-close-prompt-edit>취소</button>
           <button class="primary-button" type="submit">저장</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function AdminRevisionRequestModal() {
+  const target = getRevisionRequestTarget(state.adminRequestTargetKey);
+  if (!target || !state.adminMode) return "";
+
+  const existingRequest = state.adminPromptRevisionRequests[target.key];
+
+  return `
+    <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="revision-request-title">
+      <form class="modal prompt-edit-modal revision-request-modal" data-admin-revision-request-form="${target.key}">
+        <div class="modal-head">
+          <h2 id="revision-request-title">수정 요청</h2>
+          <button class="ghost-icon" type="button" data-close-revision-request aria-label="닫기">${icons.close}</button>
+        </div>
+        <div class="revision-request-target">
+          <strong>${escapeHtml(target.title)}</strong>
+          <p>${escapeHtml(truncateText(target.text, 120))}</p>
+        </div>
+        <label>
+          <span>작성자에게 전달할 요청 사유</span>
+          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요.">${escapeHtml(existingRequest?.reason || "")}</textarea>
+        </label>
+        <div class="form-actions">
+          <button class="secondary-button" type="button" data-close-revision-request>취소</button>
+          <button class="primary-button" type="submit">요청 보내기</button>
         </div>
       </form>
     </div>
@@ -1083,16 +1149,28 @@ function MakeSidePanel() {
         visibleThreads.length
           ? `<div class="recent-thread-list">
               ${visibleThreads.map((thread) => `
-                <article class="recent-thread ${state.activeThreadId === thread.id ? "active" : ""}">
+                <article class="recent-thread ${state.activeThreadId === thread.id ? "active" : ""} ${state.openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${thread.id}">
                   <button class="recent-thread-main" type="button" data-open-thread="${thread.id}">
                     <strong>${escapeHtml(thread.title)}</strong>
                     <span>${escapeHtml(thread.preview)}</span>
                     <small>${formatShortDate(thread.createdAt)}</small>
                   </button>
-                  <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더">
-                    ${state.makeFolders.map((folder) => `<option value="${folder.id}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
-                  </select>
-                  <button class="recent-thread-delete" type="button" data-delete-thread="${thread.id}" aria-label="대화 삭제">${icons.trash}</button>
+                  <div class="recent-thread-menu-wrap">
+                    <button class="recent-thread-more" type="button" data-thread-menu="${thread.id}" aria-label="대화 더보기" aria-expanded="${state.openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
+                    ${
+                      state.openThreadMenuId === thread.id
+                        ? `<div class="recent-thread-menu" role="menu">
+                            <label class="recent-thread-folder-field">
+                              <span>폴더 이동</span>
+                              <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더">
+                                ${state.makeFolders.map((folder) => `<option value="${folder.id}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
+                              </select>
+                            </label>
+                            <button type="button" data-delete-thread="${thread.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                          </div>`
+                        : ""
+                    }
+                  </div>
                 </article>
               `).join("")}
             </div>`
@@ -1104,6 +1182,8 @@ function MakeSidePanel() {
 
 function MakeFolderButton(folderId, name, count) {
   const isEditing = state.editingFolderId === folderId && folderId !== "all" && folderId !== "uncategorized";
+  const canManage = folderId !== "all" && folderId !== "uncategorized";
+  const isMenuOpen = state.openFolderMenuId === folderId;
   if (isEditing) {
     return `
       <form class="make-folder-edit-form" data-folder-edit-form="${folderId}">
@@ -1115,11 +1195,21 @@ function MakeFolderButton(folderId, name, count) {
   }
 
   return `
-    <div class="make-folder-item ${state.activeFolderId === folderId ? "active" : ""}">
+    <div class="make-folder-item ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${folderId}">
       <button type="button" data-open-folder="${folderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
       ${
-        folderId !== "all" && folderId !== "uncategorized"
-          ? `<div class="make-folder-actions"><button type="button" data-edit-folder="${folderId}" aria-label="폴더 수정">${icons.edit}</button><button type="button" data-delete-folder="${folderId}" aria-label="폴더 삭제">${icons.trash}</button></div>`
+        canManage
+          ? `<div class="make-folder-menu-wrap">
+              <button class="make-folder-more" type="button" data-folder-menu="${folderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
+              ${
+                isMenuOpen
+                  ? `<div class="make-folder-menu" role="menu">
+                      <button type="button" data-edit-folder="${folderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
+                      <button type="button" data-delete-folder="${folderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                    </div>`
+                  : ""
+              }
+            </div>`
           : ""
       }
     </div>
@@ -1132,7 +1222,7 @@ function MessageBubble(message) {
 
   if (isAssistant) {
     return `
-      <div class="message-group assistant-group">
+      <div class="message-group assistant-group" data-message-id="${escapeHtml(message.id)}">
         <article class="message assistant">
           <p>${message.content}</p>
         </article>
@@ -1230,6 +1320,7 @@ function SavedLibraryPanel() {
             <select data-saved-sort>
               <option value="recent" ${state.savedSort === "recent" ? "selected" : ""}>최신</option>
               <option value="saves" ${state.savedSort === "saves" ? "selected" : ""}>저장</option>
+              <option value="comments" ${state.savedSort === "comments" ? "selected" : ""}>댓글</option>
               <option value="likes" ${state.savedSort === "likes" ? "selected" : ""}>좋아요</option>
               <option value="views" ${state.savedSort === "views" ? "selected" : ""}>조회</option>
             </select>
@@ -1314,19 +1405,38 @@ function MyCommentsPanel() {
           ? `<div class="activity-list">
               ${comments
                 .map(
-                  (item) => `
+                  (item) => {
+                    const isEditing = state.editingCommentId === item.comment.id;
+                    const revisionRequest = state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)];
+                    return `
                     <article class="activity-item">
                       <div>
                         <strong>${escapeHtml(item.prompt?.title || "삭제된 프롬프트")}</strong>
-                        <p>${escapeHtml(item.comment.text)}</p>
+                        ${
+                          isEditing
+                            ? `<form class="comment-edit-form my-comment-edit-form" data-edit-comment-form="${item.comment.id}">
+                                <textarea name="comment" rows="3">${escapeHtml(item.comment.text)}</textarea>
+                                <button class="primary-button" type="submit">저장</button>
+                              </form>`
+                            : `<p>${escapeHtml(item.comment.text)}${item.comment.edited ? `<span class="activity-edited-mark">수정됨</span>` : ""}</p>`
+                        }
+                        ${
+                          revisionRequest
+                            ? `<div class="revision-request-notice activity-revision-notice">
+                                <strong>수정 요청됨</strong>
+                                <p>${escapeHtml(revisionRequest.reason)}</p>
+                              </div>`
+                            : ""
+                        }
                       </div>
                       <div class="activity-actions">
                         <button type="button" data-open-prompt="${item.promptId}">원문 보기</button>
-                        <button type="button" data-edit-comment="${item.comment.id}">수정</button>
+                        <button type="button" data-edit-comment="${item.comment.id}">${isEditing ? "취소" : "수정"}</button>
                         <button type="button" data-delete-comment="${item.comment.id}">삭제</button>
                       </div>
                     </article>
-                  `,
+                  `;
+                  },
                 )
                 .join("")}
             </div>`
@@ -1355,8 +1465,9 @@ function MyReportsPanel() {
                   (report) => `
                     <article class="activity-item reported-activity">
                       <div>
-                        <strong>${report.type === "prompt" ? "프롬프트 신고" : "댓글 신고"}</strong>
+                        <strong>${escapeHtml(report.title)}</strong>
                         <p>${escapeHtml(report.label)}</p>
+                        ${report.reason ? `<p class="activity-reason">${escapeHtml(report.reason)}</p>` : ""}
                       </div>
                       <span class="status-badge ${report.status === "resolved" ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
                     </article>
@@ -1385,10 +1496,128 @@ function AdminPage() {
   const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
   const reportRecords = getAdminReportRecords();
   const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const adminPromptQuery = state.adminPromptQuery || "";
+  const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
+    ? state.adminPromptFilter
+    : "all";
+  const filteredAdminPrompts = allPrompts
+    .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
+    .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
+  const adminPromptFilters = [
+    { id: "all", label: "전체" },
+    { id: "shared", label: "공개" },
+    { id: "private", label: "비공개" },
+    { id: "hidden", label: "숨김" },
+    { id: "reported", label: "신고됨" },
+  ];
   const adminTags = getKnownTags()
     .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
     .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
     .slice(0, 16);
+  const adminTabs = [
+    { id: "reports", label: "신고 관리", count: reportRecords.length },
+    { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
+    { id: "tags", label: "태그 관리", count: adminTags.length },
+  ];
+  const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
+  const reportsPanel = `
+    <section class="admin-panel">
+      <h2>신고 관리</h2>
+      <p class="admin-panel-note">접수된 신고는 검토 완료 또는 기각할 수 있고, 완료/기각 후에도 다시 접수 상태로 재처리할 수 있습니다.</p>
+      ${
+        reportRecords.length
+          ? reportRecords
+              .map(
+                (record) => `
+                  <article class="admin-row report-status-${record.status}">
+                    <div>
+                      <strong>${escapeHtml(record.title)}</strong>
+                      <p>${escapeHtml(record.summary)}</p>
+                      <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
+                      ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
+                    </div>
+                    <div class="admin-actions">
+                      <button type="button" data-admin-request-revision="${record.key}">수정 요청</button>
+                      ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "숨김 해제" : "숨김"}</button>` : ""}
+                      ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">검토 완료</button>` : ""}
+                      ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
+                      ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
+                      ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
+                      ${record.promptId ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>` : ""}
+                    </div>
+                  </article>
+                `,
+              )
+              .join("")
+          : `<p class="admin-empty">접수된 신고가 없습니다.</p>`
+      }
+    </section>
+  `;
+  const promptsPanel = `
+    <section class="admin-panel">
+      <h2>프롬프트 관리</h2>
+      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청, 숨김, 삭제 같은 운영 조치만 수행합니다.</p>
+      <div class="admin-filter-list" aria-label="프롬프트 분류">
+        ${adminPromptFilters
+          .map(
+            (filter) =>
+              `<button class="${adminPromptFilter === filter.id ? "active" : ""}" type="button" data-admin-prompt-filter="${filter.id}">${filter.label}</button>`,
+          )
+          .join("")}
+      </div>
+      <label class="admin-search-field">
+        <span>${icons.search}</span>
+        <input type="search" data-admin-prompt-search value="${escapeHtml(adminPromptQuery)}" placeholder="제목, 본문, 해시태그, 작성자, 상태로 검색" autocomplete="off" />
+      </label>
+      ${filteredAdminPrompts.length ? filteredAdminPrompts
+        .slice(0, 8)
+        .map(
+          (prompt) => `
+            <article class="admin-row">
+              <div>
+                <strong>${escapeHtml(prompt.title)}</strong>
+                <p>${prompt.source === "mine" ? "내 프롬프트" : "커뮤니티"} · ${prompt.isShared || prompt.source === "community" ? "공유됨" : "비공개"}</p>
+                ${getPromptRevisionRequest(prompt.id) ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
+              </div>
+              <div class="admin-actions">
+                <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                <button type="button" data-admin-hide-prompt="${prompt.id}">${state.adminHiddenPromptIds.has(prompt.id) ? "숨김 해제" : "숨김"}</button>
+                <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
+              </div>
+            </article>
+          `,
+        )
+        .join("") : `<p class="admin-empty">검색 결과가 없습니다.</p>`}
+    </section>
+  `;
+  const tagsPanel = `
+    <section class="admin-panel">
+      <h2>태그 관리</h2>
+      <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
+      ${
+        adminTags.length
+          ? adminTags
+              .map(
+                (tag) => `
+                  <article class="admin-row tag-status-${tag.status}">
+                    <div>
+                      <strong>#${escapeHtml(tag.label)}</strong>
+                      <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
+                    </div>
+                    <div class="admin-actions">
+                      ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
+                      ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
+                      ${tag.status !== "pending" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
+                    </div>
+                  </article>
+                `,
+              )
+              .join("")
+          : `<p class="admin-empty">관리할 태그가 없습니다.</p>`
+      }
+    </section>
+  `;
+  const activePanel = activeAdminTab === "prompts" ? promptsPanel : activeAdminTab === "tags" ? tagsPanel : reportsPanel;
 
   return `
     <section class="admin-page" aria-labelledby="admin-heading">
@@ -1397,85 +1626,24 @@ function AdminPage() {
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
+        <p class="admin-demo-note">프론트엔드 검수용 임시 관리자 화면입니다. 실제 서비스에서는 관리자 계정 권한으로만 접근합니다.</p>
       </div>
-      <div class="admin-grid">
-        <section class="admin-panel">
-          <h2>신고 관리</h2>
-          <p class="admin-panel-note">접수된 신고는 처리 완료 또는 기각할 수 있고, 완료/기각 후에도 다시 접수 상태로 재처리할 수 있습니다.</p>
-          ${
-            reportRecords.length
-              ? reportRecords
-                  .map(
-                    (record) => `
-                      <article class="admin-row report-status-${record.status}">
-                        <div>
-                          <strong>${escapeHtml(record.title)}</strong>
-                          <p>${escapeHtml(record.summary)}</p>
-                          <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
-                        </div>
-                        <div class="admin-actions">
-                          ${record.promptId ? `<button type="button" data-edit-prompt="${record.promptId}">수정</button>` : ""}
-                          ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "숨김 해제" : "숨김"}</button>` : ""}
-                          ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">처리 완료</button>` : ""}
-                          ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
-                          ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
-                          ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
-                          ${record.promptId ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>` : ""}
-                        </div>
-                      </article>
-                    `,
-                  )
-                  .join("")
-              : `<p class="admin-empty">접수된 신고가 없습니다.</p>`
-          }
-        </section>
-        <section class="admin-panel">
-          <h2>프롬프트 관리</h2>
-          <p class="admin-panel-note">관리자는 운영 목적의 수정, 숨김, 삭제만 수행합니다. 좋아요, 저장, 댓글 같은 커뮤니티 사용자 행동은 제한됩니다.</p>
-          ${allPrompts
-            .slice(0, 8)
+      <div class="admin-workspace">
+        <aside class="admin-side-panel" aria-label="관리자 메뉴">
+          ${adminTabs
             .map(
-              (prompt) => `
-                <article class="admin-row">
-                  <div>
-                    <strong>${escapeHtml(prompt.title)}</strong>
-                    <p>${prompt.source === "mine" ? "내 프롬프트" : "커뮤니티"} · ${prompt.isShared || prompt.source === "community" ? "공유됨" : "비공개"}</p>
-                  </div>
-                  <div class="admin-actions">
-                    <button type="button" data-edit-prompt="${prompt.id}">수정</button>
-                    <button type="button" data-admin-hide-prompt="${prompt.id}">${state.adminHiddenPromptIds.has(prompt.id) ? "숨김 해제" : "숨김"}</button>
-                    <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
-                  </div>
-                </article>
+              (tab) => `
+                <button class="${activeAdminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
+                  <span>${tab.label}</span>
+                  <em>${formatNumber(tab.count)}</em>
+                </button>
               `,
             )
             .join("")}
-        </section>
-        <section class="admin-panel">
-          <h2>태그 관리</h2>
-          <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
-          ${
-            adminTags.length
-              ? adminTags
-                  .map(
-                    (tag) => `
-                      <article class="admin-row tag-status-${tag.status}">
-                        <div>
-                          <strong>#${escapeHtml(tag.label)}</strong>
-                          <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
-                        </div>
-                        <div class="admin-actions">
-                          ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
-                          ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-                          ${tag.status !== "pending" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
-                        </div>
-                      </article>
-                    `,
-                  )
-                  .join("")
-              : `<p class="admin-empty">관리할 태그가 없습니다.</p>`
-          }
-        </section>
+        </aside>
+        <div class="admin-content-panel">
+          ${activePanel}
+        </div>
       </div>
     </section>
   `;
@@ -1672,6 +1840,15 @@ function AuthModal() {
 }
 
 function bindEvents() {
+  document.querySelector("#app")?.addEventListener("click", (event) => {
+    const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
+    const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
+    if (!shouldCloseFolderMenu && !shouldCloseThreadMenu) return;
+    if (shouldCloseFolderMenu) state.openFolderMenuId = null;
+    if (shouldCloseThreadMenu) state.openThreadMenuId = null;
+    render();
+  });
+
   document.onkeydown = (event) => {
     if (event.key === "Escape") {
       closeTopModal();
@@ -1798,6 +1975,13 @@ function bindEvents() {
   document.querySelectorAll("[data-close-prompt-edit]").forEach((button) => {
     button.addEventListener("click", () => {
       state.editingPromptId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-close-revision-request]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminRequestTargetKey = null;
       render();
     });
   });
@@ -1996,7 +2180,7 @@ function bindEvents() {
         autosizeTextarea(composerTextarea);
       });
       composerTextarea.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey) || event.isComposing) return;
+        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
         event.preventDefault();
         if (typeof composer.requestSubmit === "function") {
           composer.requestSubmit();
@@ -2020,15 +2204,17 @@ function bindEvents() {
       }
       const now = Date.now();
       const threadId = state.activeThreadId || `thread-${now}`;
+      const assistantMessageId = `make-${now}`;
       state.activeThreadId = threadId;
       state.messages.push({ id: `user-${now}`, role: "user", content: value });
       state.messages.push({
-        id: `make-${now}`,
+        id: assistantMessageId,
         role: "assistant",
         content: polishPrompt(value),
         sourcePrompt: value,
       });
       state.composerDraft = "";
+      pendingLatestMessageScrollId = assistantMessageId;
       updateRecentThread(threadId);
       render();
     });
@@ -2102,6 +2288,27 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-prompt-search]").forEach((input) => {
+    input.addEventListener("input", () => {
+      state.adminPromptQuery = input.value;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-prompt-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminPromptFilter = button.dataset.adminPromptFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminTab = button.dataset.adminTab || "reports";
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-admin-tag-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
@@ -2124,6 +2331,15 @@ function bindEvents() {
       const key = value.slice(0, separatorIndex);
       const status = value.slice(separatorIndex + 1);
       updateReportRecordStatus(key, status);
+    });
+  });
+
+  document.querySelectorAll("[data-admin-request-revision]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.adminRequestTargetKey = button.dataset.adminRequestRevision;
+      render();
     });
   });
 
@@ -2164,6 +2380,16 @@ function bindEvents() {
     button.addEventListener("click", startNewChat);
   });
 
+  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const threadId = button.dataset.threadMenu;
+      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
     button.addEventListener("click", () => {
       state.creatingFolder = true;
@@ -2189,13 +2415,27 @@ function bindEvents() {
   document.querySelectorAll("[data-open-folder]").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeFolderId = button.dataset.openFolder;
+      state.openFolderMenuId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const folderId = button.dataset.folderMenu;
+      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
       render();
     });
   });
 
   document.querySelectorAll("[data-edit-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       state.editingFolderId = button.dataset.editFolder;
+      state.openFolderMenuId = null;
       render();
     });
   });
@@ -2208,7 +2448,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-delete-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openFolderMenuId = null;
       openConfirmAction({
         type: "delete-folder",
         targetId: button.dataset.deleteFolder,
@@ -2222,6 +2465,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-thread-folder]").forEach((select) => {
     select.addEventListener("change", () => {
+      state.openThreadMenuId = null;
       moveThreadToFolder(select.dataset.threadFolder, select.value);
     });
   });
@@ -2235,6 +2479,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-open-thread]").forEach((button) => {
     button.addEventListener("click", () => {
+      state.openThreadMenuId = null;
       openRecentThread(button.dataset.openThread);
     });
   });
@@ -2243,6 +2488,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      state.openThreadMenuId = null;
       openConfirmAction({
         type: "delete-thread",
         targetId: button.dataset.deleteThread,
@@ -2415,6 +2661,14 @@ function bindEvents() {
     promptEditForm.addEventListener("submit", (event) => {
       event.preventDefault();
       updateOwnPrompt(promptEditForm.dataset.promptEditForm, new FormData(promptEditForm));
+    });
+  }
+
+  const adminRevisionRequestForm = document.querySelector("[data-admin-revision-request-form]");
+  if (adminRevisionRequestForm) {
+    adminRevisionRequestForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      requestPromptRevision(adminRevisionRequestForm.dataset.adminRevisionRequestForm, new FormData(adminRevisionRequestForm).get("reason"));
     });
   }
 
@@ -2850,6 +3104,33 @@ function getPromptCommentCount(prompt) {
   return countCommentThread(getPromptComments(prompt.id));
 }
 
+function getDisplayPromptAuthor(prompt) {
+  const author = String(prompt?.author || prompt?.owner || "").trim();
+  const owner = String(prompt?.owner || prompt?.author || "").trim();
+  const currentUser = String(state.currentUser || "").trim();
+
+  if (state.isLoggedIn && currentUser && (owner === currentUser || author === currentUser || author === "나")) {
+    return "나";
+  }
+
+  if (author && author !== "나") return author;
+  if (owner && owner !== "나") return owner;
+  return "익명 사용자";
+}
+
+function stampCurrentUserOwnedPrompts() {
+  const currentUser = String(state.currentUser || "").trim();
+  if (!currentUser) return;
+
+  [popularPrompts, savedPrompts].forEach((list) => {
+    list.forEach((prompt) => {
+      if (prompt.source !== "mine") return;
+      if (!prompt.owner || prompt.owner === "나") prompt.owner = currentUser;
+      if (!prompt.author || prompt.author === "나") prompt.author = currentUser;
+    });
+  });
+}
+
 function addPromptComment(promptId, text) {
   const content = String(text || "").trim();
   if (!content) return;
@@ -2927,6 +3208,12 @@ function updateOwnComment(commentId, text) {
     comment.edited = true;
   }
 
+  const revisionKey = makeRevisionRequestKey("comment", commentId);
+  if (state.adminPromptRevisionRequests[revisionKey]) {
+    const { [revisionKey]: _resolvedRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
+    state.adminPromptRevisionRequests = remainingRequests;
+  }
+
   state.editingCommentId = null;
   showNotice("댓글을 수정했습니다.");
 }
@@ -2986,12 +3273,14 @@ function runConfirmedAction() {
   }
 
   if (action.type === "logout") {
+    stampCurrentUserOwnedPrompts();
     state.isLoggedIn = false;
     state.currentUser = null;
     showNotice("로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {
+    stampCurrentUserOwnedPrompts();
     state.isLoggedIn = false;
     state.currentUser = null;
     state.authView = null;
@@ -3184,6 +3473,7 @@ function saveMakeMessage(messageId) {
     comments: 0,
     saves: 1,
     author: state.currentUser || "나",
+    owner: state.currentUser || "나",
     source: "mine",
     isShared: false,
     savedByMe: true,
@@ -3202,16 +3492,17 @@ function resendEditedMessage(messageId, value) {
   if (index < 0 || !cleanValue) return;
 
   const now = Date.now();
+  const assistantMessageId = `make-${now}`;
   state.messages = state.messages.slice(0, index + 1);
   state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
   state.messages.push({
-    id: `make-${now}`,
+    id: assistantMessageId,
     role: "assistant",
     content: polishPrompt(cleanValue),
     sourcePrompt: cleanValue,
   });
   state.editingMessageId = null;
-  pendingMessageScrollId = messageId;
+  pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
   showNotice("수정한 메시지로 다시 전송했습니다.");
   render();
@@ -3386,6 +3677,12 @@ function makePreview(text) {
   return clean.length > 44 ? `${clean.slice(0, 44)}...` : clean;
 }
 
+function truncateText(text, maxLength = 80) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > maxLength ? `${clean.slice(0, maxLength)}...` : clean;
+}
+
 function autosizeTextarea(textarea) {
   textarea.style.height = "auto";
   textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
@@ -3432,6 +3729,7 @@ function publishSavedPrompt(promptId) {
   prompt.isShared = true;
   prompt.source = "mine";
   prompt.author = state.currentUser || prompt.author || "나";
+  prompt.owner = state.currentUser || prompt.owner || prompt.author;
   prompt.createdAt = prompt.createdAt || Date.now();
 
   const popularIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
@@ -3468,6 +3766,12 @@ function updateOwnPrompt(promptId, formData) {
     item.tags = tags;
     item.updatedAt = Date.now();
   });
+
+  const revisionKey = makeRevisionRequestKey("prompt", promptId);
+  if (state.adminPromptRevisionRequests[revisionKey] || state.adminPromptRevisionRequests[promptId]) {
+    const { [revisionKey]: _resolvedRequest, [promptId]: _legacyRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
+    state.adminPromptRevisionRequests = remainingRequests;
+  }
 
   state.editingPromptId = null;
   showNotice("프롬프트를 수정했습니다.");
@@ -3557,9 +3861,11 @@ function getSavedSorter() {
   const byRecent = (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0);
   const bySaves = (a, b) => getPromptSaveCount(b) - getPromptSaveCount(a);
   const byLikes = (a, b) => getPromptLikes(b) - getPromptLikes(a);
+  const byComments = (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a);
   const byViews = (a, b) => Number(b.views || 0) - Number(a.views || 0);
 
   if (state.savedSort === "saves") return (a, b) => bySaves(a, b) || byRecent(a, b) || byViews(a, b);
+  if (state.savedSort === "comments") return (a, b) => byComments(a, b) || bySaves(a, b) || byRecent(a, b);
   if (state.savedSort === "likes") return (a, b) => byLikes(a, b) || bySaves(a, b) || byRecent(a, b);
   if (state.savedSort === "views") return (a, b) => byViews(a, b) || bySaves(a, b) || byRecent(a, b);
   return (a, b) => byRecent(a, b) || bySaves(a, b) || byViews(a, b);
@@ -3603,7 +3909,7 @@ function searchByTag(tag) {
   if (!cleanTag) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchQuery = cleanTag;
+  state.searchQuery = `#${cleanTag}`;
   state.popularPage = 1;
   state.detailPromptId = null;
   state.route = "home";
@@ -3642,7 +3948,8 @@ function sharePrompt(formData) {
     views: 0,
     comments: 0,
     saves: 0,
-    author: "나",
+    author: state.currentUser || existingPrompt?.author || "익명 사용자",
+    owner: state.currentUser || existingPrompt?.owner || existingPrompt?.author || "익명 사용자",
     source: "mine",
     isShared: true,
     savedByMe: Boolean(existingPrompt?.savedByMe),
@@ -3685,17 +3992,22 @@ function parseSharedTags(value) {
 }
 
 function getVisiblePopularPrompts() {
-  const tokens = parseTagQuery(state.searchQuery);
+  const criteria = parsePromptSearchQuery(state.searchQuery);
   const prompts = getUniquePrompts(popularPrompts);
 
-  if (tokens.length === 0) {
+  if (criteria.tagTokens.length === 0 && criteria.keywordTokens.length === 0) {
     return sortPopularPrompts(prompts);
   }
 
   return sortPopularPrompts(
     prompts.filter((prompt) => {
       const tags = prompt.tags.map(normalizeTag);
-      return tokens.every((token) => tags.some((tag) => tag.includes(token)));
+      const matchesTags =
+        criteria.tagTokens.length === 0 || criteria.tagTokens.every((token) => tags.some((tag) => tag.includes(token)));
+      if (!matchesTags) return false;
+
+      const haystack = normalizeSearchText([prompt.title, prompt.text, prompt.author, ...(prompt.tags || [])].join(" "));
+      return criteria.keywordTokens.every((token) => haystack.includes(token));
     }),
   );
 }
@@ -3766,6 +4078,7 @@ function getMyReports() {
     const record = getReportRecord(`prompt:${promptId}`);
     return {
       type: "prompt",
+      title: "프롬프트 신고",
       id: promptId,
       label: prompt?.title || "삭제된 프롬프트",
       status: record.status,
@@ -3776,17 +4089,81 @@ function getMyReports() {
     const record = getReportRecord(`comment:${commentId}`);
     return {
       type: "comment",
+      title: "댓글 신고",
       id: commentId,
       label: comment?.text || "삭제된 댓글",
       status: record.status,
     };
   });
 
-  return [...promptReports, ...commentReports];
+  const revisionRequests = Object.entries(state.adminPromptRevisionRequests)
+    .map(([key, request]) => {
+      const target = getRevisionRequestTarget(key);
+      if (!target || !isRevisionTargetOwnedByCurrentUser(target)) return null;
+      return {
+        type: target.type,
+        title: `${target.type === "prompt" ? "프롬프트" : "댓글"} 수정 요청`,
+        id: target.id,
+        label: target.type === "comment" ? target.text : target.title,
+        reason: request.reason,
+        status: "revision-requested",
+        requestedAt: request.requestedAt,
+      };
+    })
+    .filter(Boolean);
+
+  return [...revisionRequests, ...promptReports, ...commentReports].sort(
+    (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
+  );
 }
 
 function getReportRecord(key) {
   return state.reportRecords[key] || { status: "pending" };
+}
+
+function makeRevisionRequestKey(type, id) {
+  return `${type}:${id}`;
+}
+
+function getPromptRevisionRequest(promptId) {
+  return state.adminPromptRevisionRequests[makeRevisionRequestKey("prompt", promptId)] || state.adminPromptRevisionRequests[promptId] || null;
+}
+
+function getRevisionRequestTarget(key) {
+  const value = String(key || "");
+  const separatorIndex = value.indexOf(":");
+  const type = separatorIndex > 0 ? value.slice(0, separatorIndex) : "prompt";
+  const id = separatorIndex > 0 ? value.slice(separatorIndex + 1) : value;
+
+  if (type === "comment") {
+    const comment = findCommentById(id);
+    if (!comment) return null;
+    return {
+      type,
+      id,
+      key: makeRevisionRequestKey(type, id),
+      title: "댓글 수정 요청",
+      text: comment.text,
+      owner: comment.owner || comment.author,
+    };
+  }
+
+  const prompt = findPromptById(id);
+  if (!prompt) return null;
+  return {
+    type: "prompt",
+    id,
+    key: makeRevisionRequestKey("prompt", id),
+    title: prompt.title,
+    text: prompt.text,
+    owner: prompt.owner || prompt.author,
+  };
+}
+
+function isRevisionTargetOwnedByCurrentUser(target) {
+  if (!target) return false;
+  const owner = target.owner;
+  return owner === "나" || owner === state.currentUser;
 }
 
 function getAdminReportRecords() {
@@ -3821,9 +4198,47 @@ function getAdminReportRecords() {
 }
 
 function getReportStatusLabel(status) {
+  if (status === "revision-requested") return "수정 요청됨";
   if (status === "dismissed") return "기각";
-  if (status === "resolved") return "처리 완료";
+  if (status === "resolved") return "검토 완료";
   return "접수";
+}
+
+function matchesAdminPromptQuery(prompt, query) {
+  const normalizedQuery = normalizeAdminSearchText(query);
+  if (!normalizedQuery) return true;
+
+  const visibility = state.adminHiddenPromptIds.has(prompt.id)
+    ? "숨김 hidden"
+    : prompt.isShared || prompt.source === "community"
+      ? "공유 공개 shared public"
+      : "비공개 private";
+  const source = prompt.source === "mine" ? "내 프롬프트 mine" : "커뮤니티 다른 사용자 community";
+  const haystack = normalizeAdminSearchText(
+    [prompt.title, prompt.text, prompt.author, source, visibility, ...(prompt.tags || [])].join(" "),
+  );
+
+  return normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => haystack.includes(token));
+}
+
+function matchesAdminPromptFilter(prompt, filter) {
+  if (filter === "shared") return Boolean(prompt.isShared || prompt.source === "community");
+  if (filter === "private") return prompt.source === "mine" && !prompt.isShared;
+  if (filter === "hidden") return state.adminHiddenPromptIds.has(prompt.id);
+  if (filter === "reported") return state.reportedPromptIds.has(prompt.id);
+  return true;
+}
+
+function normalizeAdminSearchText(value) {
+  return String(value || "")
+    .replace(/^#+/, "")
+    .replace(/[#,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function getAdminTagStatus(tag) {
@@ -3854,6 +4269,30 @@ function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "dismissed", "resolved"].includes(status)) return;
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
+}
+
+function requestPromptRevision(targetKey, reason) {
+  const target = getRevisionRequestTarget(targetKey);
+  const content = String(reason || "").trim();
+
+  if (!target || !state.adminMode) return;
+  if (!content) {
+    window.alert("작성자에게 전달할 수정 요청 사유를 입력해주세요.");
+    return;
+  }
+
+  state.adminPromptRevisionRequests = {
+    ...state.adminPromptRevisionRequests,
+    [target.key]: {
+      type: target.type,
+      targetId: target.id,
+      reason: content,
+      requestedAt: Date.now(),
+      status: "requested",
+    },
+  };
+  state.adminRequestTargetKey = null;
+  showNotice("작성자에게 수정 요청을 보냈습니다.");
 }
 
 function findPromptIdByCommentId(commentId) {
@@ -3921,11 +4360,35 @@ function getPopularTotalPages(count) {
   return Math.max(1, Math.ceil(count / 16));
 }
 
-function parseTagQuery(query) {
-  return query
+function parsePromptSearchQuery(query) {
+  const tagTokens = [];
+  const keywordTokens = [];
+
+  String(query || "")
     .split(/[,\s]+/)
-    .map(normalizeTag)
-    .filter(Boolean);
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .forEach((token) => {
+      if (token.startsWith("#")) {
+        const tag = normalizeTag(token);
+        if (tag) tagTokens.push(tag);
+        return;
+      }
+
+      const keyword = normalizeSearchText(token);
+      if (keyword) keywordTokens.push(keyword);
+    });
+
+  return { tagTokens, keywordTokens };
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .replace(/^#+/, "")
+    .replace(/[#,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeTag(value) {
@@ -4018,6 +4481,10 @@ function persistState() {
           adminMode: state.adminMode,
           adminHiddenPromptIds: [...state.adminHiddenPromptIds],
           adminTagDecisions: state.adminTagDecisions,
+          adminTab: state.adminTab,
+          adminPromptQuery: state.adminPromptQuery,
+          adminPromptFilter: state.adminPromptFilter,
+          adminPromptRevisionRequests: state.adminPromptRevisionRequests,
           reportRecords: state.reportRecords,
           popularSort: state.popularSort,
           savedSort: state.savedSort,
@@ -4067,11 +4534,22 @@ function loadPersistedState() {
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
+    state.adminTab = ["reports", "prompts", "tags"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
+    state.adminPromptQuery = savedState.adminPromptQuery || "";
+    state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
+      ? savedState.adminPromptFilter
+      : "all";
+    state.adminPromptRevisionRequests =
+      savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
+        ? savedState.adminPromptRevisionRequests
+        : {};
     state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
     state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(savedState.popularSort)
       ? savedState.popularSort
       : "popular";
-    state.savedSort = ["recent", "saves", "likes", "views"].includes(savedState.savedSort) ? savedState.savedSort : "recent";
+    state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(savedState.savedSort)
+      ? savedState.savedSort
+      : "recent";
     state.guestImproveCount = Number(savedState.guestImproveCount || 0);
     state.recentThreads = Array.isArray(savedState.recentThreads) ? savedState.recentThreads : [];
     state.makeFolders = normalizeMakeFolders(savedState.makeFolders);

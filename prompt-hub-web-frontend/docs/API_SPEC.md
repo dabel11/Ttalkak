@@ -44,7 +44,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, My page에는 내 프롬프트로 유지 |
 | 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | My page의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
-| 관리자 프롬프트 수정/삭제 | `PATCH/DELETE /api/admin/prompts/:id` | varies | 관리자 권한 및 감사 로그 필요 |
+| 관리자 프롬프트 수정 요청/삭제 | `POST /api/admin/prompts/:id/revision-request`, `DELETE /api/admin/prompts/:id` | varies | 관리자는 사용자 콘텐츠를 직접 수정하지 않고 수정 요청 또는 운영 조치만 수행 |
 | 저장 | `POST /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 저장 취소 | `DELETE /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 좋아요 | `POST /api/prompts/:id/like` | none | 좋아요 수와 `isLiked` 반환 |
@@ -80,18 +80,18 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
 | 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 작성자, 처리 상태 |
-| 신고 처리 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 처리자와 처리 시각 감사 로그 필요 |
+| 신고 검토 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
 | 신고 기각 | `PATCH /api/admin/reports/:id` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
-| 신고 재처리 | `PATCH /api/admin/reports/:id` | `{ status: "pending", memo? }` | 처리 완료/기각 상태를 다시 접수 상태로 되돌림 |
+| 신고 재처리 | `PATCH /api/admin/reports/:id` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |
 | 신고 대상 삭제 | `DELETE /api/admin/reports/:id/target` | `{ memo? }` | 대상이 프롬프트/댓글/대댓글인지에 따라 삭제 |
-| 전체 프롬프트 수정 | `PATCH /api/admin/prompts/:id` | `{ title, text, tags, isShared? }` | 소유자와 무관하게 관리자 권한으로 수정 |
+| 프롬프트 수정 요청 | `POST /api/admin/prompts/:id/revision-request` | `{ reason }` | 작성자에게 수정 요청을 전달, 관리자와 요청 시각 감사 로그 필요 |
 | 전체 프롬프트 삭제 | `DELETE /api/admin/prompts/:id` | `{ memo? }` | 삭제 사유와 관리자 감사 로그 필요 |
 | 태그 관리 | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected` 상태와 사용 횟수 반환 |
 | 태그 상태 변경 | `PATCH /api/admin/tags/:id` | `{ status: "pending" \| "approved" \| "rejected", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
 
 Admin status model:
 
-- Report status: `pending` = 접수, `resolved` = 처리 완료, `dismissed` = 기각. 처리 완료/기각 상태는 `pending`으로 되돌려 재처리할 수 있어야 합니다.
+- Report status: `pending` = 접수, `resolved` = 검토 완료, `dismissed` = 기각. 검토 완료/기각 상태는 `pending`으로 되돌려 재처리할 수 있어야 합니다.
 - Tag status: `pending` = 검토 중, `approved` = 검토 완료, `rejected` = 추천 제외. 승인/제외된 태그도 `pending`으로 되돌려 재검토할 수 있어야 합니다.
 
 회원가입 필수값은 `nickname`, `name`, `userId`, `password`, `passwordConfirm`, `agreeTerms`, `agreePrivacy`입니다. `birth`, `phone`, `email`은 선택값이며, 입력된 경우에만 형식 검증을 권장합니다. 이메일은 아이디 찾기 보조 수단으로 사용할 수 있으나, 이메일을 등록하지 않은 사용자는 이메일 방식 아이디 찾기를 사용할 수 없습니다. 커뮤니티 화면에는 실명 `name`이 아니라 `nickname`을 표시해야 합니다. 약관/개인정보 동의는 실제 서비스에서 동의 버전과 동의 시각 저장이 필요합니다.

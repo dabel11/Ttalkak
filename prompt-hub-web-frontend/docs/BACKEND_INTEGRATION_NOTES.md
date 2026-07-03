@@ -131,9 +131,11 @@ Modal behavior:
 - Optional `email` can be used for the email-based ID recovery flow. Users without a registered email should not be eligible for email-based recovery.
 - Nickname and user ID duplicate checks are frontend demo buttons and should be backed by real availability-check endpoints.
 - Account withdrawal is demo-only. Backend must define account deletion, authored prompt ownership, saved prompt cleanup, comments, reports, and audit policy.
-- Admin edit/delete UI is exposed through a demo toggle. Real service should drive this from a backend role such as `role: "admin"` and enforce all edit/delete actions server-side.
-- When admin mode is active, the prototype hides normal user navigation and exposes only the `Admin` area. This reflects the intended role separation: admin accounts operate moderation/management tools rather than liking, saving, sharing, or commenting as community users.
-- Prompt edit updates title, text, and tags in the prototype. Backend should provide an update endpoint with owner/admin authorization.
+- Admin moderation UI is exposed through a demo toggle only for frontend review. This toggle is not a production access model.
+- Real service should drive Admin access from authenticated account metadata such as `role: "admin"` and enforce every Admin API server-side. Hiding or showing the Admin menu in the frontend is only a convenience layer, not authorization.
+- Admin accounts should enter an operator-oriented Admin area. They should not perform normal community actions such as liking, saving, sharing, or commenting as users while in Admin mode.
+- Admins should not directly edit user-authored prompt content; they can request revisions, hide content, dismiss/resolve reports, or delete clear violations with an audit log.
+- Prompt edit updates title, text, and tags for the owner. Admins should use revision requests instead of directly editing user-authored prompt content.
 - Admin page is prototype-only but should map to real role-based access control. Backend must enforce admin permissions server-side; hiding UI is not sufficient.
 
 ## My Page Navigation And User Activity
