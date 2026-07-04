@@ -45,6 +45,7 @@ class QueryRequest(BaseModel):
     use_hybrid:          bool = False   # dense+BM25 하이브리드 — 이 코퍼스에선 악화로 기본 off(opt-in)
     use_query_transform: bool = False   # 키워드 쿼리변환(실험적) — 코퍼스 미스매치로 기본 off
     use_hyde:            bool = False   # HyDE 가상문서 쿼리(실험적)
+    min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
 
 class QueryResponse(BaseModel):
     answer:              str            # 전체 응답 (화면 표시용)
@@ -157,8 +158,10 @@ def query(req: QueryRequest):
         top_k=req.top_k,
         use_reranker=req.use_reranker,
         use_hybrid=req.use_hybrid,
+        min_score=req.min_score,
     )
     # 첫 턴(대화 기록 없음)에 매칭 결과가 없을 때만 404.
+    # min_score 컷으로 전부 걸러졌다면 = 정말 무관한 입력 → 404가 의도된 동작.
     # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
     if not retrieved and not history:
         raise HTTPException(

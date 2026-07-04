@@ -42,14 +42,18 @@ MySQL (3306, ttalkak) — Spring 백엔드와 동일 DB, rag_chunk 테이블
 
 ### 검색 파이프라인 (/query)
 1. **후보 추리기** — dense(bge-m3 코사인)로 `fetch_k`(기본 20)개. (옵션 `use_hybrid`: dense+BM25 RRF 융합 — 측정상 악화라 기본 off)
+   - fetch_k=20은 측정 기반 결정: 10으로 줄이면 지연 절반(1988→922ms)이지만 Recall@5 −4.5%p (WORKLOG 2026-07-05 스윕).
 2. **리랭크** — bge-reranker-v2-m3로 재채점해 상위 `top_k` 반환(`use_reranker` **기본 on, 검증된 핵심 개선**). 실패 시 후보 폴백.
-3. **쿼리 변환(실험적, 기본 off)** — `use_query_transform`(키워드) / `use_hyde`(가상문서). 둘 다 이 코퍼스에선 검색 악화라 비활성(아래 평가).
+   - 반환 `score`는 dense 코사인(해석 가능), `rerank_score`(sigmoid)는 병기 — 리랭커 확률은 ~0.50 평탄이라 표시·필터에 부적합(측정으로 확인).
+3. **유효 유사도 컷** — `min_score`(기본 **0.40**, dense 기준) 미만은 top_k에서 제외. 무관한 입력이면 0건→첫 턴 404. τ=0.40은 recall 무손실·빈결과 0% 지점(`eval/score_analysis.py`로 측정, 코퍼스 변경 시 재측정).
+4. **쿼리 변환(실험적, 기본 off)** — `use_query_transform`(키워드) / `use_hyde`(가상문서). 둘 다 이 코퍼스에선 검색 악화라 비활성(아래 평가).
 
 ## 평가 (검색 + 생성)
 
 ### 검색 품질: `python -m eval.run_eval --qa qa_set_realistic.json`
-`--all`(4변형 비교) · `--rerank` · `--hybrid` · `--query-transform`/`--hyde` · `--show-fails`.
-지표: Hit@1 / **Recall@1·3·5(진짜 recall = 정답∩topk/정답수)** / Precision@5 / MRR@10 / **NDCG@5**.
+`--all`(4변형 비교) · `--rerank` · `--hybrid` · `--query-transform`/`--hyde` · `--fetch-k 20 15 10`(후보폭 스윕) · `--show-fails`.
+지표: Hit@1 / **Recall@1·3·5(진짜 recall = 정답∩topk/정답수)** / Precision@5 / MRR@10 / **NDCG@5** / 평균 검색 지연.
+임계치 설계: `python -m eval.score_analysis` — 정답/오답 점수 분포 + min_score 스윕(유지Recall/Precision/빈결과율).
 
 #### 검색 평가 결과 (현실 평가셋 59문항, 원시 사용자 프롬프트)
 | 변형 | Recall@3 | Recall@5 | NDCG@5 | MRR@10 |
@@ -299,6 +303,7 @@ rag-server/
 │   └── pdf_crawler.py         #   11개 출처 크롤링 → PDF 다운로드
 ├── eval/                      # 품질 측정
 │   ├── run_eval.py            #   검색 (python -m eval.run_eval)
+│   ├── score_analysis.py      #   min_score 임계치 설계 (분포·스윕)
 │   ├── gen_eval.py            #   생성 LLM-judge (python -m eval.gen_eval)
 │   ├── uplift_eval.py         #   결과 상향 A/B (python -m eval.uplift_eval)
 │   ├── qa_set*.json           #   검색 평가셋 (질문→정답 chunk_id)

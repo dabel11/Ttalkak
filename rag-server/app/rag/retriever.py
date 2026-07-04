@@ -89,7 +89,11 @@ class Retriever:
         use_reranker: bool | None = None,
         use_hybrid: bool | None = None,
         fetch_k: int | None = None,
+        min_score: float | None = None,
     ) -> list[dict]:
+        """min_score: dense 코사인 임계치. 이 값 미만은 top_k에서 제외(무관 꼬리 컷).
+        측정(eval/score_analysis) 근거: 리랭커 확률은 정답/오답 분리가 안 되고(0.50 평탄),
+        dense 는 분리됨 → 필터는 dense 기준. τ=0.40이면 recall 무손실·빈결과 0%."""
         do_rerank = self.use_reranker if use_reranker is None else use_reranker
         do_hybrid = self.use_hybrid   if use_hybrid   is None else use_hybrid
         n_fetch   = fetch_k if fetch_k is not None else self.fetch_k
@@ -104,14 +108,19 @@ class Retriever:
         candidates = self._candidates(query, rows, stage1_k, do_hybrid, collection_name)
 
         if not do_rerank:
-            return candidates[:top_k]
+            hits = candidates[:top_k]
+        else:
+            # ── 2단계: cross-encoder 리랭크 ───────────────────
+            try:
+                hits = self._rerank(query, candidates, top_k)
+            except Exception as e:  # 리랭커 실패 시 후보로 폴백 (검색이 끊기지 않게)
+                print(f"[Retriever] 리랭크 실패 → 후보 폴백: {e}")
+                hits = candidates[:top_k]
 
-        # ── 2단계: cross-encoder 리랭크 ───────────────────────
-        try:
-            return self._rerank(query, candidates, top_k)
-        except Exception as e:  # 리랭커 실패 시 후보로 폴백 (검색이 끊기지 않게)
-            print(f"[Retriever] 리랭크 실패 → 후보 폴백: {e}")
-            return candidates[:top_k]
+        # ── 3단계(옵션): 유효 유사도 필터 — score(dense 코사인) 기준 ──
+        if min_score is not None:
+            hits = [h for h in hits if h["score"] >= min_score]
+        return hits
 
     # ── 내부 ──────────────────────────────────────────────────
     def _candidates(self, query: str, rows: list[dict], k: int, hybrid: bool,
@@ -174,8 +183,10 @@ class Retriever:
         out = []
         for i in order:
             c = dict(candidates[i])
-            # 순위는 reranker 기준 유지, 표시 점수는 평탄한 sigmoid 대신 dense 코사인 사용
-            c["score"] = c.pop("dense_score", round(float(probs[i]), 4))
+            # 순위는 reranker 기준 유지, 표시 점수는 평탄한 sigmoid 대신 dense 코사인 사용.
+            # rerank_score(sigmoid 0~1)는 임계치 필터·분석용으로 병기.
+            c["rerank_score"] = round(float(probs[i]), 4)
+            c["score"] = c.pop("dense_score", c["score"])
             out.append(c)
         return out
 

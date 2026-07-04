@@ -24,6 +24,7 @@ eval/run_eval.py
 import argparse
 import json
 import math
+import time
 from pathlib import Path
 
 from app.rag.retriever import Retriever
@@ -61,7 +62,8 @@ def _first_relevant_rank(retrieved_ids: list[str], relevant: set[str]) -> int | 
     return None
 
 
-def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_fails):
+def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_fails,
+             fetch_k=None):
     # qmode: None / "qt"(키워드 변환) / "hyde"(가상문서)
     transform = None
     if qmode == "qt":
@@ -72,6 +74,7 @@ def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_f
     agg = {"hit1": 0.0, "r1": 0.0, "r3": 0.0, "r5": 0.0,
            "p5": 0.0, "mrr": 0.0, "ndcg5": 0.0}
     fails = []
+    elapsed = 0.0
 
     for it in items:
         query    = it["query"]
@@ -79,10 +82,12 @@ def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_f
 
         search_q = transform(query) if transform else query
 
+        t0 = time.perf_counter()
         results = retriever.search(
             query=search_q, collection_name=collection, top_k=K_RETRIEVE,
-            use_reranker=use_rerank, use_hybrid=use_hybrid,
+            use_reranker=use_rerank, use_hybrid=use_hybrid, fetch_k=fetch_k,
         )
+        elapsed += time.perf_counter() - t0
 
         retrieved_ids = [r["metadata"].get("chunk_id") for r in results]
         first = _first_relevant_rank(retrieved_ids, relevant)
@@ -99,7 +104,9 @@ def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_f
             fails.append((query, sorted(relevant), retrieved_ids[:5]))
 
     n = len(items)
-    print(f"\n변형: hybrid={use_hybrid}  rerank={use_rerank}  query={qmode or 'raw'}  (질문 {n}개)")
+    fk = fetch_k if fetch_k is not None else retriever.fetch_k
+    print(f"\n변형: hybrid={use_hybrid}  rerank={use_rerank}  query={qmode or 'raw'}"
+          f"  fetch_k={fk}  (질문 {n}개)")
     print("─" * 48)
     print(f"  Hit@1       : {agg['hit1']/n:.3f}")
     print(f"  Recall@1    : {agg['r1']/n:.3f}")
@@ -108,6 +115,7 @@ def evaluate(items, retriever, collection, use_rerank, use_hybrid, qmode, show_f
     print(f"  Precision@5 : {agg['p5']/n:.3f}")
     print(f"  MRR@{K_RETRIEVE}      : {agg['mrr']/n:.3f}")
     print(f"  NDCG@5      : {agg['ndcg5']/n:.3f}")
+    print(f"  검색 지연     : 평균 {1000*elapsed/n:.0f}ms/쿼리")
     print("─" * 48)
 
     if fails:
@@ -127,6 +135,8 @@ def main():
     ap.add_argument("--qa", default="qa_set.json", help="평가셋 파일명 (eval/ 기준)")
     ap.add_argument("--all", action="store_true",
                     help="dense / +hybrid / +rerank / +both 4개 변형을 한 번에 비교")
+    ap.add_argument("--fetch-k", type=int, nargs="+", default=None,
+                    help="리랭크 후보 폭 스윕 (예: --fetch-k 20 15 10). 여러 값이면 순차 비교")
     args = ap.parse_args()
     qmode = "hyde" if args.hyde else ("qt" if args.query_transform else None)
 
@@ -142,9 +152,15 @@ def main():
         # (hybrid, rerank) 조합 — 쿼리 모드는 raw로 고정 비교
         for hy, rr in [(False, False), (True, False), (False, True), (True, True)]:
             evaluate(items, retriever, collection, rr, hy, None, args.show_fails)
+    elif args.fetch_k and len(args.fetch_k) > 1:
+        # fetch_k 스윕 — 나머지 플래그는 고정
+        for fk in args.fetch_k:
+            evaluate(items, retriever, collection, args.rerank,
+                     args.hybrid, qmode, args.show_fails, fetch_k=fk)
     else:
+        fk = args.fetch_k[0] if args.fetch_k else None
         evaluate(items, retriever, collection, args.rerank,
-                 args.hybrid, qmode, args.show_fails)
+                 args.hybrid, qmode, args.show_fails, fetch_k=fk)
 
 
 if __name__ == "__main__":
