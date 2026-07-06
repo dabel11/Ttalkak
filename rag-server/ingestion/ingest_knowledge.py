@@ -373,9 +373,23 @@ class LLMJudge:
         data = _loads_loose(self._complete(sys_p, user))
         return _safe_int(data.get("suitability", 0)), str(data.get("reason", "")).strip()
 
+    # 레이트리밋 대기 총예산(초/호출). Groq 무료 티어 TPD는 롤링 24h 창이라
+    # "try again in Xm" 만큼 기다리면 점진적으로 풀린다 → 장시간 배치도 완주 가능.
+    RATE_LIMIT_BUDGET = 3600.0
+
+    @staticmethod
+    def _parse_retry_delay(msg: str) -> float | None:
+        """429 메시지의 'try again in 17m19.392s' / '7.9s' 를 초로 파싱."""
+        m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
+        if not m:
+            return None
+        return int(m.group(1) or 0) * 60 + float(m.group(2))
+
     def _complete(self, system: str, user: str, retries: int = 3) -> str:
         last = None
-        for attempt in range(retries):
+        attempt = 0            # 일반 오류 카운터 (레이트리밋 대기는 예산으로 별도 관리)
+        rl_budget = self.RATE_LIMIT_BUDGET
+        while True:
             try:
                 if self.backend == "groq":
                     resp = self.client.chat.completions.create(
@@ -408,9 +422,20 @@ class LLMJudge:
                 # (해결책: --window-chars 축소 또는 TPM 큰 모델 사용)
                 if "Request too large" in msg or "reduce your message size" in msg:
                     raise RuntimeError(f"요청이 모델 TPM 한도보다 큼 → --window-chars 축소 필요: {e}") from e
-                # 레이트리밋(TPM)은 분 단위 윈도라 20/40/60s 로 길게 대기
-                wait = 20 * (attempt + 1) if "rate_limit" in msg or "429" in msg else 5 * (attempt + 1)
-                print(f"[LLMJudge] 오류({attempt+1}/{retries}): {e} → {wait}s 대기")
+                if "rate_limit" in msg or "429" in msg:
+                    # API가 알려준 회복 시각만큼 대기(+10s 버퍼, 상한 15분). 예산 소진 시 포기.
+                    wait = min((self._parse_retry_delay(msg) or 60) + 10, 900)
+                    if rl_budget < wait:
+                        raise RuntimeError(f"레이트리밋 대기 예산({self.RATE_LIMIT_BUDGET:.0f}s) 소진: {e}") from e
+                    rl_budget -= wait
+                    print(f"[LLMJudge] 레이트리밋 → {wait:.0f}s 대기 (잔여 예산 {rl_budget/60:.0f}분)")
+                    time.sleep(wait)
+                    continue
+                attempt += 1
+                if attempt >= retries:
+                    break
+                wait = 5 * attempt
+                print(f"[LLMJudge] 오류({attempt}/{retries}): {e} → {wait}s 대기")
                 time.sleep(wait)
         raise RuntimeError(f"LLM 호출 실패: {last}")
 
@@ -532,6 +557,59 @@ def print_summary(kept: list[Technique]) -> None:
 
 
 # ════════════════════════════════════════════════════════════
+# kept.jsonl 직접 인덱싱 (LLM 불필요 — 재현·부분실패 복구용)
+# ════════════════════════════════════════════════════════════
+def index_from_jsonl(paths: list[pathlib.Path], collection: str, *,
+                     dry_run: bool, semantic: bool, threshold: float) -> None:
+    """추출·큐레이션이 끝난 kept.jsonl 을 바로 인덱싱한다.
+    쿼터 소진으로 인덱싱 전에 죽었거나, 같은 산출물을 다른 컬렉션에 재적재할 때 사용.
+    이름 정확일치 + (옵션) 의미 중복제거를 PDF 경로와 동일하게 적용한다."""
+    from sqlalchemy import select
+    from app.core.db import SessionLocal, RagChunk
+
+    fields = set(Technique.__dataclass_fields__)
+    techs: list[Technique] = []
+    for p in paths:
+        if not p.exists():
+            print(f"⚠️  건너뜀(없음): {p}")
+            continue
+        for line in p.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            techs.append(Technique(**{k: v for k, v in row.items() if k in fields}))
+    print(f"▶ kept.jsonl 로드: {len(techs)}개 (파일 {len(paths)}개)")
+    if not techs:
+        sys.exit(1)
+
+    # 이름 정확일치 중복 제거 (기존 컬렉션의 technique 메타와 비교)
+    with SessionLocal() as session:
+        metas = session.execute(
+            select(RagChunk.chunk_metadata).where(RagChunk.collection_name == collection)
+        ).scalars().all()
+    existing = {_normalize_name((m or {}).get("technique", "")) for m in metas}
+    kept = [t for t in techs if _normalize_name(t.name) not in existing]
+    if len(kept) != len(techs):
+        print(f"   이름 중복 폐기 {len(techs) - len(kept)}개: "
+              f"{[t.name for t in techs if _normalize_name(t.name) in existing]}")
+
+    if semantic and kept:
+        from app.core.embeddings import get_model
+        kept, dropped = semantic_dedupe(kept, collection, threshold, get_model(), True)
+        if dropped:
+            print(f"   의미 중복 폐기 {len(dropped)}개: {[t.name for t in dropped]}")
+
+    print(f"▶ 적재 대상 {len(kept)}개: {[t.name for t in kept]}")
+    if dry_run:
+        print("🧪 --dry-run: DB 저장 생략.")
+        return
+    if kept:
+        from app.rag.indexer import Indexer
+        Indexer().index(chunks=[t.to_document() for t in kept],
+                        metadata=[t.to_metadata() for t in kept],
+                        collection_name=collection)
+    print(f"🎉 완료: {len(kept)}개 → '{collection}'")
+
+
+# ════════════════════════════════════════════════════════════
 # 메인
 # ════════════════════════════════════════════════════════════
 def collect_pdfs(paths: list[pathlib.Path]) -> list[pathlib.Path]:
@@ -552,8 +630,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="논문/기법 PDF → 파싱·청킹·적합도 큐레이션 → MySQL 인덱싱(딸각 RAG)"
     )
-    ap.add_argument("--pdf", type=pathlib.Path, nargs="+", required=True,
+    ap.add_argument("--pdf", type=pathlib.Path, nargs="+", default=None,
                     help="PDF 파일 또는 디렉터리(여러 개 가능)")
+    ap.add_argument("--from-jsonl", type=pathlib.Path, nargs="+", default=None,
+                    help="data/curated/*.kept.jsonl 을 LLM 없이 바로 인덱싱 "
+                         "(재현·부분실패 복구용 — 이름/의미 중복제거는 동일 적용)")
     ap.add_argument("--mode", choices=["paper", "technique"], default="paper",
                     help="paper=논문 자동 청킹(LLM) / technique=사람이 직접 청킹한 "
                          "'Chunk NNN' PDF 결정론적 파싱 (기본 paper)")
@@ -579,6 +660,17 @@ def main() -> None:
                     help="의미 중복 판정 코사인 임계값 (기본 0.90)")
     args = ap.parse_args()
 
+    # ── kept.jsonl 직접 인덱싱 경로 (LLM 불필요) ──
+    if args.from_jsonl:
+        index_from_jsonl(args.from_jsonl, args.collection,
+                         dry_run=args.dry_run,
+                         semantic=not args.no_semantic_dedup,
+                         threshold=args.sim_threshold)
+        return
+
+    if not args.pdf:
+        print("❌ --pdf 또는 --from-jsonl 중 하나가 필요합니다.")
+        sys.exit(1)
     pdfs = collect_pdfs(args.pdf)
     if not pdfs:
         print("❌ 처리할 PDF가 없습니다.")

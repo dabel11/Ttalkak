@@ -72,7 +72,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
   - `system` = `SYSTEM_PROMPT` (프롬프트 엔지니어 페르소나 + 질문/개선 모드 규칙)
   - `history`(대화 맥락) 정제 후 삽입 (`_sanitize_history`, 121)
   - `user` = `"[참고 기법]\n{5개 청크 포맷}\n\n[원본 프롬프트]\n{query}"` (`_build_technique_context`, 135)
-  - 파라미터: `temperature=0.7`, `max_tokens=4096`(70b) / **8b는 2048 캡** — Groq는 입력+출력예약 합산이라 4096이 8b TPM 6k를 초과시킴(2026-07-05)
+  - 파라미터: `temperature=0.7`, `max_tokens`는 **TPM 예산 내 동적 산정**(`_fit_max_tokens` — 입력≈chars/3 추정, 70b 12k/8b 6k 예산, 상한 4096·하한 512). Groq는 입력+출력예약 합산이라 긴 원문·8b에서 413 나던 것 방지(2026-07-07)
   - Groq `response_format=json_object` / Gemini `response_mime_type=application/json` — **JSON 출력 강제**
 - **두 모드 중 하나로 응답** (SYSTEM_PROMPT [출력 형식 — JSON]이 스키마 정의, 2026-07-05)
   - **개선 모드**(기본): `{mode:"improve", improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary}`
@@ -137,7 +137,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 | `use_reranker` | True | `main.py:44` | 측정상 단독이 최고 |
 | `use_hybrid` | False | `main.py:44` | 한국어 코퍼스에서 악화 → off |
 | 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py` GROQ_MODEL_MAP | 8b 생성은 mode_accuracy 0.75로 열세 → 70b 유지 |
-| 생성 temp/tokens | 0.7 / 4096(70b)·2048캡(8b) | `generator.py` | 8b TPM 6k에 4096 예약이 초과라 캡 |
+| 생성 temp/tokens | 0.7 / TPM 예산 내 동적(≤4096) | `generator.py` `_fit_max_tokens` | 입력 길이 추정 후 예약 축소 — 긴 원문 413 방지 |
 | collection | prompt_techniques (108청크) | QueryRequest | 기법 카드 컬렉션 (100 원본 + 가이드 8) |
 
 ---
@@ -147,7 +147,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 - ✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05) — 무관 입력은 0건→404, 실제 개선 요청은 평가셋 기준 빈결과 0%.
 - ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕 측정으로 20 확정(2026-07-05). `--fetch-k`로 재측정 가능.
 - ✅ **생성기 원문 페이로드 누락** (uplift_eval 발견): SYSTEM_PROMPT에 "원문 verbatim 포함" 규칙 추가로 해결(2026-06-26). 후속 버그(추출 `---` 잘림·노이즈 과삭제)도 수정(2026-06-27).
-- 🟡 **긴 원문 truncation**: 원문 verbatim 포함 + 출력 한도. `max_tokens` 4096(70b)으로 완화했으나 매우 긴 문서는 여전히 잘릴 수 있음(8b는 2048 캡이라 더 짧음) → 장문은 청크 분할/요약 선처리 검토
+- 🟡 **긴 원문 truncation**: `_fit_max_tokens`로 413 즉사는 방지(2026-07-07). 단 TPM 예산상 아주 긴 원문은 출력 예약이 줄어 잘릴 수 있음 → 장문은 청크 분할/요약 선처리 검토
 - 🟡 **코퍼스 확장 2차 대기**: DAIR 나머지 14윈도·OpenAI Cookbook — 70b TPD 리셋 후 적재, 이후 하이브리드 재평가·min_score 재측정 (WORKLOG 백로그)
 - 🟡 **벡터 인덱스 부재**: 코퍼스 확장 시 brute-force 병목 (§2-(3))
 - ✅ **정규식 파싱 취약** → 구조화 JSON 응답 + 정규식 폴백으로 해소(2026-07-05, §2-(4)). QueryResponse에 `score` 추가.

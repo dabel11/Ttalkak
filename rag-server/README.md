@@ -304,13 +304,15 @@ rag-server/
 │   └── rag/
 │       ├── retriever.py       #   2단계 검색(dense → 리랭크)
 │       ├── indexer.py         #   bge-m3 임베딩 + MySQL 저장
-│       ├── generator.py       #   LLM 응답 생성
+│       ├── generator.py       #   LLM 응답 생성(JSON, TPM 예산 내 max_tokens)
+│       ├── postprocess.py     #   파싱·복원 순수 함수(JSON↔마크다운, 정규식 폴백)
 │       └── query_transform.py #   쿼리 변환·HyDE(실험적)
 ├── ingestion/                 # 오프라인 적재 (python -m ingestion.*)
 │   ├── chunking.py            #   시맨틱 청킹 유틸
 │   ├── pdf_indexer.py         #   기법 PDF → MySQL 직접 인덱싱
 │   ├── ingest_knowledge.py    #   논문/기법 PDF LLM 큐레이션 인덱서
 │   └── pdf_crawler.py         #   11개 출처 크롤링 → PDF 다운로드
+├── tests/                     # 순수 함수 단위테스트 (python -m tests.test_postprocess 등)
 ├── eval/                      # 품질 측정
 │   ├── run_eval.py            #   검색 (python -m eval.run_eval)
 │   ├── score_analysis.py      #   min_score 임계치 설계 (분포·스윕)

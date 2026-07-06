@@ -614,15 +614,36 @@ eval/  run_eval.py(+__init__.py)
 
 ---
 
+## [2026-07-07] 병행 정비 — postprocess 분리·단위테스트 · --from-jsonl · max_tokens 동적 산정
+**목적**: 코퍼스 2차 적재(롤링 쿼터 드립으로 장시간 소요)가 도는 동안, LLM 불필요한 백로그 3건 처리.
+
+**1) 파싱·복원 순수 함수 분리 + 단위테스트 (신규 `tests/`)**
+- Before: `parse_generation`/`build_answer`/`extract_*`가 main.py에 있어 테스트하려면 모델·DB 로딩 필요. 모드 판정(=Execute 버튼)의 단일 결정점인데 테스트 0개.
+- After: **`app/rag/postprocess.py`로 분리**(순수 함수, main.py는 동일 이름 재노출 → eval 하위호환). `tests/test_postprocess.py` **21케이스** — 핵심은 왕복 계약 `extract(build(p)) == improved_prompt` (JSON 경로와 정규식 폴백이 같은 표시 형식 공유 보장), 원문 속 `---` 보존, 결손 필드 관용.
+- 실행: `python3 -m tests.test_postprocess` (1초, 모델·DB·LLM 불필요)
+
+**2) `--from-jsonl` CLI 승격 (`ingestion/ingest_knowledge.py`)**
+- Before: kept.jsonl 회수 인덱싱이 일회성 인라인 스크립트(2026-07-05 C에서 사용).
+- After: `python -m ingestion.ingest_knowledge --from-jsonl data/curated/X.kept.jsonl [--dry-run]` — LLM 0토큰, 이름·의미 중복제거 동일 적용. **멱등 검증**: 기존 적재분 재실행 시 5/5 이름중복 폐기.
+
+**3) max_tokens 동적 산정 (`app/rag/generator.py`) — 긴 원문 truncation·413 대응**
+- Before: 고정 4096(70b)/2048캡(8b). 긴 원문(회의록·코드) 포함 시 입력+예약이 TPM 초과 → 413 즉사.
+- After: `_fit_max_tokens()` — 입력 추정(≈chars/3)해 TPM(70b 12k/8b 6k) 예산 내로 예약 축소(하한 512, 짧은 입력은 4096 유지). 8b 고정 캡을 일반화로 대체. `tests/test_token_budget.py` **7케이스**.
+- ⚠️ 실LLM 연동 스모크는 쿼터 회복 후 gen_eval 회귀로 확인 예정(산술은 테스트로 보장).
+
+**변경 파일**: 신규 `app/rag/postprocess.py`, `tests/`(3파일) / 수정 `app/main.py`(재노출·함수 제거), `ingestion/ingest_knowledge.py`(+index_from_jsonl), `app/rag/generator.py`(_fit_max_tokens)
+
+---
+
 # 다음 작업 / 보류 항목 (백로그)
 
-- [ ] **코퍼스 확장 2차**: DAIR 나머지(70b TPD 리셋 후 `--pdf DAIR... --model` 기본 70b) + OpenAI Cookbook. 완료 후 하이브리드 재평가(`--all`) + min_score 재측정. kept.jsonl 회수 인덱싱 스크립트를 `--from-jsonl` CLI 옵션으로 승격 검토.
+- [ ] **코퍼스 확장 2차**: DAIR 전체 + OpenAI Cookbook — 드립 내성 ingest로 진행 중(2026-07-07, 롤링 쿼터 대기 포함 장시간). 완료 후 하이브리드 재평가(`--all`) + min_score 재측정. (~~--from-jsonl 승격~~ → 완료 2026-07-07)
 
 - [x] 🔴 **generator 원문 페이로드 누락(uplift_eval 발견)** — 완료(위 [2026-06-26] 항목). 사용자가 변환할 원문(회의록·번역 대상 이메일·리뷰 대상 코드 등)을 직접 준 경우, 개선프롬프트가 그 원문을 **조건·재료로 그대로 포함**하도록 SYSTEM_PROMPT 규칙 추가. 회의록 개선점수 1.0→5.0, 이메일 원문 verbatim 포함 확인(8b/70b). ⚠️ 70b TPD 회복 후 동일조건 전체 재측정 권장.
 
 - [x] **생성기 과잉 질문 완화** — (A)작업종류+(B)핵심주제 2-항목 게이트로 완화. mode_accuracy 0.27→≈0.92, instruction_form N/A→5.0. (위 2026-06-22 항목)
 - [~] **생성 출력 토큰 깨짐**: Groq llama-3.3-70b 응답에 `图片`/`_highlight`/`紹介`/`詳細` 등 혼합언어·깨진 토큰. 한글에 붙은 한자는 `_strip_cjk_noise`로 제거(2026-06-27 정상 외국어 보존하도록 보강). `_highlight` 류 라틴 깨짐은 미해결 — 모델 교체 또는 후처리 추가 검토.
-- [ ] **장문 원문 truncation**: 원문 verbatim 포함 + 출력 `max_tokens=4096`(2026-06-27 상향). 매우 긴 문서·코드는 여전히 잘릴 수 있음 → 장문 입력 시 분할/요약 선처리 또는 max_tokens 동적 산정 검토.
+- [~] **장문 원문 truncation**: max_tokens 동적 산정(_fit_max_tokens)으로 413 즉사 방지 완료(2026-07-07). 단 TPM 예산상 매우 긴 원문은 출력이 짧아져 잘릴 수 있음 → 분할/요약 선처리는 여전히 미해결.
 - [x] **Groq 무료 티어 TPD 대응** — 캐시(--cache-file)·judge 비치명·413 즉시실패·8b max_tokens 캡으로 강건화. judge 8b 전환은 일치도 측정 결과 **기각**(신뢰 불가). (위 2026-07-05 D 항목)
 - [ ] **gen judge 신뢰도**: 70b judge도 과잉질문에 관대(mode_fit). 모드 판정은 결정론적 mode_accuracy 우선 유지. judge 강건화(few-shot 라벨, 타 프로바이더 모델) 검토.
 - [x] **리랭커 점수 표시** — 해결됨(코드 확인). `retriever.py`의 `_rerank`가 표시 `score`를 평탄한 sigmoid가 아니라 **dense 코사인**으로 환산해 반환(`c["score"] = c.pop("dense_score", ...)`). UI "유사도 %"는 코사인 기준.

@@ -184,6 +184,20 @@ class GroqGenerator:
         "gemini-1.5-flash":  "llama-3.1-8b-instant",
         "gemini-1.5-pro":    "llama-3.3-70b-versatile",
     }
+    # 무료 티어 TPM(분당 토큰) — Groq는 요청 크기를 '입력 + max_tokens(출력 예약)'로 계산
+    TPM_LIMIT = {
+        "llama-3.3-70b-versatile": 12000,
+        "llama-3.1-8b-instant":    6000,
+    }
+
+    @classmethod
+    def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int) -> int:
+        """입력 길이를 추정(≈chars/3)해 TPM 예산 안에 들어가는 max_tokens 를 계산.
+        긴 원문(회의록·코드)을 포함한 요청이 413(Request too large)으로 즉사하는 것을
+        방지하고, 짧은 입력이면 want(기본 4096)를 그대로 쓴다. 하한 512."""
+        est_input = sum(len(m.get("content") or "") for m in messages) // 3 + 100
+        tpm = cls.TPM_LIMIT.get(groq_model, 12000)
+        return max(512, min(want, tpm - est_input - 200))
 
     def __init__(self):
         from groq import Groq
@@ -198,11 +212,6 @@ class GroqGenerator:
                  history: list[dict] | None = None) -> str:
         groq_model = self.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
 
-        # 8b-instant는 무료 티어 TPM 6,000 — Groq는 입력+max_tokens(출력 예약)를 합산하므로
-        # 4096 예약이면 요청 자체가 한도 초과(413). 8b에선 2048로 캡. (70b는 TPM 12,000이라 4096 OK)
-        if groq_model == "llama-3.1-8b-instant":
-            max_tokens = min(max_tokens, 2048)
-
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
 
@@ -214,6 +223,9 @@ class GroqGenerator:
             # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
             user_msg = query
         messages.append({"role": "user", "content": user_msg})
+
+        # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력·8b TPM 6k에서 413 방지)
+        max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens)
 
         response = self.client.chat.completions.create(
             model=groq_model,
