@@ -143,6 +143,24 @@ The sidebar currently exposes `My page` as a top-level navigation item. Internal
 
 Backend integration should treat `My page` as the current user activity area. The implementation route may remain `saved`, but product copy and navigation should use `My page`.
 
+## Make Thread Identity
+
+- Recent Make conversations are separate records by `threadId`, not by message text.
+- Starting a new conversation with the same first prompt must create a new recent conversation instead of replacing the old one.
+- Folder movement, deletion, and rename actions should operate on thread/folder ids.
+
+## Action Placement Rules
+
+- Prompt preview cards use a `...` menu for owner-only management actions such as edit, share/unshare, and delete.
+- Prompt detail modals separate owner/admin management actions from usage actions to prevent dense icon rows.
+- Admin review detail is read-only for normal user actions. Admin mode should show only close, revision request, hide/unhide, and delete style moderation actions.
+
+## My Page Demo Data
+
+- Production My page should start empty for a newly authenticated user.
+- The prototype can show sample saved/owned/comment/report data only when the demo data toggle is enabled.
+- The demo data toggle is for QA and backend handoff review, not a production default state.
+
 ## Execute Flow Note
 
 웹사이트만으로는 ChatGPT/Gemini/Claude 입력창에 직접 자동 입력할 수 없습니다. 현재 UX는 최종 프롬프트를 클립보드에 복사하고 선택한 AI 사이트를 연 뒤, 사용자가 입력창에 붙여넣도록 안내합니다. 직접 자동 입력은 Chrome Extension content script 또는 공식 API 연동이 필요합니다.

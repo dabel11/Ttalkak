@@ -1075,6 +1075,62 @@ h1 {
   transform: translateY(-1px);
 }
 
+.admin-subnav {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(239, 248, 242, 0.76);
+  box-shadow: var(--edge-shadow);
+}
+
+.admin-subnav button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--brand-green);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--edge-shadow);
+  transition: background 0.16s, color 0.16s, box-shadow 0.16s, transform 0.16s;
+}
+
+.admin-subnav button:hover,
+.admin-subnav button.active {
+  background: var(--brand-green);
+  color: #fff;
+  box-shadow: var(--edge-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.admin-subnav em {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(239, 248, 242, 0.9);
+  color: var(--brand-green);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.admin-subnav button:hover em,
+.admin-subnav button.active em {
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .meta-like-button,
 .meta-save-button,
 .meta-comment-button {
@@ -5121,7 +5177,7 @@ input[type="checkbox"] {
 
 .admin-workspace {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -5322,8 +5378,8 @@ input[type="checkbox"] {
 
 .make-folder-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: center;
   position: relative;
   z-index: 1;
@@ -5352,6 +5408,10 @@ input[type="checkbox"] {
   text-align: left;
 }
 
+.make-folder-item.user-folder > button {
+  padding-right: 44px;
+}
+
 .make-folder-item > button span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5376,23 +5436,24 @@ input[type="checkbox"] {
 }
 
 .make-folder-menu-wrap {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 3;
   display: grid;
   place-items: center;
   width: 30px;
   min-width: 30px;
+  transform: translateY(-50%);
 }
 
 .make-folder-more {
   width: 30px;
   height: 30px;
   opacity: 0;
+  pointer-events: none;
   cursor: pointer;
   transition: opacity 0.16s, background 0.16s, color 0.16s, box-shadow 0.16s;
-}
-
-.system-folder-spacer {
-  pointer-events: none;
 }
 
 .make-folder-item:hover .make-folder-more,
@@ -5400,6 +5461,7 @@ input[type="checkbox"] {
 .make-folder-item.menu-open .make-folder-more,
 .make-folder-more:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .make-folder-more:hover,

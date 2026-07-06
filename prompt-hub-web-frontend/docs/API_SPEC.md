@@ -40,7 +40,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
 | 프롬프트 공유 | `POST /api/prompts` | `{ title, text, tags }` | 내 프롬프트를 공유 상태로 생성 |
-| 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자 또는 관리자만 가능 |
+| 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자만 가능. 관리자는 사용자 작성 프롬프트를 직접 수정하지 않고 수정 요청/숨김/삭제로 처리 |
 | 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, My page에는 내 프롬프트로 유지 |
 | 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | My page의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
@@ -152,6 +152,13 @@ My page의 내 프롬프트는 `공유됨`/`비공개` 상태를 버튼 한 번�
 | Make 폴더 수정 | `PATCH /api/make/folders/:id` | `{ name }` | 폴더 이름 변경 |
 | Make 폴더 삭제 | `DELETE /api/make/folders/:id` | none | 폴더 안 대화는 삭제하지 않고 미분류로 이동 |
 | Make 대화 폴더 이동 | `PATCH /api/make/threads/:id/folder` | `{ folderId }` | `folderId: null` 또는 `"uncategorized"`는 미분류 |
+
+Make thread identity policy:
+
+- Make conversation identity must be based on `threadId` / `conversationId`.
+- Do not deduplicate or overwrite conversations by first message text, title, or normalized prompt content.
+- If a user starts two separate conversations with the same input text, both conversations must remain as separate thread records.
+- Updating a thread should replace only the record with the same `threadId`.
 
 ## Suggested Prompt Response
 

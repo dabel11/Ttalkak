@@ -212,6 +212,35 @@ Recommended backend endpoints:
 - Admin prompt edits/deletes and tag moderation should produce audit logs.
 - Prompt detail can execute a prompt through the same external AI chooser used by Make results.
 
+## Make Thread Identity Policy
+
+- Treat `threadId` / `conversationId` as the only identity for Make conversation records.
+- Do not deduplicate Make conversations by message text, title, normalized prompt content, or preview.
+- A user can intentionally create multiple separate conversations with the same first prompt. These should appear as separate recent conversations.
+- When saving an existing conversation, update only the thread with the same `threadId`.
+- Backend pagination or "load more" can be added later; the prototype limits the visible recent list for demo simplicity.
+
+## Admin And User Action Separation
+
+- Admin mode is an operator surface, not a normal community-user surface.
+- Admins should not directly edit user-authored prompt text, tags, comments, or replies.
+- Admins can request revisions, hide/unhide posts, delete clear violations, resolve/dismiss/reopen reports, and moderate tags.
+- Admin detail views are read-only review surfaces. Execute, like, save, share, report, comment, and reply actions should not be exposed there.
+- User-owned prompt management remains available to the owner: edit, share/unshare, delete, save/unsave, and final prompt detail review.
+
+## Demo Data And Empty Production Defaults
+
+- Real newly authenticated users should start with empty My page data unless they have saved, liked, authored, commented, or reported content.
+- Prototype sample My page content is only for QA and backend handoff review.
+- The `데모 데이터 채우기` / `데모 데이터 숨기기` control toggles sample activity visibility and should not be confused with production data seeding.
+- `데모 초기화` remains a broader localStorage reset utility for frontend QA.
+
+## Prompt Card Action Pattern
+
+- Prompt preview cards keep owner-only management actions inside the `...` menu to avoid icon overflow.
+- Prompt detail modals split actions by intent: owner management actions on the left, usage actions such as Execute/Like/Save on the right.
+- This is a frontend UX pattern only; backend authorization must still validate every edit/share/delete/save request.
+
 ## Frontend Validation
 
 The prototype currently checks:

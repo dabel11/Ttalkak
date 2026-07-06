@@ -573,13 +573,26 @@ function Sidebar() {
       <span>${label}</span>
     </button>
   `;
+  const adminTabs = state.adminMode ? getAdminTabs() : [];
 
   return `
     <aside class="sidebar" aria-label="주요 메뉴">
       <nav class="nav-list">
         ${
           state.adminMode
-            ? item("admin", "Admin", icons.shield)
+            ? `${item("admin", "Admin", icons.shield)}
+               <div class="admin-subnav" aria-label="관리자 하위 메뉴">
+                 ${adminTabs
+                   .map(
+                     (tab) => `
+                       <button class="${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
+                         <span>${tab.label}</span>
+                         <em>${formatNumber(tab.count)}</em>
+                       </button>
+                     `,
+                   )
+                   .join("")}
+               </div>`
             : `
               ${item("home", "Home", icons.home)}
               ${item("make", "Make", icons.make)}
@@ -590,6 +603,28 @@ function Sidebar() {
       </nav>
     </aside>
   `;
+}
+
+function getAdminTabs() {
+  const reportRecords = getAdminReportRecords();
+  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const adminPromptQuery = state.adminPromptQuery || "";
+  const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
+    ? state.adminPromptFilter
+    : "all";
+  const filteredAdminPrompts = allPrompts
+    .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
+    .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
+  const adminTags = getKnownTags()
+    .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
+    .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
+    .slice(0, 16);
+
+  return [
+    { id: "reports", label: "신고 관리", count: reportRecords.length },
+    { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
+    { id: "tags", label: "태그 관리", count: adminTags.length },
+  ];
 }
 
 function Header() {
@@ -1363,7 +1398,7 @@ function MakeFolderButton(folderId, name, count) {
                   : ""
               }
             </div>`
-          : `<div class="make-folder-menu-wrap system-folder-spacer" aria-hidden="true"></div>`
+          : ""
       }
     </div>
   `;
@@ -1681,11 +1716,7 @@ function AdminPage() {
     .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
     .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
     .slice(0, 16);
-  const adminTabs = [
-    { id: "reports", label: "신고 관리", count: reportRecords.length },
-    { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
-    { id: "tags", label: "태그 관리", count: adminTags.length },
-  ];
+  const adminTabs = getAdminTabs();
   const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
   const reportsPanel = `
     <section class="admin-panel">
@@ -1840,18 +1871,6 @@ function AdminPage() {
         <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 숨김, 삭제, 검토 상태 변경만 수행합니다.</p>
       </div>
       <div class="admin-workspace">
-        <aside class="admin-side-panel" aria-label="관리자 메뉴">
-          ${adminTabs
-            .map(
-              (tab) => `
-                <button class="${activeAdminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
-                  <span>${tab.label}</span>
-                  <em>${formatNumber(tab.count)}</em>
-                </button>
-              `,
-            )
-            .join("")}
-        </aside>
         <div class="admin-content-panel">
           ${activePanel}
         </div>
@@ -4216,10 +4235,9 @@ function updateRecentThread(threadId) {
   const firstUser = state.messages.find((message) => message.role === "user");
   const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
   const existingThread = state.recentThreads.find((item) => item.id === threadId);
-  const dedupeKey = getRecentThreadKey(firstUser?.content || lastUser?.content || "");
   const thread = {
     id: threadId,
-    dedupeKey,
+    dedupeKey: threadId,
     title: makePromptTitle(lastUser?.content || "새 대화"),
     preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
     createdAt: existingThread?.createdAt || Date.now(),
@@ -4227,7 +4245,7 @@ function updateRecentThread(threadId) {
     messages: state.messages.map((item) => ({ ...item })),
   };
 
-  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId && getRecentThreadKeyFromThread(item) !== dedupeKey)].slice(0, 8);
+  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId)].slice(0, 8);
 }
 
 function openRecentThread(threadId) {
@@ -4261,9 +4279,7 @@ function startNewChat() {
 }
 
 function getRecentThreadKeyFromThread(thread) {
-  if (thread.dedupeKey) return thread.dedupeKey;
-  const firstUser = thread.messages?.find((message) => message.role === "user");
-  return getRecentThreadKey(firstUser?.content || thread.title || "");
+  return thread.id || thread.dedupeKey || "";
 }
 
 function getRecentThreadKey(text) {
@@ -5344,8 +5360,11 @@ function normalizePersistedLikeCounts() {
 function normalizeRecentThreads() {
   const seen = new Set();
 
-  state.recentThreads = state.recentThreads.filter((thread) => {
-    const key = getRecentThreadKeyFromThread(thread);
+  state.recentThreads = state.recentThreads.filter((thread, index) => {
+    if (!thread.id) {
+      thread.id = `legacy-thread-${Date.now()}-${index}`;
+    }
+    const key = thread.id;
     if (!key || seen.has(key)) return false;
     seen.add(key);
     thread.dedupeKey = key;
