@@ -13,7 +13,7 @@ POST /query
   │  QueryRequest { query, collection="prompt_techniques", top_k=5, min_score=0.40,
   │                 model="gemini-2.0-flash", history, use_reranker=T, use_hybrid=F, ... }
   ▼
-[A] 검색 쿼리 결정      main.py:170-176   (기본: 원본 / 옵션: HyDE·키워드 변환)
+[A] 검색 쿼리 결정      main.py:249-255   (기본: 원본 / 옵션: HyDE·키워드 변환)
   ▼
 [B] 검색 (2단계+컷)     retriever.py:84
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
@@ -21,13 +21,13 @@ POST /query
    ├ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:175
    └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
   ▼
-   검색결과 0 & history 없음 → 404                  main.py:188
+   검색결과 0 & history 없음 → 404                  main.py:267
   ▼
-[C] 생성 (LLM)          generator.py:170/207   (참고기법 + 원본 프롬프트 → 개선/질문 모드)
+[C] 생성 (LLM, JSON)    generator.py       (참고기법 + 원본 → JSON {mode, improved_prompt, ...})
   ▼
-[D] 후처리·파싱 → 응답  main.py:213-        (정규식으로 블록 추출, 추가 LLM 호출 없음)
-  ▼
-QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
+[D] 파싱·복원 → 응답    main.py:190 run_generation()  (JSON 파싱 → answer 마크다운 복원,
+  ▼                                                    실패 시 정규식 폴백 — 추가 LLM 호출 없음)
+QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, score }
 ```
 
 - **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3) · 생성 LLM(Groq/Gemini)
@@ -39,7 +39,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 
 ## 1. 단계별 상세
 
-### [A] 검색 쿼리 결정 — `main.py:170-176`
+### [A] 검색 쿼리 결정 — `main.py:249-255`
 - 기본값: `search_query = req.query` (원본 그대로)
 - `use_hyde` ON → `query_transform.hyde()` (가상 기법문서 생성)
 - `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성)
@@ -72,21 +72,20 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
   - `system` = `SYSTEM_PROMPT` (프롬프트 엔지니어 페르소나 + 질문/개선 모드 규칙)
   - `history`(대화 맥락) 정제 후 삽입 (`_sanitize_history`, 121)
   - `user` = `"[참고 기법]\n{5개 청크 포맷}\n\n[원본 프롬프트]\n{query}"` (`_build_technique_context`, 135)
-  - 파라미터: `temperature=0.7`, `max_tokens=4096` (긴 원문을 개선프롬프트에 verbatim 포함해도 안 잘리도록 2048→4096 상향, 2026-06-27)
-- **두 모드 중 하나로 응답** (SYSTEM_PROMPT가 결정)
-  - **개선 모드**(기본): `**개선된 프롬프트:**` / `**적용한 기법:**` / `**개선 포인트:**` 블록
-  - **원문 보존 원칙**: 사용자가 가공·변환할 원문(회의록·이메일·코드 등)을 주면 개선프롬프트에 **원문 그대로(verbatim) 포함** (SYSTEM_PROMPT 규칙, 2026-06-26)
-  - **질문 모드**(예외): (A)작업종류·(B)핵심주제 특정 불가 시 `**확인이 필요해요 🤔**` + 질문
-- 후처리: `_strip_cjk_noise`로 **한글에 직접 붙은** 한자 오염 토큰만 제거 (`generator.py:9`). ⚠️ 공백·따옴표로 분리된 외국어(번역 원문 등)는 보존(2026-06-27 수정)
+  - 파라미터: `temperature=0.7`, `max_tokens=4096`(70b) / **8b는 2048 캡** — Groq는 입력+출력예약 합산이라 4096이 8b TPM 6k를 초과시킴(2026-07-05)
+  - Groq `response_format=json_object` / Gemini `response_mime_type=application/json` — **JSON 출력 강제**
+- **두 모드 중 하나로 응답** (SYSTEM_PROMPT [출력 형식 — JSON]이 스키마 정의, 2026-07-05)
+  - **개선 모드**(기본): `{mode:"improve", improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary}`
+  - **원문 보존 원칙**: 사용자가 가공·변환할 원문(회의록·이메일·코드 등)을 주면 improved_prompt에 **원문 그대로(verbatim) 포함** (SYSTEM_PROMPT 규칙, 2026-06-26)
+  - **질문 모드**(예외): (A)작업종류·(B)핵심주제 특정 불가 시 `{mode:"ask", questions[], summary}`
+- 후처리: `_strip_cjk_noise`로 **한글에 직접 붙은** 한자 오염 토큰만 제거 (`generator.py:19`). ⚠️ 공백·따옴표로 분리된 외국어(번역 원문 등)는 보존(2026-06-27 수정)
 
-### [D] 후처리·응답 — `main.py`
-- 빈/None 생성 응답 가드: `answer`가 비면 **503**(이전엔 `extract_improved_prompt(None)` → 500 크래시, 2026-06-27)
-- **정규식 파싱**(추가 LLM 호출 없음)
-  - `extract_improved_prompt` → `improved_prompt` (개선 블록 없으면 `""` = 질문 모드)
-    - 종료점은 **구조 마커(`적용한 기법`/`개선 포인트`)** 기준 → 개선프롬프트에 담긴 원문 속 `---`에서 안 잘림(중간 `---` 보존, 꼬리만 제거, 2026-06-27 수정)
-  - `extract_applied_techniques` → `techniques_applied[]`
-  - `extract_changes` → `changes[]`
-- `sources` = 검색된 청크 5개 (`text[:300]`, metadata, score)
+### [D] 파싱·복원·응답 — `main.py:190 run_generation()` (§2-(4) 상세)
+- `parse_generation()`: JSON 관대 파싱(코드펜스·잡담 허용). mode 필드 유효성 검사
+- `build_answer()`: JSON → **기존 표시용 마크다운 복원** (`**개선된 프롬프트:**`… / `**확인이 필요해요 🤔**`) — 익스텐션 UI·history 왕복 형식 무변경
+- **파싱 실패 시 폴백**: 원문 그대로 answer + 레거시 정규식 추출(extract_improved_prompt 등, 2026-06-27의 `---` 보존 로직 유지)
+- 빈/None 생성 응답 → **503** 가드
+- `sources` = 검색된 청크 ≤5개 (`text[:300]`, metadata, score). `score` = LLM 자체평가(1~10, 개선 모드만)
 - 프론트 규약: `improved_prompt`가 비면 **Execute 버튼 숨김**
 
 ---
@@ -94,7 +93,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 ## 2. 핵심 설계 포인트 4가지
 
 ### (1) 검색 쿼리 ≠ 생성 쿼리
-- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:195`)
+- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:245 query()`)
 - 이유: 검색이 매칭할 대상은 **기법 카드 코퍼스**, 생성이 다룰 대상은 **사용자 실제 의도·내용** → 최적 입력이 다름
 - 변환 함수 (`query_transform.py`)
   - `transform()` (71): Groq `llama-3.1-8b-instant`, 출력=**키워드 한 줄** (예: `역할 부여, 출력 형식, 톤`)
@@ -114,15 +113,17 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 
 ### (3) 벡터 인덱스 없음 — brute-force 코사인 — `retriever.py`
 - MySQL엔 **ANN(근사최근접) 인덱스 없음** → 매 쿼리마다 컬렉션 전체를 메모리로 올려 **numpy 전수 코사인** (`_load_collection` 182 → `_dense_scores` 139)
-- 현재 규모(~100청크) **~1ms 수준**으로 충분
+- 현재 규모(108청크 — 2026-07-05 가이드 8기법 확장) **~1ms 수준**으로 충분
 - 설계 근거: "Spring 백엔드와 동일 DB 사용" 원칙(별도 벡터 DB 제거, 배포 단순화) > 검색 최적화 (WORKLOG 2026-06-19)
 - ⚠️ **확장 시 병목**: 코퍼스가 수천~수만으로 커지면 이 전수 스캔이 한계 → ANN/캐시/pgvector류 도입 검토 필요
 
-### (4) 출력은 정규식 파싱 의존 — `main.py`
-- 생성 응답에서 **마커 기반 정규식**으로 `improved_prompt`/`techniques`/`changes` 추출 (별도 LLM·JSON 강제 없음)
-- 종료점은 **구조 마커** 기준이라 원문 속 `---`에는 안 잘림(2026-06-27 수정). 빈 응답은 503 가드.
-- ⚠️ **남은 취약점**: LLM이 마커(`**개선된 프롬프트:**`)를 아예 안 지키면 `improved_prompt`가 비어 **Execute 버튼이 안 뜸**
-- 백로그: 설계 문서의 구조화 응답 `{ improved, score, changes[] }`(정규식 의존 제거) — 미착수
+### (4) 출력은 구조화 JSON 우선, 정규식은 폴백 — `main.py run_generation()`
+- LLM이 **JSON**(`{mode, improved_prompt, techniques[], changes[], score, summary, questions[]}`)을 출력
+  (Groq `response_format=json_object` / Gemini `response_mime_type` 강제, 스키마는 SYSTEM_PROMPT [출력 형식])
+- `parse_generation()`이 관대 파싱 → `build_answer()`가 **기존 표시용 마크다운 복원**(익스텐션 UI·history 왕복 무변경)
+- **파싱 실패 시 레거시 정규식 폴백**(extract_improved_prompt 등) → 모델이 JSON을 안 지켜도 서비스 안 끊김
+- `/query`·gen_eval·uplift_eval 모두 `run_generation()` **공용 경로** 사용 (측정 = 운영)
+- 검증: gen_eval 12문항 mode_accuracy **1.00**, 폴백 발동 0회 (2026-07-05)
 
 ---
 
@@ -135,9 +136,9 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 | `fetch_k` | 20 | `main.py:44` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
 | `use_reranker` | True | `main.py:44` | 측정상 단독이 최고 |
 | `use_hybrid` | False | `main.py:44` | 한국어 코퍼스에서 악화 → off |
-| 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py:156` | Groq 매핑 |
-| 생성 temp/tokens | 0.7 / 4096 | `generator.py` | tokens는 긴 원문 verbatim 대비 4096 |
-| collection | prompt_techniques | QueryRequest | 기법 카드 컬렉션 |
+| 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py` GROQ_MODEL_MAP | 8b 생성은 mode_accuracy 0.75로 열세 → 70b 유지 |
+| 생성 temp/tokens | 0.7 / 4096(70b)·2048캡(8b) | `generator.py` | 8b TPM 6k에 4096 예약이 초과라 캡 |
+| collection | prompt_techniques (108청크) | QueryRequest | 기법 카드 컬렉션 (100 원본 + 가이드 8) |
 
 ---
 
@@ -146,9 +147,10 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 - ✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05) — 무관 입력은 0건→404, 실제 개선 요청은 평가셋 기준 빈결과 0%.
 - ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕 측정으로 20 확정(2026-07-05). `--fetch-k`로 재측정 가능.
 - ✅ **생성기 원문 페이로드 누락** (uplift_eval 발견): SYSTEM_PROMPT에 "원문 verbatim 포함" 규칙 추가로 해결(2026-06-26). 후속 버그(추출 `---` 잘림·노이즈 과삭제)도 수정(2026-06-27).
-- 🟡 **긴 원문 truncation**: 원문 verbatim 포함 + 출력 한도. `max_tokens` 4096으로 완화했으나 매우 긴 문서는 여전히 잘릴 수 있음 → 장문은 청크 분할/요약 선처리 검토
+- 🟡 **긴 원문 truncation**: 원문 verbatim 포함 + 출력 한도. `max_tokens` 4096(70b)으로 완화했으나 매우 긴 문서는 여전히 잘릴 수 있음(8b는 2048 캡이라 더 짧음) → 장문은 청크 분할/요약 선처리 검토
+- 🟡 **코퍼스 확장 2차 대기**: DAIR 나머지 14윈도·OpenAI Cookbook — 70b TPD 리셋 후 적재, 이후 하이브리드 재평가·min_score 재측정 (WORKLOG 백로그)
 - 🟡 **벡터 인덱스 부재**: 코퍼스 확장 시 brute-force 병목 (§2-(3))
-- 🟡 **정규식 파싱 취약** (§2-(4)): LLM이 마커 자체를 안 지키는 경우 — 구조화 응답으로 전환 검토
+- ✅ **정규식 파싱 취약** → 구조화 JSON 응답 + 정규식 폴백으로 해소(2026-07-05, §2-(4)). QueryResponse에 `score` 추가.
 - 🟡 **생성 출력 라틴 깨짐**: Groq 70b 응답에 `_highlight` 류 토큰 혼입(한자 노이즈는 `_strip_cjk_noise`로 제거). 모델 교체/후처리 검토
 - 🟡 **Groq 무료 티어 TPD 100k**: 평가/운영 시 토큰 한도 고려
 
@@ -164,3 +166,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 | `python3 -m eval.uplift_eval` | **결과 상향 — raw vs 개선 결과물 A/B** | 개선 승률 / 평균 점수 Δ |
 
 > 검색·생성·실효용을 분리 측정. "개선 프롬프트가 좋다"(G)와 "결과물이 실제로 좋아진다"(uplift)는 다른 축.
+
+**쿼터 운용(Groq 무료 티어)**: 생성·judge는 70b 유지(8b judge는 일치도 측정 결과 신뢰 불가 — 2026-07-05).
+TPD 부족 시 `--cache-file`로 생성 캐시 후 judge만 재실행, judge 실패해도 mode_accuracy는 집계됨.
+8b는 TPM 6k라 max_tokens 2048 캡(generator.py) — 요청=입력+출력예약 합산임에 주의.

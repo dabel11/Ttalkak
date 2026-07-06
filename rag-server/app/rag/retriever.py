@@ -68,7 +68,7 @@ class Retriever:
         model_name: str = "BAAI/bge-m3",
         use_reranker: bool = True,
         use_hybrid: bool = False,
-        fetch_k: int = 50,
+        fetch_k: int = 20,   # 측정 파레토 최적 (50: 전지표 열세·2.5배 느림 — WORKLOG 2026-07-05)
         **_ignore,
     ):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)

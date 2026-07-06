@@ -33,7 +33,7 @@ import re
 import time
 from pathlib import Path
 
-from app.main import retriever, generator, extract_improved_prompt
+from app.main import retriever, generator, extract_improved_prompt, run_generation
 from app.rag.generator import SYSTEM_PROMPT
 
 
@@ -65,12 +65,16 @@ def _save_cache(cache: dict, path: str | None) -> None:
 
 
 def _retry(fn, tries: int = 4, base: float = 9.0):
-    """무료 티어 TPM(429) 대응 — 429면 점증 대기 후 재시도. 그 외 예외는 즉시 전파."""
+    """무료 티어 TPM(429) 대응 — 429면 점증 대기 후 재시도. 그 외 예외는 즉시 전파.
+    단 '요청 자체가 너무 큼'(413)은 기다려도 안 풀리므로 즉시 실패."""
     for attempt in range(tries):
         try:
             return fn()
         except Exception as e:
-            if "429" in str(e) or "rate_limit" in str(e):
+            msg = str(e)
+            if "Request too large" in msg or "reduce your message size" in msg:
+                raise
+            if "429" in msg or "rate_limit" in msg:
                 if attempt == tries - 1:
                     raise
                 wait = base * (attempt + 1)
@@ -193,28 +197,38 @@ def main():
 
         ckey = _cache_key(query, techniques) if args.cache_file else None
         if ckey and ckey in cache:
-            answer = cache[ckey]
+            cached = cache[ckey]
+            if isinstance(cached, dict):           # 신형 캐시: run_generation 결과 dict
+                gen = cached
+            else:                                  # 구형 캐시: 마크다운 문자열 → 레거시 추출
+                gen = {"answer": cached, "improved_prompt": extract_improved_prompt(cached)}
             cache_hits += 1
             print(f"  [{i:>2}] [캐시 히트]", end="  ")
         else:
             try:
-                answer = _retry(lambda: generator.generate(
-                    query=query, contexts=retrieved, model=args.model, history=[]))
+                # 운영과 동일 경로(JSON 구조화 + 폴백) — /query 와 같은 run_generation 사용
+                gen = _retry(lambda: run_generation(query, retrieved, args.model, []))
             except Exception as e:
                 print(f"  [{i}] 생성 실패: {e}")
                 continue
             if ckey:
-                cache[ckey] = answer
+                cache[ckey] = gen
                 _save_cache(cache, args.cache_file)
 
-        improved = extract_improved_prompt(answer)
+        answer   = gen["answer"]
+        improved = gen["improved_prompt"]
         mode = "improve" if improved else "ask"
         if expected:
             mode_total += 1
             mode_correct += 1 if mode == expected else 0
 
-        verdict = _retry(lambda: _judge(query, techniques, answer, improved,
-                                        mode, args.judge_model))
+        # judge 실패(TPD 소진 등)는 비치명 — mode_accuracy(결정론적)는 계속 집계
+        try:
+            verdict = _retry(lambda: _judge(query, techniques, answer, improved,
+                                            mode, args.judge_model))
+        except Exception as e:
+            print(f"       (judge 실패 → 점수 없이 mode만 집계: {str(e)[:80]})")
+            verdict = {}
         for k in scores:
             scores[k].append(verdict.get(k))
 

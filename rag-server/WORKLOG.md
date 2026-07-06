@@ -534,20 +534,102 @@ eval/  run_eval.py(+__init__.py)
 
 ---
 
+## [2026-07-05] 출력 구조화 — LLM JSON 응답 (정규식 파싱 의존 제거)
+**목적**: 설계 문서의 `{improved, score, changes[]}` 구조화 응답. 기존엔 LLM 마크다운을 정규식으로 파싱해 마커가 어긋나면 improved_prompt가 비어 Execute 버튼이 안 뜨는 취약점(단일 결정점)이 있었음.
+
+**Before**
+- generator가 마크다운(`**개선된 프롬프트:**`…) 출력 → main.py의 정규식 3종(extract_improved_prompt/applied_techniques/changes)으로 추출
+- gen_eval·uplift_eval도 각자 generate→extract 경로 중복
+- score(자체 평가) 없음
+
+**After**
+- SYSTEM_PROMPT에 [출력 형식 — JSON] 섹션: `{mode, improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary, questions[]}`. 행동 규칙(2-항목 게이트·verbatim 원칙)은 그대로, 형식 섹션만 교체
+- Groq `response_format=json_object` / Gemini `response_mime_type=application/json` 강제
+- main.py `run_generation()` 공용 경로: JSON 관대 파싱(`parse_generation`) → 실패 시 **레거시 정규식 폴백**(안 끊김) → `build_answer()`로 기존 표시용 마크다운 복원(익스텐션 UI·history 왕복 형식 무변경)
+- `/query`·gen_eval·uplift_eval 모두 run_generation 사용(경로 단일화). QueryResponse에 `score` 필드 추가(하위호환 additive)
+- gen_eval 캐시: dict(신형)/문자열(구형) 양쪽 호환
+
+**검증 (gen_eval 12문항, judge 70b)**
+| 지표 | 기준선(정규식) | JSON 구조화 |
+|---|---|---|
+| mode_accuracy | ≈0.92 | **1.00 (12/12)** |
+| mode_fit | 4.50 | **5.00** |
+| technique_grounding | 4.50 | 4.58 |
+| instruction_form | 5.00 (n=7) | 5.00 (n=8) |
+- 스모크: improve(score=8, 원문 verbatim 포함, 마크다운 복원 정상)·ask(questions 정상) 모두 structured=True. 폴백 발동 0회.
+
+**결정·근거**
+- answer를 JSON에서 마크다운으로 **복원**해 반환 → Spring/익스텐션 무변경으로 배포 가능. 이후 프론트가 구조화 필드를 직접 쓰게 되면 복원 로직은 표시 전용으로 남음.
+- 파싱 실패 시 폴백을 남겨 모델이 JSON을 안 지켜도 서비스가 안 끊김(정규식 코드는 폴백 용도로 유지).
+- 관찰: eval 4번 항목(회의록 실본문 없는 메타 요청)에서 요청문 자체를 회의록으로 인용 — 평가셋 인공물이며 실사용 시나리오 아님. 평가셋 개선 후보.
+
+---
+
+## [2026-07-05] 코퍼스 확장 1차 — 가이드 8기법 적재 + 회귀 무해 검증
+**목적**: 100청크 동질 코퍼스 확장(하이브리드 실패의 근본 원인 완화 시작). 확장이 기존 검색을 해치지 않는지 회귀 방법론 확립.
+
+**Before**: prompt_techniques 100청크(pdf_001~100). 신규 자료 적재 시 기존 쿼리 방해 여부 미검증.
+
+**After**
+- **108청크**: Brex·DAIR 가이드에서 70b가 추출한 kept.jsonl(적합도 7~9)을 회수 인덱싱 — Markdown Tables, Give a Bot a Fish, Chain of Thought(Brex판), Embedding Data, Simple Lists, Self-Consistency, PAL, AutoPrompt
+- 중복 방어 2중: 이름 정규화 일치(기존 100과 비교 → CoT/Zero-Shot/Few-Shot 3개 자동 폐기) + 의미 중복제거(코사인≥0.90)
+- **회귀(59문항, fk20)**: Hit@1/MRR **변화 0**, Recall@5 0.847→0.839(−0.008, 경계 1건), NDCG −0.005 → **무해 판정**
+- min_score 재검: τ=0.40 여전히 recall 무손실·빈결과 0% → 유지
+
+**여정에서 배운 것 (쿼터 제약)**
+- 70b 풀 적재 시도 → **TPD 100k 소진**(DAIR 5/16 윈도에서 중단, DB 무변경 확인)
+- 8b 전환 시도 → **TPM 6,000에 요청(6,347tok)이 아예 초과(413)**. 원인: 입력이 아니라 `max_tokens=4096` 출력예약이 지배적
+- 해결: ingest `_complete` 백오프 개선(레이트리밋 20/40/60s, 'Request too large'는 즉시 실패+안내) + **kept.jsonl 회수 인덱싱**(LLM 0토큰)으로 70b 품질 확보
+
+**변경 파일**: `ingestion/ingest_knowledge.py`(백오프·413 처리), `app/rag/retriever.py`(생성자 fetch_k 기본값 50→20 — main.py 외 두 번째 외부 변경 지점 발견·환원)
+
+**결정·근거**
+- 하이브리드 재평가는 보류 — +8청크로는 코퍼스 이질화 부족. DAIR 나머지 14윈도·OpenAI Cookbook 본적재(70b TPD 리셋 후) 뒤에 재평가.
+- 관찰: 'Chain of Thought'(Brex판)가 기존 'Chain-of-Thought Prompting'과 이름 정규화 불일치로 생존(의미중복 0.90도 미달) — near-dup 1건 허용, 회귀 무해 확인됨. 임계치 하향(0.85)은 패러프레이즈 오폐기 위험과 트레이드오프라 보류.
+
+---
+
+## [2026-07-05] 평가 운용 — judge 일치도 측정·기본값 결정·쿼터 강건화 (D)
+**목적**: Groq 무료 티어 한도(70b TPD 100k, 8b TPM 6k) 아래에서 gen_eval을 지속 운용 가능하게. judge를 8b로 낮출 수 있는지 **같은 답변에 대한 두 judge 일치도**로 판정.
+
+**방법**: gen_eval `--cache-file`(외부 세션 기여)로 답변 12개를 캐시에 시딩(8b 생성) → 같은 캐시로 judge만 8b/70b 각각 실행 → 항목별 점수 비교.
+
+**측정 결과 → 판정: judge 기본 70b 유지, 8b judge는 신뢰 불가**
+- 8b judge 이상 패턴: ① improve 항목의 instruction_form **채점 누락(None)** 빈발 ② 정답 ask 항목에 mode_fit **2점 오채점** ③ technique_grounding 전항목 5점(인플레이션 — 70b는 3~5 변별)
+- 70b judge와 정확 일치(5개 겹침 항목): tech 1/5, fit 4/5 — 상관 낮음
+- 부수 확인: **8b 생성**도 mode_accuracy 0.75(70b 1.00) — 과잉 질문 재발. 생성·채점 모두 70b 유지.
+
+**쿼터 강건화 (이번에 추가)**
+- `generator.py`: 8b-instant는 max_tokens 2048 캡 — Groq가 입력+출력예약 합산이라 4096 예약(6/27 상향분)이 8b TPM 6k를 초과시켜 413. 이 캡으로 8b 경로 복구(스모크 확인).
+- `gen_eval._retry`: 413('Request too large')은 대기 없이 즉시 실패(기다려도 안 풀림).
+- `gen_eval`: judge 실패를 비치명 처리 — 점수 없이도 **mode_accuracy(결정론적)는 끝까지 집계**(중도 크래시로 집계 유실 방지).
+- `ingest_knowledge._complete`: 레이트리밋 백오프 20/40/60s + 413 즉시 실패(C에서 선반영).
+
+**운용 가이드 (TPD 제약 시)**
+1. `--cache-file`로 생성 캐시 → 재채점은 judge 비용만
+2. mode_accuracy는 judge 없이도 유효한 1차 신호 (judge 실패 허용됨)
+3. 70b TPD 소진 시: 측정을 미루는 게 원칙. 8b judge 점수는 참고용으로도 부적합.
+
+**변경 파일**: `app/rag/generator.py`(8b max_tokens 캡), `eval/gen_eval.py`(413 즉시실패·judge 비치명)
+
+---
+
 # 다음 작업 / 보류 항목 (백로그)
+
+- [ ] **코퍼스 확장 2차**: DAIR 나머지(70b TPD 리셋 후 `--pdf DAIR... --model` 기본 70b) + OpenAI Cookbook. 완료 후 하이브리드 재평가(`--all`) + min_score 재측정. kept.jsonl 회수 인덱싱 스크립트를 `--from-jsonl` CLI 옵션으로 승격 검토.
 
 - [x] 🔴 **generator 원문 페이로드 누락(uplift_eval 발견)** — 완료(위 [2026-06-26] 항목). 사용자가 변환할 원문(회의록·번역 대상 이메일·리뷰 대상 코드 등)을 직접 준 경우, 개선프롬프트가 그 원문을 **조건·재료로 그대로 포함**하도록 SYSTEM_PROMPT 규칙 추가. 회의록 개선점수 1.0→5.0, 이메일 원문 verbatim 포함 확인(8b/70b). ⚠️ 70b TPD 회복 후 동일조건 전체 재측정 권장.
 
 - [x] **생성기 과잉 질문 완화** — (A)작업종류+(B)핵심주제 2-항목 게이트로 완화. mode_accuracy 0.27→≈0.92, instruction_form N/A→5.0. (위 2026-06-22 항목)
 - [~] **생성 출력 토큰 깨짐**: Groq llama-3.3-70b 응답에 `图片`/`_highlight`/`紹介`/`詳細` 등 혼합언어·깨진 토큰. 한글에 붙은 한자는 `_strip_cjk_noise`로 제거(2026-06-27 정상 외국어 보존하도록 보강). `_highlight` 류 라틴 깨짐은 미해결 — 모델 교체 또는 후처리 추가 검토.
 - [ ] **장문 원문 truncation**: 원문 verbatim 포함 + 출력 `max_tokens=4096`(2026-06-27 상향). 매우 긴 문서·코드는 여전히 잘릴 수 있음 → 장문 입력 시 분할/요약 선처리 또는 max_tokens 동적 산정 검토.
-- [ ] **Groq 무료 티어 일일 토큰 한도(TPD 100k)**: gen_eval 12문항 1회도 빠듯. judge를 8b로 낮추거나 평가셋 분할·캐싱 검토.
-- [ ] **gen judge 신뢰도**: LLM judge가 과잉질문을 관대하게 5점 처리. 모드 판정은 결정론적 mode_accuracy 우선, judge는 보조. judge 강건화(few-shot 라벨, 다른 모델) 검토.
+- [x] **Groq 무료 티어 TPD 대응** — 캐시(--cache-file)·judge 비치명·413 즉시실패·8b max_tokens 캡으로 강건화. judge 8b 전환은 일치도 측정 결과 **기각**(신뢰 불가). (위 2026-07-05 D 항목)
+- [ ] **gen judge 신뢰도**: 70b judge도 과잉질문에 관대(mode_fit). 모드 판정은 결정론적 mode_accuracy 우선 유지. judge 강건화(few-shot 라벨, 타 프로바이더 모델) 검토.
 - [x] **리랭커 점수 표시** — 해결됨(코드 확인). `retriever.py`의 `_rerank`가 표시 `score`를 평탄한 sigmoid가 아니라 **dense 코사인**으로 환산해 반환(`c["score"] = c.pop("dense_score", ...)`). UI "유사도 %"는 코사인 기준.
 - [ ] **리랭커 비용/지연**: 모델(~568M 파라미터, 디스크 2GB대) + 쿼리당 CPU cross-encoder — **실측 1.85s/20쌍(Mac CPU), 검색 지연의 90%**. Railway 무료티어 RAM 확인 필요. 부담 시 fetch_k=10(지연 절반, Recall@5 −4.5%p — 2026-07-05 스윕 표 참조) 또는 `use_reranker=false` 폴백.
 - [x] **쿼리 변환 HyDE형** — 구현·측정 완료. 결과: 악화 → 기본 off(opt-in 보존).
 - [x] **한국어 BM25 토큰화** — kiwipiepy 적용 완료. 결과: 하이브리드는 여전히 악화 → 기본 off.
 - [x] **평가셋 확장** — 현실셋 59문항으로 확장 완료.
-- [ ] **출력 구조화**: 설계 문서의 `{ improved, score, changes[] }` 구조화 응답(현재 정규식 파싱 의존) — 미착수.
+- [x] **출력 구조화** — LLM JSON 응답 + 정규식 폴백으로 완료. mode_accuracy 1.00. (위 2026-07-05 항목)
 - [ ] **스트리밍(SSE)**: 설계 문서의 `/improve/stream` — 미착수.
 - [ ] **검색 추가 아이디어**: 기법 corpus가 동질적이라 sparse/쿼리변환이 안 통함. 코퍼스가 커지고 이질화되면 하이브리드 재평가 가치 있음. min_score(0.40)도 코퍼스 변경 시 `python -m eval.score_analysis`로 재측정.

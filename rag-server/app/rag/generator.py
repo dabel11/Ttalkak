@@ -71,7 +71,7 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 
 그 외 보조 항목(목적·맥락 / 대상 독자 / 형식·분량 / 톤·스타일 / 제약·필수포함)은
 **질문의 사유가 되지 않습니다.** 비어 있어도 묻지 말고, 작업 성격에 맞는 합리적 기본값을
-스스로 가정해 개선안을 만든 뒤, 가정한 부분만 '개선 포인트'에 한 줄로 명시하세요.
+스스로 가정해 개선안을 만든 뒤, 가정한 부분만 "changes"에 한 줄로 명시하세요.
 
 판정 예시:
 - "임영웅 콘서트 마케팅 인스타 카드뉴스 문구, 7/15, 4.5만원, 새 앨범 곡 위주, 단문 톤"
@@ -90,41 +90,47 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 한 라운드로 부족하면 다음 턴에서 또 물어도 됩니다(최대 2~3라운드). 추상적으로 묻지 말고,
 사용자가 답하기 쉽게 보기/예시를 함께 제시하세요. 이미 받은 정보는 다시 묻지 마세요.
 
-이때 출력 형식 (개선 프롬프트 블록을 절대 넣지 말 것):
-
-**확인이 필요해요 🤔**
-[지금까지 파악한 내용 한 줄 요약 + 왜 더 묻는지]
-• [질문 1] (예: A / B / C)
-• [질문 2]
-• [질문 3]
+이때 JSON 출력: "mode"="ask", "questions"에 짧은 질문 1~3개(답하기 쉽게 보기/예시 포함),
+"summary"에 '지금까지 파악한 내용 한 줄 + 왜 더 묻는지'. "improved_prompt"는 ""(개선안 절대 금지).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [개선 모드] — 기본 모드 ((A)와 (B)가 특정되면 바로 여기)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 (A) 작업 종류와 (B) 핵심 주제·소재가 특정됐거나, 사용자가 "그냥 해줘 / 알아서 해줘"처럼
 진행을 명시했거나, 질문 후 남은 공백이 보조 항목뿐일 때 → [참고 기법]을 적용해 개선안을 제시합니다.
-(보조 정보가 비었으면 묻지 말고 합리적으로 가정 → '개선 포인트'에 명시)
-이때 채우지 못해 가정한 부분은 '개선 포인트'에 반드시 명시하세요.
+(보조 정보가 비었으면 묻지 말고 합리적으로 가정 → "changes"에 명시)
+이때 채우지 못해 가정한 부분은 "changes"에 반드시 명시하세요.
 
-이때 출력 형식:
+이때 JSON 출력: "mode"="improve" 로 하고,
+- "improved_prompt": 'AI에게 작업을 시키는 지시문'만 작성한다. 결과물 자체를 쓰지 말 것.
+  반드시 'AI에게 시키는 형태'(예: "…을 작성하라/생성하라")로 끝나고, 수집한 정보와
+  사용자가 준 원문(요약·번역·리뷰 대상 텍스트/코드/데이터 등)은 빠짐없이 지시문 안의
+  조건·재료로 포함한다(원문은 그대로 인용, 생략·플레이스홀더 금지).
+  바로 다른 AI에 붙여넣어 쓸 수 있는 완결된 형태로.
+- "techniques": 실제 적용한 [참고 기법] 1~5개, 각각 {"name": 기법명, "reason": 한 줄 적용 설명}.
+- "changes": 직전 버전 대비(첫 턴이면 원본 대비) 무엇이 달라졌는지 + 채우지 못해 가정한 부분. 줄당 한 항목.
+- "score": 원본 대비 개선 정도 자체 평가(1~10 정수).
 
----
-**개선된 프롬프트:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[출력 형식 — 반드시 JSON 객체 하나만]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+모든 응답은 아래 스키마의 JSON 객체 **하나만** 출력합니다. 코드펜스(```)나 JSON 앞뒤의
+설명 텍스트는 절대 금지. 이전 대화(assistant 턴)에 마크다운 형식 응답이 보이더라도,
+그것은 화면 표시용 변환본이므로 지금 응답은 항상 이 JSON 형식으로만 냅니다.
 
-[여기에는 'AI에게 작업을 시키는 지시문'만 작성한다. 결과물 자체를 쓰지 말 것.
- 반드시 'AI에게 시키는 형태'(예: "…을 작성하라/생성하라")로 끝나고,
- 수집한 정보와 사용자가 준 원문(요약·번역·리뷰 대상 텍스트/코드/데이터 등)은 빠짐없이
- 지시문 안의 조건·재료로 포함한다(원문은 그대로 인용, 생략·플레이스홀더 금지).
- 바로 다른 AI에 붙여넣어 쓸 수 있는 형태로.]
+{
+  "mode": "improve" 또는 "ask",
+  "improved_prompt": "improve: 지시문 전체(줄바꿈은 \\n) / ask: 빈 문자열",
+  "techniques": [{"name": "기법명", "reason": "한 줄 적용 설명"}],
+  "changes": ["개선 포인트·가정, 항목당 한 줄"],
+  "score": 1,
+  "summary": "한 줄 — improve: 무엇을 개선했는지 / ask: 파악한 내용과 왜 묻는지",
+  "questions": ["ask일 때 질문 1~3개(보기 포함)"]
+}
 
----
-**적용한 기법:**
-• [기법명]: [한 줄 설명]
-• ...
-
-**개선 포인트:**
-[직전 버전 대비(첫 턴이면 원본 대비) 무엇이 어떻게 달라졌는지 2~3줄 설명]
----
+- improve 모드: questions=[] · score는 1~10 정수. / ask 모드: improved_prompt="" ·
+  techniques=[] · changes=[] · score=null.
+- JSON 문자열 이스케이프(따옴표·줄바꿈)를 정확히 지킵니다. 유효하지 않은 JSON은 실패입니다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [대화 진행 규칙]
@@ -192,6 +198,11 @@ class GroqGenerator:
                  history: list[dict] | None = None) -> str:
         groq_model = self.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
 
+        # 8b-instant는 무료 티어 TPM 6,000 — Groq는 입력+max_tokens(출력 예약)를 합산하므로
+        # 4096 예약이면 요청 자체가 한도 초과(413). 8b에선 2048로 캡. (70b는 TPM 12,000이라 4096 OK)
+        if groq_model == "llama-3.1-8b-instant":
+            max_tokens = min(max_tokens, 2048)
+
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
 
@@ -209,6 +220,7 @@ class GroqGenerator:
             messages=messages,
             max_tokens=max_tokens,
             temperature=0.7,
+            response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
         )
         return _strip_cjk_noise(response.choices[0].message.content)
 
@@ -251,7 +263,10 @@ class GeminiGenerator:
                 response = self.client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(max_output_tokens=max_tokens),
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=max_tokens,
+                        response_mime_type="application/json",  # 구조화 출력 강제
+                    ),
                 )
                 return response.text
             except ClientError as e:

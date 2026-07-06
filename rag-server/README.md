@@ -68,10 +68,11 @@ MySQL (3306, ttalkak) — Spring 백엔드와 동일 DB, rag_chunk 테이블
 ### 생성 품질(G): `python -m eval.gen_eval` (GROQ_API_KEY 필요)
 운영과 동일한 파이프라인(검색+생성)으로 `improved_prompt`를 만들고 별도 LLM(judge)이 채점.
 지표: mode_fit / technique_grounding / instruction_form / intent_preservation(1~5) + **mode_accuracy**(탐지 모드 vs 기대 라벨, 결정론적이라 가장 신뢰).
-- mode_accuracy(탐지 모드 vs 기대): **0.27 → ≈0.92** (generator 과잉 질문 완화 후). instruction_form N/A→5.00.
+- mode_accuracy(탐지 모드 vs 기대): **0.27 → ≈0.92**(과잉 질문 완화) → **1.00**(JSON 구조화 응답, 2026-07-05). instruction_form 5.00.
+- 응답은 LLM이 JSON(`{mode, improved_prompt, techniques, changes, score, ...}`)으로 생성 → `run_generation()`이 파싱(실패 시 정규식 폴백) 후 표시용 마크다운 복원. `/query` 응답에 `score`(1~10 자체평가) 추가.
   - 발견·수정: 정보가 충분한 프롬프트도 첫 턴에 질문 모드로 빠지던 문제를, `generator.py`를 (A)작업종류+(B)핵심주제 2-항목 게이트로 완화해 해결. 측정→수정→재측정 루프(WORKLOG 2026-06-22).
 - 모드 판정은 결정론적 `mode_accuracy`를 1차 신호로, LLM judge 점수는 보조로 본다(judge가 과잉질문에 관대함).
-- ⚠️ 운용 주의: Groq 무료 티어 일일 토큰 한도(TPD 100k)로 12문항 1회도 빠듯 — judge를 8b로 낮추거나 평가셋 분할 권장.
+- ⚠️ 운용: Groq 무료 티어 TPD 100k — `--cache-file`로 생성 캐시 후 judge만 재실행 가능, judge 실패해도 mode_accuracy는 집계됨. judge를 8b로 낮추는 건 일치도 측정 결과 **비권장**(채점 누락·인플레이션).
 
 ### 결과 상향(uplift): `python -m eval.uplift_eval` (GROQ/GEMINI 키 필요)
 딸각의 **실제 효용**을 end-to-end A/B로 측정한다. "개선 프롬프트가 좋은 지시문인가"(=gen_eval)가 아니라 **"그 프롬프트로 만든 결과물이 raw 프롬프트를 그냥 LLM에 넣은 것보다 실제로 좋아지는가"**를 잰다.
@@ -268,22 +269,25 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
-응답 (v2.0 스키마):
+응답 (LLM이 JSON으로 생성 → `run_generation()`이 파싱·복원, 실패 시 정규식 폴백):
 ```json
 {
-  "answer": "Chain-of-thought prompting은 모델이 복잡한 추론 과정을...",
+  "answer": "---\n**개선된 프롬프트:**\n\n...(표시용 마크다운 — JSON에서 복원)...",
   "improved_prompt": "Chain-of-thought 기법을 써서 다음 문제를 단계별로 풀어라: ...",
   "sources": [
     {
       "text": "Chain-of-thought prompting enables...",
       "metadata": {"technique": "Chain-of-Thought", "source": "Wei et al. 2022", "page": 1},
-      "score": 0.923
+      "score": 0.52
     }
   ],
   "techniques_applied": ["Chain-of-Thought Prompting"],
-  "changes": ["단계적 추론 구조 추가", "목적 명시"]
+  "changes": ["단계적 추론 구조 추가", "목적 명시"],
+  "score": 8
 }
 ```
+- `sources[].score` = dense 코사인(0~1, min_score=0.40 컷 통과분), `score` = LLM 자체평가(1~10, 개선 모드만)
+- 질문 모드면 `improved_prompt=""`(프론트는 Execute 버튼 숨김), `answer`에 질문 블록
 
 ---
 

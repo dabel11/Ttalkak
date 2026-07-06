@@ -403,7 +403,13 @@ class LLMJudge:
                     return resp.text
             except Exception as e:  # noqa: BLE001 - 백엔드별 예외가 제각각
                 last = e
-                wait = 5 * (attempt + 1)
+                msg = str(e)
+                # '요청 자체가 너무 큼'(413 too large)은 기다려도 안 풀림 → 즉시 실패
+                # (해결책: --window-chars 축소 또는 TPM 큰 모델 사용)
+                if "Request too large" in msg or "reduce your message size" in msg:
+                    raise RuntimeError(f"요청이 모델 TPM 한도보다 큼 → --window-chars 축소 필요: {e}") from e
+                # 레이트리밋(TPM)은 분 단위 윈도라 20/40/60s 로 길게 대기
+                wait = 20 * (attempt + 1) if "rate_limit" in msg or "429" in msg else 5 * (attempt + 1)
                 print(f"[LLMJudge] 오류({attempt+1}/{retries}): {e} → {wait}s 대기")
                 time.sleep(wait)
         raise RuntimeError(f"LLM 호출 실패: {last}")

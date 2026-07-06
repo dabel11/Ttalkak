@@ -1,4 +1,5 @@
 import hmac
+import json
 import os
 import re
 import uvicorn
@@ -68,11 +69,12 @@ class QueryRequest(BaseModel):
     min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
 
 class QueryResponse(BaseModel):
-    answer:              str            # 전체 응답 (화면 표시용)
+    answer:              str            # 전체 응답 (화면 표시용 마크다운 — JSON에서 복원)
     improved_prompt:     str            # 개선된 프롬프트만 (Execute용)
     sources:             list[dict]
     techniques_applied:  list[str] = []  # 적용한 기법명 목록
     changes:             list[str] = []  # 개선 포인트 줄 목록
+    score:               Optional[int] = None  # LLM 자체 평가(1~10, 개선 모드만) — 설계문서 {improved, score, changes[]}
 
 
 # ── 개선된 프롬프트 추출 ─────────────────────────────────────
@@ -144,6 +146,83 @@ def extract_changes(answer: str) -> list[str]:
     return lines
 
 
+# ── 구조화 생성 (JSON 우선, 정규식 폴백) ─────────────────────
+def parse_generation(raw: str) -> dict | None:
+    """LLM 출력에서 구조화 JSON을 관대하게 파싱.
+    mode 필드가 있는 유효 객체면 dict, 아니면 None(→ 레거시 정규식 폴백)."""
+    if not raw:
+        return None
+    m = re.search(r"\{.*\}", raw, re.DOTALL)   # 코드펜스·앞뒤 잡담 허용
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except Exception:
+        return None
+    if not isinstance(obj, dict) or obj.get("mode") not in ("improve", "ask"):
+        return None
+    return obj
+
+
+def build_answer(p: dict) -> str:
+    """구조화 JSON → 기존 화면 표시용 마크다운 복원.
+    익스텐션 UI·history 왕복(assistant 턴 저장) 형식을 기존과 동일하게 유지한다."""
+    if p["mode"] == "ask":
+        lines = ["**확인이 필요해요 🤔**"]
+        if p.get("summary"):
+            lines.append(str(p["summary"]))
+        lines += [f"• {q}" for q in p.get("questions") or []]
+        return "\n".join(lines)
+
+    parts = ["---", "**개선된 프롬프트:**", "", str(p.get("improved_prompt") or ""), "",
+             "---", "**적용한 기법:**"]
+    for t in p.get("techniques") or []:
+        name   = t.get("name", "") if isinstance(t, dict) else str(t)
+        reason = t.get("reason", "") if isinstance(t, dict) else ""
+        parts.append(f"• {name}: {reason}" if reason else f"• {name}")
+    changes = p.get("changes") or []
+    if changes:
+        parts += ["", "**개선 포인트:**"] + [f"- {c}" for c in changes]
+    parts.append("---")
+    return "\n".join(parts)
+
+
+def run_generation(query: str, contexts: list[dict], model: str,
+                   history: list[dict]) -> dict:
+    """검색 결과 → 생성 → 구조화 필드 추출까지의 공용 경로 (/query·eval 공유).
+    반환: {answer, improved_prompt, techniques_applied, changes, score, structured}
+    JSON 파싱 실패 시 레거시 정규식 추출로 폴백(structured=False)."""
+    raw = generator.generate(query=query, contexts=contexts, model=model, history=history)
+    if not (raw and raw.strip()):
+        raise RuntimeError("생성 결과가 비어 있습니다.")
+
+    p = parse_generation(raw)
+    if p is not None:
+        improved = str(p.get("improved_prompt") or "") if p["mode"] == "improve" else ""
+        techs = [t.get("name", "") if isinstance(t, dict) else str(t)
+                 for t in (p.get("techniques") or [])]
+        score = p.get("score")
+        return {
+            "answer":             build_answer(p),
+            "improved_prompt":    improved.strip(),
+            "techniques_applied": [t for t in techs if t],
+            "changes":            [str(c) for c in (p.get("changes") or [])],
+            "score":              int(score) if isinstance(score, (int, float)) else None,
+            "structured":         True,
+        }
+
+    # 폴백: 모델이 JSON을 안 지킨 경우 — 원문을 그대로 표시하고 정규식으로 추출
+    print("[Main] 구조화 JSON 파싱 실패 → 정규식 폴백")
+    return {
+        "answer":             raw,
+        "improved_prompt":    extract_improved_prompt(raw),
+        "techniques_applied": extract_applied_techniques(raw),
+        "changes":            extract_changes(raw),
+        "score":              None,
+        "structured":         False,
+    }
+
+
 # ── 엔드포인트 ───────────────────────────────────────────────
 @app.get("/health")
 def health():
@@ -192,36 +271,22 @@ def query(req: QueryRequest):
         )
 
     try:
-        answer = generator.generate(
-            query=req.query,
-            contexts=retrieved,
-            model=req.model,
-            history=history,
-        )
+        gen = run_generation(req.query, retrieved, req.model, history)
     except RuntimeError as e:
+        # 빈 생성·백엔드 한도 등 — 명확히 503 (extract(None) 500 크래시 방지 겸용)
         raise HTTPException(status_code=503, detail=str(e))
-
-    # LLM이 빈/None 응답을 주면 그대로 추출 단계에 넘기지 않고 명확히 실패시킨다
-    # (None → extract_improved_prompt(None) TypeError로 500 나던 것을 방지).
-    if not (answer and answer.strip()):
-        raise HTTPException(
-            status_code=503,
-            detail="생성 결과가 비어 있습니다. 잠시 후 다시 시도해주세요."
-        )
-
-    # 개선된 프롬프트만 별도 추출 → Execute 시 이 값만 전송
-    improved_prompt = extract_improved_prompt(answer)
 
     sources = [
         {"text": r["text"][:300], "metadata": r["metadata"], "score": r["score"]}
         for r in retrieved
     ]
     return QueryResponse(
-        answer=answer,
-        improved_prompt=improved_prompt,
+        answer=gen["answer"],
+        improved_prompt=gen["improved_prompt"],
         sources=sources,
-        techniques_applied=extract_applied_techniques(answer),
-        changes=extract_changes(answer),
+        techniques_applied=gen["techniques_applied"],
+        changes=gen["changes"],
+        score=gen["score"],
     )
 
 

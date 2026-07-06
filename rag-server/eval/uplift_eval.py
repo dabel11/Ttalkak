@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 
 # 운영과 동일한 파이프라인(검색·생성·개선프롬프트 추출)을 그대로 재사용
-from app.main import retriever, generator, extract_improved_prompt
+from app.main import retriever, generator, extract_improved_prompt, run_generation
 
 
 # ── 실행/채점용 '순수 LLM' (딸각 시스템프롬프트 없음) ────────────
@@ -247,9 +247,9 @@ def main():
 
         # ── ① 딸각 파이프라인 → 개선 프롬프트 ──
         retrieved = retriever.search(query=task, collection_name=collection, top_k=5)
-        assistant = _retry(lambda: generator.generate(
-            query=task, contexts=retrieved, model=args.gen_model, history=[]))
-        improved_prompt = extract_improved_prompt(assistant)
+        # 운영과 동일 경로(JSON 구조화 + 폴백)
+        gen = _retry(lambda: run_generation(task, retrieved, args.gen_model, []))
+        improved_prompt = gen["improved_prompt"]
 
         if not improved_prompt:
             skipped += 1
