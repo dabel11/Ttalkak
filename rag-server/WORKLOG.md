@@ -506,6 +506,34 @@ eval/  run_eval.py(+__init__.py)
 
 ---
 
+## [2026-07-05] 운영/보안 묶음 — /index 보호 · requirements 분리 · compose healthcheck
+**목적**: 구조 점검(P1)에서 나온 배포 전 필수 3건. 각각 소규모지만 방치 시 코퍼스 오염·이미지 비대·기동 중 트래픽 유입 문제.
+
+**Before**
+- `/index` 무인증 — CORS `*`와 결합해 누구나 rag_chunk에 upsert 가능(코퍼스 오염 벡터)
+- `requirements.txt`에 런타임·적재·크롤러 의존성 혼재 → Docker 이미지에 크롤러 전용 requests/bs4/tqdm/reportlab·pypdf 불필요 설치
+- compose의 rag-server에 healthcheck 없음 — `/health` 미활용, 모델 로딩(수십 초~수 분) 중 준비 안 된 컨테이너가 healthy 취급
+
+**After**
+- `/index`: `RAG_INDEX_API_KEY` 설정 시 `X-API-Key` 헤더 필수(`hmac.compare_digest` 상수시간 비교, 불일치 403). 미설정이면 로컬 편의상 허용 + 기동 경고. `/query`는 제품 API라 공개 유지. `.env`에 주석 예시 추가.
+- requirements 분리: `requirements.txt`(런타임 12개) / `requirements-ingestion.txt`(-r 포함 + pypdf·requests·bs4·tqdm·reportlab). app/ 의 실제 import 그렙으로 분류 검증(pypdf도 ingestion 전용으로 판명).
+- compose: rag-server에 `/health` 기반 healthcheck(interval 30s, start_period 300s — 첫 기동 모델 다운로드 고려).
+
+**변경 파일**
+- 수정: `app/main.py`(_verify_index_key + Header), `requirements.txt`, `../docker-compose.yml`, `README.md`(설치·curl 예시·배포 환경변수), `.env`(주석 예시)
+- 신규: `requirements-ingestion.txt`
+
+**검증**
+- TestClient 실호출: 키 없음 403 / 틀린 키 403 / 맞는 키 통과 / `/health`·`/query` 무영향 200
+- `docker compose config` 문법 통과
+- app/ import 그렙으로 런타임 의존성 완결성 확인
+
+**결정·근거**
+- 키 미설정 시 차단이 아니라 허용+경고: 로컬 개발 흐름(Spring 없이 직접 인덱싱)을 안 깨기 위함. 배포 환경에선 키 설정을 README·경고로 강제 유도.
+- ⚠️ 진행 중 발견·해결: `app/main.py`의 retriever가 `fetch_k=50`으로 변경돼 있었음(외부 세션 추정, 미측정). 50 vs 20 동일 프로세스 측정 결과 **50이 전 지표 열세 + 2.5배 느림**(Hit@1 0.661 vs 0.695, Recall@5 0.839 vs 0.847, NDCG@5 0.736 vs 0.757, 지연 4065 vs 1651ms) → **20으로 환원**. 원인: 21~50위 저품질 후보가 리랭커에 유입되면 cross-encoder 오판으로 정답 위에 올라가는 경우가 생김(넓다고 좋은 게 아님). main.py에 근거 주석 명시.
+
+---
+
 # 다음 작업 / 보류 항목 (백로그)
 
 - [x] 🔴 **generator 원문 페이로드 누락(uplift_eval 발견)** — 완료(위 [2026-06-26] 항목). 사용자가 변환할 원문(회의록·번역 대상 이메일·리뷰 대상 코드 등)을 직접 준 경우, 개선프롬프트가 그 원문을 **조건·재료로 그대로 포함**하도록 SYSTEM_PROMPT 규칙 추가. 회의록 개선점수 1.0→5.0, 이메일 원문 verbatim 포함 확인(8b/70b). ⚠️ 70b TPD 회복 후 동일조건 전체 재측정 권장.

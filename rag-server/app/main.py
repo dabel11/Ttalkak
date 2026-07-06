@@ -1,6 +1,8 @@
+import hmac
+import os
 import re
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -13,6 +15,22 @@ from app.rag import query_transform
 
 app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 
+
+# ── /index 보호 ──────────────────────────────────────────────
+# RAG_INDEX_API_KEY 가 설정돼 있으면 X-API-Key 헤더가 일치해야 인덱싱 허용.
+# 미설정이면 로컬 개발 편의상 허용하되 기동 시 경고. (/query 는 제품 API라 공개 유지)
+_INDEX_API_KEY = os.environ.get("RAG_INDEX_API_KEY", "")
+if not _INDEX_API_KEY:
+    print("[Main] ⚠️  RAG_INDEX_API_KEY 미설정 — /index 가 무인증입니다. 배포 시 .env에 설정하세요.")
+
+
+def _verify_index_key(provided: str | None) -> None:
+    """키가 설정된 경우에만 검사. 불일치 시 403."""
+    if not _INDEX_API_KEY:
+        return
+    if not provided or not hmac.compare_digest(provided, _INDEX_API_KEY):
+        raise HTTPException(status_code=403, detail="X-API-Key 가 없거나 올바르지 않습니다.")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +39,9 @@ app.add_middleware(
 )
 
 indexer  = Indexer()
-retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=50)  # 리랭커 단독 (평가상 최적)
+# fetch_k=20: 측정상 파레토 최적 — 50은 전 지표 열세+2.5배 느림, 10은 지연 절반이나 Recall@5 -4.5%p
+# (WORKLOG 2026-07-05 스윕 표 참조. 변경 시 python -m eval.run_eval --fetch-k 로 재측정)
+retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=20)  # 리랭커 단독 (평가상 최적)
 generator = Generator()
 
 
@@ -131,7 +151,9 @@ def health():
 
 
 @app.post("/index", response_model=IndexResponse)
-def index_chunks(req: IndexRequest):
+def index_chunks(req: IndexRequest,
+                 x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    _verify_index_key(x_api_key)
     count = indexer.index(
         chunks=req.chunks,
         metadata=req.metadata,

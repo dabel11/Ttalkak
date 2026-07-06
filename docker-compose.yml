@@ -41,6 +41,14 @@ services:
       - "8000:8000"
     volumes:
       - hf-cache:/root/.cache/huggingface   # bge-m3 모델 캐시(재다운로드 방지)
+    healthcheck:
+      # /health 응답 확인. 첫 기동은 모델 다운로드+로드로 오래 걸릴 수 있어 start_period 여유
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
     restart: unless-stopped
 
 volumes:

@@ -2,7 +2,7 @@
 
 > `POST /query` 한 건이 들어와 응답이 나가기까지의 전체 흐름과 핵심 설계 포인트 정리.
 > 코드 위치는 `파일:줄`로 표기. 기준: `rag-server/` (FastAPI, bge-m3 + MySQL + reranker + LLM).
-> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_query_transform=False`, `use_hyde=False`.
+> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_query_transform=False`, `use_hyde=False`, `min_score=0.40`.
 
 ---
 
@@ -10,21 +10,22 @@
 
 ```
 POST /query
-  │  QueryRequest { query, collection="prompt_techniques", top_k=5,
+  │  QueryRequest { query, collection="prompt_techniques", top_k=5, min_score=0.40,
   │                 model="gemini-2.0-flash", history, use_reranker=T, use_hybrid=F, ... }
   ▼
-[A] 검색 쿼리 결정      main.py:156-162   (기본: 원본 / 옵션: HyDE·키워드 변환)
+[A] 검색 쿼리 결정      main.py:170-176   (기본: 원본 / 옵션: HyDE·키워드 변환)
   ▼
-[B] 검색 (2단계)        retriever.py:84
-   ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:182
-   ├ B2 1단계 후보 50개  (bge-m3 dense 코사인)     retriever.py:117
-   └ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:166
+[B] 검색 (2단계+컷)     retriever.py:84
+   ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
+   ├ B2 1단계 후보 20개  (bge-m3 dense 코사인)     retriever.py:126
+   ├ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:175
+   └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
   ▼
-   검색결과 0 & history 없음 → 404                  main.py:173
+   검색결과 0 & history 없음 → 404                  main.py:188
   ▼
 [C] 생성 (LLM)          generator.py:170/207   (참고기법 + 원본 프롬프트 → 개선/질문 모드)
   ▼
-[D] 후처리·파싱 → 응답  main.py:190-202   (정규식으로 블록 추출, 추가 LLM 호출 없음)
+[D] 후처리·파싱 → 응답  main.py:213-        (정규식으로 블록 추출, 추가 LLM 호출 없음)
   ▼
 QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 ```
@@ -32,31 +33,36 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 - **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3) · 생성 LLM(Groq/Gemini)
 - **저장소**: MySQL `rag_chunk` (Spring 백엔드와 **동일 DB** `ttalkak` 공유)
 - **호출 경로**: Chrome 확장 → Spring(:8080) `/api/prompts/improve` → rag-server(:8000) `/query`
+- **쓰기 보호**: `POST /index`는 `RAG_INDEX_API_KEY` 설정 시 `X-API-Key` 헤더 필수(403), 미설정이면 허용+기동 경고 (`main.py:27`)
 
 ---
 
 ## 1. 단계별 상세
 
-### [A] 검색 쿼리 결정 — `main.py:156-162`
+### [A] 검색 쿼리 결정 — `main.py:170-176`
 - 기본값: `search_query = req.query` (원본 그대로)
 - `use_hyde` ON → `query_transform.hyde()` (가상 기법문서 생성)
 - `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성)
 - **검색용 쿼리와 생성용 쿼리를 분리** → 자세히는 §2-(1)
 
 ### [B] 검색 — `retriever.py:84 search()`
-- **B1. 컬렉션 로드** (`retriever.py:182`)
+- **B1. 컬렉션 로드** (`retriever.py:193`)
   - MySQL `rag_chunk`에서 `collection_name` 일치 행을 `id` 순으로 `SELECT document, metadata, embedding`
   - 임베딩(JSON) → numpy 배열. **매 쿼리마다 전체 로드** → 자세히는 §2-(3)
-- **B2. 1단계 후보 추리기** (`_candidates`, `retriever.py:117`)
-  - 리랭크 ON이므로 후보 폭 `stage1_k = max(fetch_k=50, top_k=5) = 50` (`retriever.py:103`)
-  - `_dense_scores`: bge-m3로 쿼리 인코딩 → 전체 행렬과 **numpy 코사인** (`retriever.py:139, 199`)
-  - `use_hybrid=False` → BM25 건너뜀, `argsort(-dense)[:50]`
-  - (하이브리드 ON 시: BM25(kiwipiepy 형태소) 점수와 **RRF 융합**, `_rrf_order` 156 — 기본 off)
-- **B3. 2단계 리랭크** (`_rerank`, `retriever.py:166`)
-  - `bge-reranker-v2-m3`에 `(query, doc)` 50쌍 → logit → **sigmoid(0~1)** → 정렬 → **top_k=5**
-  - 표시 `score`는 평탄한 sigmoid 대신 **dense 코사인으로 환산**해 노출 (순위만 리랭커 기준)
-  - 리랭커 예외 → 후보 상위 5개로 **폴백** (검색 안 끊김, `retriever.py:112`)
-- **결과**: 관련 기법 청크 5개 `{text, metadata{technique, category, source, chunk_id}, score}`
+- **B2. 1단계 후보 추리기** (`_candidates`, `retriever.py:126`)
+  - 리랭크 ON이므로 후보 폭 `stage1_k = max(fetch_k=20, top_k=5) = 20` (`retriever.py:107`)
+  - **fetch_k=20은 측정 파레토 최적** — 50은 전 지표 열세+2.5배 느림(21~50위 쓰레기가 리랭커를 오판시킴), 10은 지연 절반이나 Recall@5 −4.5%p (WORKLOG 2026-07-05 스윕)
+  - `_dense_scores`: bge-m3로 쿼리 인코딩 → 전체 행렬과 **numpy 코사인** (`retriever.py:148`)
+  - `use_hybrid=False` → BM25 건너뜀, `argsort(-dense)[:20]`
+  - (하이브리드 ON 시: BM25(kiwipiepy 형태소) 점수와 **RRF 융합**, `_rrf_order` 165 — 기본 off)
+- **B3. 2단계 리랭크** (`_rerank`, `retriever.py:175`)
+  - `bge-reranker-v2-m3`에 `(query, doc)` 20쌍 → logit → **sigmoid(0~1)** → 정렬 → **top_k=5**
+  - 표시 `score`는 평탄한 sigmoid 대신 **dense 코사인으로 환산**해 노출(순위만 리랭커 기준), `rerank_score`(sigmoid) 병기
+  - 리랭커 예외 → 후보 상위 5개로 **폴백** (검색 안 끊김, `retriever.py:117`)
+- **B4. 유효 유사도 컷** (`retriever.py:121`, 기본 `min_score=0.40`)
+  - `score`(dense 코사인) < min_score 인 결과를 top_k에서 **제외** → 무관 입력은 0건이 되어 첫 턴 404
+  - 신호·임계치는 측정으로 결정: 리랭커 확률은 정답/오답 분리 전무(p50 0.503 vs 0.500)라 **dense 채택**, τ=0.40은 recall 무손실(0.839)·빈결과 0% 지점 (`eval/score_analysis.py`, 코퍼스 변경 시 재측정)
+- **결과**: 관련 기법 청크 ≤5개 `{text, metadata{technique, category, source, chunk_id}, score, rerank_score}`
 
 ### [C] 생성 — `generator.py`
 - **백엔드 자동선택** (`Generator.__init__`, `generator.py:274`)
@@ -88,7 +94,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 ## 2. 핵심 설계 포인트 4가지
 
 ### (1) 검색 쿼리 ≠ 생성 쿼리
-- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:180`)
+- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:195`)
 - 이유: 검색이 매칭할 대상은 **기법 카드 코퍼스**, 생성이 다룰 대상은 **사용자 실제 의도·내용** → 최적 입력이 다름
 - 변환 함수 (`query_transform.py`)
   - `transform()` (71): Groq `llama-3.1-8b-instant`, 출력=**키워드 한 줄** (예: `역할 부여, 출력 형식, 톤`)
@@ -124,10 +130,11 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 
 | 항목 | 기본값 | 위치 | 비고 |
 |---|---|---|---|
-| `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수 |
-| `fetch_k` | 50 | `main.py:24` Retriever | 1단계 후보 폭(리랭크 입력) |
-| `use_reranker` | True | `main.py:24` | 측정상 단독이 최고 |
-| `use_hybrid` | False | `main.py:24` | 한국어 코퍼스에서 악화 → off |
+| `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수(상한 — min_score 컷으로 줄 수 있음) |
+| `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. recall 무손실 지점(score_analysis로 측정) |
+| `fetch_k` | 20 | `main.py:44` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
+| `use_reranker` | True | `main.py:44` | 측정상 단독이 최고 |
+| `use_hybrid` | False | `main.py:44` | 한국어 코퍼스에서 악화 → off |
 | 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py:156` | Groq 매핑 |
 | 생성 temp/tokens | 0.7 / 4096 | `generator.py` | tokens는 긴 원문 verbatim 대비 4096 |
 | collection | prompt_techniques | QueryRequest | 기법 카드 컬렉션 |
@@ -136,6 +143,8 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 
 ## 4. 알려진 한계 · 백로그
 
+- ✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05) — 무관 입력은 0건→404, 실제 개선 요청은 평가셋 기준 빈결과 0%.
+- ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕 측정으로 20 확정(2026-07-05). `--fetch-k`로 재측정 가능.
 - ✅ **생성기 원문 페이로드 누락** (uplift_eval 발견): SYSTEM_PROMPT에 "원문 verbatim 포함" 규칙 추가로 해결(2026-06-26). 후속 버그(추출 `---` 잘림·노이즈 과삭제)도 수정(2026-06-27).
 - 🟡 **긴 원문 truncation**: 원문 verbatim 포함 + 출력 한도. `max_tokens` 4096으로 완화했으나 매우 긴 문서는 여전히 잘릴 수 있음 → 장문은 청크 분할/요약 선처리 검토
 - 🟡 **벡터 인덱스 부재**: 코퍼스 확장 시 brute-force 병목 (§2-(3))
@@ -149,7 +158,8 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes }
 
 | 명령 | 측정 대상 | 핵심 지표 |
 |---|---|---|
-| `python3 -m eval.run_eval --qa qa_set_realistic.json` | **검색(R)** | Hit@1 / Recall@1·3·5 / NDCG@5 / MRR@10 |
+| `python3 -m eval.run_eval --qa qa_set_realistic.json` | **검색(R)** (`--fetch-k` 스윕·지연 포함) | Hit@1 / Recall@1·3·5 / NDCG@5 / MRR@10 / ms·쿼리 |
+| `python3 -m eval.score_analysis` | **min_score 임계치 설계** — 정답/오답 점수 분포·τ 스윕 | 유지Recall / Precision / 빈결과율 |
 | `python3 -m eval.gen_eval` | **생성(G) — 개선프롬프트 지시문 품질** | mode_fit / grounding / mode_accuracy |
 | `python3 -m eval.uplift_eval` | **결과 상향 — raw vs 개선 결과물 A/B** | 개선 승률 / 평균 점수 Δ |
 

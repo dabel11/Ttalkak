@@ -97,13 +97,16 @@ MySQL (3306, ttalkak) — Spring 백엔드와 동일 DB, rag_chunk 테이블
 ```bash
 cd rag-server
 
-pip install -r requirements.txt
+pip install -r requirements.txt              # 서버 런타임만
+pip install -r requirements-ingestion.txt    # 적재/크롤링까지 할 때 (런타임 포함)
 
 # MySQL 접속 (.env 또는 환경변수, Spring과 동일 ttalkak DB)
 #   DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
 #   또는 RAG_DB_URL=mysql+pymysql://user:pw@host:3306/ttalkak?charset=utf8mb4
 # LLM 키
 export GROQ_API_KEY=...        # 또는 GEMINI_API_KEY=...
+# /index 보호(배포 시 권장): 설정하면 POST /index 에 X-API-Key 헤더 필수
+export RAG_INDEX_API_KEY=...
 
 # (최초 1회) 지식 PDF를 파싱→청킹→적합도 큐레이션→MySQL 인덱싱까지 한 번에
 #   ① 사람이 직접 청킹한 기법 PDF (결정론적, 무료)
@@ -233,9 +236,12 @@ implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
 ### 인덱싱 (`POST /index`)
 
+`RAG_INDEX_API_KEY` 가 설정된 서버에선 `X-API-Key` 헤더 필수(불일치 403). `/query`는 공개.
+
 ```bash
 curl -X POST http://localhost:8000/index \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $RAG_INDEX_API_KEY" \
   -d '{
     "chunks": [
       "Chain-of-thought prompting enables complex reasoning...",
@@ -318,7 +324,7 @@ rag-server/
 
 FastAPI 서버를 Railway에 올릴 경우:
 1. `rag-server/` 폴더를 별도 Railway 서비스로 배포 (시작 명령 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
-2. 환경변수: LLM 키(`GROQ_API_KEY`/`GEMINI_API_KEY`) + DB 접속
+2. 환경변수: LLM 키(`GROQ_API_KEY`/`GEMINI_API_KEY`) + `RAG_INDEX_API_KEY`(/index 보호) + DB 접속
    (`RAG_DB_URL` 또는 `DB_HOST/...`) — Railway MySQL 플러그인을 가리키게 설정
 3. Spring Boot `application.yml`의 `rag.server.url`을 Railway URL로 변경
 
