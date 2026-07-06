@@ -50,6 +50,7 @@ Comment/reply responses should include:
 - like/unlike
 - share/unshare/delete
 - comments/replies CRUD
+- When deleting a comment that has replies, use soft deletion: hide the original content and show a deleted-comment placeholder while preserving replies. Comments without replies can be removed from the visible list.
 - comment/reply like
 - prompt/comment reports
 - My page list filters
@@ -163,6 +164,12 @@ Current My page tabs:
 - Comment management: comments and replies written by the current user. The UI can open the related prompt detail and enter edit/delete flows.
 - Report history: reports submitted by the current user, including target type, reason, submitted time, and review status.
 
+Initial account state:
+
+- In the real service, a newly authenticated user's My page should start empty unless that user has saved, liked, authored, commented, or reported content.
+- The prototype keeps sample My page content hidden by default and exposes it through a `데모 데이터 채우기` / `데모 데이터 숨기기` toggle only for QA and backend handoff review.
+- Backend integration should not treat prototype seed examples as default user-owned records.
+
 Recommended backend endpoints:
 
 - `GET /api/me/library`
@@ -177,6 +184,7 @@ Report records should include `reporterId` or equivalent ownership metadata so u
 Concept boundary:
 
 - Make folders organize private conversation threads while the user is drafting or improving prompts.
+- Folder creation, renaming, deletion, and thread movement are login-only features because they persist personal conversation organization.
 - My page library manages final prompt artifacts: saved prompts, liked prompts, and prompts authored by the user.
 - Moving a Make conversation between folders must not change whether a final prompt is saved, liked, private, or shared.
 - Saving or sharing a final prompt must not require exposing the original Make conversation thread.
@@ -187,8 +195,10 @@ Frontend behavior:
 
 - Default folder filters: `전체` and `미분류`.
 - Users can create, rename, and delete custom folders.
+- Custom Make folders are limited to 5 per user. System filters such as `전체` and `미분류` are not counted toward this limit.
 - Deleting a folder does not delete conversations. Threads in that folder move to `미분류`.
 - Each recent Make conversation has a compact folder move menu.
+- The thread menu can also create a new custom folder and move that thread into it in one flow. The same login-only and 5-folder limit rules apply.
 - New conversations created while a custom folder is active are assigned to that folder. New conversations from `전체` go to `미분류`.
 
 Recommended backend endpoints:
