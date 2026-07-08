@@ -18,36 +18,44 @@ Ttalkak 프로젝트의 Spring Boot 백엔드 서버입니다.
 
 MySQL Workbench에서 아래 SQL을 실행합니다.
 
+```sql
 CREATE DATABASE IF NOT EXISTS ttalkak
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
+```
 
 ### 2. application.yml 확인
 
 기본 로컬 설정은 다음과 같습니다.
 
+```yml
 spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
+```
 
-본인 MySQL 계정이 다르면 환경변수 또는 application.yml 기본값을 수정해야 합니다.
+본인 MySQL 계정이 다르면 환경변수 또는 `application.yml` 기본값을 수정해야 합니다.
 
 ### 3. 서버 실행
 
 Windows PowerShell 기준:
 
+```powershell
 cd backend
 .\gradlew.bat bootRun
+```
 
 ### 4. API 확인
 
 브라우저에서 아래 주소를 확인합니다.
 
+```text
 http://localhost:8080/api/prompts
 http://localhost:8080/api/tags/popular
 http://localhost:8080/api/make/threads
+```
 
 ## 현재 구현 상태
 
