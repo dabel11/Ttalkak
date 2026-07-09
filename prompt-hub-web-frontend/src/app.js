@@ -342,12 +342,17 @@ const state = {
   adminTab: "reports",
   adminPromptQuery: "",
   adminPromptFilter: "all",
+  adminTagQuery: "",
+  adminTagFilter: "all",
+  adminTagSort: "usage",
   adminPromptRevisionRequests: {},
   reportRecords: {},
   isLoggedIn: false,
   currentUser: null,
   isComposingSearch: false,
   isComposingShareTag: false,
+  isComposingAdminPromptSearch: false,
+  isComposingAdminTagSearch: false,
   authDraft: {},
   authDuplicateChecks: {},
   authUserIdWarning: "",
@@ -361,6 +366,9 @@ const state = {
   openPromptCardMenuId: null,
   searchScope: "all",
   searchQuery: "",
+  backendPopularTags: [],
+  backendStatus: "checking",
+  backendStatusMessage: "백엔드 연결 확인 중",
   popularSort: "popular",
   popularPage: 1,
   savedPage: 1,
@@ -393,6 +401,8 @@ const state = {
 };
 
 let searchCommitTimer = null;
+let adminPromptSearchCommitTimer = null;
+let adminTagSearchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let pendingLatestMessageScrollId = null;
@@ -615,10 +625,7 @@ function getAdminTabs() {
   const filteredAdminPrompts = allPrompts
     .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
     .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
-  const adminTags = getKnownTags()
-    .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
-    .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
-    .slice(0, 16);
+  const adminTags = getAdminManagedTags();
 
   return [
     { id: "reports", label: "신고 관리", count: reportRecords.length },
@@ -644,6 +651,7 @@ function Header() {
       </button>
       <div class="topbar-auth">
         ${authButton}
+        ${BackendStatusBadge()}
         ${
           showPromptTools
             ? `<div class="topbar-tools">
@@ -675,7 +683,7 @@ function Page() {
 function HomePage() {
   const prompts = applyReportedVisibility(getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = popularTags.length ? popularTags : fallbackPopularTags;
+  const displayTags = state.backendPopularTags.length ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const totalPages = getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
@@ -797,10 +805,12 @@ function isPromptPendingUnsave(promptId) {
   return state.pendingUnsaveIds.has(promptId);
 }
 
-function commitPendingUnsaves(nextRoute = state.route) {
-  if (state.route !== "saved" || nextRoute === "saved" || state.pendingUnsaveIds.size === 0) return;
+function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myPageTab) {
+  const staysInLibrary = state.route === "saved" && nextRoute === "saved" && state.myPageTab === "library" && nextMyPageTab === "library";
+  if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return;
 
   state.pendingUnsaveIds.forEach((promptId) => {
+    callBackendApi("unsavePrompt", promptId);
     const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
     if (savedIndex >= 0) {
       if (savedPrompts[savedIndex].source === "mine") {
@@ -880,6 +890,18 @@ function PromptCard(prompt, options = {}) {
         <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
       </footer>
     </article>
+  `;
+}
+
+function BackendStatusBadge() {
+  const status = state.backendStatus || "checking";
+  const message = state.backendStatusMessage || "백엔드 연결 확인 중";
+  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "Demo data 표시 중" : "Backend 확인 중";
+  return `
+    <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
+      <span class="backend-status-dot" aria-hidden="true"></span>
+      <span>${label}</span>
+    </div>
   `;
 }
 
@@ -1712,10 +1734,15 @@ function AdminPage() {
     { id: "hidden", label: "숨김" },
     { id: "reported", label: "신고됨" },
   ];
-  const adminTags = getKnownTags()
-    .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
-    .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
-    .slice(0, 16);
+  const adminTags = getAdminManagedTags();
+  const adminTagFilter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const adminTagSort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
+  const adminTagFilters = [
+    { id: "all", label: "전체" },
+    { id: "pending", label: "검토 중" },
+    { id: "approved", label: "검토 완료" },
+    { id: "rejected", label: "추천 제외" },
+  ];
   const adminTabs = getAdminTabs();
   const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
   const reportsPanel = `
@@ -1836,6 +1863,24 @@ function AdminPage() {
     <section class="admin-panel">
       <h2>태그 관리</h2>
       <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
+      <div class="admin-filter-list" aria-label="태그 상태 분류">
+        ${adminTagFilters
+          .map(
+            (filter) =>
+              `<button class="${adminTagFilter === filter.id ? "active" : ""}" type="button" data-admin-tag-filter="${filter.id}">${filter.label}</button>`,
+          )
+          .join("")}
+      </div>
+      <div class="admin-search-toolbar">
+        <label class="admin-search-field">
+          <span>${icons.search}</span>
+          <input type="search" data-admin-tag-search value="${escapeHtml(state.adminTagQuery || "")}" placeholder="태그명을 검색" autocomplete="off" />
+        </label>
+        <select class="admin-sort-select" data-admin-tag-sort aria-label="태그 정렬">
+          <option value="usage" ${adminTagSort === "usage" ? "selected" : ""}>사용량</option>
+          <option value="recent" ${adminTagSort === "recent" ? "selected" : ""}>최신</option>
+        </select>
+      </div>
       ${
         adminTags.length
           ? adminTags
@@ -1845,11 +1890,13 @@ function AdminPage() {
                     <div>
                       <strong>#${escapeHtml(tag.label)}</strong>
                       <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
+                      <span class="admin-tag-usage">사용 ${formatNumber(tag.count)}회</span>
                     </div>
                     <div class="admin-actions">
                       ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
                       ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-                      ${tag.status !== "pending" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
+                      ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">검토 완료 취소</button>` : ""}
+                      ${tag.status === "rejected" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
                     </div>
                   </article>
                 `,
@@ -2060,7 +2107,10 @@ function AuthModal() {
               <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>
               <input name="email" type="email" placeholder="이메일" autocomplete="email" value="${escapeHtml(state.authDraft.email || "")}" />
               <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" value="${escapeHtml(state.authDraft.phone || "")}" />
-              <input name="birth" type="date" aria-label="생년월일 선택" value="${escapeHtml(state.authDraft.birth || "")}" />`
+              <label class="date-field ${state.authDraft.birth ? "has-value" : ""}">
+                <input name="birth" type="date" aria-label="생년월일 선택" value="${escapeHtml(state.authDraft.birth || "")}" />
+                <span>생년월일</span>
+              </label>`
             : `<input name="userId" placeholder="아이디" autocomplete="username" />
                <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>`
         }
@@ -2408,7 +2458,9 @@ function bindEvents() {
 
   document.querySelectorAll("[data-my-tab]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.myPageTab = button.dataset.myTab;
+      const nextTab = button.dataset.myTab || "library";
+      commitPendingUnsaves(state.route, nextTab);
+      state.myPageTab = nextTab;
       state.savedPage = 1;
       render();
     });
@@ -2674,15 +2726,52 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-admin-prompt-search]").forEach((input) => {
-    input.addEventListener("input", () => {
-      state.adminPromptQuery = input.value;
-      render();
+    input.addEventListener("compositionstart", () => {
+      state.isComposingAdminPromptSearch = true;
+      window.clearTimeout(adminPromptSearchCommitTimer);
+    });
+    input.addEventListener("compositionend", () => {
+      state.isComposingAdminPromptSearch = false;
+      scheduleAdminPromptSearchCommit(input.value);
+    });
+    input.addEventListener("input", (event) => {
+      if (state.isComposingAdminPromptSearch || event.isComposing) return;
+      scheduleAdminPromptSearchCommit(input.value);
     });
   });
 
   document.querySelectorAll("[data-admin-prompt-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.adminPromptFilter = button.dataset.adminPromptFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-search]").forEach((input) => {
+    input.addEventListener("compositionstart", () => {
+      state.isComposingAdminTagSearch = true;
+      window.clearTimeout(adminTagSearchCommitTimer);
+    });
+    input.addEventListener("compositionend", () => {
+      state.isComposingAdminTagSearch = false;
+      scheduleAdminTagSearchCommit(input.value);
+    });
+    input.addEventListener("input", (event) => {
+      if (state.isComposingAdminTagSearch || event.isComposing) return;
+      scheduleAdminTagSearchCommit(input.value);
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminTagFilter = button.dataset.adminTagFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-sort]").forEach((select) => {
+    select.addEventListener("change", () => {
+      state.adminTagSort = select.value || "usage";
       render();
     });
   });
@@ -2698,14 +2787,20 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
       if (!tag) return;
-      if (decision === "pending") {
-        const nextDecisions = { ...state.adminTagDecisions };
-        delete nextDecisions[tag];
-        state.adminTagDecisions = nextDecisions;
-      } else {
-        state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
+      if (decision === "rejected") {
+        openConfirmAction({
+          type: "admin-tag-status",
+          targetId: tag,
+          value: decision,
+          title: "태그 추천 제외",
+          message: "이 태그를 추천 태그 목록에서 제외할까요? 제외 후에도 태그 관리에서 재검토할 수 있습니다.",
+          confirmLabel: "추천 제외",
+          danger: true,
+        });
+        return;
       }
-      showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+      updateAdminTagDecision(tag, decision);
+      render();
     });
   });
 
@@ -3281,6 +3376,7 @@ function toggleSavedPrompt(promptId) {
       state.userLibraryPromptIds.add(promptId);
       state.pendingUnsaveIds.delete(promptId);
       updatePromptField(promptId, "saves", 1);
+      callBackendApi("savePrompt", promptId);
       showNotice("저장했습니다.");
       return;
     }
@@ -3308,6 +3404,7 @@ function toggleSavedPrompt(promptId) {
     }
     state.userLibraryPromptIds.delete(promptId);
     updatePromptField(promptId, "saves", -1);
+    callBackendApi("unsavePrompt", promptId);
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
       state.detailPromptId = null;
     }
@@ -3334,6 +3431,7 @@ function toggleSavedPrompt(promptId) {
     savedByMe: true,
   });
   state.userLibraryPromptIds.add(promptId);
+  callBackendApi("savePrompt", promptId);
 
   showNotice("저장했습니다.");
 }
@@ -3343,9 +3441,11 @@ function toggleLikePrompt(promptId) {
   if (isLiked) {
     state.likedPromptIds.delete(promptId);
     updatePromptField(promptId, "likes", -1);
+    callBackendApi("unlikePrompt", promptId);
   } else {
     state.likedPromptIds.add(promptId);
     updatePromptField(promptId, "likes", 1);
+    callBackendApi("likePrompt", promptId);
   }
   showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
@@ -3636,16 +3736,19 @@ function toggleLikeComment(commentId) {
   if (isLiked) {
     state.likedCommentIds.delete(commentId);
     comment.likes = Math.max(0, getCommentLikes(comment) - 1);
+    callBackendApi("unlikeComment", commentId);
   } else {
     state.likedCommentIds.add(commentId);
     comment.likes = getCommentLikes(comment) + 1;
+    callBackendApi("likeComment", commentId);
   }
 
   showNotice(isLiked ? "댓글 좋아요를 취소했습니다." : "댓글에 좋아요를 눌렀습니다.");
 }
 
 function getPromptCommentCount(prompt) {
-  return countCommentThread(getPromptComments(prompt.id));
+  const threadCount = countCommentThread(getPromptComments(prompt.id));
+  return threadCount || Number(prompt.comments || prompt.commentCount || 0);
 }
 
 function getDisplayPromptAuthor(prompt) {
@@ -3694,6 +3797,7 @@ function addPromptComment(promptId, text) {
 
   state.expandedComments[promptId] = true;
   incrementPromptComments(promptId);
+  callBackendApi("addComment", promptId, { text: content });
   render();
 }
 
@@ -3728,6 +3832,7 @@ function addCommentReply(commentId, text) {
   });
 
   state.replyingCommentId = null;
+  callBackendApi("addReply", commentId, { text: content });
   showNotice("답글을 등록했습니다.");
 }
 
@@ -3815,6 +3920,10 @@ function runConfirmedAction() {
 
   if (action.type === "delete-folder") {
     performDeleteFolder(action.targetId);
+  }
+
+  if (action.type === "admin-tag-status") {
+    updateAdminTagDecision(action.targetId, action.value);
   }
 
   if (action.type === "logout") {
@@ -4465,6 +4574,7 @@ function performUnsharePrompt(promptId) {
 
   state.popularPage = 1;
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+  callBackendApi("unsharePrompt", promptId);
   showNotice("프롬프트 공유를 취소했습니다.");
 }
 
@@ -4500,7 +4610,11 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
-  const merged = savedPrompts.filter((prompt) => !isHiddenDemoLibraryPrompt(prompt));
+  const merged = savedPrompts.filter(
+    (prompt) =>
+      !isHiddenDemoLibraryPrompt(prompt) &&
+      (prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id)),
+  );
   const seen = new Set(merged.map((prompt) => prompt.id));
 
   popularPrompts.forEach((prompt) => {
@@ -4513,7 +4627,7 @@ function getSavedPagePrompts() {
 }
 
 function hasUserLibraryContent() {
-  return savedPrompts.some((prompt) => !isHiddenDemoLibraryPrompt(prompt)) || state.likedPromptIds.size > 0;
+  return getSavedPagePrompts().length > 0;
 }
 
 function matchesSavedFilter(prompt) {
@@ -4570,6 +4684,56 @@ function commitSearchQuery(value) {
   state.popularPage = 1;
   render();
   restoreSearchFocus();
+}
+
+function scheduleAdminPromptSearchCommit(value) {
+  window.clearTimeout(adminPromptSearchCommitTimer);
+  adminPromptSearchCommitTimer = window.setTimeout(() => {
+    commitAdminPromptSearchQuery(value);
+  }, SEARCH_DEBOUNCE_MS);
+}
+
+function commitAdminPromptSearchQuery(value) {
+  const nextQuery = String(value || "");
+  window.clearTimeout(adminPromptSearchCommitTimer);
+  if (state.adminPromptQuery === nextQuery) return;
+
+  state.adminPromptQuery = nextQuery;
+  render();
+  restoreAdminPromptSearchFocus();
+}
+
+function restoreAdminPromptSearchFocus() {
+  const nextInput = document.querySelector("[data-admin-prompt-search]");
+  if (!nextInput) return;
+
+  nextInput.focus();
+  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+}
+
+function scheduleAdminTagSearchCommit(value) {
+  window.clearTimeout(adminTagSearchCommitTimer);
+  adminTagSearchCommitTimer = window.setTimeout(() => {
+    commitAdminTagSearchQuery(value);
+  }, SEARCH_DEBOUNCE_MS);
+}
+
+function commitAdminTagSearchQuery(value) {
+  const nextQuery = String(value || "");
+  window.clearTimeout(adminTagSearchCommitTimer);
+  if (state.adminTagQuery === nextQuery) return;
+
+  state.adminTagQuery = nextQuery;
+  render();
+  restoreAdminTagSearchFocus();
+}
+
+function restoreAdminTagSearchFocus() {
+  const nextInput = document.querySelector("[data-admin-tag-search]");
+  if (!nextInput) return;
+
+  nextInput.focus();
+  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
 }
 
 function searchByTag(tag) {
@@ -4651,6 +4815,12 @@ function sharePrompt(formData) {
   if (!commentsByPrompt[prompt.id]) {
     commentsByPrompt[prompt.id] = [];
   }
+  callBackendApi("sharePrompt", {
+    title: prompt.title,
+    text: prompt.text,
+    tags: prompt.tags,
+    isShared: true,
+  });
   state.searchQuery = "";
   state.popularSort = "latest";
   state.popularPage = 1;
@@ -4762,6 +4932,56 @@ function getKnownTags() {
     });
   });
   return [...tags.values()].sort((a, b) => a.localeCompare(b, "ko-KR"));
+}
+
+function getAdminManagedTags() {
+  const stats = getTagStats();
+  const query = normalizeTag(state.adminTagQuery || "");
+  const filter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const sort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
+
+  return getKnownTags()
+    .map((tag) => {
+      const key = normalizeTag(tag);
+      const stat = stats.get(key) || {};
+      return {
+        label: tag,
+        key,
+        status: getAdminTagStatus(tag),
+        count: stat.count || 0,
+        recentAt: stat.recentAt || 0,
+      };
+    })
+    .filter((tag) => filter === "all" || tag.status === filter)
+    .filter((tag) => !query || normalizeTag(tag.label).includes(query))
+    .sort((a, b) => {
+      if (sort === "recent") {
+        return b.recentAt - a.recentAt || b.count - a.count || a.label.localeCompare(b.label, "ko");
+      }
+
+      return b.count - a.count || b.recentAt - a.recentAt || getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko");
+    })
+    .slice(0, 16);
+}
+
+function getTagStats() {
+  const stats = new Map();
+
+  [...popularPrompts, ...savedPrompts].forEach((prompt) => {
+    const usedAt = new Date(getPromptCreatedAt(prompt) || 0).getTime() || 0;
+    (prompt.tags || []).forEach((tag) => {
+      const key = normalizeTag(tag);
+      if (!key) return;
+
+      const current = stats.get(key) || { count: 0, recentAt: 0 };
+      stats.set(key, {
+        count: current.count + 1,
+        recentAt: Math.max(current.recentAt, usedAt),
+      });
+    });
+  });
+
+  return stats;
 }
 
 function getMyPrompts() {
@@ -4988,6 +5208,20 @@ function getAdminTagStatusOrder(status) {
   if (status === "pending") return 0;
   if (status === "approved") return 1;
   return 2;
+}
+
+function updateAdminTagDecision(tag, decision) {
+  if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
+
+  if (decision === "pending") {
+    const nextDecisions = { ...state.adminTagDecisions };
+    delete nextDecisions[tag];
+    state.adminTagDecisions = nextDecisions;
+  } else {
+    state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
+  }
+
+  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
 }
 
 function updateReportRecordStatus(key, status) {
@@ -5221,6 +5455,16 @@ function showNotice(message) {
   }, 1700);
 }
 
+function callBackendApi(action, ...args) {
+  const api = window.TTALKAK_API;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return;
+
+  Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
+    console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
+  });
+}
+
 function persistState() {
   try {
     localStorage.setItem(
@@ -5249,6 +5493,9 @@ function persistState() {
           adminTab: state.adminTab,
           adminPromptQuery: state.adminPromptQuery,
           adminPromptFilter: state.adminPromptFilter,
+          adminTagQuery: state.adminTagQuery,
+          adminTagFilter: state.adminTagFilter,
+          adminTagSort: state.adminTagSort,
           adminPromptRevisionRequests: state.adminPromptRevisionRequests,
           reportRecords: state.reportRecords,
           searchScope: state.searchScope,
@@ -5307,6 +5554,11 @@ function loadPersistedState() {
     state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
       ? savedState.adminPromptFilter
       : "all";
+    state.adminTagQuery = savedState.adminTagQuery || "";
+    state.adminTagFilter = ["all", "pending", "approved", "rejected"].includes(savedState.adminTagFilter)
+      ? savedState.adminTagFilter
+      : "all";
+    state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
     state.adminPromptRevisionRequests =
       savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
         ? savedState.adminPromptRevisionRequests
@@ -5417,9 +5669,59 @@ function normalizeDemoCopy() {
   });
 }
 
+async function hydrateBackendHomeData() {
+  const api = window.TTALKAK_API;
+  if (!api?.getCommunityPosts) {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다.";
+    render();
+    return;
+  }
+
+  const [promptsResult, tagsResult] = await Promise.allSettled([
+    api.getCommunityPosts({ page: 1, size: 64, sort: state.popularSort }),
+    api.getPopularTags?.({ limit: 8 }),
+  ]);
+
+  let shouldRender = false;
+
+  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
+    popularPrompts.splice(
+      0,
+      popularPrompts.length,
+      ...promptsResult.value.items.map((prompt) => ({
+        ...prompt,
+        source: prompt.source || "community",
+        isShared: prompt.isShared ?? true,
+      })),
+    );
+    normalizePersistedLikeCounts();
+    state.backendStatus = "connected";
+    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+    shouldRender = true;
+  } else if (promptsResult.status === "rejected") {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다.";
+    console.warn("[TTALKAK] /api/prompts 연동에 실패해 데모 데이터를 유지합니다.", promptsResult.reason);
+  }
+
+  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
+    state.backendPopularTags = tagsResult.value.slice(0, 8);
+    if (state.backendStatus === "connected") {
+      state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
+    }
+    shouldRender = true;
+  } else if (tagsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/tags/popular 연동에 실패해 데모 태그를 유지합니다.", tagsResult.reason);
+  }
+
+  if (shouldRender) render();
+}
+
 loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
 normalizeRecentThreads();
 ensureDemoComments();
 render();
+hydrateBackendHomeData();

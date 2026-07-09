@@ -1,6 +1,20 @@
 # Backend Integration Notes
 
-This frontend prototype currently uses local in-memory arrays plus `localStorage`. Replace the local mutations in `src/app.js` with API calls when the Spring Boot backend is ready.
+This frontend prototype uses local in-memory arrays plus `localStorage` for most interactions. The Home screen now performs a backend smoke integration on initial load so the team can verify API traffic before replacing all local mutations.
+
+## Current Backend Smoke Integration
+
+- `index.html` loads `src/api.js` before `src/app.js`.
+- `src/api.js` exposes `window.TTALKAK_API` for plain browser script usage.
+- On startup, `src/app.js` calls `window.TTALKAK_API.getCommunityPosts()`, which requests `GET http://localhost:8080/api/prompts`.
+- On startup, `src/app.js` also calls `window.TTALKAK_API.getPopularTags()`, which requests `GET http://localhost:8080/api/tags/popular`.
+- If the backend request succeeds, Home uses the returned prompt `items` and popular tags.
+- If the backend is unavailable, the prototype keeps the demo data fallback so the screen remains reviewable.
+- The top bar shows a small backend status badge:
+  - `Backend 연결됨`: Home is using backend prompt/tag responses.
+  - `Demo data 표시 중`: backend request failed and local demo fallback is displayed.
+- Save, like, comment, reply, share, and unshare buttons call the matching `src/api.js` functions in the background, while the visible UI still uses optimistic local demo mutations in `src/app.js`. Real integration should add token handling, API error rollback, and final response contract handling.
+- Admin operations still use local demo mutations in `src/app.js`; the matching backend authorization and audit logging should be implemented server-side.
 
 ## Local State
 

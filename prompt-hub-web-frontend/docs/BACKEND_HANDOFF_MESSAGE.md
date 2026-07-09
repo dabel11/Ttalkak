@@ -4,6 +4,26 @@ TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
 현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage`를 사용합니다. 실제 연동 시에는 `src/api.js`와 `docs/API_SPEC.md`를 기준으로 Spring Boot API 호출로 교체하면 됩니다.
 
+## 브랜치 목적
+
+이 브랜치는 정식 병합용 완성본이 아니라, 백엔드 담당자가 현재 프론트엔드 데모를 직접 체험하고 API 연동 범위를 확인하기 위한 인계용 브랜치입니다.
+
+확인 순서는 아래를 권장합니다.
+
+1. `Home`: 인기 프롬프트, 검색 범위, 정렬, 상세 모달, 태그/작성자 검색
+2. `Make`: 프롬프트 첨삭 채팅, 최근 대화, 폴더, 저장/공유/Execute
+3. `My page`: 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역, 데모 데이터 토글
+4. `Share`: 로그인 기반 프롬프트 공유, 태그 검색/선택, 카드 미리보기
+5. `Admin`: 로그인 후 상단 `관리자 데모` 버튼을 켠 뒤 신고 관리, 프롬프트 관리, 태그 관리 확인
+
+## 데모 한계
+
+- 현재 인증, Google OAuth2, 관리자 권한, 중복 확인, 신고/태그 검토는 실제 서버 연동이 아닌 프론트엔드 데모 흐름입니다.
+- Google OAuth 버튼은 실제 OAuth 인증이 아니라 사용자 흐름 확인용입니다.
+- Admin 화면은 프론트엔드 검수용 데모 토글입니다. 실서비스에서는 `ADMIN` 권한 검증과 감사 로그를 백엔드에서 반드시 처리해야 합니다.
+- My page의 샘플 데이터는 QA용 데모 데이터이며, 실서비스 신규 사용자의 My page 기본 상태는 비어 있어야 합니다.
+- 문서는 UTF-8 기준으로 작성되어 있습니다. Windows PowerShell에서 한글이 깨져 보이면 GitHub 또는 UTF-8 에디터에서 확인해주세요.
+
 ## 실행
 
 ```powershell
@@ -67,3 +87,40 @@ http://127.0.0.1:4173/
 ## 데모 상태
 
 브라우저 localStorage에 예전 상태가 남아 있으면 UI가 이상해 보일 수 있습니다. QA 중 이상하면 Home 또는 My page 상단의 `데모 초기화`를 눌러 `prompt_hub_web_state_v2`를 초기화하면 됩니다.
+
+## Backend Smoke Integration Summary
+
+This branch is a frontend demo and backend handoff preview, not a production-ready integration branch.
+
+Current backend-connected checks:
+
+- `index.html` loads `src/api.js` before `src/app.js`.
+- `src/api.js` exposes `window.TTALKAK_API` for the non-module browser prototype.
+- Home calls `GET http://localhost:8080/api/prompts` on startup.
+- Home calls `GET http://localhost:8080/api/tags/popular` on startup.
+- If those requests succeed, the Home prompt list and popular tags use backend responses.
+- If those requests fail, the UI falls back to local demo data and shows `Demo data 표시 중`.
+
+Still demo/local-state based:
+
+- Auth, Google OAuth2, account withdrawal, and permission checks
+- Make chat/folders
+- My page library/activity data
+- Admin moderation screens
+- Final error rollback for save/like/comment/share mutations
+
+Backend handoff check:
+
+1. Run backend on `http://localhost:8080`.
+2. Run frontend on `http://127.0.0.1:4173`.
+3. Open DevTools Network tab and refresh Home.
+4. Confirm `GET http://localhost:8080/api/prompts` returns `200`.
+5. Confirm `GET http://localhost:8080/api/tags/popular` returns `200`.
+
+Production transition cleanup:
+
+- Replace localStorage demo state with server state.
+- Replace admin demo toggle with real `ADMIN` role checks.
+- Keep new user My page empty by default; sample activity is QA/demo-only.
+- Treat Google OAuth buttons as demo flow until backend OAuth is connected.
+- Add token handling, API error rollback, and response contract validation before release.

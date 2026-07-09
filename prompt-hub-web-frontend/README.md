@@ -6,6 +6,26 @@
 
 현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage`를 사용합니다. 실제 백엔드 연동 시에는 `src/api.js`와 `docs/API_SPEC.md`를 기준으로 API 호출로 교체하면 됩니다.
 
+## 브랜치 목적
+
+`jaewon7025/web-demo-preview`는 최종 병합용 완성본이 아니라, 백엔드 담당자와 팀원이 현재 프론트엔드 UX 흐름을 직접 체험하고 API 연동 범위를 확인하기 위한 데모/인계용 브랜치입니다.
+
+권장 확인 순서:
+
+1. `Home`: 인기 프롬프트, 검색 범위, 정렬, 상세 모달, 태그/작성자 검색 흐름 확인
+2. `Make`: 프롬프트 첨삭 채팅, 최근 대화, 폴더, 저장/공유/Execute 흐름 확인
+3. `My page`: 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역, 데모 데이터 토글 확인
+4. `Share`: 로그인 기반 프롬프트 공유, 태그 검색/선택, 카드 미리보기 확인
+5. `Admin`: 로그인 후 상단 `관리자 데모` 버튼을 켜고 신고 관리, 프롬프트 관리, 태그 관리 확인
+
+## 데모 한계
+
+- 현재 동작은 `src/app.js`의 로컬 상태와 브라우저 `localStorage` 기반입니다.
+- 실제 인증, Google OAuth2, 관리자 권한, 닉네임/아이디 중복 확인, 신고/태그 검토는 백엔드 연동 전 데모 흐름입니다.
+- Google OAuth 버튼은 실제 OAuth 인증이 아니라 화면 흐름 확인용입니다.
+- Admin 화면은 프론트엔드 검수용 데모 토글로만 노출됩니다. 실서비스에서는 반드시 서버의 관리자 권한 검증과 감사 로그가 필요합니다.
+- 문서는 UTF-8 기준으로 작성되어 있습니다. Windows PowerShell에서 한글이 깨져 보일 수 있으나 GitHub/에디터에서는 UTF-8로 확인하면 됩니다.
+
 ## 팀 공유 메모
 
 이 브랜치는 정식 병합 전 UX 확인용입니다. 팀원은 Home, Make, My page, Share, Admin 흐름을 직접 눌러보며 현재 프론트엔드 데모 수준을 확인하면 됩니다. 인증, Google OAuth, 관리자 권한, 중복 확인, 신고/태그 처리 등은 백엔드 연동 전 데모 동작입니다.
@@ -97,6 +117,40 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - `내 프롬프트`와 `내가 저장한 프롬프트`는 별도 상태입니다.
 - `saves`는 전체 저장 수, `isSaved`는 현재 사용자의 저장 여부입니다. 저장 아이콘 활성화는 `isSaved`를 기준으로 해야 합니다.
 - My page에서 저장 취소를 누르면 즉시 사라지지 않고, 다른 화면으로 이동할 때 확정됩니다.
+
+## Backend Smoke Integration Status
+
+This branch is still a frontend demo and handoff branch, not a full production integration.
+
+Currently connected to the backend:
+
+- `index.html` loads `src/api.js` before `src/app.js`.
+- `src/api.js` exposes `window.TTALKAK_API` for non-module browser usage.
+- Home startup calls `GET http://localhost:8080/api/prompts`.
+- Home startup calls `GET http://localhost:8080/api/tags/popular`.
+- If those calls succeed, Home renders backend prompt `items` and backend popular tags.
+- If those calls fail, Home falls back to demo data and shows a small fallback status badge in the top bar.
+
+Still demo/local-state based:
+
+- Auth and Google OAuth2 flow
+- My page library data
+- Make chat and folders
+- Admin screens
+- Most save/like/comment/share UI state
+
+Save, like, comment, reply, share, and unshare buttons now call the matching `window.TTALKAK_API` functions in the background, but the visible UI still uses optimistic local demo state. Real integration should add token handling, API error rollback, and final response contract handling.
+
+Backend handoff check:
+
+1. Run the Spring Boot backend on `http://localhost:8080`.
+2. Run this frontend on `http://127.0.0.1:4173`.
+3. Open DevTools Network tab.
+4. Refresh Home.
+5. Confirm `GET http://localhost:8080/api/prompts` returns `200`.
+6. Confirm `GET http://localhost:8080/api/tags/popular` returns `200`.
+
+If requests fail with `Failed to fetch`, check backend CORS for both `http://127.0.0.1:4173` and `http://localhost:4173`.
 
 ## Handoff Policy Notes
 
