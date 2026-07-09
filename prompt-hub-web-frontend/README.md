@@ -130,12 +130,17 @@ Currently connected to the backend:
 - Home startup calls `GET http://localhost:8080/api/tags/popular`.
 - If those calls succeed, Home renders backend prompt `items` and backend popular tags.
 - If those calls fail, Home falls back to demo data and shows a small fallback status badge in the top bar.
+- Make first entry calls `GET http://localhost:8080/api/make/threads`.
+- Make first entry calls `GET http://localhost:8080/api/make/folders`.
+- Make prompt submit calls `POST http://localhost:8080/api/prompts/improve` and falls back to local demo polishing if it fails.
 
 Still demo/local-state based:
 
 - Auth and Google OAuth2 flow
 - My page library data
-- Make chat and folders
+- Make chat and folders are still rendered optimistically from local state, even though smoke API calls are now emitted.
+- Make thread delete remains local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
+- When creating a new folder and immediately moving a thread, the frontend only sends the move request if `POST /api/make/folders` returns a server folder id. Otherwise, it keeps the local demo state and skips the move API to avoid sending a temporary local id.
 - Admin screens
 - Most save/like/comment/share UI state
 
@@ -149,6 +154,9 @@ Backend handoff check:
 4. Refresh Home.
 5. Confirm `GET http://localhost:8080/api/prompts` returns `200`.
 6. Confirm `GET http://localhost:8080/api/tags/popular` returns `200`.
+7. Open Make and confirm `GET http://localhost:8080/api/make/threads` returns `200`.
+8. Open Make and confirm `GET http://localhost:8080/api/make/folders` returns `200`.
+9. Submit a Make prompt and confirm `POST http://localhost:8080/api/prompts/improve` is requested.
 
 If requests fail with `Failed to fetch`, check backend CORS for both `http://127.0.0.1:4173` and `http://localhost:4173`.
 

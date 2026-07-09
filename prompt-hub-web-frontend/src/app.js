@@ -369,6 +369,8 @@ const state = {
   backendPopularTags: [],
   backendStatus: "checking",
   backendStatusMessage: "백엔드 연결 확인 중",
+  makeBackendStatus: "idle",
+  makeBackendMessage: "",
   popularSort: "popular",
   popularPage: 1,
   savedPage: 1,
@@ -456,6 +458,7 @@ function render() {
   restorePendingMessageScroll();
   scrollToPendingLatestMessage();
   scrollToHighlightedComment();
+  hydrateBackendMakeDataIfNeeded();
 }
 
 function scrollToHighlightedComment() {
@@ -1325,6 +1328,7 @@ function MakeSidePanel() {
         </div>
         ${!canManageFolders ? `<p class="make-folder-limit">로그인하면 대화를 폴더로 정리할 수 있습니다.</p>` : ""}
         ${canManageFolders && !canCreateFolder ? `<p class="make-folder-limit">폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.</p>` : ""}
+        ${state.makeBackendMessage ? `<p class="make-backend-note">${escapeHtml(state.makeBackendMessage)}</p>` : ""}
         ${
           state.creatingFolder
             ? `<form class="make-folder-form" data-folder-create-form>
@@ -2627,7 +2631,7 @@ function bindEvents() {
       });
     }
 
-    composer.addEventListener("submit", (event) => {
+    composer.addEventListener("submit", async (event) => {
       event.preventDefault();
       const value = new FormData(composer).get("prompt").trim();
       if (!value) return;
@@ -2644,15 +2648,17 @@ function bindEvents() {
       const assistantMessageId = `make-${now}`;
       state.activeThreadId = threadId;
       state.messages.push({ id: `user-${now}`, role: "user", content: value });
+      const improvedPrompt = await improvePromptWithBackend(value);
       state.messages.push({
         id: assistantMessageId,
         role: "assistant",
-        content: polishPrompt(value),
+        content: improvedPrompt,
         sourcePrompt: value,
       });
       state.composerDraft = "";
       pendingLatestMessageScrollId = assistantMessageId;
       updateRecentThread(threadId);
+      syncMakeThreadWithBackend(threadId);
       render();
     });
   }
@@ -4019,11 +4025,12 @@ function createMakeFolder(folderName) {
   state.makeFolders.push(folder);
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
+  createBackendMakeFolder({ name: cleanName });
   showNotice("폴더를 추가했습니다.");
   render();
 }
 
-function createMakeFolderAndMoveThread(threadId, folderName) {
+async function createMakeFolderAndMoveThread(threadId, folderName) {
   if (!state.isLoggedIn) {
     state.creatingThreadFolderId = null;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4059,6 +4066,12 @@ function createMakeFolderAndMoveThread(threadId, folderName) {
   state.activeFolderId = folder.id;
   state.openThreadMenuId = null;
   state.creatingThreadFolderId = null;
+  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
+  if (backendFolderId) {
+    callBackendApi("moveMakeThread", threadId, { folderId: backendFolderId });
+  } else {
+    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+  }
   showNotice("새 폴더를 만들고 대화를 이동했습니다.");
   render();
 }
@@ -4081,6 +4094,7 @@ function renameMakeFolder(folderId, name) {
 
   folder.name = cleanName;
   state.editingFolderId = null;
+  callBackendApi("updateMakeFolder", folderId, { name: cleanName });
   showNotice("폴더 이름을 수정했습니다.");
   render();
 }
@@ -4098,6 +4112,7 @@ function performDeleteFolder(folderId) {
     if (thread.folderId === folderId) thread.folderId = "uncategorized";
   });
   if (state.activeFolderId === folderId) state.activeFolderId = "all";
+  callBackendApi("deleteMakeFolder", folderId);
   showNotice("폴더를 삭제했습니다.");
 }
 
@@ -4111,6 +4126,7 @@ function moveThreadToFolder(threadId, folderId) {
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
   thread.folderId = folderId || "uncategorized";
+  callBackendApi("moveMakeThread", threadId, { folderId: thread.folderId === "uncategorized" ? null : thread.folderId });
   showNotice("대화 폴더를 변경했습니다.");
   render();
 }
@@ -4250,7 +4266,7 @@ function saveMakeMessage(messageId) {
   render();
 }
 
-function resendEditedMessage(messageId, value) {
+async function resendEditedMessage(messageId, value) {
   const cleanValue = String(value || "").trim();
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
@@ -4259,15 +4275,17 @@ function resendEditedMessage(messageId, value) {
   const assistantMessageId = `make-${now}`;
   state.messages = state.messages.slice(0, index + 1);
   state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
+  const improvedPrompt = await improvePromptWithBackend(cleanValue);
   state.messages.push({
     id: assistantMessageId,
     role: "assistant",
-    content: polishPrompt(cleanValue),
+    content: improvedPrompt,
     sourcePrompt: cleanValue,
   });
   state.editingMessageId = null;
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
+  syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
   showNotice("수정한 메시지로 다시 전송했습니다.");
   render();
 }
@@ -5463,6 +5481,110 @@ function callBackendApi(action, ...args) {
   Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
     console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
   });
+}
+
+async function createBackendMakeFolder(payload) {
+  const api = window.TTALKAK_API;
+  if (!api?.createMakeFolder) return "";
+
+  try {
+    const result = await api.createMakeFolder(payload, state.authToken || state.token || undefined);
+    return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
+  } catch (error) {
+    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패해 로컬 데모 폴더만 유지합니다.", error);
+    return "";
+  }
+}
+
+async function improvePromptWithBackend(prompt) {
+  const api = window.TTALKAK_API;
+  if (!api?.improvePrompt) return polishPrompt(prompt);
+
+  try {
+    const improved = await api.improvePrompt({ prompt }, state.authToken || state.token || undefined);
+    state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
+    return improved || polishPrompt(prompt);
+  } catch (error) {
+    state.makeBackendMessage = "Make demo data 표시 중: /api/prompts/improve 호출 실패로 데모 첨삭을 표시합니다.";
+    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
+    return polishPrompt(prompt);
+  }
+}
+
+function syncMakeThreadWithBackend(threadId) {
+  const thread = state.recentThreads.find((item) => item.id === threadId);
+  const messages = state.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    sourcePrompt: message.sourcePrompt || "",
+  }));
+
+  callBackendApi("createMakeThread", {
+    id: threadId,
+    title: thread?.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
+    preview: thread?.preview || makePreview(messages[messages.length - 1]?.content || ""),
+    folderId: thread?.folderId === "uncategorized" ? null : thread?.folderId || null,
+    messages,
+  });
+}
+
+async function hydrateBackendMakeDataIfNeeded() {
+  if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+
+  const api = window.TTALKAK_API;
+  if (!api?.getMakeThreads && !api?.getMakeFolders) {
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다.";
+    render();
+    return;
+  }
+
+  state.makeBackendStatus = "checking";
+  state.makeBackendMessage = "Make API 연결 확인 중";
+
+  const [threadsResult, foldersResult] = await Promise.allSettled([
+    api.getMakeThreads?.(state.authToken || state.token || undefined),
+    api.getMakeFolders?.(state.authToken || state.token || undefined),
+  ]);
+
+  let shouldRender = false;
+
+  if (foldersResult.status === "fulfilled" && Array.isArray(foldersResult.value)) {
+    const folders = foldersResult.value.filter((folder) => folder.id && folder.name);
+    if (folders.length) {
+      state.makeFolders = normalizeMakeFolders(folders);
+      shouldRender = true;
+    }
+  } else if (foldersResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/make/folders 연동에 실패해 데모 폴더를 유지합니다.", foldersResult.reason);
+  }
+
+  if (threadsResult.status === "fulfilled" && Array.isArray(threadsResult.value)) {
+    const threads = threadsResult.value.filter((thread) => thread.id);
+    if (threads.length) {
+      state.recentThreads = threads.map((thread) => ({
+        id: thread.id,
+        dedupeKey: thread.id,
+        title: thread.title || "새 대화",
+        preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
+        folderId: thread.folderId || "uncategorized",
+        createdAt: thread.createdAt || Date.now(),
+        messages: Array.isArray(thread.messages) ? thread.messages : [],
+      }));
+      normalizeRecentThreads();
+      shouldRender = true;
+    }
+  } else if (threadsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/make/threads 연동에 실패해 데모 대화를 유지합니다.", threadsResult.reason);
+  }
+
+  const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
+  state.makeBackendStatus = anyConnected ? "connected" : "fallback";
+  state.makeBackendMessage = anyConnected
+    ? "Make API 연결됨: GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
+    : "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다.";
+
+  if (shouldRender || state.route === "make") render();
 }
 
 function persistState() {

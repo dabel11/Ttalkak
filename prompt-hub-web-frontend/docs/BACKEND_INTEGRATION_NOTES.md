@@ -8,12 +8,18 @@ This frontend prototype uses local in-memory arrays plus `localStorage` for most
 - `src/api.js` exposes `window.TTALKAK_API` for plain browser script usage.
 - On startup, `src/app.js` calls `window.TTALKAK_API.getCommunityPosts()`, which requests `GET http://localhost:8080/api/prompts`.
 - On startup, `src/app.js` also calls `window.TTALKAK_API.getPopularTags()`, which requests `GET http://localhost:8080/api/tags/popular`.
+- On first Make entry, `src/app.js` calls `window.TTALKAK_API.getMakeThreads()`, which requests `GET http://localhost:8080/api/make/threads`.
+- On first Make entry, `src/app.js` calls `window.TTALKAK_API.getMakeFolders()`, which requests `GET http://localhost:8080/api/make/folders`.
+- On Make prompt submit or edited-message resend, `src/app.js` calls `window.TTALKAK_API.improvePrompt()`, which requests `POST http://localhost:8080/api/prompts/improve`.
 - If the backend request succeeds, Home uses the returned prompt `items` and popular tags.
 - If the backend is unavailable, the prototype keeps the demo data fallback so the screen remains reviewable.
 - The top bar shows a small backend status badge:
   - `Backend 연결됨`: Home is using backend prompt/tag responses.
   - `Demo data 표시 중`: backend request failed and local demo fallback is displayed.
 - Save, like, comment, reply, share, and unshare buttons call the matching `src/api.js` functions in the background, while the visible UI still uses optimistic local demo mutations in `src/app.js`. Real integration should add token handling, API error rollback, and final response contract handling.
+- Make threads/folders also remain optimistic local demo state after the smoke calls. Real integration should replace local folder/thread mutations with the final API response, dedupe server ids, and add rollback on failure.
+- Make thread delete is currently local-only because the shared backend contract does not include `DELETE /api/make/threads/:id`.
+- When a user creates a folder from the thread menu and immediately moves that thread, the frontend sends the move API only if the folder creation response includes a server folder id. This avoids sending temporary local ids to `PATCH /api/make/threads/:id/folder`.
 - Admin operations still use local demo mutations in `src/app.js`; the matching backend authorization and audit logging should be implemented server-side.
 
 ## Local State

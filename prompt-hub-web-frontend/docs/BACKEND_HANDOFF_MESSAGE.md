@@ -124,3 +124,21 @@ Production transition cleanup:
 - Keep new user My page empty by default; sample activity is QA/demo-only.
 - Treat Google OAuth buttons as demo flow until backend OAuth is connected.
 - Add token handling, API error rollback, and response contract validation before release.
+
+## Make Smoke Integration Addendum
+
+The latest frontend demo also emits Make-related backend requests for Network-tab verification.
+
+Expected Make requests:
+
+- Open Make: `GET http://localhost:8080/api/make/threads`
+- Open Make: `GET http://localhost:8080/api/make/folders`
+- Submit a Make prompt: `POST http://localhost:8080/api/prompts/improve`
+
+Current Make limitation:
+
+- Threads and folders still render optimistically from local demo state.
+- Folder create/rename/delete and thread move call API wrappers in the background, but final server-response synchronization and rollback are not complete yet.
+- Thread delete is local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
+- New-folder-and-move sends the move request only when folder creation returns a server folder id, so the frontend does not send a temporary local folder id to the backend.
+- Real integration should replace local Make mutations with backend responses, persist server ids, and handle API failures visibly.

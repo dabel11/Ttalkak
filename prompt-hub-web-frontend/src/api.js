@@ -122,6 +122,52 @@
     return String(item?.name || item?.tagName || item?.label || item?.title || "").replace(/^#+/, "").trim();
   }
 
+  function normalizeMakeMessage(item, index = 0) {
+    return {
+      id: String(item?.id || item?.messageId || `backend-message-${index}`),
+      role: item?.role || item?.sender || "assistant",
+      content: String(item?.content || item?.text || item?.message || ""),
+      sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
+      createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.timestamp),
+      raw: item,
+    };
+  }
+
+  function normalizeMakeThread(item, index = 0) {
+    const messages = unwrapItems(item?.messages || item?.chatMessages || item?.conversation).map(normalizeMakeMessage);
+    const lastMessage = messages[messages.length - 1];
+    return {
+      id: String(item?.id || item?.threadId || item?.conversationId || `backend-thread-${index}`),
+      title: String(item?.title || item?.name || messages.find((message) => message.role === "user")?.content || "새 대화").trim(),
+      preview: String(item?.preview || item?.summary || lastMessage?.content || "").trim(),
+      folderId: item?.folderId || item?.folder?.id || "uncategorized",
+      createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.updatedAt),
+      messages,
+      raw: item,
+    };
+  }
+
+  function normalizeMakeFolder(item, index = 0) {
+    return {
+      id: String(item?.id || item?.folderId || `backend-folder-${index}`),
+      name: String(item?.name || item?.title || "새 폴더").trim(),
+      raw: item,
+    };
+  }
+
+  function normalizeImproveResult(payload, fallbackPrompt = "") {
+    if (typeof payload === "string") return payload;
+    return String(
+      payload?.improvedPrompt ||
+        payload?.finalPrompt ||
+        payload?.result ||
+        payload?.text ||
+        payload?.content ||
+        payload?.prompt ||
+        fallbackPrompt,
+    );
+  }
+
   async function getCommunityPosts({ page = 1, size = 16, sort = "popular" } = {}) {
     const query = new URLSearchParams({ page, size, sort });
     const payload = await request(`/api/prompts?${query.toString()}`);
@@ -170,13 +216,33 @@
       return request(`/api/tags/popular?limit=${limit}`).then((payload) => unwrapItems(payload).map(normalizePopularTag).filter(Boolean));
     },
     getMakeThreads(token) {
-      return request("/api/make/threads", { token });
+      return request("/api/make/threads", { token }).then((payload) => unwrapItems(payload).map(normalizeMakeThread));
+    },
+    getMakeFolders(token) {
+      return request("/api/make/folders", { token }).then((payload) => unwrapItems(payload).map(normalizeMakeFolder));
+    },
+    createMakeThread(payload, token) {
+      return request("/api/make/threads", { method: "POST", token, body: JSON.stringify(payload) });
+    },
+    createMakeFolder(payload, token) {
+      return request("/api/make/folders", { method: "POST", token, body: JSON.stringify(payload) });
+    },
+    updateMakeFolder(folderId, payload, token) {
+      return request(`/api/make/folders/${folderId}`, { method: "PATCH", token, body: JSON.stringify(payload) });
+    },
+    deleteMakeFolder(folderId, token) {
+      return request(`/api/make/folders/${folderId}`, { method: "DELETE", token });
+    },
+    moveMakeThread(threadId, payload, token) {
+      return request(`/api/make/threads/${threadId}/folder`, { method: "PATCH", token, body: JSON.stringify(payload) });
     },
     viewPrompt(promptId) {
       return request(`/api/prompts/${promptId}/view`, { method: "POST" });
     },
     improvePrompt(payload, token) {
-      return request("/api/prompts/improve", { method: "POST", token, body: JSON.stringify(payload) });
+      return request("/api/prompts/improve", { method: "POST", token, body: JSON.stringify(payload) }).then((result) =>
+        normalizeImproveResult(result, payload?.prompt || ""),
+      );
     },
     savePrompt(promptId, token) {
       return request(`/api/prompts/${promptId}/save`, { method: "POST", token });
