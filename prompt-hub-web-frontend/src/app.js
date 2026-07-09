@@ -4068,7 +4068,8 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
   state.creatingThreadFolderId = null;
   const backendFolderId = await createBackendMakeFolder({ name: cleanName });
   if (backendFolderId) {
-    callBackendApi("moveMakeThread", threadId, { folderId: backendFolderId });
+    folder.serverId = backendFolderId;
+    await moveThreadToFolderOnBackend(thread, backendFolderId);
   } else {
     console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
   }
@@ -4116,7 +4117,7 @@ function performDeleteFolder(folderId) {
   showNotice("폴더를 삭제했습니다.");
 }
 
-function moveThreadToFolder(threadId, folderId) {
+async function moveThreadToFolder(threadId, folderId) {
   if (!state.isLoggedIn) {
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
     render();
@@ -4126,9 +4127,30 @@ function moveThreadToFolder(threadId, folderId) {
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
   thread.folderId = folderId || "uncategorized";
-  callBackendApi("moveMakeThread", threadId, { folderId: thread.folderId === "uncategorized" ? null : thread.folderId });
+  await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
   showNotice("대화 폴더를 변경했습니다.");
   render();
+}
+
+async function moveThreadToFolderOnBackend(thread, backendFolderId) {
+  const api = window.TTALKAK_API;
+  if (!api?.moveMakeThread) return;
+
+  const backendThreadId = await ensureBackendMakeThreadId(thread);
+  if (!backendThreadId) {
+    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+    return;
+  }
+
+  try {
+    await api.moveMakeThread(
+      backendThreadId,
+      { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
+      state.authToken || state.token || undefined,
+    );
+  } catch (error) {
+    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패해 로컬 데모 상태만 유지합니다.", error);
+  }
 }
 
 function countThreadsInFolder(folderId) {
@@ -4369,6 +4391,7 @@ function updateRecentThread(threadId) {
     preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
     createdAt: existingThread?.createdAt || Date.now(),
     folderId: existingThread?.folderId || (state.activeFolderId !== "all" ? state.activeFolderId : "uncategorized"),
+    serverId: existingThread?.serverId || "",
     messages: state.messages.map((item) => ({ ...item })),
   };
 
@@ -5496,6 +5519,63 @@ async function createBackendMakeFolder(payload) {
   }
 }
 
+async function createBackendMakeThread(thread) {
+  const api = window.TTALKAK_API;
+  if (!api?.createMakeThread || !thread) return "";
+
+  const messages = Array.isArray(thread.messages) && thread.messages.length
+    ? thread.messages
+    : state.messages;
+
+  try {
+    const result = await api.createMakeThread(
+      {
+        id: thread.serverId || thread.id,
+        title: thread.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
+        preview: thread.preview || makePreview(messages[messages.length - 1]?.content || ""),
+        folderId: getBackendFolderId(thread.folderId),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          sourcePrompt: message.sourcePrompt || "",
+        })),
+      },
+      state.authToken || state.token || undefined,
+    );
+    return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
+  } catch (error) {
+    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
+    return "";
+  }
+}
+
+async function ensureBackendMakeThreadId(thread) {
+  if (!thread) return "";
+  if (isBackendNumericId(thread.serverId)) return String(thread.serverId);
+  if (isBackendNumericId(thread.id)) {
+    thread.serverId = String(thread.id);
+    return thread.serverId;
+  }
+
+  const serverId = await createBackendMakeThread(thread);
+  if (serverId) {
+    thread.serverId = serverId;
+    return serverId;
+  }
+  return "";
+}
+
+function getBackendFolderId(folderId) {
+  if (!folderId || folderId === "all" || folderId === "uncategorized") return null;
+  const folder = state.makeFolders.find((item) => item.id === folderId || item.serverId === folderId);
+  const candidate = folder?.serverId || folderId;
+  return isBackendNumericId(candidate) ? Number(candidate) : null;
+}
+
+function isBackendNumericId(value) {
+  return value !== null && value !== undefined && /^\d+$/.test(String(value));
+}
+
 async function improvePromptWithBackend(prompt) {
   const api = window.TTALKAK_API;
   if (!api?.improvePrompt) return polishPrompt(prompt);
@@ -5511,21 +5591,11 @@ async function improvePromptWithBackend(prompt) {
   }
 }
 
-function syncMakeThreadWithBackend(threadId) {
+async function syncMakeThreadWithBackend(threadId) {
   const thread = state.recentThreads.find((item) => item.id === threadId);
-  const messages = state.messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-    sourcePrompt: message.sourcePrompt || "",
-  }));
-
-  callBackendApi("createMakeThread", {
-    id: threadId,
-    title: thread?.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
-    preview: thread?.preview || makePreview(messages[messages.length - 1]?.content || ""),
-    folderId: thread?.folderId === "uncategorized" ? null : thread?.folderId || null,
-    messages,
-  });
+  if (!thread) return;
+  const serverId = await createBackendMakeThread(thread);
+  if (serverId) thread.serverId = serverId;
 }
 
 async function hydrateBackendMakeDataIfNeeded() {
@@ -5565,6 +5635,7 @@ async function hydrateBackendMakeDataIfNeeded() {
       state.recentThreads = threads.map((thread) => ({
         id: thread.id,
         dedupeKey: thread.id,
+        serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
         title: thread.title || "새 대화",
         preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
         folderId: thread.folderId || "uncategorized",

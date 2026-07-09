@@ -136,8 +136,10 @@
   function normalizeMakeThread(item, index = 0) {
     const messages = unwrapItems(item?.messages || item?.chatMessages || item?.conversation).map(normalizeMakeMessage);
     const lastMessage = messages[messages.length - 1];
+    const serverId = item?.id || item?.threadId || item?.conversationId || "";
     return {
-      id: String(item?.id || item?.threadId || item?.conversationId || `backend-thread-${index}`),
+      id: String(serverId || `backend-thread-${index}`),
+      serverId: serverId ? String(serverId) : "",
       title: String(item?.title || item?.name || messages.find((message) => message.role === "user")?.content || "새 대화").trim(),
       preview: String(item?.preview || item?.summary || lastMessage?.content || "").trim(),
       folderId: item?.folderId || item?.folder?.id || "uncategorized",
@@ -148,8 +150,10 @@
   }
 
   function normalizeMakeFolder(item, index = 0) {
+    const serverId = item?.id || item?.folderId || "";
     return {
-      id: String(item?.id || item?.folderId || `backend-folder-${index}`),
+      id: String(serverId || `backend-folder-${index}`),
+      serverId: serverId ? String(serverId) : "",
       name: String(item?.name || item?.title || "새 폴더").trim(),
       raw: item,
     };
