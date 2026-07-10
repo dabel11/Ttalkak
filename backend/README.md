@@ -1,4 +1,4 @@
-﻿# Ttalkak Backend
+# Ttalkak Backend
 
 Ttalkak 프로젝트의 Spring Boot 백엔드 서버입니다.
 
@@ -235,3 +235,27 @@ PATCH  /api/make/threads/{숫자id}/folder    200
 - 댓글 수 계산 정책 정교화
 - API 응답 계약 문서화
 - 배포 환경변수 설정
+---
+
+## 추가 반영 사항
+
+### 회원탈퇴 / 계정 비활성화
+
+- `DELETE /api/auth/withdraw` API를 제공합니다.
+- 로그인 사용자 본인만 회원탈퇴할 수 있습니다.
+- 회원탈퇴 시 비밀번호 확인이 필요합니다.
+- 탈퇴 계정은 `active=false`로 처리됩니다.
+- 탈퇴 이후 기존 demo token은 더 이상 인증되지 않습니다.
+- 탈퇴 계정은 재로그인할 수 없습니다.
+- 현재 정책상 기존 프롬프트, 댓글, 답글, 신고, 좋아요, 저장, Make 대화는 즉시 삭제하지 않고 보존합니다.
+
+### 신고 생성 인증
+
+- 신고 생성 API는 로그인 사용자만 호출할 수 있습니다.
+- 비로그인 사용자가 신고 API를 직접 호출하면 `401 Unauthorized`를 반환합니다.
+
+### API 응답 계약
+
+프론트와 백엔드 응답 필드 계약은 아래 문서에 정리합니다.
+
+backend/docs/API_CONTRACT.md

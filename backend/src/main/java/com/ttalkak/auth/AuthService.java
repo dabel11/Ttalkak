@@ -8,6 +8,7 @@ import java.util.Optional;
 
 @Service
 public class AuthService {
+
     private final MemberRepository memberRepository;
 
     public AuthService(MemberRepository memberRepository) {
@@ -19,12 +20,19 @@ public class AuthService {
     }
 
     public Optional<Member> getMemberFromAuthorization(String authorizationHeader) {
-        if (authorizationHeader == null || authorizationHeader.isBlank()) return Optional.empty();
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            return Optional.empty();
+        }
+
         String token = authorizationHeader.replace("Bearer", "").trim();
-        if (!token.startsWith("demo-token-")) return Optional.empty();
+
+        if (!token.startsWith("demo-token-")) {
+            return Optional.empty();
+        }
+
         try {
             Long id = Long.parseLong(token.substring("demo-token-".length()));
-            return memberRepository.findById(id);
+            return memberRepository.findByIdAndActiveTrue(id);
         } catch (NumberFormatException e) {
             return Optional.empty();
         }

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "members")
 public class Member {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -30,10 +31,16 @@ public class Member {
     @Column(nullable = false)
     private String role = "USER";
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean active = true;
+
+    private LocalDateTime withdrawnAt;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    protected Member() {}
+    protected Member() {
+    }
 
     public Member(String userId, String password, String nickname, String name, LocalDate birth, String phone, String email) {
         this.userId = userId;
@@ -45,14 +52,62 @@ public class Member {
         this.email = email;
     }
 
-    public Long getId() { return id; }
-    public String getUserId() { return userId; }
-    public String getPassword() { return password; }
-    public String getNickname() { return nickname; }
-    public String getName() { return name; }
-    public LocalDate getBirth() { return birth; }
-    public String getPhone() { return phone; }
-    public String getEmail() { return email; }
-    public String getRole() { return role; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public Long getId() {
+        return id;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public LocalDate getBirth() {
+        return birth;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public LocalDateTime getWithdrawnAt() {
+        return withdrawnAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void withdraw() {
+        this.active = false;
+        this.withdrawnAt = LocalDateTime.now();
+
+        String suffix = this.id != null ? String.valueOf(this.id) : String.valueOf(System.currentTimeMillis());
+        this.nickname = "withdrawn_user_" + suffix;
+        this.name = "탈퇴한 사용자";
+        this.phone = null;
+        this.email = null;
+    }
 }
