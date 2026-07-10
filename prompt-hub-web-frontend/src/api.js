@@ -98,6 +98,20 @@
     return Date.now();
   }
 
+  function normalizeAuthor(value, fallback = "익명 사용자") {
+    if (!value) return fallback;
+    if (typeof value === "string") return value.trim() || fallback;
+    return String(
+      value.nickname ||
+        value.authorNickname ||
+        value.name ||
+        value.username ||
+        value.userId ||
+        value.id ||
+        fallback
+    ).trim() || fallback;
+  }
+
   function normalizePrompt(item, index = 0) {
     const rawText = item?.text || item?.prompt || item?.content || item?.body || item?.description || "";
     const text = String(rawText || item?.title || "프롬프트 내용을 불러왔습니다.").trim();
@@ -112,6 +126,8 @@
       item?.username ||
       "작성자";
 
+    const normalizedAuthor = normalizeAuthor(author);
+
     return {
       id: String(item?.id || item?.promptId || item?.prompt_id || item?.uuid || `backend-prompt-${index}`),
       title,
@@ -121,8 +137,8 @@
       comments: toNumber(item?.comments, item?.commentCount, item?.commentsCount),
       saves: toNumber(item?.saves, item?.saveCount, item?.savedCount, item?.bookmarkCount),
       likes: toNumber(item?.likes, item?.likeCount, item?.likedCount),
-      author,
-      owner: item?.owner || author,
+      author: normalizedAuthor,
+      owner: normalizeAuthor(item?.owner, normalizedAuthor),
       source: item?.source || (item?.mine || item?.isMine ? "mine" : "community"),
       isShared: item?.isShared ?? item?.shared ?? item?.public ?? true,
       createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.publishedAt, item?.updatedAt),
@@ -138,8 +154,8 @@
       id: String(item?.id || item?.commentId || `backend-comment-${index}`),
       promptId: item?.promptId ? String(item.promptId) : "",
       parentId: item?.parentId ? String(item.parentId) : null,
-      author,
-      owner: author,
+      author: normalizeAuthor(author, "사용자"),
+      owner: normalizeAuthor(author, "사용자"),
       text: String(item?.text || item?.content || ""),
       likes: toNumber(item?.likes, item?.likeCount),
       edited: Boolean(item?.edited || item?.isEdited),
