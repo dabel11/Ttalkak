@@ -133,18 +133,20 @@ Currently connected to the backend:
 - Make first entry calls `GET http://localhost:8080/api/make/threads`.
 - Make first entry calls `GET http://localhost:8080/api/make/folders`.
 - Make prompt submit calls `POST http://localhost:8080/api/prompts/improve` and falls back to local demo polishing if it fails.
+- Login/signup store the backend `accessToken` in `ttalkak_access_token`, and protected API calls send `Authorization: Bearer ...`.
+- Account withdrawal calls `DELETE http://localhost:8080/api/auth/withdraw` with `{ password }`; on success the frontend clears auth state and server-data caches.
 
 Still demo/local-state based:
 
-- Auth and Google OAuth2 flow
-- My page library data
+- Google OAuth2 flow
+- My page library/comment/report data calls `/api/me/*` when logged in, but keeps local demo fallback/optimistic UI for preview.
 - Make chat and folders are still rendered optimistically from local state, even though smoke API calls are now emitted.
 - Make thread delete remains local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
 - When creating a new folder and immediately moving a thread, the frontend only sends the move request if `POST /api/make/folders` returns a server folder id. Otherwise, it keeps the local demo state and skips the move API to avoid sending a temporary local id.
 - Admin screens
 - Most save/like/comment/share UI state
 
-Save, like, comment, reply, share, and unshare buttons now call the matching `window.TTALKAK_API` functions in the background, but the visible UI still uses optimistic local demo state. Real integration should add token handling, API error rollback, and final response contract handling.
+Save, like, comment, reply, share, and unshare buttons now call the matching `window.TTALKAK_API` functions in the background, but the visible UI still uses optimistic local demo state. Real integration should keep token handling aligned with the final auth scheme, then add API error rollback and final response contract handling.
 
 Backend handoff check:
 

@@ -151,7 +151,7 @@ Modal behavior:
 - Terms and privacy consent are frontend demo checkboxes. Backend should persist consent version, consent timestamp, and user identifier for auditability.
 - Optional `email` can be used for the email-based ID recovery flow. Users without a registered email should not be eligible for email-based recovery.
 - Nickname and user ID duplicate checks are frontend demo buttons and should be backed by real availability-check endpoints.
-- Account withdrawal is demo-only. Backend must define account deletion, authored prompt ownership, saved prompt cleanup, comments, reports, and audit policy.
+- Account withdrawal now calls `DELETE /api/auth/withdraw` with `{ password }` and the stored `Authorization: Bearer ...` token. On success, the frontend clears `ttalkak_access_token`, authenticated user state, My page/Admin/Make backend caches, and returns to Home.
 - Admin moderation UI is exposed through a demo toggle only for frontend review. This toggle is not a production access model.
 - In the frontend demo, the Admin toggle is available only after login. If the user logs out while Admin demo mode is active, the frontend exits Admin mode and returns to Home.
 - Real service should drive Admin access from authenticated account metadata such as `role: "admin"` and enforce every Admin API server-side. Hiding or showing the Admin menu in the frontend is only a convenience layer, not authorization.

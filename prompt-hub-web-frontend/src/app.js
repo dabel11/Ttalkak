@@ -260,6 +260,7 @@ const promptTemplates = [
 
 const FREE_MAKE_LIMIT = 3;
 const STORAGE_KEY = "prompt_hub_web_state_v2";
+const AUTH_TOKEN_KEY = "ttalkak_access_token";
 const SAVED_PAGE_SIZE = 16;
 const SEARCH_DEBOUNCE_MS = 320;
 const MAX_CUSTOM_MAKE_FOLDERS = 5;
@@ -349,6 +350,10 @@ const state = {
   reportRecords: {},
   isLoggedIn: false,
   currentUser: null,
+  currentUserId: null,
+  currentUserRole: "user",
+  authToken: "",
+  token: "",
   isComposingSearch: false,
   isComposingShareTag: false,
   isComposingAdminPromptSearch: false,
@@ -369,6 +374,13 @@ const state = {
   backendPopularTags: [],
   backendStatus: "checking",
   backendStatusMessage: "백엔드 연결 확인 중",
+  myBackendStatus: "idle",
+  adminBackendStatus: "idle",
+  backendMyComments: [],
+  backendMyReports: [],
+  backendLibraryPromptIds: new Set(),
+  backendAdminReports: [],
+  backendAdminTags: [],
   makeBackendStatus: "idle",
   makeBackendMessage: "",
   popularSort: "popular",
@@ -459,6 +471,8 @@ function render() {
   scrollToPendingLatestMessage();
   scrollToHighlightedComment();
   hydrateBackendMakeDataIfNeeded();
+  hydrateBackendMyPageDataIfNeeded();
+  hydrateBackendAdminDataIfNeeded();
 }
 
 function scrollToHighlightedComment() {
@@ -642,8 +656,11 @@ function Header() {
   const canUseReportTools = state.isLoggedIn || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
+  const adminAccessButton = state.currentUserRole === "admin"
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="관리자 권한 화면입니다." aria-label="관리자 화면">${state.adminMode ? "Admin 종료" : "Admin"}</button>`
+    : "";
   const authButton = state.isLoggedIn
-    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="프론트엔드 검수용 임시 관리자 진입입니다." aria-label="프론트엔드 검수용 관리자 데모">${state.adminMode ? "데모 해제" : "관리자 데모"}</button><button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴 데모</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+    ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
     : `<button class="login-button" type="button" data-open-auth="login">로그인</button>`;
 
   return `
@@ -813,7 +830,7 @@ function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myP
   if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return;
 
   state.pendingUnsaveIds.forEach((promptId) => {
-    callBackendApi("unsavePrompt", promptId);
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
     const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
     if (savedIndex >= 0) {
       if (savedPrompts[savedIndex].source === "mine") {
@@ -1477,7 +1494,7 @@ function SavedPage() {
     { id: "library", label: "내 보관함", count: getSavedPagePrompts().length },
     { id: "mine", label: "내가 만든 프롬프트", count: getMyPrompts().length },
     { id: "comments", label: "댓글 관리", count: getMyComments().length },
-    { id: "reports", label: "신고 내역", count: state.reportedPromptIds.size + state.reportedCommentIds.size },
+    { id: "reports", label: "신고 내역", count: getMyReports().length },
   ];
 
   return `
@@ -1506,6 +1523,17 @@ function SavedPage() {
 }
 
 function DemoLibraryPrompt() {
+  if (state.myBackendStatus === "connected") {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 보관함 기준</strong>
+          <p>내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역은 백엔드 API 응답을 우선 반영합니다.</p>
+        </div>
+      </div>
+    `;
+  }
+
   const isSeeded = state.libraryDemoSeeded;
   return `
     <div class="demo-library-prompt">
@@ -2053,8 +2081,13 @@ function AuthModal() {
             <h2 id="auth-title">${title}</h2>
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
-          <p class="auth-helper">회원탈퇴는 백엔드 연동 후 계정과 작성 데이터 정책에 맞춰 처리됩니다. 현재는 데모 흐름입니다.</p>
-          <button class="primary-button danger-primary full" type="submit">회원탈퇴 데모</button>
+          <p class="auth-helper">회원탈퇴를 진행하면 계정이 비활성화되고 기존 토큰으로 다시 사용할 수 없습니다. 본인 확인을 위해 비밀번호를 입력해주세요.</p>
+          <label class="password-field">
+            <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />
+            <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
+          </label>
+          <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
+          <button class="primary-button danger-primary full" type="submit">회원탈퇴</button>
           <button class="text-button" type="button" data-close-auth>취소</button>
         </form>
       </div>
@@ -2144,7 +2177,7 @@ function AuthModal() {
                 <button class="text-button inline" type="button" data-open-auth="signup">회원가입</button>
               </div>`
         }
-        ${isSignup ? `<button class="text-button" type="button" data-open-auth="login">이미 계정이 있어요</button>` : state.isLoggedIn ? `<button class="text-button" type="button" data-open-auth="withdraw">회원탈퇴 데모</button>` : ""}
+        ${isSignup ? `<button class="text-button" type="button" data-open-auth="login">이미 계정이 있어요</button>` : state.isLoggedIn ? `<button class="text-button" type="button" data-open-auth="withdraw">회원탈퇴</button>` : ""}
       </form>
     </div>
   `;
@@ -2186,6 +2219,84 @@ function getUserIdValidationMessage(value) {
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function normalizeAuthResult(payload, fallbackUserId = "") {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+  const user = data.user || data.member || data.account || {};
+  const token = String(data.accessToken || data.token || data.authToken || data.jwt || "").trim();
+  const nickname = String(user.nickname || user.name || data.nickname || fallbackUserId || "사용자").trim() || "사용자";
+  const role = String(user.role || data.role || "user").toLowerCase().replace(/^role_/, "");
+
+  return {
+    token,
+    user: {
+      id: user.id || user.memberId || data.memberId || null,
+      userId: user.userId || user.username || data.userId || fallbackUserId || "",
+      nickname,
+      role,
+    },
+    raw: payload,
+  };
+}
+
+function applyAuthenticatedUser(authResult) {
+  state.isLoggedIn = true;
+  state.currentUser = authResult.user.nickname;
+  state.currentUserId = authResult.user.id;
+  state.currentUserRole = authResult.user.role || "user";
+  state.authToken = authResult.token;
+  state.token = authResult.token;
+  state.adminMode = state.currentUserRole === "admin";
+  if (state.adminMode) state.route = "admin";
+  state.myBackendStatus = "idle";
+  state.adminBackendStatus = "idle";
+  state.makeBackendStatus = "idle";
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, authResult.token);
+  } catch (_error) {
+    // Local preview can still run if browser storage is blocked.
+  }
+}
+
+function clearAuthenticatedSession({ keepRoute = false } = {}) {
+  state.isLoggedIn = false;
+  state.currentUser = null;
+  state.currentUserId = null;
+  state.currentUserRole = "user";
+  state.authToken = "";
+  state.token = "";
+  state.adminMode = false;
+  state.authView = null;
+  state.myBackendStatus = "idle";
+  state.adminBackendStatus = "idle";
+  state.makeBackendStatus = "idle";
+  state.backendMyComments = [];
+  state.backendMyReports = [];
+  state.backendLibraryPromptIds = new Set();
+  state.backendAdminReports = [];
+  state.backendAdminTags = [];
+  state.creatingFolder = false;
+  state.editingFolderId = null;
+  state.openFolderMenuId = null;
+  state.creatingThreadFolderId = null;
+  state.openThreadMenuId = null;
+  state.openPromptCardMenuId = null;
+  state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
+  state.reportPromptId = null;
+  state.reportCommentId = null;
+  state.editingPromptId = null;
+  state.adminRequestTargetKey = null;
+  state.editingMessageId = null;
+  state.executeMessageId = null;
+  state.executePromptId = null;
+  if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch (_error) {
+    // Local preview can continue if browser storage is unavailable.
+  }
 }
 
 function normalizeUserIdInput(input) {
@@ -2335,7 +2446,7 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-check-duplicate]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const row = button.closest(".auth-check-row");
       const input = row?.querySelector("input");
       const field = button.dataset.checkDuplicate;
@@ -2353,7 +2464,20 @@ function bindEvents() {
           return;
         }
       }
-      if (isDuplicateAuthValue(field, value)) {
+      let isDuplicate = isDuplicateAuthValue(field, value);
+      const api = window.TTALKAK_API;
+      const checkHandler = field === "nickname" ? api?.checkNickname : api?.checkUserId;
+      if (checkHandler) {
+        try {
+          const result = await checkHandler(value);
+          if (typeof result?.available === "boolean") {
+            isDuplicate = !result.available;
+          }
+        } catch (error) {
+          console.warn("[TTALKAK] 중복 확인 API 호출에 실패해 데모 중복 목록으로 확인합니다.", error);
+        }
+      }
+      if (isDuplicate) {
         delete state.authDuplicateChecks[field];
         window.alert(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
         render();
@@ -2424,8 +2548,8 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-confirm-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      runConfirmedAction();
+    button.addEventListener("click", async () => {
+      await runConfirmedAction();
     });
   });
 
@@ -2551,6 +2675,7 @@ function bindEvents() {
     searchScopeSelect.addEventListener("change", () => {
       state.searchScope = getValidSearchScope(searchScopeSelect.value);
       state.popularPage = 1;
+      refreshBackendHomePrompts();
       render();
       restoreSearchFocus();
     });
@@ -2593,6 +2718,7 @@ function bindEvents() {
     popularSortSelect.addEventListener("change", () => {
       state.popularSort = popularSortSelect.value;
       state.popularPage = 1;
+      refreshBackendHomePrompts();
       render();
     });
   }
@@ -3071,7 +3197,7 @@ function bindEvents() {
       input.addEventListener("blur", () => updateCapsLockWarning(input, null));
     });
 
-    authForm.addEventListener("submit", (event) => {
+    authForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       saveAuthDraftFromForm();
       const formData = new FormData(authForm);
@@ -3084,12 +3210,17 @@ function bindEvents() {
       const userIdWarning = getUserIdValidationMessage(userId);
 
       if (isWithdraw) {
+        if (!password) {
+          window.alert("회원탈퇴를 위해 비밀번호를 입력해주세요.");
+          return;
+        }
         openConfirmAction({
           type: "withdraw",
           title: "회원탈퇴",
-          message: "회원탈퇴 데모를 진행할까요?",
+          message: "정말 회원탈퇴를 진행할까요? 탈퇴 후에는 이 계정으로 다시 로그인할 수 없습니다.",
           confirmLabel: "회원탈퇴",
           danger: true,
+          password,
         });
         return;
       }
@@ -3110,8 +3241,17 @@ function bindEvents() {
           window.alert("전화번호 형식을 확인해주세요.");
           return;
         }
+        try {
+          const api = window.TTALKAK_API;
+          const result = api?.findId ? await api.findId({ method: "email", name, email, phone }) : null;
+          const maskedUserId = result?.maskedUserId || "";
+          showNotice(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
+        } catch (error) {
+          const backendMessage = error?.payload?.message || error?.message || "";
+          window.alert(backendMessage || "아이디 찾기 요청에 실패했습니다.");
+          return;
+        }
         state.authView = "login";
-        showNotice("입력한 정보로 아이디 찾기 요청을 보냈습니다.");
         return;
       }
 
@@ -3134,8 +3274,16 @@ function bindEvents() {
           window.alert("전화번호 형식을 확인해주세요.");
           return;
         }
+        try {
+          const api = window.TTALKAK_API;
+          if (api?.requestPasswordReset) await api.requestPasswordReset({ userId, email, phone });
+          showNotice("비밀번호 재설정 요청을 보냈습니다.");
+        } catch (error) {
+          const backendMessage = error?.payload?.message || error?.message || "";
+          window.alert(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
+          return;
+        }
         state.authView = "login";
-        showNotice("비밀번호 재설정 요청을 보냈습니다.");
         return;
       }
 
@@ -3210,12 +3358,48 @@ function bindEvents() {
         window.alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
         return;
       }
-      state.isLoggedIn = true;
-      state.currentUser = String(formData.get("nickname") || formData.get("name") || userId || "사용자").trim() || "사용자";
-      state.authView = null;
-      state.authDraft = {};
-      state.authDuplicateChecks = {};
-      showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
+
+      const api = window.TTALKAK_API;
+      if (!api?.login) {
+        window.alert("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
+        return;
+      }
+
+      try {
+        const authPayload = isSignup
+          ? {
+              nickname: String(formData.get("nickname") || "").trim(),
+              name: String(formData.get("name") || "").trim(),
+              userId,
+              email: String(formData.get("email") || "").trim(),
+              phone: String(formData.get("phone") || "").trim(),
+              birth: String(formData.get("birth") || "").trim(),
+              password,
+              passwordConfirm: String(formData.get("passwordConfirm") || "").trim(),
+              agreeTerms: formData.get("terms") === "on",
+              agreePrivacy: formData.get("privacy") === "on",
+            }
+          : { userId, password };
+        const authResponse = isSignup && api.signup ? await api.signup(authPayload) : await api.login(authPayload);
+        const authResult = normalizeAuthResult(authResponse, userId);
+
+        if (!authResult.token) {
+          window.alert("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
+          return;
+        }
+
+        applyAuthenticatedUser(authResult);
+        state.authView = null;
+        state.authDraft = {};
+        state.authDuplicateChecks = {};
+        state.authUserIdWarning = "";
+        showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
+        await loadMakeBackendData({ shouldRender: false });
+        render();
+      } catch (error) {
+        const backendMessage = error?.payload?.message || error?.message || "";
+        window.alert(backendMessage || "로그인 요청에 실패했습니다.");
+      }
     });
   }
 
@@ -3382,7 +3566,7 @@ function toggleSavedPrompt(promptId) {
       state.userLibraryPromptIds.add(promptId);
       state.pendingUnsaveIds.delete(promptId);
       updatePromptField(promptId, "saves", 1);
-      callBackendApi("savePrompt", promptId);
+      if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
       showNotice("저장했습니다.");
       return;
     }
@@ -3410,7 +3594,7 @@ function toggleSavedPrompt(promptId) {
     }
     state.userLibraryPromptIds.delete(promptId);
     updatePromptField(promptId, "saves", -1);
-    callBackendApi("unsavePrompt", promptId);
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
       state.detailPromptId = null;
     }
@@ -3437,21 +3621,27 @@ function toggleSavedPrompt(promptId) {
     savedByMe: true,
   });
   state.userLibraryPromptIds.add(promptId);
-  callBackendApi("savePrompt", promptId);
+  if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
 
   showNotice("저장했습니다.");
 }
 
 function toggleLikePrompt(promptId) {
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 좋아요를 누를 수 있습니다.");
+    return;
+  }
+
   const isLiked = state.likedPromptIds.has(promptId);
   if (isLiked) {
     state.likedPromptIds.delete(promptId);
     updatePromptField(promptId, "likes", -1);
-    callBackendApi("unlikePrompt", promptId);
+    if (isBackendNumericId(promptId)) callBackendApi("unlikePrompt", promptId);
   } else {
     state.likedPromptIds.add(promptId);
     updatePromptField(promptId, "likes", 1);
-    callBackendApi("likePrompt", promptId);
+    if (isBackendNumericId(promptId)) callBackendApi("likePrompt", promptId);
   }
   showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
@@ -3656,6 +3846,7 @@ function openPromptDetail(promptId, options = {}) {
   if (state.detailHighlightCommentId || shouldOpenCommentsByDefault()) {
     state.expandedComments[promptId] = true;
   }
+  hydratePromptComments(promptId);
   render();
 }
 
@@ -3664,7 +3855,23 @@ function openPromptComments(promptId) {
   state.detailPromptId = promptId;
   state.detailHighlightCommentId = null;
   state.expandedComments[promptId] = true;
+  hydratePromptComments(promptId);
   render();
+}
+
+async function hydratePromptComments(promptId) {
+  const api = window.TTALKAK_API;
+  if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return;
+
+  try {
+    const comments = await api.getPromptComments(promptId, state.authToken || state.token || undefined);
+    if (Array.isArray(comments)) {
+      commentsByPrompt[promptId] = comments;
+      if (state.detailPromptId === promptId) render();
+    }
+  } catch (error) {
+    console.warn("[TTALKAK] /api/prompts/{id}/comments 호출에 실패해 데모 댓글을 유지합니다.", error);
+  }
 }
 
 function shouldOpenCommentsByDefault() {
@@ -3861,6 +4068,9 @@ function updateOwnComment(commentId, text) {
   if (comment.text !== content) {
     comment.text = content;
     comment.edited = true;
+    if (isBackendNumericId(commentId)) {
+      callBackendApi("updateComment", commentId, { text: content });
+    }
   }
 
   const revisionKey = makeRevisionRequestKey("comment", commentId);
@@ -3902,7 +4112,7 @@ function openConfirmAction(action) {
   render();
 }
 
-function runConfirmedAction() {
+async function runConfirmedAction() {
   const action = state.confirmAction;
   if (!action) return;
 
@@ -3935,30 +4145,29 @@ function runConfirmedAction() {
   if (action.type === "logout") {
     stampCurrentUserOwnedPrompts();
     const wasAdminMode = state.adminMode;
-    state.isLoggedIn = false;
-    state.currentUser = null;
-    state.adminMode = false;
-    state.creatingFolder = false;
-    state.editingFolderId = null;
-    state.openFolderMenuId = null;
-    state.creatingThreadFolderId = null;
-    state.openThreadMenuId = null;
-    if (state.route === "admin" || state.route === "saved") state.route = "home";
+    clearAuthenticatedSession();
     showNotice(wasAdminMode ? "로그아웃하여 관리자 데모를 종료했습니다." : "로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {
-    stampCurrentUserOwnedPrompts();
-    state.isLoggedIn = false;
-    state.currentUser = null;
-    if (state.route === "saved") state.route = "home";
-    state.authView = null;
-    state.creatingFolder = false;
-    state.editingFolderId = null;
-    state.openFolderMenuId = null;
-    state.creatingThreadFolderId = null;
-    state.openThreadMenuId = null;
-    showNotice("회원탈퇴 데모가 완료되었습니다.");
+    const api = window.TTALKAK_API;
+    if (!state.authToken && !state.token) {
+      state.authView = "login";
+      showNotice("로그인이 필요합니다.");
+      render();
+      return;
+    }
+    try {
+      if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
+      const result = await api.withdrawAccount({ password: action.password || "" }, state.authToken || state.token);
+      clearAuthenticatedSession();
+      showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
+    } catch (error) {
+      const backendMessage = error?.payload?.message || error?.message || "";
+      window.alert(backendMessage || "회원탈퇴 요청에 실패했습니다.");
+      render();
+      return;
+    }
   }
 
   if (action.type === "reset-demo") {
@@ -3974,6 +4183,9 @@ function performDeleteComment(commentId) {
     const removed = removeCommentFromList(comments, commentId);
     if (!removed) continue;
 
+    if (isBackendNumericId(commentId)) {
+      callBackendApi("deleteComment", commentId);
+    }
     decrementPromptComments(promptId);
     state.likedCommentIds.delete(commentId);
     state.reportedCommentIds.delete(commentId);
@@ -3994,7 +4206,7 @@ function performDeleteThread(threadId) {
   showNotice("대화를 삭제했습니다.");
 }
 
-function createMakeFolder(folderName) {
+async function createMakeFolder(folderName) {
   if (!state.isLoggedIn) {
     state.creatingFolder = false;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4025,7 +4237,8 @@ function createMakeFolder(folderName) {
   state.makeFolders.push(folder);
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
-  createBackendMakeFolder({ name: cleanName });
+  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
+  if (backendFolderId) folder.serverId = backendFolderId;
   showNotice("폴더를 추가했습니다.");
   render();
 }
@@ -4081,7 +4294,7 @@ function getCustomMakeFolderCount() {
   return state.makeFolders.filter((folder) => folder.id !== "all" && folder.id !== "uncategorized").length;
 }
 
-function renameMakeFolder(folderId, name) {
+async function renameMakeFolder(folderId, name) {
   if (!state.isLoggedIn) {
     state.editingFolderId = null;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4095,7 +4308,10 @@ function renameMakeFolder(folderId, name) {
 
   folder.name = cleanName;
   state.editingFolderId = null;
-  callBackendApi("updateMakeFolder", folderId, { name: cleanName });
+  const backendFolderId = getBackendFolderId(folderId);
+  if (backendFolderId) {
+    callBackendApi("updateMakeFolder", backendFolderId, { name: cleanName });
+  }
   showNotice("폴더 이름을 수정했습니다.");
   render();
 }
@@ -4108,12 +4324,15 @@ function performDeleteFolder(folderId) {
   }
 
   if (!folderId || folderId === "uncategorized") return;
+  const backendFolderId = getBackendFolderId(folderId);
   state.makeFolders = state.makeFolders.filter((folder) => folder.id !== folderId);
   state.recentThreads.forEach((thread) => {
     if (thread.folderId === folderId) thread.folderId = "uncategorized";
   });
   if (state.activeFolderId === folderId) state.activeFolderId = "all";
-  callBackendApi("deleteMakeFolder", folderId);
+  if (backendFolderId) {
+    callBackendApi("deleteMakeFolder", backendFolderId);
+  }
   showNotice("폴더를 삭제했습니다.");
 }
 
@@ -4528,7 +4747,7 @@ function unshareOwnPrompt(promptId) {
   });
 }
 
-function publishSavedPrompt(promptId) {
+async function publishSavedPrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt || prompt.source !== "mine") return;
 
@@ -4536,6 +4755,27 @@ function publishSavedPrompt(promptId) {
     state.authView = "login";
     render();
     return;
+  }
+
+  let backendPrompt = null;
+  if (isBackendNumericId(promptId) && window.TTALKAK_API?.shareExistingPrompt) {
+    try {
+      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, state.authToken || state.token || undefined);
+    } catch (error) {
+      const backendMessage = error?.payload?.message || error?.message || "";
+      window.alert(backendMessage || "공유 상태 변경 요청에 실패했습니다.");
+      return;
+    }
+  }
+
+  if (backendPrompt) {
+    Object.assign(prompt, backendPrompt, {
+      source: "mine",
+      isShared: true,
+      savedByMe: prompt.savedByMe,
+      author: state.currentUser || backendPrompt.author,
+      owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
+    });
   }
 
   prompt.isShared = true;
@@ -4558,7 +4798,7 @@ function publishSavedPrompt(promptId) {
   render();
 }
 
-function updateOwnPrompt(promptId, formData) {
+async function updateOwnPrompt(promptId, formData) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
 
@@ -4571,13 +4811,29 @@ function updateOwnPrompt(promptId, formData) {
     return;
   }
 
+  let backendPrompt = null;
+  if (isBackendNumericId(promptId) && window.TTALKAK_API?.updatePrompt) {
+    try {
+      backendPrompt = await window.TTALKAK_API.updatePrompt(
+        promptId,
+        { title, text, tags },
+        state.authToken || state.token || undefined,
+      );
+    } catch (error) {
+      const backendMessage = error?.payload?.message || error?.message || "";
+      window.alert(backendMessage || "프롬프트 수정 요청에 실패했습니다.");
+      return;
+    }
+  }
+
+  const nextValues = backendPrompt
+    ? { ...backendPrompt, source: "mine", savedByMe: prompt.savedByMe, isShared: prompt.isShared }
+    : { title, text, tags, updatedAt: Date.now() };
+
   [popularPrompts, savedPrompts].forEach((list) => {
     const item = list.find((entry) => entry.id === promptId);
     if (!item) return;
-    item.title = title;
-    item.text = text;
-    item.tags = tags;
-    item.updatedAt = Date.now();
+    Object.assign(item, nextValues);
   });
 
   const revisionKey = makeRevisionRequestKey("prompt", promptId);
@@ -4592,9 +4848,13 @@ function updateOwnPrompt(promptId, formData) {
 }
 
 function performDeletePrompt(promptId) {
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("deletePrompt", promptId);
+  }
   removePromptById(popularPrompts, promptId);
   removePromptById(savedPrompts, promptId);
   state.userLibraryPromptIds.delete(promptId);
+  state.backendLibraryPromptIds.delete(promptId);
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
   normalizeSavedPage();
   showNotice("프롬프트를 삭제했습니다.");
@@ -4615,7 +4875,9 @@ function performUnsharePrompt(promptId) {
 
   state.popularPage = 1;
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
-  callBackendApi("unsharePrompt", promptId);
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("unsharePrompt", promptId);
+  }
   showNotice("프롬프트 공유를 취소했습니다.");
 }
 
@@ -4651,6 +4913,13 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
+  if (state.myBackendStatus === "connected") {
+    return savedPrompts.filter((prompt) => {
+      if (!state.backendLibraryPromptIds.has(prompt.id)) return false;
+      return prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id);
+    });
+  }
+
   const merged = savedPrompts.filter(
     (prompt) =>
       !isHiddenDemoLibraryPrompt(prompt) &&
@@ -4723,6 +4992,7 @@ function commitSearchQuery(value) {
 
   state.searchQuery = nextQuery;
   state.popularPage = 1;
+  refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
 }
@@ -4787,6 +5057,7 @@ function searchByTag(tag) {
   state.popularPage = 1;
   state.detailPromptId = null;
   state.route = "home";
+  refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
 }
@@ -4802,6 +5073,7 @@ function searchByAuthor(author) {
   state.detailPromptId = null;
   state.detailHighlightCommentId = null;
   state.route = "home";
+  refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
 }
@@ -4810,7 +5082,7 @@ function findPromptById(promptId) {
   return savedPrompts.find((item) => item.id === promptId) || popularPrompts.find((item) => item.id === promptId);
 }
 
-function sharePrompt(formData) {
+async function sharePrompt(formData) {
   if (!state.isLoggedIn) {
     state.authView = "login";
     render();
@@ -4850,18 +5122,45 @@ function sharePrompt(formData) {
     delete existingSavedPrompt.messages;
   }
 
-  upsertPrompt(popularPrompts, prompt);
-  upsertPrompt(savedPrompts, prompt);
-  state.userLibraryPromptIds.add(prompt.id);
-  if (!commentsByPrompt[prompt.id]) {
-    commentsByPrompt[prompt.id] = [];
+  let finalPrompt = prompt;
+  const api = window.TTALKAK_API;
+  if (api?.sharePrompt) {
+    try {
+      const backendPrompt = await api.sharePrompt(
+        {
+          title: prompt.title,
+          text: prompt.text,
+          tags: prompt.tags,
+          isShared: true,
+        },
+        state.authToken || state.token || undefined,
+      );
+      finalPrompt = {
+        ...backendPrompt,
+        source: "mine",
+        isShared: true,
+        savedByMe: Boolean(existingPrompt?.savedByMe || backendPrompt.savedByMe),
+        author: state.currentUser || backendPrompt.author,
+        owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
+      };
+      if (prompt.id !== finalPrompt.id) {
+        removePromptById(popularPrompts, prompt.id);
+        removePromptById(savedPrompts, prompt.id);
+      }
+    } catch (error) {
+      const backendMessage = error?.payload?.message || error?.message || "";
+      window.alert(backendMessage || "프롬프트 공유 요청에 실패했습니다.");
+      return;
+    }
   }
-  callBackendApi("sharePrompt", {
-    title: prompt.title,
-    text: prompt.text,
-    tags: prompt.tags,
-    isShared: true,
-  });
+
+  upsertPrompt(popularPrompts, finalPrompt);
+  upsertPrompt(savedPrompts, finalPrompt);
+  state.userLibraryPromptIds.add(finalPrompt.id);
+  state.backendLibraryPromptIds.add(finalPrompt.id);
+  if (!commentsByPrompt[finalPrompt.id]) {
+    commentsByPrompt[finalPrompt.id] = [];
+  }
   state.searchQuery = "";
   state.popularSort = "latest";
   state.popularPage = 1;
@@ -4981,7 +5280,18 @@ function getAdminManagedTags() {
   const filter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const sort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
 
-  return getKnownTags()
+  const backendTags = (state.backendAdminTags || []).map((tag) => ({
+    label: tag.label,
+    key: tag.key,
+    id: tag.id,
+    status: tag.status || getAdminTagStatus(tag.label),
+    count: tag.count || 0,
+    recentAt: tag.recentAt || 0,
+    backend: true,
+  }));
+  const backendKeys = new Set(backendTags.map((tag) => tag.key));
+  const localTags = getKnownTags()
+    .filter((tag) => !backendKeys.has(normalizeTag(tag)))
     .map((tag) => {
       const key = normalizeTag(tag);
       const stat = stats.get(key) || {};
@@ -4992,7 +5302,9 @@ function getAdminManagedTags() {
         count: stat.count || 0,
         recentAt: stat.recentAt || 0,
       };
-    })
+    });
+
+  return [...backendTags, ...localTags]
     .filter((tag) => filter === "all" || tag.status === filter)
     .filter((tag) => !query || normalizeTag(tag.label).includes(query))
     .sort((a, b) => {
@@ -5026,10 +5338,23 @@ function getTagStats() {
 }
 
 function getMyPrompts() {
+  if (state.myBackendStatus === "connected") {
+    return getUniquePrompts(
+      savedPrompts.filter((prompt) => state.backendLibraryPromptIds.has(prompt.id) && prompt.source === "mine"),
+    );
+  }
   return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt)));
 }
 
 function getMyComments() {
+  if (state.backendMyComments.length) {
+    return state.backendMyComments.map((comment) => ({
+      promptId: String(comment.promptId || ""),
+      prompt: findPromptById(String(comment.promptId || "")),
+      comment,
+    }));
+  }
+
   const owner = state.currentUser || "나";
   const items = [];
 
@@ -5050,6 +5375,15 @@ function collectOwnedComments(items, promptId, comments, owner) {
 }
 
 function getMyReports() {
+  const backendReports = state.backendMyReports.map((report) => ({
+    type: report.type,
+    title: report.type === "comment" ? "댓글 신고" : "프롬프트 신고",
+    id: report.targetId,
+    label: report.reason || report.raw?.targetPreview || report.raw?.promptTitle || "신고 내역",
+    reason: report.reason,
+    status: mapBackendReportStatus(report.status),
+    requestedAt: report.createdAt,
+  }));
   const promptReports = [...state.reportedPromptIds].map((promptId) => {
     const prompt = findPromptById(promptId);
     const record = getReportRecord(`prompt:${promptId}`);
@@ -5089,13 +5423,26 @@ function getMyReports() {
     })
     .filter(Boolean);
 
-  return [...revisionRequests, ...promptReports, ...commentReports].sort(
+  return [...revisionRequests, ...backendReports, ...promptReports, ...commentReports].sort(
     (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
   );
 }
 
 function getReportRecord(key) {
   return state.reportRecords[key] || { status: "pending" };
+}
+
+function mapBackendReportStatus(status) {
+  const normalized = String(status || "pending").toLowerCase();
+  if (["reviewed", "resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
+  if (["dismissed", "rejected", "reject"].includes(normalized)) return "dismissed";
+  return "pending";
+}
+
+function mapFrontendReportStatus(status) {
+  if (status === "resolved") return "REVIEWED";
+  if (status === "dismissed") return "DISMISSED";
+  return "PENDING";
 }
 
 function makeRevisionRequestKey(type, id) {
@@ -5144,6 +5491,26 @@ function isRevisionTargetOwnedByCurrentUser(target) {
 }
 
 function getAdminReportRecords() {
+  if (state.backendAdminReports.length) {
+    return state.backendAdminReports.map((report) => {
+      const prompt = report.promptId ? findPromptById(report.promptId) : report.type === "prompt" ? findPromptById(report.targetId) : null;
+      const record = getReportRecord(report.key);
+      return {
+        key: report.key,
+        type: report.type,
+        targetId: report.targetId,
+        promptId: report.promptId || prompt?.id || "",
+        status: record.status || mapBackendReportStatus(report.status),
+        title: report.type === "comment" ? "댓글 신고" : (prompt?.title || report.raw?.promptTitle || "프롬프트 신고"),
+        contextTitle: prompt?.title || report.raw?.promptTitle || "게시물 확인 필요",
+        promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : report.raw?.promptAuthorNickname || "",
+        commentAuthor: report.raw?.commentAuthorNickname || "",
+        targetPreview: report.raw?.targetPreview || report.raw?.commentText || makePreview(prompt?.text || ""),
+        summary: report.reason ? `신고 사유: ${report.reason}` : "신고 사유 없음",
+      };
+    }).sort((a, b) => Number(getReportRecord(b.key).createdAt || 0) - Number(getReportRecord(a.key).createdAt || 0));
+  }
+
   const records = [];
   [...state.reportedPromptIds].forEach((promptId) => {
     const prompt = findPromptById(promptId);
@@ -5251,8 +5618,20 @@ function getAdminTagStatusOrder(status) {
   return 2;
 }
 
-function updateAdminTagDecision(tag, decision) {
+async function updateAdminTagDecision(tag, decision) {
   if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
+
+  const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
+  if (backendTag?.id && window.TTALKAK_API?.updateAdminTagStatus) {
+    try {
+      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, decision.toUpperCase(), state.authToken || state.token || undefined);
+      state.backendAdminTags = state.backendAdminTags.map((item) =>
+        item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
+      );
+    } catch (error) {
+      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+    }
+  }
 
   if (decision === "pending") {
     const nextDecisions = { ...state.adminTagDecisions };
@@ -5265,8 +5644,25 @@ function updateAdminTagDecision(tag, decision) {
   showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
 }
 
-function updateReportRecordStatus(key, status) {
+async function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "dismissed", "resolved"].includes(status)) return;
+  const record = getReportRecord(key);
+  if (record.backendId && window.TTALKAK_API?.updateAdminReportStatus) {
+    try {
+      const updated = await window.TTALKAK_API.updateAdminReportStatus(
+        record.backendId,
+        mapFrontendReportStatus(status),
+        state.authToken || state.token || undefined,
+      );
+      const backendStatus = mapBackendReportStatus(updated?.status || status);
+      state.backendAdminReports = state.backendAdminReports.map((report) =>
+        report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
+      );
+      status = backendStatus;
+    } catch (error) {
+      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+    }
+  }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
 }
@@ -5363,12 +5759,26 @@ function canShowReportedState() {
   return state.isLoggedIn || state.adminMode;
 }
 
-function toggleAdminPromptHidden(promptId) {
+async function toggleAdminPromptHidden(promptId) {
   if (!promptId) return;
   if (state.adminHiddenPromptIds.has(promptId)) {
+    if (window.TTALKAK_API?.restoreAdminPrompt && isBackendNumericId(promptId)) {
+      try {
+        await window.TTALKAK_API.restoreAdminPrompt(promptId, state.authToken || state.token || undefined);
+      } catch (error) {
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
+      }
+    }
     state.adminHiddenPromptIds.delete(promptId);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
+    if (window.TTALKAK_API?.hideAdminPrompt && isBackendNumericId(promptId)) {
+      try {
+        await window.TTALKAK_API.hideAdminPrompt(promptId, state.authToken || state.token || undefined);
+      } catch (error) {
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
+      }
+    }
     state.adminHiddenPromptIds.add(promptId);
     showNotice("관리자 숨김 처리했습니다.");
   }
@@ -5526,11 +5936,14 @@ async function createBackendMakeThread(thread) {
   const messages = Array.isArray(thread.messages) && thread.messages.length
     ? thread.messages
     : state.messages;
+  const backendThreadId = isBackendNumericId(thread.serverId)
+    ? Number(thread.serverId)
+    : isBackendNumericId(thread.id)
+      ? Number(thread.id)
+      : null;
 
   try {
-    const result = await api.createMakeThread(
-      {
-        id: thread.serverId || thread.id,
+    const payload = {
         title: thread.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
         preview: thread.preview || makePreview(messages[messages.length - 1]?.content || ""),
         folderId: getBackendFolderId(thread.folderId),
@@ -5539,7 +5952,14 @@ async function createBackendMakeThread(thread) {
           content: message.content,
           sourcePrompt: message.sourcePrompt || "",
         })),
-      },
+      };
+    if (backendThreadId) {
+      payload.id = backendThreadId;
+      payload.threadId = backendThreadId;
+    }
+
+    const result = await api.createMakeThread(
+      payload,
       state.authToken || state.token || undefined,
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
@@ -5658,6 +6078,98 @@ async function hydrateBackendMakeDataIfNeeded() {
   if (shouldRender || state.route === "make") render();
 }
 
+async function hydrateBackendMyPageDataIfNeeded() {
+  if (state.route !== "saved" || !state.isLoggedIn || state.myBackendStatus !== "idle") return;
+  const api = window.TTALKAK_API;
+  if (!api?.getMyLibrary) return;
+
+  state.myBackendStatus = "checking";
+  const token = state.authToken || state.token || undefined;
+  const [libraryResult, commentsResult, reportsResult] = await Promise.allSettled([
+    api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
+    api.getMyComments?.(token),
+    api.getMyReports?.(token),
+  ]);
+
+  let shouldRender = false;
+  if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
+    state.backendLibraryPromptIds = new Set();
+    libraryResult.value.items.forEach((prompt) => {
+      const normalized = {
+        ...prompt,
+        source: prompt.source || (prompt.isMine ? "mine" : "community"),
+        savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
+      };
+      upsertPrompt(savedPrompts, normalized);
+      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+      state.userLibraryPromptIds.add(normalized.id);
+      state.backendLibraryPromptIds.add(normalized.id);
+    });
+    shouldRender = true;
+  } else if (libraryResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/me/library 연동에 실패해 데모 보관함을 유지합니다.", libraryResult.reason);
+  }
+
+  if (commentsResult.status === "fulfilled" && Array.isArray(commentsResult.value)) {
+    state.backendMyComments = commentsResult.value;
+    shouldRender = true;
+  }
+
+  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
+    state.backendMyReports = reportsResult.value;
+    shouldRender = true;
+  }
+
+  state.myBackendStatus = "connected";
+  if (shouldRender) render();
+}
+
+async function hydrateBackendAdminDataIfNeeded() {
+  if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
+  const api = window.TTALKAK_API;
+  if (!api?.getAdminReports && !api?.getAdminTags) return;
+
+  state.adminBackendStatus = "checking";
+  const token = state.authToken || state.token || undefined;
+  const [reportsResult, tagsResult] = await Promise.allSettled([
+    api.getAdminReports?.({}, token),
+    api.getAdminTags?.({}, token),
+  ]);
+
+  let shouldRender = false;
+  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
+    state.backendAdminReports = reportsResult.value;
+    reportsResult.value.forEach((report) => {
+      state.reportRecords[report.key] = {
+        ...getReportRecord(report.key),
+        backendId: report.id,
+        status: mapBackendReportStatus(report.status),
+        reason: report.reason || getReportRecord(report.key).reason || "",
+        createdAt: report.createdAt || Date.now(),
+      };
+      if (report.type === "prompt") state.reportedPromptIds.add(report.targetId);
+      if (report.type === "comment") state.reportedCommentIds.add(report.targetId);
+    });
+    shouldRender = true;
+  } else if (reportsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/reports 연동에 실패해 데모 신고 데이터를 유지합니다.", reportsResult.reason);
+  }
+
+  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
+    state.backendAdminTags = tagsResult.value;
+    tagsResult.value.forEach((tag) => {
+      if (!tag.key) return;
+      state.adminTagDecisions = { ...state.adminTagDecisions, [tag.key]: tag.status };
+    });
+    shouldRender = true;
+  } else if (tagsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/tags 연동에 실패해 데모 태그 데이터를 유지합니다.", tagsResult.reason);
+  }
+
+  state.adminBackendStatus = "connected";
+  if (shouldRender) render();
+}
+
 function persistState() {
   try {
     localStorage.setItem(
@@ -5673,6 +6185,10 @@ function persistState() {
         state: {
           isLoggedIn: state.isLoggedIn,
           currentUser: state.currentUser,
+          currentUserId: state.currentUserId,
+          currentUserRole: state.currentUserRole,
+          authToken: state.authToken,
+          token: state.token,
           libraryDemoSeeded: state.libraryDemoSeeded,
           userLibraryPromptIds: [...state.userLibraryPromptIds],
           likedPromptIds: [...state.likedPromptIds],
@@ -5729,8 +6245,14 @@ function loadPersistedState() {
     }
 
     const savedState = parsed.state || {};
-    state.isLoggedIn = Boolean(savedState.isLoggedIn);
-    state.currentUser = savedState.currentUser || null;
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const restoredToken = storedToken || savedState.authToken || savedState.token || "";
+    state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);
+    state.currentUser = state.isLoggedIn ? savedState.currentUser || null : null;
+    state.currentUserId = state.isLoggedIn ? savedState.currentUserId || null : null;
+    state.currentUserRole = state.isLoggedIn ? savedState.currentUserRole || "user" : "user";
+    state.authToken = state.isLoggedIn ? restoredToken : "";
+    state.token = state.isLoggedIn ? restoredToken : "";
     state.libraryDemoSeeded = Boolean(savedState.libraryDemoSeeded);
     state.userLibraryPromptIds = new Set(Array.isArray(savedState.userLibraryPromptIds) ? savedState.userLibraryPromptIds : []);
     state.likedPromptIds = new Set(Array.isArray(savedState.likedPromptIds) ? savedState.likedPromptIds : []);
@@ -5738,7 +6260,7 @@ function loadPersistedState() {
     state.reportedPromptIds = new Set(Array.isArray(savedState.reportedPromptIds) ? savedState.reportedPromptIds : []);
     state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
     state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
-    state.adminMode = Boolean(savedState.adminMode);
+    state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && savedState.adminMode);
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
@@ -5909,6 +6431,50 @@ async function hydrateBackendHomeData() {
   }
 
   if (shouldRender) render();
+}
+
+async function refreshBackendHomePrompts() {
+  const api = window.TTALKAK_API;
+  if (!api?.searchCommunityPosts) return;
+
+  const query = String(state.searchQuery || "").trim();
+  const scope = getValidSearchScope(state.searchScope);
+  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort });
+  state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
+
+  try {
+    const result = await api.searchCommunityPosts({
+      scope,
+      query,
+      page: 1,
+      size: 64,
+      sort: state.popularSort,
+    });
+    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort })) {
+      return;
+    }
+    if (Array.isArray(result?.items)) {
+      popularPrompts.splice(
+        0,
+        popularPrompts.length,
+        ...result.items.map((prompt) => ({
+          ...prompt,
+          source: prompt.source || (prompt.isMine ? "mine" : "community"),
+          isShared: prompt.isShared ?? true,
+        })),
+      );
+      state.backendStatus = "connected";
+      state.backendStatusMessage = query
+        ? `GET /api/prompts?scope=${scope}&query=... 검색 결과를 Home에 반영 중입니다.`
+        : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+      normalizePersistedLikeCounts();
+      render();
+    }
+  } catch (error) {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다.";
+    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패해 로컬 필터를 유지합니다.", error);
+  }
 }
 
 loadPersistedState();

@@ -60,7 +60,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 닉네임 중복 확인 | `GET /api/auth/check-nickname?nickname=...` | none | 사용 가능 여부 반환 |
 | 아이디 중복 확인 | `GET /api/auth/check-user-id?userId=...` | none | 사용 가능 여부 반환 |
 | 로그아웃 | `POST /api/auth/logout` | none | 세션/token 종료 |
-| 회원탈퇴 | `DELETE /api/users/me` | confirmation payload | 계정/작성물/댓글/저장/신고 정책 필요 |
+| 회원탈퇴 | `DELETE /api/auth/withdraw` | `{ password }` + `Authorization: Bearer ...` | 성공 시 계정 비활성화, 기존 토큰 무효, 프론트 인증/캐시 상태 초기화 |
 
 ## My Page / User Activity
 

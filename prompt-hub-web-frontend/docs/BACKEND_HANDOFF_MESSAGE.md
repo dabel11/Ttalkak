@@ -101,13 +101,19 @@ Current backend-connected checks:
 - If those requests succeed, the Home prompt list and popular tags use backend responses.
 - If those requests fail, the UI falls back to local demo data and shows `Demo data 표시 중`.
 
-Still demo/local-state based:
+Still demo/local-state based or partial:
 
-- Auth, Google OAuth2, account withdrawal, and permission checks
+- Google OAuth2 and final permission/error rollback
 - Make chat/folders
 - My page library/activity data
 - Admin moderation screens
 - Final error rollback for save/like/comment/share mutations
+
+Connected auth updates:
+
+- Login/signup store the backend `accessToken` in `ttalkak_access_token`.
+- Protected API calls send `Authorization: Bearer ...` through `src/api.js`.
+- Account withdrawal calls `DELETE /api/auth/withdraw` with `{ password }`; on success the frontend clears the token, authenticated user state, My page/Admin/Make backend caches, and returns to Home.
 
 Backend handoff check:
 
@@ -123,7 +129,7 @@ Production transition cleanup:
 - Replace admin demo toggle with real `ADMIN` role checks.
 - Keep new user My page empty by default; sample activity is QA/demo-only.
 - Treat Google OAuth buttons as demo flow until backend OAuth is connected.
-- Add token handling, API error rollback, and response contract validation before release.
+- Keep token handling aligned with the final auth scheme, then add API error rollback and response contract validation before release.
 
 ## Make Smoke Integration Addendum
 

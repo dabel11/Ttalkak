@@ -9,6 +9,14 @@
 
   async function request(path, options = {}) {
     const { token, headers, ...fetchOptions } = options;
+    const storedToken = (() => {
+      try {
+        return window.localStorage?.getItem("ttalkak_access_token") || "";
+      } catch (_error) {
+        return "";
+      }
+    })();
+    const resolvedToken = token || storedToken;
     const defaultHeaders = fetchOptions.body ? { "Content-Type": "application/json" } : {};
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -19,13 +27,20 @@
         signal: fetchOptions.signal || controller.signal,
         headers: {
           ...defaultHeaders,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(resolvedToken ? { Authorization: `Bearer ${resolvedToken}` } : {}),
           ...(headers || {}),
         },
       });
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        const error = new Error(`API request failed: ${response.status} ${response.statusText}`);
+        error.status = response.status;
+        try {
+          error.payload = await response.json();
+        } catch (_error) {
+          error.payload = null;
+        }
+        throw error;
       }
 
       if (response.status === 204) return null;
@@ -117,9 +132,58 @@
     };
   }
 
+  function normalizeComment(item, index = 0) {
+    const author = item?.author?.nickname || item?.authorNickname || item?.nickname || item?.author || "익명 사용자";
+    return {
+      id: String(item?.id || item?.commentId || `backend-comment-${index}`),
+      promptId: item?.promptId ? String(item.promptId) : "",
+      parentId: item?.parentId ? String(item.parentId) : null,
+      author,
+      owner: author,
+      text: String(item?.text || item?.content || ""),
+      likes: toNumber(item?.likes, item?.likeCount),
+      edited: Boolean(item?.edited || item?.isEdited),
+      deleted: Boolean(item?.deleted || item?.isDeleted),
+      likedByMe: Boolean(item?.likedByMe || item?.isLiked),
+      isReported: Boolean(item?.isReported || item?.reportedByMe),
+      createdAt: toTimestamp(item?.createdAt, item?.createdDate),
+      replies: unwrapItems(item?.replies).map((reply, replyIndex) => normalizeComment(reply, replyIndex)),
+      raw: item,
+    };
+  }
+
   function normalizePopularTag(item) {
     if (typeof item === "string") return item.replace(/^#+/, "").trim();
     return String(item?.name || item?.tagName || item?.label || item?.title || "").replace(/^#+/, "").trim();
+  }
+
+  function normalizeAdminTag(item, index = 0) {
+    const label = normalizePopularTag(item) || `tag-${index}`;
+    const status = String(item?.status || "pending").toLowerCase();
+    return {
+      id: String(item?.id || item?.tagId || label),
+      key: label.replace(/^#+/, "").trim().toLowerCase(),
+      label,
+      status: ["approved", "rejected", "pending"].includes(status) ? status : "pending",
+      count: toNumber(item?.useCount, item?.count, item?.usageCount),
+      recentAt: toTimestamp(item?.createdAt, item?.updatedAt),
+      raw: item,
+    };
+  }
+
+  function normalizeReport(item, index = 0) {
+    const targetType = String(item?.targetType || item?.type || "prompt").toLowerCase();
+    return {
+      id: String(item?.id || item?.reportId || `backend-report-${index}`),
+      key: `${targetType}:${item?.targetId || item?.promptId || item?.commentId || item?.id || index}`,
+      type: targetType,
+      targetId: String(item?.targetId || item?.promptId || item?.commentId || ""),
+      promptId: item?.promptId ? String(item.promptId) : "",
+      status: String(item?.status || "pending").toLowerCase(),
+      reason: item?.reason || "",
+      createdAt: toTimestamp(item?.createdAt, item?.createdDate),
+      raw: item,
+    };
   }
 
   function normalizeMakeMessage(item, index = 0) {
@@ -208,9 +272,21 @@
         body: JSON.stringify(payload),
       });
     },
+    withdrawAccount(payload, token) {
+      return request("/api/auth/withdraw", {
+        method: "DELETE",
+        token,
+        body: JSON.stringify(payload),
+      });
+    },
     getCommunityPosts,
-    searchCommunityPosts({ tags = [], page = 1, size = 16, sort = "popular" } = {}) {
-      const query = new URLSearchParams({ tags: tags.join(","), page, size, sort });
+    searchCommunityPosts({ tags = [], scope = "", query: searchQuery = "", keyword = "", author = "", page = 1, size = 16, sort = "popular" } = {}) {
+      const query = new URLSearchParams({ page, size, sort });
+      if (tags.length) query.set("tags", tags.join(","));
+      if (scope) query.set("scope", scope);
+      if (searchQuery) query.set("query", searchQuery);
+      if (keyword) query.set("keyword", keyword);
+      if (author) query.set("author", author);
       return request(`/api/prompts?${query.toString()}`).then((payload) => ({
         ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
         items: unwrapItems(payload).map(normalizePrompt),
@@ -218,6 +294,13 @@
     },
     getPopularTags({ limit = 8 } = {}) {
       return request(`/api/tags/popular?limit=${limit}`).then((payload) => unwrapItems(payload).map(normalizePopularTag).filter(Boolean));
+    },
+    searchTags({ query = "", limit = 8 } = {}) {
+      const params = new URLSearchParams({ query, limit });
+      return request(`/api/tags?${params.toString()}`).then((payload) => unwrapItems(payload).map(normalizeAdminTag));
+    },
+    proposeTag(payload, token) {
+      return request("/api/tags/proposals", { method: "POST", token, body: JSON.stringify(payload) }).then(normalizeAdminTag);
     },
     getMakeThreads(token) {
       return request("/api/make/threads", { token }).then((payload) => unwrapItems(payload).map(normalizeMakeThread));
@@ -242,6 +325,9 @@
     },
     viewPrompt(promptId) {
       return request(`/api/prompts/${promptId}/view`, { method: "POST" });
+    },
+    getPromptComments(promptId, token) {
+      return request(`/api/prompts/${promptId}/comments`, { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
     },
     improvePrompt(payload, token) {
       return request("/api/prompts/improve", { method: "POST", token, body: JSON.stringify(payload) }).then((result) =>
@@ -288,8 +374,24 @@
       const query = new URLSearchParams({ filter, page, size });
       return request(`/api/prompts/my?${query.toString()}`, { token });
     },
+    getMyLibrary({ filter = "all", page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ filter, page, pageSize });
+      return request(`/api/me/library?${query.toString()}`, { token }).then((payload) => ({
+        ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
+        items: unwrapItems(payload).map(normalizePrompt),
+      }));
+    },
+    getMyComments(token) {
+      return request("/api/me/comments", { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
+    },
+    getMyReports(token) {
+      return request("/api/me/reports", { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
+    },
     sharePrompt(payload, token) {
-      return request("/api/prompts", { method: "POST", token, body: JSON.stringify(payload) });
+      return request("/api/prompts", { method: "POST", token, body: JSON.stringify(payload) }).then(normalizePrompt);
+    },
+    updatePrompt(promptId, payload, token) {
+      return request(`/api/prompts/${promptId}`, { method: "PATCH", token, body: JSON.stringify(payload) }).then(normalizePrompt);
     },
     unsharePrompt(promptId, token) {
       return request(`/api/prompts/${promptId}/visibility`, {
@@ -298,8 +400,45 @@
         body: JSON.stringify({ isShared: false }),
       });
     },
+    shareExistingPrompt(promptId, token) {
+      return request(`/api/prompts/${promptId}/visibility`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ isShared: true }),
+      }).then(normalizePrompt);
+    },
     deletePrompt(promptId, token) {
       return request(`/api/prompts/${promptId}`, { method: "DELETE", token });
+    },
+    checkUserId(userId) {
+      const query = new URLSearchParams({ userId });
+      return request(`/api/auth/check-user-id?${query.toString()}`);
+    },
+    checkNickname(nickname) {
+      const query = new URLSearchParams({ nickname });
+      return request(`/api/auth/check-nickname?${query.toString()}`);
+    },
+    getAdminReports({ status = "" } = {}, token) {
+      const query = new URLSearchParams();
+      if (status) query.set("status", status);
+      return request(`/api/admin/reports${query.toString() ? `?${query.toString()}` : ""}`, { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
+    },
+    updateAdminReportStatus(reportId, status, token) {
+      return request(`/api/admin/reports/${reportId}/status`, { method: "PATCH", token, body: JSON.stringify({ status }) }).then(normalizeReport);
+    },
+    hideAdminPrompt(promptId, token) {
+      return request(`/api/admin/prompts/${promptId}/hide`, { method: "PATCH", token }).then(normalizePrompt);
+    },
+    restoreAdminPrompt(promptId, token) {
+      return request(`/api/admin/prompts/${promptId}/restore`, { method: "PATCH", token }).then(normalizePrompt);
+    },
+    getAdminTags({ status = "" } = {}, token) {
+      const query = new URLSearchParams();
+      if (status) query.set("status", status);
+      return request(`/api/admin/tags${query.toString() ? `?${query.toString()}` : ""}`, { token }).then((payload) => unwrapItems(payload).map(normalizeAdminTag));
+    },
+    updateAdminTagStatus(tagId, status, token) {
+      return request(`/api/admin/tags/${tagId}/status`, { method: "PATCH", token, body: JSON.stringify({ status }) }).then(normalizeAdminTag);
     },
   };
 
