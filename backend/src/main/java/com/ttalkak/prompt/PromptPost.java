@@ -66,6 +66,7 @@ public class PromptPost {
     public void decreaseComments() { if (this.comments > 0) this.comments--; }
     public void changeVisibility(boolean shared) { this.shared = shared; this.updatedAt = LocalDateTime.now(); }
     public void delete() { this.deleted = true; this.shared = false; this.updatedAt = LocalDateTime.now(); }
+    public void restore() { this.deleted = false; this.shared = true; this.updatedAt = LocalDateTime.now(); }
     public void update(String title, String text, String tagsCsv) {
         this.title = title;
         this.text = text;

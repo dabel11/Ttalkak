@@ -3,13 +3,16 @@ package com.ttalkak.community;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @RestController
 public class CommentController {
@@ -41,13 +44,14 @@ public class CommentController {
     public ResponseEntity<?> addComment(@PathVariable Long promptId,
                                         @RequestBody CommentRequest request,
                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId = requireMemberId(authorization);
         String nickname = authService.currentNickname(authorization);
+        PromptPost prompt = promptRepository.findById(promptId)
+                .filter(item -> !item.isDeleted())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프롬프트를 찾을 수 없습니다."));
         Comment comment = commentRepository.save(new Comment(promptId, null, memberId, nickname, resolvedText(request)));
-        promptRepository.findById(promptId).ifPresent(prompt -> {
-            prompt.increaseComments();
-            promptRepository.save(prompt);
-        });
+        prompt.increaseComments();
+        promptRepository.save(prompt);
         return ResponseEntity.ok(toResponse(comment, memberId, true));
     }
 
@@ -55,9 +59,9 @@ public class CommentController {
     public ResponseEntity<?> addReply(@PathVariable Long commentId,
                                       @RequestBody CommentRequest request,
                                       @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Comment parent = commentRepository.findById(commentId).orElse(null);
-        if (parent == null) return ResponseEntity.notFound().build();
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId = requireMemberId(authorization);
+        Comment parent = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         String nickname = authService.currentNickname(authorization);
         Comment reply = commentRepository.save(new Comment(parent.getPromptId(), commentId, memberId, nickname, resolvedText(request)));
         promptRepository.findById(parent.getPromptId()).ifPresent(prompt -> {
@@ -71,37 +75,51 @@ public class CommentController {
     public ResponseEntity<?> updateComment(@PathVariable Long commentId,
                                            @RequestBody CommentRequest request,
                                            @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
-        Comment comment = commentRepository.findById(commentId).orElse(null);
-        if (comment == null) return ResponseEntity.notFound().build();
+        Long memberId = requireMemberId(authorization);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        if (!canManage(comment, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "댓글 수정 권한이 없습니다."));
+        }
+        if (comment.isDeleted()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "삭제된 댓글은 수정할 수 없습니다."));
+        }
         comment.updateText(resolvedText(request));
         commentRepository.save(comment);
         return ResponseEntity.ok(toResponse(comment, memberId, comment.getParentId() == null));
     }
 
     @DeleteMapping("/api/comments/{commentId}")
-    public ResponseEntity<?> deleteComment(@PathVariable Long commentId) {
-        Comment comment = commentRepository.findById(commentId).orElse(null);
-        if (comment == null) return ResponseEntity.notFound().build();
+    public ResponseEntity<?> deleteComment(@PathVariable Long commentId,
+                                           @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireMemberId(authorization);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        if (!canManage(comment, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "댓글 삭제 권한이 없습니다."));
+        }
+        boolean shouldDecreaseCount = !comment.isDeleted();
         if (commentRepository.countByParentId(commentId) > 0) {
             comment.softDelete();
             commentRepository.save(comment);
         } else {
             commentRepository.delete(comment);
         }
-        promptRepository.findById(comment.getPromptId()).ifPresent(prompt -> {
-            prompt.decreaseComments();
-            promptRepository.save(prompt);
-        });
+        if (shouldDecreaseCount) {
+            promptRepository.findById(comment.getPromptId()).ifPresent(prompt -> {
+                prompt.decreaseComments();
+                promptRepository.save(prompt);
+            });
+        }
         return ResponseEntity.ok(Map.of("deleted", true, "id", commentId));
     }
 
     @PostMapping("/api/comments/{commentId}/like")
     public ResponseEntity<?> likeComment(@PathVariable Long commentId,
                                          @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization) == null ? 0L : authService.currentMemberIdOrNull(authorization);
-        Comment comment = commentRepository.findById(commentId).orElse(null);
-        if (comment == null) return ResponseEntity.notFound().build();
+        Long memberId = requireMemberId(authorization);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         if (!commentLikeRepository.existsByCommentIdAndMemberId(commentId, memberId)) {
             commentLikeRepository.save(new CommentLike(commentId, memberId));
             comment.increaseLikes();
@@ -113,9 +131,9 @@ public class CommentController {
     @DeleteMapping("/api/comments/{commentId}/like")
     public ResponseEntity<?> unlikeComment(@PathVariable Long commentId,
                                            @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization) == null ? 0L : authService.currentMemberIdOrNull(authorization);
-        Comment comment = commentRepository.findById(commentId).orElse(null);
-        if (comment == null) return ResponseEntity.notFound().build();
+        Long memberId = requireMemberId(authorization);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         commentLikeRepository.findByCommentIdAndMemberId(commentId, memberId).ifPresent(like -> {
             commentLikeRepository.delete(like);
             comment.decreaseLikes();
@@ -148,6 +166,24 @@ public class CommentController {
                     .toList());
         }
         return body;
+    }
+
+    private Long requireMemberId(String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        return memberId;
+    }
+
+    private boolean canManage(Comment comment, String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) return false;
+        boolean isAuthor = Objects.equals(comment.getAuthorId(), memberId);
+        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+        return isAuthor || isAdmin;
     }
 
     private String resolvedText(CommentRequest request) {

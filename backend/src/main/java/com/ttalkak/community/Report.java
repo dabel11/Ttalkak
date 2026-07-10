@@ -30,4 +30,6 @@ public class Report {
     public String getReason() { return reason; }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public void changeStatus(String status) { this.status = status; }
 }
+

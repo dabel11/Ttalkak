@@ -3,8 +3,10 @@ package com.ttalkak.prompt;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.member.Member;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
@@ -39,6 +41,10 @@ public class PromptController {
     @GetMapping
     public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization,
                                     @RequestParam(required = false) String tags,
+                                    @RequestParam(required = false) String scope,
+                                    @RequestParam(required = false) String query,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(required = false) String author,
                                     @RequestParam(defaultValue = "popular") String sort,
                                     @RequestParam(defaultValue = "1") int page,
                                     @RequestParam(required = false) Integer size,
@@ -51,6 +57,7 @@ public class PromptController {
 
         List<PromptPost> filtered = promptRepository.findByDeletedFalseAndSharedTrue().stream()
                 .filter(prompt -> tagTokens.isEmpty() || PromptMapper.splitTags(prompt.getTagsCsv()).containsAll(tagTokens))
+                .filter(prompt -> matchesSearch(prompt, scope, query, keyword, author))
                 .sorted(comparator(sort))
                 .toList();
 
@@ -70,7 +77,7 @@ public class PromptController {
     @PostMapping
     public ResponseEntity<?> share(@RequestBody SharePromptRequest request,
                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId = requireMemberId(authorization);
         String nickname = authService.currentNickname(authorization);
         String tagsCsv = PromptMapper.joinTags(request.tags());
         PromptPost prompt = new PromptPost(memberId, nickname, request.title(), request.text(), tagsCsv, true);
@@ -83,10 +90,10 @@ public class PromptController {
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @RequestBody SharePromptRequest request,
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
-        if (memberId != null && prompt.getAuthorId() != null && !Objects.equals(prompt.getAuthorId(), memberId)) {
+        if (!canManage(prompt, authorization)) {
             return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
         }
         prompt.update(request.title(), request.text(), PromptMapper.joinTags(request.tags()));
@@ -98,8 +105,12 @@ public class PromptController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null) return ResponseEntity.notFound().build();
+        if (!canManage(prompt, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "삭제 권한이 없습니다."));
+        }
         prompt.delete();
         promptRepository.save(prompt);
         return ResponseEntity.ok(Map.of("deleted", true, "id", id));
@@ -109,9 +120,12 @@ public class PromptController {
     public ResponseEntity<?> visibility(@PathVariable Long id,
                                         @RequestBody VisibilityRequest request,
                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (!canManage(prompt, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "공유 상태 변경 권한이 없습니다."));
+        }
         prompt.changeVisibility(Boolean.TRUE.equals(request.isShared()));
         promptRepository.save(prompt);
         return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId)));
@@ -286,7 +300,54 @@ public class PromptController {
     }
 
     private Long requireMemberId(String authorization) {
-        return authService.currentMemberIdOrNull(authorization) == null ? 0L : authService.currentMemberIdOrNull(authorization);
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        return memberId;
+    }
+
+    private boolean canManage(PromptPost prompt, String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) return false;
+        boolean isAuthor = prompt.getAuthorId() != null && Objects.equals(prompt.getAuthorId(), memberId);
+        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+        return isAuthor || isAdmin;
+    }
+
+    private boolean matchesSearch(PromptPost prompt, String scope, String query, String keyword, String author) {
+        String q = firstNonBlank(query, keyword);
+        String normalizedScope = scope == null || scope.isBlank() ? "all" : scope.toLowerCase();
+
+        if (author != null && !author.isBlank()) {
+            String authorText = prompt.getAuthorNickname() == null ? "" : prompt.getAuthorNickname();
+            if (!authorText.toLowerCase().contains(author.toLowerCase())) return false;
+        }
+
+        if (q == null || q.isBlank()) return true;
+        String lower = q.toLowerCase();
+        return switch (normalizedScope) {
+            case "tag", "hashtag", "tags" -> PromptMapper.splitTags(prompt.getTagsCsv()).stream()
+                    .anyMatch(tag -> tag.toLowerCase().contains(lower));
+            case "author" -> prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower);
+            case "keyword", "title", "text" -> containsPromptText(prompt, lower);
+            default -> containsPromptText(prompt, lower)
+                    || (prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower))
+                    || PromptMapper.splitTags(prompt.getTagsCsv()).stream().anyMatch(tag -> tag.toLowerCase().contains(lower));
+        };
+    }
+
+    private boolean containsPromptText(PromptPost prompt, String lower) {
+        return (prompt.getTitle() != null && prompt.getTitle().toLowerCase().contains(lower))
+                || (prompt.getText() != null && prompt.getText().toLowerCase().contains(lower));
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        if (second != null && !second.isBlank()) return second;
+        return null;
     }
 
     private void increaseTagUsage(List<String> tags) {

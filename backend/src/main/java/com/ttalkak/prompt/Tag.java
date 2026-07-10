@@ -22,5 +22,7 @@ public class Tag {
     public String getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void increaseUseCount() { this.useCount++; }
+    public void changeStatus(String status) { this.status = status; }
     public static String normalize(String raw) { return raw == null ? "" : raw.trim().replace("#", "").toLowerCase(); }
 }
+
