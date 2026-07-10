@@ -3648,6 +3648,12 @@ function toggleLikePrompt(promptId) {
 
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 신고할 수 있습니다.");
+    render();
+    return;
+  }
   if (state.reportedPromptIds.has(promptId)) {
     showNotice("이미 신고한 프롬프트입니다.");
     return;
@@ -3659,6 +3665,12 @@ function openReportPrompt(promptId) {
 
 function openReportComment(commentId) {
   if (!findCommentById(commentId)) return;
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 신고할 수 있습니다.");
+    render();
+    return;
+  }
   if (state.reportedCommentIds.has(commentId)) {
     showNotice("이미 신고한 댓글입니다.");
     return;
@@ -3692,6 +3704,9 @@ function reportPrompt(promptId, reason) {
     createdAt: Date.now(),
   };
   state.reportPromptId = null;
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("reportPrompt", promptId, { reason: content });
+  }
   showNotice("신고가 접수되었습니다.");
 }
 
@@ -3715,6 +3730,9 @@ function reportComment(commentId, reason) {
     createdAt: Date.now(),
   };
   state.reportCommentId = null;
+  if (isBackendNumericId(commentId)) {
+    callBackendApi("reportComment", commentId, { reason: content });
+  }
   showNotice("댓글 신고가 접수되었습니다.");
 }
 
@@ -3938,6 +3956,13 @@ function getCommentLikes(comment) {
 }
 
 function toggleLikeComment(commentId) {
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 댓글에 좋아요를 누를 수 있습니다.");
+    render();
+    return;
+  }
+
   const comment = findCommentById(commentId);
   if (!comment) return;
   if (canDeleteComment(comment)) {
@@ -3995,6 +4020,13 @@ function addPromptComment(promptId, text) {
   const content = String(text || "").trim();
   if (!content) return;
 
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("댓글을 작성하려면 로그인이 필요합니다.");
+    render();
+    return;
+  }
+
   if (!commentsByPrompt[promptId]) {
     commentsByPrompt[promptId] = [];
   }
@@ -4027,6 +4059,13 @@ function toggleReplyForm(commentId) {
 function addCommentReply(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("답글을 작성하려면 로그인이 필요합니다.");
+    render();
+    return;
+  }
 
   const parentComment = findCommentById(commentId);
   if (!parentComment) return;
@@ -4103,6 +4142,7 @@ function deleteOwnComment(commentId) {
 function canDeleteComment(comment) {
   if (!comment) return false;
   if (state.adminMode) return true;
+  if (!state.isLoggedIn) return false;
   const owner = comment.owner || comment.author;
   return owner === "나" || owner === state.currentUser || comment.author === state.currentUser;
 }
@@ -4163,8 +4203,7 @@ async function runConfirmedAction() {
       clearAuthenticatedSession();
       showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
     } catch (error) {
-      const backendMessage = error?.payload?.message || error?.message || "";
-      window.alert(backendMessage || "회원탈퇴 요청에 실패했습니다.");
+      handleBackendAccessError(error, "회원탈퇴 요청에 실패했습니다.");
       render();
       return;
     }
@@ -4368,6 +4407,7 @@ async function moveThreadToFolderOnBackend(thread, backendFolderId) {
       state.authToken || state.token || undefined,
     );
   } catch (error) {
+    handleBackendAccessError(error, "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.");
     console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패해 로컬 데모 상태만 유지합니다.", error);
   }
 }
@@ -4762,8 +4802,7 @@ async function publishSavedPrompt(promptId) {
     try {
       backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, state.authToken || state.token || undefined);
     } catch (error) {
-      const backendMessage = error?.payload?.message || error?.message || "";
-      window.alert(backendMessage || "공유 상태 변경 요청에 실패했습니다.");
+      handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
       return;
     }
   }
@@ -4820,8 +4859,7 @@ async function updateOwnPrompt(promptId, formData) {
         state.authToken || state.token || undefined,
       );
     } catch (error) {
-      const backendMessage = error?.payload?.message || error?.message || "";
-      window.alert(backendMessage || "프롬프트 수정 요청에 실패했습니다.");
+      handleBackendAccessError(error, "프롬프트 수정 요청에 실패했습니다.");
       return;
     }
   }
@@ -5148,8 +5186,7 @@ async function sharePrompt(formData) {
         removePromptById(savedPrompts, prompt.id);
       }
     } catch (error) {
-      const backendMessage = error?.payload?.message || error?.message || "";
-      window.alert(backendMessage || "프롬프트 공유 요청에 실패했습니다.");
+      handleBackendAccessError(error, "프롬프트 공유 요청에 실패했습니다.");
       return;
     }
   }
@@ -5629,6 +5666,7 @@ async function updateAdminTagDecision(tag, decision) {
         item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
       );
     } catch (error) {
+      handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
       console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
     }
   }
@@ -5660,6 +5698,7 @@ async function updateReportRecordStatus(key, status) {
       );
       status = backendStatus;
     } catch (error) {
+      handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
       console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
     }
   }
@@ -5766,6 +5805,7 @@ async function toggleAdminPromptHidden(promptId) {
       try {
         await window.TTALKAK_API.restoreAdminPrompt(promptId, state.authToken || state.token || undefined);
       } catch (error) {
+        handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
         console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
       }
     }
@@ -5776,6 +5816,7 @@ async function toggleAdminPromptHidden(promptId) {
       try {
         await window.TTALKAK_API.hideAdminPrompt(promptId, state.authToken || state.token || undefined);
       } catch (error) {
+        handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
         console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
       }
     }
@@ -5906,12 +5947,48 @@ function showNotice(message) {
   }, 1700);
 }
 
+function getBackendErrorMessage(error) {
+  const payload = error?.payload;
+  return String(
+    payload?.message ||
+      payload?.error ||
+      payload?.code ||
+      error?.message ||
+      "",
+  ).trim();
+}
+
+function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.") {
+  const status = Number(error?.status || error?.payload?.status || 0);
+  const backendMessage = getBackendErrorMessage(error);
+
+  if (status === 401) {
+    clearAuthenticatedSession({ keepRoute: true });
+    state.authView = "login";
+    showNotice("로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+    return true;
+  }
+
+  if (status === 403) {
+    showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
+    return true;
+  }
+
+  if (backendMessage || fallbackMessage) {
+    showNotice(backendMessage || fallbackMessage);
+    return true;
+  }
+
+  return false;
+}
+
 function callBackendApi(action, ...args) {
   const api = window.TTALKAK_API;
   const handler = api?.[action];
   if (typeof handler !== "function") return;
 
   Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
+    handleBackendAccessError(error, "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다.");
     console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
   });
 }
@@ -5924,6 +6001,7 @@ async function createBackendMakeFolder(payload) {
     const result = await api.createMakeFolder(payload, state.authToken || state.token || undefined);
     return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
   } catch (error) {
+    handleBackendAccessError(error, "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.");
     console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패해 로컬 데모 폴더만 유지합니다.", error);
     return "";
   }
@@ -5964,6 +6042,7 @@ async function createBackendMakeThread(thread) {
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
   } catch (error) {
+    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.");
     console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
     return "";
   }
@@ -6006,6 +6085,7 @@ async function improvePromptWithBackend(prompt) {
     return improved || polishPrompt(prompt);
   } catch (error) {
     state.makeBackendMessage = "Make demo data 표시 중: /api/prompts/improve 호출 실패로 데모 첨삭을 표시합니다.";
+    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.");
     console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
     return polishPrompt(prompt);
   }
