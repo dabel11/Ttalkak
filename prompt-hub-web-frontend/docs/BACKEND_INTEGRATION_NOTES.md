@@ -16,7 +16,7 @@ This frontend prototype uses local in-memory arrays plus `localStorage` for most
 - The top bar shows a small backend status badge:
   - `Backend 연결됨`: Home is using backend prompt/tag responses.
   - `Demo data 표시 중`: backend request failed and local demo fallback is displayed.
-- Save, like, comment, reply, share, and unshare buttons call the matching `src/api.js` functions in the background, while the visible UI still uses optimistic local demo mutations in `src/app.js`. Real integration should add token handling, API error rollback, and final response contract handling.
+- Save, like, comment, reply, report, share, and unshare buttons call the matching `src/api.js` functions in the background, while the visible UI still uses optimistic local demo mutations in `src/app.js`. Login/signup store `ttalkak_access_token`, protected calls send `Authorization: Bearer ...`, 401 responses clear the token and open the login modal, and 403 responses show a permission notice. Real integration should still add final API-response rollback and response contract handling.
 - Make threads/folders also remain optimistic local demo state after the smoke calls. Real integration should replace local folder/thread mutations with the final API response, dedupe server ids, and add rollback on failure.
 - Make thread delete is currently local-only because the shared backend contract does not include `DELETE /api/make/threads/:id`.
 - When a user creates a folder from the thread menu and immediately moves that thread, the frontend sends the move API only if the folder creation response includes a server folder id. This avoids sending temporary local ids to `PATCH /api/make/threads/:id/folder`.

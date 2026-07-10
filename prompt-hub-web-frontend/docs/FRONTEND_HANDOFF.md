@@ -10,7 +10,7 @@ TTALKAK 웹 프론트엔드 프로토타입을 백엔드와 연결하기 위한 
 - 영속 상태: 브라우저 `localStorage`
 - API 초안: `src/api.js`, `docs/API_SPEC.md`
 
-현재 프론트는 백엔드 없이 UX 확인이 가능하도록 만들어져 있습니다. 실제 연동 시에는 로컬 상태 변경 함수를 API 호출로 교체하면 됩니다.
+현재 프론트는 백엔드 없이도 UX 확인이 가능하도록 로컬 상태와 `localStorage` fallback을 유지합니다. 동시에 Home, Make, 인증, 일부 커뮤니티 액션은 `src/api.js`를 통해 API 요청을 발생시킵니다. 다음 연동 단계에서는 optimistic local state를 최종 서버 응답 기준 렌더링과 실패 rollback으로 교체하면 됩니다.
 
 ## Screen Structure
 

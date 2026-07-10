@@ -2,7 +2,7 @@
 
 TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
-현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage`를 사용합니다. 실제 연동 시에는 `src/api.js`와 `docs/API_SPEC.md`를 기준으로 Spring Boot API 호출로 교체하면 됩니다.
+현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage` fallback을 유지합니다. 동시에 Home, Make, 인증, 저장/좋아요/댓글/공유 일부 흐름은 `src/api.js`를 통해 Spring Boot API 요청을 발생시키므로 Network 탭에서 연동 상태를 확인할 수 있습니다.
 
 ## 브랜치 목적
 
@@ -18,7 +18,7 @@ TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
 ## 데모 한계
 
-- 현재 인증, Google OAuth2, 관리자 권한, 중복 확인, 신고/태그 검토는 실제 서버 연동이 아닌 프론트엔드 데모 흐름입니다.
+- 일반 로그인/회원가입 토큰 저장과 보호 API의 `Authorization: Bearer ...` 전송은 연결되어 있습니다. Google OAuth2, 관리자 권한 확정, 중복 확인, 신고/태그 검토의 최종 서버 상태 동기화는 아직 데모/부분 연동 흐름입니다.
 - Google OAuth 버튼은 실제 OAuth 인증이 아니라 사용자 흐름 확인용입니다.
 - Admin 화면은 프론트엔드 검수용 데모 토글입니다. 실서비스에서는 `ADMIN` 권한 검증과 감사 로그를 백엔드에서 반드시 처리해야 합니다.
 - My page의 샘플 데이터는 QA용 데모 데이터이며, 실서비스 신규 사용자의 My page 기본 상태는 비어 있어야 합니다.
@@ -103,11 +103,11 @@ Current backend-connected checks:
 
 Still demo/local-state based or partial:
 
-- Google OAuth2 and final permission/error rollback
+- Google OAuth2 and final API-response rollback
 - Make chat/folders
 - My page library/activity data
 - Admin moderation screens
-- Final error rollback for save/like/comment/share mutations
+- Final server-response rollback for save/like/comment/report/share mutations
 
 Connected auth updates:
 
@@ -122,6 +122,10 @@ Backend handoff check:
 3. Open DevTools Network tab and refresh Home.
 4. Confirm `GET http://localhost:8080/api/prompts` returns `200`.
 5. Confirm `GET http://localhost:8080/api/tags/popular` returns `200`.
+
+Full QA checklist:
+
+- See `docs/QA_CHECKLIST.md` for the recommended click-test order and the expected Network requests.
 
 Production transition cleanup:
 

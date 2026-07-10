@@ -4,7 +4,7 @@
 
 > 이 브랜치는 `jaewon7025/web-demo-preview` 체험용 브랜치입니다. 기존 `jaewon7025/develop` 작업물을 건드리지 않고, 팀원이 현재 웹 프론트엔드 데모 수준을 확인할 수 있도록 별도로 공유하는 용도입니다.
 
-현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage`를 사용합니다. 실제 백엔드 연동 시에는 `src/api.js`와 `docs/API_SPEC.md`를 기준으로 API 호출로 교체하면 됩니다.
+현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage` fallback을 유지합니다. 동시에 Home, Make, 인증, 저장/좋아요/댓글/공유 일부 흐름은 `src/api.js`를 통해 백엔드 API 요청을 발생시키므로 Network 탭에서 연동 상태를 확인할 수 있습니다.
 
 ## 브랜치 목적
 
@@ -88,22 +88,21 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - `docs/FRONTEND_HANDOFF.md`: 프론트 상태/정책 문서
 - `docs/BACKEND_INTEGRATION_NOTES.md`: 백엔드 연동 메모
 - `docs/BACKEND_HANDOFF_MESSAGE.md`: 백엔드 전달용 요약 메시지
+- `docs/QA_CHECKLIST.md`: 프론트/백엔드 연동 검수 체크리스트
 - `docs/SCREEN_MAP.md`: 화면별 기능/API 맵
 
-## 백엔드 연동 시 교체할 부분
+## 백엔드 연동 시 완성할 부분
 
-- 인증: 로그인, 회원가입, 아이디 찾기, 비밀번호 찾기
-- 프롬프트 목록, 상세, 검색, 정렬, 태그 랭킹
-- 저장, 좋아요, 신고, 조회수
-- 공유, 공유 취소, 삭제
-- 댓글/대댓글 CRUD, 좋아요, 신고
-- Make 첨삭 API
-- Make 최근 대화 저장/불러오기
+- 인증: 일반 로그인/회원가입 토큰 저장은 연결되어 있으며, Google OAuth2와 아이디/비밀번호 찾기 최종 API 연결이 남아 있습니다.
+- 프롬프트 목록, 태그 랭킹, Make 첨삭은 smoke 연동되어 있으며, 검색/정렬/상세 응답 계약과 실패 rollback을 더 맞춰야 합니다.
+- 저장, 좋아요, 신고, 댓글, 공유/공유 취소는 API 호출이 발생하지만 화면 상태는 아직 optimistic local state입니다.
+- Make 최근 대화/폴더는 서버 id를 사용해 호출하되, 최종 서버 응답 기준 렌더링과 삭제 API 계약 확정이 남아 있습니다.
+- My page와 Admin은 일부 API를 호출하지만, 실서비스에서는 서버 데이터/권한/감사 로그 기준으로 완전히 전환해야 합니다.
 
 ## 백엔드 공유 시 주의
 
 - 이 프로토타입은 정적 프론트엔드 데모입니다. 현재 화면 동작은 `src/app.js`의 로컬 배열과 `localStorage`가 담당합니다.
-- `src/api.js`와 `docs/API_SPEC.md`는 백엔드 연동 계약 초안이며, 아직 모든 화면 동작에 직접 연결된 상태는 아닙니다.
+- `src/api.js`와 `docs/API_SPEC.md`는 백엔드 연동 계약 초안입니다. Home/Make/Auth/일부 커뮤니티 액션은 API 요청을 발생시키지만, 화면 상태는 아직 optimistic local state를 함께 사용합니다.
 - 사이드바의 `My page` 화면 안에 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역 탭이 함께 들어 있습니다. 내부 route 이름은 기존 구현 호환을 위해 `saved`를 유지하지만, 사용자-facing 명칭은 `My page`입니다.
 - Admin 화면은 프론트엔드 데모 토글로 노출되지만, 실제 서비스에서는 반드시 백엔드의 관리자 권한 검증과 감사 로그가 필요합니다.
 - 관리자 데모가 켜진 상태에서는 일반 사용자 메뉴를 숨기고 `Admin`만 노출합니다. 관리자는 커뮤니티 사용자 행동보다 신고/콘텐츠/태그 관리에 집중하는 역할로 가정합니다.
@@ -146,7 +145,7 @@ Still demo/local-state based:
 - Admin screens
 - Most save/like/comment/share UI state
 
-Save, like, comment, reply, share, and unshare buttons now call the matching `window.TTALKAK_API` functions in the background, but the visible UI still uses optimistic local demo state. Real integration should keep token handling aligned with the final auth scheme, then add API error rollback and final response contract handling.
+Save, like, comment, reply, report, share, and unshare buttons now call the matching `window.TTALKAK_API` functions in the background. The visible UI still uses optimistic local demo state, but 401 responses clear the stored token and open the login modal, while 403 responses show a permission notice. Full production integration should add final API-response based rollback and response contract validation.
 
 Backend handoff check:
 
