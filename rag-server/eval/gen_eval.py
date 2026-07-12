@@ -38,11 +38,12 @@ from app.rag.generator import SYSTEM_PROMPT
 
 
 # ── 응답 캐시 (Groq 무료 TPD 100k 절약) ────────────────────────
-# 캐시 키 = sha256(SYSTEM_PROMPT + query + sorted 기법명) — 검색 결과나 시스템 프롬프트가
-# 바뀌면 자동 무효화. 같은 조건이면 LLM 호출을 건너뜀.
+# 캐시 키 = sha256(생성모델 + SYSTEM_PROMPT + query + sorted 기법명) — 검색 결과·시스템
+# 프롬프트·모델이 바뀌면 자동 무효화. 같은 조건이면 LLM 호출을 건너뜀.
+# (모델 미포함 시 8b 실험 응답이 70b 측정으로 오인되는 사고가 실제 있었음 — 2026-07-09)
 
-def _cache_key(query: str, technique_names: list[str]) -> str:
-    payload = SYSTEM_PROMPT + "|" + query + "|" + str(sorted(technique_names))
+def _cache_key(query: str, technique_names: list[str], model: str = "") -> str:
+    payload = str(model) + "|" + SYSTEM_PROMPT + "|" + query + "|" + str(sorted(technique_names))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -195,7 +196,7 @@ def main():
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
 
-        ckey = _cache_key(query, techniques) if args.cache_file else None
+        ckey = _cache_key(query, techniques, args.model) if args.cache_file else None
         if ckey and ckey in cache:
             cached = cache[ckey]
             if isinstance(cached, dict):           # 신형 캐시: run_generation 결과 dict

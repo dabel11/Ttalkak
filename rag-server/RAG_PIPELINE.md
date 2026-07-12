@@ -13,7 +13,7 @@ POST /query
   │  QueryRequest { query, collection="prompt_techniques", top_k=5, min_score=0.40,
   │                 model="gemini-2.0-flash", history, use_reranker=T, use_hybrid=F, ... }
   ▼
-[A] 검색 쿼리 결정      main.py:249-255   (기본: 원본 / 옵션: HyDE·키워드 변환)
+[A] 검색 쿼리 결정      main.py:142-147   (기본: 원본 / 옵션: HyDE·키워드 변환)
   ▼
 [B] 검색 (2단계+컷)     retriever.py:84
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
@@ -21,11 +21,11 @@ POST /query
    ├ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:175
    └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
   ▼
-   검색결과 0 & history 없음 → 404                  main.py:267
+   검색결과 0 & history 없음 → 404                  main.py:160
   ▼
 [C] 생성 (LLM, JSON)    generator.py       (참고기법 + 원본 → JSON {mode, improved_prompt, ...})
   ▼
-[D] 파싱·복원 → 응답    main.py:190 run_generation()  (JSON 파싱 → answer 마크다운 복원,
+[D] 파싱·복원 → 응답    main.py:83 run_generation()   (JSON 파싱 → answer 마크다운 복원,
   ▼                                                    실패 시 정규식 폴백 — 추가 LLM 호출 없음)
 QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, score }
 ```
@@ -39,7 +39,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 
 ## 1. 단계별 상세
 
-### [A] 검색 쿼리 결정 — `main.py:249-255`
+### [A] 검색 쿼리 결정 — `main.py:142-147`
 - 기본값: `search_query = req.query` (원본 그대로)
 - `use_hyde` ON → `query_transform.hyde()` (가상 기법문서 생성)
 - `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성)
@@ -65,13 +65,13 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 - **결과**: 관련 기법 청크 ≤5개 `{text, metadata{technique, category, source, chunk_id}, score, rerank_score}`
 
 ### [C] 생성 — `generator.py`
-- **백엔드 자동선택** (`Generator.__init__`, `generator.py:274`)
+- **백엔드 자동선택** (`Generator.__init__`, `generator.py:321`)
   - `GROQ_API_KEY` 있으면 **Groq 우선**, 없으면 Gemini (현재 `.env`엔 Groq만 → Groq)
-  - `model="gemini-2.0-flash"` → Groq `GROQ_MODEL_MAP`으로 **`llama-3.3-70b-versatile`** 매핑 (`generator.py:156`)
-- **메시지 구성** (`generator.py:175`)
+  - `model="gemini-2.0-flash"` → Groq `GROQ_MODEL_MAP`으로 **`llama-3.3-70b-versatile`** 매핑 (`generator.py:182`)
+- **메시지 구성** (`generator.py:215`)
   - `system` = `SYSTEM_PROMPT` (프롬프트 엔지니어 페르소나 + 질문/개선 모드 규칙)
-  - `history`(대화 맥락) 정제 후 삽입 (`_sanitize_history`, 121)
-  - `user` = `"[참고 기법]\n{5개 청크 포맷}\n\n[원본 프롬프트]\n{query}"` (`_build_technique_context`, 135)
+  - `history`(대화 맥락) 정제 후 삽입 (`_sanitize_history`, 147)
+  - `user` = `"[참고 기법]\n{5개 청크 포맷}\n\n[원본 프롬프트]\n{query}"` (`_build_technique_context`, 161)
   - 파라미터: `temperature=0.7`, `max_tokens`는 **TPM 예산 내 동적 산정**(`_fit_max_tokens` — 입력≈chars/3 추정, 70b 12k/8b 6k 예산, 상한 4096·하한 512). Groq는 입력+출력예약 합산이라 긴 원문·8b에서 413 나던 것 방지(2026-07-07)
   - Groq `response_format=json_object` / Gemini `response_mime_type=application/json` — **JSON 출력 강제**
 - **두 모드 중 하나로 응답** (SYSTEM_PROMPT [출력 형식 — JSON]이 스키마 정의, 2026-07-05)
@@ -80,7 +80,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
   - **질문 모드**(예외): (A)작업종류·(B)핵심주제 특정 불가 시 `{mode:"ask", questions[], summary}`
 - 후처리: `_strip_cjk_noise`로 **한글에 직접 붙은** 한자 오염 토큰만 제거 (`generator.py:19`). ⚠️ 공백·따옴표로 분리된 외국어(번역 원문 등)는 보존(2026-06-27 수정)
 
-### [D] 파싱·복원·응답 — `main.py:190 run_generation()` (§2-(4) 상세)
+### [D] 파싱·복원·응답 — `main.py:83 run_generation()` (§2-(4) 상세)
 - `parse_generation()`: JSON 관대 파싱(코드펜스·잡담 허용). mode 필드 유효성 검사
 - `build_answer()`: JSON → **기존 표시용 마크다운 복원** (`**개선된 프롬프트:**`… / `**확인이 필요해요 🤔**`) — 익스텐션 UI·history 왕복 형식 무변경
 - **파싱 실패 시 폴백**: 원문 그대로 answer + 레거시 정규식 추출(extract_improved_prompt 등, 2026-06-27의 `---` 보존 로직 유지)
@@ -93,7 +93,7 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 ## 2. 핵심 설계 포인트 4가지
 
 ### (1) 검색 쿼리 ≠ 생성 쿼리
-- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:245 query()`)
+- **검색([B])은 `search_query`, 생성([C])은 항상 원본 `req.query`** (`main.py:137 query()`)
 - 이유: 검색이 매칭할 대상은 **기법 카드 코퍼스**, 생성이 다룰 대상은 **사용자 실제 의도·내용** → 최적 입력이 다름
 - 변환 함수 (`query_transform.py`)
   - `transform()` (71): Groq `llama-3.1-8b-instant`, 출력=**키워드 한 줄** (예: `역할 부여, 출력 형식, 톤`)
@@ -112,8 +112,8 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 - 운영 메모: HF Xet 연결 리셋 회피 위해 `HF_HUB_DISABLE_XET=1`(다운로드)·`HF_HUB_OFFLINE=1`(이후)
 
 ### (3) 벡터 인덱스 없음 — brute-force 코사인 — `retriever.py`
-- MySQL엔 **ANN(근사최근접) 인덱스 없음** → 매 쿼리마다 컬렉션 전체를 메모리로 올려 **numpy 전수 코사인** (`_load_collection` 182 → `_dense_scores` 139)
-- 현재 규모(108청크 — 2026-07-05 가이드 8기법 확장) **~1ms 수준**으로 충분
+- MySQL엔 **ANN(근사최근접) 인덱스 없음** → 매 쿼리마다 컬렉션 전체를 메모리로 올려 **numpy 전수 코사인** (`_load_collection` 193 → `_dense_scores` 148)
+- 현재 규모(134청크 — 2026-07-09 2차 확장: DAIR·Cookbook +30 후 이름 중복 4건 정리) **~1ms 수준**으로 충분
 - 설계 근거: "Spring 백엔드와 동일 DB 사용" 원칙(별도 벡터 DB 제거, 배포 단순화) > 검색 최적화 (WORKLOG 2026-06-19)
 - ⚠️ **확장 시 병목**: 코퍼스가 수천~수만으로 커지면 이 전수 스캔이 한계 → ANN/캐시/pgvector류 도입 검토 필요
 
@@ -133,12 +133,12 @@ QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, s
 |---|---|---|---|
 | `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수(상한 — min_score 컷으로 줄 수 있음) |
 | `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. recall 무손실 지점(score_analysis로 측정) |
-| `fetch_k` | 20 | `main.py:44` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
-| `use_reranker` | True | `main.py:44` | 측정상 단독이 최고 |
-| `use_hybrid` | False | `main.py:44` | 한국어 코퍼스에서 악화 → off |
+| `fetch_k` | 20 | `main.py:48` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
+| `use_reranker` | True | `main.py:48` | 측정상 단독이 최고 |
+| `use_hybrid` | False | `main.py:48` | 한국어 코퍼스에서 악화 → off |
 | 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py` GROQ_MODEL_MAP | 8b 생성은 mode_accuracy 0.75로 열세 → 70b 유지 |
 | 생성 temp/tokens | 0.7 / TPM 예산 내 동적(≤4096) | `generator.py` `_fit_max_tokens` | 입력 길이 추정 후 예약 축소 — 긴 원문 413 방지 |
-| collection | prompt_techniques (108청크) | QueryRequest | 기법 카드 컬렉션 (100 원본 + 가이드 8) |
+| collection | prompt_techniques (134청크) | QueryRequest | 기법 카드 컬렉션 (100 원본 + 가이드 8 + DAIR·Cookbook 30 − 중복 정리 4) |
 
 ---
 

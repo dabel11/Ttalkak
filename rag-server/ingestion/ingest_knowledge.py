@@ -713,6 +713,22 @@ def main() -> None:
         print("\n저장할 청크가 없어 종료합니다.")
         return
 
+    # ── 이름 정확일치 중복 제거 (기존 컬렉션과 비교) ──
+    # 의미 dedupe는 설명 문구가 다르면(코사인 < 임계) 동명 기법을 놓친다 —
+    # 2026-07-09 2차 적재에서 CoT·Few-Shot·Zero-Shot·Role 4건 유입 사고.
+    if not args.replace:
+        from sqlalchemy import select
+        from app.core.db import SessionLocal, RagChunk
+        with SessionLocal() as session:
+            metas = session.execute(
+                select(RagChunk.chunk_metadata).where(RagChunk.collection_name == args.collection)
+            ).scalars().all()
+        existing = {_normalize_name((m or {}).get("technique", "")) for m in metas}
+        name_dropped = [t for t in all_kept if _normalize_name(t.name) in existing]
+        all_kept = [t for t in all_kept if _normalize_name(t.name) not in existing]
+        if name_dropped:
+            print(f"🔁 이름 중복 폐기 {len(name_dropped)}개: {[t.name for t in name_dropped]}")
+
     # ── 의미 기반 중복 제거 (이름이 달라도 같은 기법이면 코퍼스 오염 방지) ──
     if not args.no_semantic_dedup:
         from app.core.embeddings import get_model
