@@ -1,94 +1,367 @@
 package com.ttalkak.prompt;
 
-import com.ttalkak.common.response.ApiResponse;
-import com.ttalkak.common.security.UserPrincipal;
-import com.ttalkak.prompt.dto.*;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
+import com.ttalkak.auth.AuthService;
+import com.ttalkak.member.Member;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.io.IOException;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/prompts")
-@RequiredArgsConstructor
 public class PromptController {
+    private final PromptRepository promptRepository;
+    private final PromptSaveRepository saveRepository;
+    private final PromptLikeRepository likeRepository;
+    private final TagRepository tagRepository;
+    private final AuthService authService;
+    private final WebClient webClient;
 
-    private final PromptService promptService;
+    @Value("${rag.server-url:http://localhost:8000}")
+    private String ragServerUrl;
 
-    @PostMapping("/improve")
-    public ApiResponse<ImproveResponse> improve(
-            @Valid @RequestBody ImproveRequest request,
-            @AuthenticationPrincipal(required = false) UserPrincipal user,
-            HttpServletRequest httpRequest) {
-        return ApiResponse.ok(promptService.improve(request, user, getClientIp(httpRequest)));
+    public PromptController(PromptRepository promptRepository,
+                            PromptSaveRepository saveRepository,
+                            PromptLikeRepository likeRepository,
+                            TagRepository tagRepository,
+                            AuthService authService,
+                            WebClient.Builder webClientBuilder) {
+        this.promptRepository = promptRepository;
+        this.saveRepository = saveRepository;
+        this.likeRepository = likeRepository;
+        this.tagRepository = tagRepository;
+        this.authService = authService;
+        this.webClient = webClientBuilder.build();
     }
 
-    @PostMapping(value = "/improve/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter improveStream(
-            @Valid @RequestBody ImproveRequest request,
-            @AuthenticationPrincipal(required = false) UserPrincipal user,
-            HttpServletRequest httpRequest) {
+    @GetMapping
+    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                    @RequestParam(required = false) String tags,
+                                    @RequestParam(required = false) String scope,
+                                    @RequestParam(required = false) String query,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(required = false) String author,
+                                    @RequestParam(defaultValue = "popular") String sort,
+                                    @RequestParam(defaultValue = "1") int page,
+                                    @RequestParam(required = false) Integer size,
+                                    @RequestParam(required = false) Integer pageSize) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        List<String> tagTokens = tags == null || tags.isBlank()
+                ? List.of()
+                : Arrays.stream(tags.split(",")).map(Tag::normalize).filter(s -> !s.isBlank()).toList();
 
-        SseEmitter emitter = new SseEmitter(180_000L);
+        List<PromptPost> filtered = promptRepository.findByDeletedFalseAndSharedTrue().stream()
+                .filter(prompt -> tagTokens.isEmpty() || PromptMapper.splitTags(prompt.getTagsCsv()).containsAll(tagTokens))
+                .filter(prompt -> matchesSearch(prompt, scope, query, keyword, author))
+                .sorted(comparator(sort))
+                .toList();
 
-        promptService.improveStream(request, user, getClientIp(httpRequest))
-                .subscribe(
-                        content -> {
-                            try {
-                                emitter.send(SseEmitter.event().name("content").data(content));
-                            } catch (IOException e) {
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        emitter::completeWithError,
-                        () -> {
-                            try {
-                                emitter.send(SseEmitter.event().name("done").data("[DONE]"));
-                                emitter.complete();
-                            } catch (IOException e) {
-                                emitter.completeWithError(e);
-                            }
-                        }
-                );
-
-        return emitter;
+        return pageResponse(filtered, page, resolvedSize, memberId);
     }
 
-    @PostMapping("/save")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<PromptResponse> save(
-            @Valid @RequestBody SavePromptRequest request,
-            @AuthenticationPrincipal UserPrincipal user) {
-        return ApiResponse.ok(promptService.save(request, user.getId()));
+    @GetMapping("/{id}")
+    public ResponseEntity<?> detail(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        return promptRepository.findById(id)
+                .filter(prompt -> !prompt.isDeleted())
+                .map(prompt -> ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId))))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public ResponseEntity<?> share(@RequestBody SharePromptRequest request,
+                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        String nickname = authService.currentNickname(authorization);
+        String tagsCsv = PromptMapper.joinTags(request.tags());
+        PromptPost prompt = new PromptPost(memberId, nickname, request.title(), request.text(), tagsCsv, true);
+        promptRepository.save(prompt);
+        increaseTagUsage(request.tags());
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, false, false));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @RequestBody SharePromptRequest request,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (!canManage(prompt, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
+        }
+        prompt.update(request.title(), request.text(), PromptMapper.joinTags(request.tags()));
+        promptRepository.save(prompt);
+        increaseTagUsage(request.tags());
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId)));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null) return ResponseEntity.notFound().build();
+        if (!canManage(prompt, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "삭제 권한이 없습니다."));
+        }
+        prompt.delete();
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(Map.of("deleted", true, "id", id));
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<?> visibility(@PathVariable Long id,
+                                        @RequestBody VisibilityRequest request,
+                                        @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (!canManage(prompt, authorization)) {
+            return ResponseEntity.status(403).body(Map.of("message", "공유 상태 변경 권한이 없습니다."));
+        }
+        prompt.changeVisibility(Boolean.TRUE.equals(request.isShared()));
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId)));
+    }
+
+    @PostMapping("/{id}/view")
+    public ResponseEntity<?> view(@PathVariable Long id) {
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        prompt.increaseViews();
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(Map.of("id", id, "views", prompt.getViews()));
+    }
+
+    @PostMapping("/{id}/save")
+    public ResponseEntity<?> save(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (!saveRepository.existsByPromptIdAndMemberId(id, memberId)) {
+            saveRepository.save(new PromptSave(id, memberId));
+            prompt.increaseSaves();
+            promptRepository.save(prompt);
+        }
+        return ResponseEntity.ok(Map.of("id", id, "saves", prompt.getSaves(), "isSaved", true));
+    }
+
+    @DeleteMapping("/{id}/save")
+    public ResponseEntity<?> unsave(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        saveRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(save -> {
+            saveRepository.delete(save);
+            prompt.decreaseSaves();
+            promptRepository.save(prompt);
+        });
+        return ResponseEntity.ok(Map.of("id", id, "saves", prompt.getSaves(), "isSaved", false));
+    }
+
+    @PostMapping("/{id}/like")
+    public ResponseEntity<?> like(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (!likeRepository.existsByPromptIdAndMemberId(id, memberId)) {
+            likeRepository.save(new PromptLike(id, memberId));
+            prompt.increaseLikes();
+            promptRepository.save(prompt);
+        }
+        return ResponseEntity.ok(Map.of("id", id, "likes", prompt.getLikes(), "isLiked", true));
+    }
+
+    @DeleteMapping("/{id}/like")
+    public ResponseEntity<?> unlike(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        likeRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(like -> {
+            likeRepository.delete(like);
+            prompt.decreaseLikes();
+            promptRepository.save(prompt);
+        });
+        return ResponseEntity.ok(Map.of("id", id, "likes", prompt.getLikes(), "isLiked", false));
     }
 
     @GetMapping("/my")
-    public ApiResponse<Page<PromptResponse>> getMyPrompts(
-            @AuthenticationPrincipal UserPrincipal user,
-            @PageableDefault(size = 16) Pageable pageable) {
-        return ApiResponse.ok(promptService.getMyPrompts(user.getId(), pageable));
+    public Map<String, Object> myPrompts(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                         @RequestParam(defaultValue = "all") String filter,
+                                         @RequestParam(defaultValue = "1") int page,
+                                         @RequestParam(required = false) Integer size,
+                                         @RequestParam(required = false) Integer pageSize) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        Long memberId = requireMemberId(authorization);
+        List<Long> savedIds = saveRepository.findByMemberId(memberId).stream().map(PromptSave::getPromptId).toList();
+        List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
+        List<PromptPost> prompts = promptRepository.findAll().stream()
+                .filter(prompt -> !prompt.isDeleted())
+                .filter(prompt -> switch (filter) {
+                    case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
+                    case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
+                    case "liked" -> likedIds.contains(prompt.getId());
+                    default -> savedIds.contains(prompt.getId()) || likedIds.contains(prompt.getId()) || Objects.equals(prompt.getAuthorId(), memberId);
+                })
+                .sorted(comparator("latest"))
+                .toList();
+        return pageResponse(prompts, page, resolvedSize, memberId);
     }
 
-    @GetMapping("/templates")
-    public ApiResponse<List<TemplateResponse>> getTemplates() {
-        return ApiResponse.ok(promptService.getTemplates());
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
+    @PostMapping("/improve")
+    public Map<String, Object> improve(@RequestBody ImproveRequest request) {
+        try {
+            Map<?, ?> ragResponse = webClient.post()
+                    .uri(ragServerUrl + "/query")
+                    .bodyValue(Map.of("query", request.prompt(), "top_k", 5))
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+            if (ragResponse != null) {
+                return improveFallback(request.prompt(), ragResponse);
+            }
+        } catch (Exception ignored) {
+            // rag-server가 아직 없으면 데모 개선 결과 반환
         }
-        return request.getRemoteAddr();
+        return improveFallback(request.prompt(), Map.of());
     }
+
+    private Map<String, Object> improveFallback(String prompt, Map<?, ?> ragResponse) {
+        String improved = """
+                너는 사용자의 목적을 정확히 파악해 결과물을 만드는 AI 전문가다.
+
+                [사용자 요청]
+                %s
+
+                [수행 방식]
+                1. 사용자의 목적을 먼저 분석한다.
+                2. 부족한 조건이 있으면 합리적으로 보완한다.
+                3. 결과는 바로 사용할 수 있는 형태로 작성한다.
+                4. 필요한 경우 예시와 출력 형식을 함께 제시한다.
+                """.formatted(prompt == null ? "" : prompt);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("conversationId", System.currentTimeMillis());
+        body.put("answer", "**개선된 프롬프트:**\n" + improved);
+        body.put("improvedPrompt", improved);
+        body.put("techniquesApplied", List.of("Role Prompting", "Specificity", "Output Format"));
+        body.put("changes", List.of("AI의 역할을 명확히 지정함", "요청 조건을 구조화함", "출력 형식을 구체화함"));
+        body.put("sources", ragResponse.containsKey("sources") ? ragResponse.get("sources") : List.of());
+        return body;
+    }
+
+    private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(size, 1);
+        int from = Math.min((safePage - 1) * safeSize, prompts.size());
+        int to = Math.min(from + safeSize, prompts.size());
+        List<Map<String, Object>> items = prompts.subList(from, to).stream()
+                .map(prompt -> PromptMapper.toPromptResponse(prompt, memberId, isSaved(prompt.getId(), memberId), isLiked(prompt.getId(), memberId)))
+                .toList();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", prompts.size());
+        body.put("totalPages", (int) Math.ceil((double) prompts.size() / safeSize));
+        return body;
+    }
+
+    private Comparator<PromptPost> comparator(String sort) {
+        Comparator<PromptPost> byLatest = Comparator.comparing(PromptPost::getCreatedAt).reversed();
+        return switch (sort == null ? "popular" : sort) {
+            case "saves" -> Comparator.comparing(PromptPost::getSaves).reversed().thenComparing(PromptPost::getViews).reversed();
+            case "comments" -> Comparator.comparing(PromptPost::getComments).reversed().thenComparing(PromptPost::getViews).reversed();
+            case "likes" -> Comparator.comparing(PromptPost::getLikes).reversed().thenComparing(PromptPost::getViews).reversed();
+            case "latest" -> byLatest;
+            default -> Comparator.comparing(PromptPost::getViews).reversed()
+                    .thenComparing(PromptPost::getComments).reversed()
+                    .thenComparing(PromptPost::getSaves).reversed();
+        };
+    }
+
+    private boolean isSaved(Long promptId, Long memberId) {
+        return memberId != null && saveRepository.existsByPromptIdAndMemberId(promptId, memberId);
+    }
+
+    private boolean isLiked(Long promptId, Long memberId) {
+        return memberId != null && likeRepository.existsByPromptIdAndMemberId(promptId, memberId);
+    }
+
+    private Long requireMemberId(String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        return memberId;
+    }
+
+    private boolean canManage(PromptPost prompt, String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) return false;
+        boolean isAuthor = prompt.getAuthorId() != null && Objects.equals(prompt.getAuthorId(), memberId);
+        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+        return isAuthor || isAdmin;
+    }
+
+    private boolean matchesSearch(PromptPost prompt, String scope, String query, String keyword, String author) {
+        String q = firstNonBlank(query, keyword);
+        String normalizedScope = scope == null || scope.isBlank() ? "all" : scope.toLowerCase();
+
+        if (author != null && !author.isBlank()) {
+            String authorText = prompt.getAuthorNickname() == null ? "" : prompt.getAuthorNickname();
+            if (!authorText.toLowerCase().contains(author.toLowerCase())) return false;
+        }
+
+        if (q == null || q.isBlank()) return true;
+        String lower = q.toLowerCase();
+        return switch (normalizedScope) {
+            case "tag", "hashtag", "tags" -> PromptMapper.splitTags(prompt.getTagsCsv()).stream()
+                    .anyMatch(tag -> tag.toLowerCase().contains(lower));
+            case "author" -> prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower);
+            case "keyword", "title", "text" -> containsPromptText(prompt, lower);
+            default -> containsPromptText(prompt, lower)
+                    || (prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower))
+                    || PromptMapper.splitTags(prompt.getTagsCsv()).stream().anyMatch(tag -> tag.toLowerCase().contains(lower));
+        };
+    }
+
+    private boolean containsPromptText(PromptPost prompt, String lower) {
+        return (prompt.getTitle() != null && prompt.getTitle().toLowerCase().contains(lower))
+                || (prompt.getText() != null && prompt.getText().toLowerCase().contains(lower));
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        if (second != null && !second.isBlank()) return second;
+        return null;
+    }
+
+    private void increaseTagUsage(List<String> tags) {
+        if (tags == null) return;
+        for (String raw : tags) {
+            String name = Tag.normalize(raw);
+            if (name.isBlank()) continue;
+            Tag tag = tagRepository.findByName(name).orElseGet(() -> new Tag(name));
+            tag.increaseUseCount();
+            tagRepository.save(tag);
+        }
+    }
+
+    public record SharePromptRequest(String title, String text, List<String> tags) {}
+    public record VisibilityRequest(Boolean isShared) {}
+    public record ImproveRequest(String prompt, String category, Long conversationId, List<Map<String, String>> history) {}
 }
