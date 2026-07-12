@@ -119,6 +119,8 @@ const savedPrompts = [
 
 normalizeSavedPromptOwnership();
 
+const DEMO_LIBRARY_PROMPT_IDS = new Set(savedPrompts.map((prompt) => prompt.id));
+
 const fallbackPopularTags = window.TTALKAK_DEMO_COPY?.fallbackPopularTags || ["SEO", "마케팅", "코딩", "이메일", "블로그", "콘텐츠", "첨삭", "기획"];
 const demoPromptTextOverrides = {
   "post-1": {
@@ -258,8 +260,12 @@ const promptTemplates = [
 
 const FREE_MAKE_LIMIT = 3;
 const STORAGE_KEY = "prompt_hub_web_state_v2";
+const AUTH_TOKEN_KEY = "ttalkak_access_token";
 const SAVED_PAGE_SIZE = 16;
 const SEARCH_DEBOUNCE_MS = 320;
+const MAX_CUSTOM_MAKE_FOLDERS = 5;
+const DEMO_EXISTING_NICKNAMES = ["Google닉네임", "태그지니", "콘텐츠랩", "카피메이커", "박민준", "김지수", "이서연", "나"];
+const DEMO_EXISTING_USER_IDS = ["google", "demo", "admin", "user", "ttalkak", "jaewon7025"];
 
 const commentsByPrompt = {
   "post-1": [
@@ -337,17 +343,46 @@ const state = {
   adminTab: "reports",
   adminPromptQuery: "",
   adminPromptFilter: "all",
+  adminTagQuery: "",
+  adminTagFilter: "all",
+  adminTagSort: "usage",
   adminPromptRevisionRequests: {},
   reportRecords: {},
   isLoggedIn: false,
   currentUser: null,
+  currentUserId: null,
+  currentUserRole: "user",
+  authToken: "",
+  token: "",
   isComposingSearch: false,
   isComposingShareTag: false,
+  isComposingAdminPromptSearch: false,
+  isComposingAdminTagSearch: false,
+  authDraft: {},
+  authDuplicateChecks: {},
+  authUserIdWarning: "",
+  libraryDemoSeeded: false,
+  userLibraryPromptIds: new Set(),
   searchTipShown: false,
   searchTipVisible: false,
   openFolderMenuId: null,
   openThreadMenuId: null,
+  creatingThreadFolderId: null,
+  openPromptCardMenuId: null,
+  searchScope: "all",
   searchQuery: "",
+  backendPopularTags: [],
+  backendStatus: "checking",
+  backendStatusMessage: "백엔드 연결 확인 중",
+  myBackendStatus: "idle",
+  adminBackendStatus: "idle",
+  backendMyComments: [],
+  backendMyReports: [],
+  backendLibraryPromptIds: new Set(),
+  backendAdminReports: [],
+  backendAdminTags: [],
+  makeBackendStatus: "idle",
+  makeBackendMessage: "",
   popularSort: "popular",
   popularPage: 1,
   savedPage: 1,
@@ -380,6 +415,8 @@ const state = {
 };
 
 let searchCommitTimer = null;
+let adminPromptSearchCommitTimer = null;
+let adminTagSearchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let pendingLatestMessageScrollId = null;
@@ -433,6 +470,9 @@ function render() {
   restorePendingMessageScroll();
   scrollToPendingLatestMessage();
   scrollToHighlightedComment();
+  hydrateBackendMakeDataIfNeeded();
+  hydrateBackendMyPageDataIfNeeded();
+  hydrateBackendAdminDataIfNeeded();
 }
 
 function scrollToHighlightedComment() {
@@ -510,6 +550,7 @@ function navigateTo(route) {
 
 function resetHomeView() {
   window.clearTimeout(searchCommitTimer);
+  state.searchScope = "all";
   state.searchQuery = "";
   state.popularPage = 1;
   state.detailPromptId = null;
@@ -559,17 +600,30 @@ function Sidebar() {
       <span>${label}</span>
     </button>
   `;
+  const adminTabs = state.adminMode ? getAdminTabs() : [];
 
   return `
     <aside class="sidebar" aria-label="주요 메뉴">
       <nav class="nav-list">
         ${
           state.adminMode
-            ? item("admin", "Admin", icons.shield)
+            ? `${item("admin", "Admin", icons.shield)}
+               <div class="admin-subnav" aria-label="관리자 하위 메뉴">
+                 ${adminTabs
+                   .map(
+                     (tab) => `
+                       <button class="${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
+                         <span>${tab.label}</span>
+                         <em>${formatNumber(tab.count)}</em>
+                       </button>
+                     `,
+                   )
+                   .join("")}
+               </div>`
             : `
               ${item("home", "Home", icons.home)}
               ${item("make", "Make", icons.make)}
-              ${item("saved", "My page", icons.user)}
+              ${state.isLoggedIn ? item("saved", "My page", icons.user) : ""}
               ${item("share", "Share", icons.share)}
             `
         }
@@ -578,12 +632,35 @@ function Sidebar() {
   `;
 }
 
+function getAdminTabs() {
+  const reportRecords = getAdminReportRecords();
+  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const adminPromptQuery = state.adminPromptQuery || "";
+  const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
+    ? state.adminPromptFilter
+    : "all";
+  const filteredAdminPrompts = allPrompts
+    .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
+    .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
+  const adminTags = getAdminManagedTags();
+
+  return [
+    { id: "reports", label: "신고 관리", count: reportRecords.length },
+    { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
+    { id: "tags", label: "태그 관리", count: adminTags.length },
+  ];
+}
+
 function Header() {
   const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
-  const hasReportedPrompts = state.reportedPromptIds.size > 0;
-  const showPromptTools = state.route === "home" || state.route === "saved";
+  const canUseReportTools = state.isLoggedIn || state.adminMode;
+  const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
+  const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
+  const adminAccessButton = state.currentUserRole === "admin"
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="관리자 권한 화면입니다." aria-label="관리자 화면">${state.adminMode ? "Admin 종료" : "Admin"}</button>`
+    : "";
   const authButton = state.isLoggedIn
-    ? `<div class="account-actions"><button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="프론트엔드 검수용 임시 관리자 진입입니다." aria-label="프론트엔드 검수용 관리자 데모">${state.adminMode ? "데모 해제" : "관리자 데모"}</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+    ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
     : `<button class="login-button" type="button" data-open-auth="login">로그인</button>`;
 
   return `
@@ -594,6 +671,7 @@ function Header() {
       </button>
       <div class="topbar-auth">
         ${authButton}
+        ${BackendStatusBadge()}
         ${
           showPromptTools
             ? `<div class="topbar-tools">
@@ -611,7 +689,12 @@ function Header() {
 function Page() {
   if (state.adminMode) return AdminPage();
   if (state.route === "make") return MakePage();
-  if (state.route === "saved") return SavedPage();
+  if (state.route === "saved") {
+    if (state.isLoggedIn) return SavedPage();
+    state.route = "home";
+    state.authView = "login";
+    return HomePage();
+  }
   if (state.route === "share") return SharePage();
   if (state.route === "admin") return AdminPage();
   return HomePage();
@@ -620,21 +703,30 @@ function Page() {
 function HomePage() {
   const prompts = applyReportedVisibility(getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = popularTags.length ? popularTags : fallbackPopularTags;
-  const searchCriteria = parsePromptSearchQuery(state.searchQuery);
+  const displayTags = state.backendPopularTags.length ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
+  const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const totalPages = getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
   const pagePrompts = prompts.slice((currentPage - 1) * 16, currentPage * 16);
   const isSearching = state.searchQuery.trim().length > 0;
+  const searchPlaceholder = getSearchPlaceholder(state.searchScope);
 
   return `
     <section class="home-page" aria-labelledby="popular-heading">
       <label class="search-field">
         <span>${icons.search}</span>
-        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="#해시태그와 키워드로 검색하세요. 예: #마케팅 CTA" aria-label="프롬프트 검색" />
-        <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="다중 해시태그 검색 안내">
+        <span class="search-scope-select">
+          <select data-search-scope aria-label="검색 대상">
+            ${SearchScopeOption("all", "전체")}
+            ${SearchScopeOption("tag", "해시태그")}
+            ${SearchScopeOption("keyword", "키워드")}
+            ${SearchScopeOption("author", "작성자")}
+          </select>
+        </span>
+        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="${searchPlaceholder}" aria-label="프롬프트 검색" />
+        <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
           <span>${icons.bulb}</span>
-          <small role="tooltip">#해시태그와 키워드를 함께 검색할 수 있습니다.</small>
+          <small role="tooltip">검색어는 쉼표로 구분해 여러 개를 함께 검색할 수 있습니다. 전체 검색에서는 태그, 키워드, 작성자를 함께 찾습니다.</small>
         </button>
       </label>
       <div class="popular-tags" aria-label="인기 태그">
@@ -662,7 +754,7 @@ function HomePage() {
              ${Pagination(totalPages, currentPage)}`
           : `<div class="empty-state search-empty">
               <span>${icons.search}</span>
-              <p>일치하는 해시태그의 프롬프트가 없습니다.</p>
+              <p>일치하는 프롬프트가 없습니다.</p>
             </div>`
       }
     </section>
@@ -671,6 +763,17 @@ function HomePage() {
 
 function SortOption(value, label) {
   return `<option value="${value}" ${state.popularSort === value ? "selected" : ""}>${label}</option>`;
+}
+
+function SearchScopeOption(value, label) {
+  return `<option value="${value}" ${state.searchScope === value ? "selected" : ""}>${label}</option>`;
+}
+
+function getSearchPlaceholder(scope) {
+  if (scope === "tag") return "해시태그를 입력하세요...";
+  if (scope === "keyword") return "프롬프트 제목이나 내용을 검색하세요...";
+  if (scope === "author") return "작성자 닉네임을 입력하세요...";
+  return "프롬프트를 검색하세요...";
 }
 
 function Pagination(totalPages, currentPage) {
@@ -695,8 +798,14 @@ function normalizeSavedPromptOwnership() {
 }
 
 function isPromptSaved(promptId) {
+  if (!state.isLoggedIn) return false;
   const prompt = savedPrompts.find((item) => item.id === promptId);
+  if (isHiddenDemoLibraryPrompt(prompt)) return false;
   return Boolean(prompt?.savedByMe) && !state.pendingUnsaveIds.has(promptId);
+}
+
+function isHiddenDemoLibraryPrompt(prompt) {
+  return Boolean(prompt && DEMO_LIBRARY_PROMPT_IDS.has(prompt.id) && !state.libraryDemoSeeded && !state.userLibraryPromptIds.has(prompt.id));
 }
 
 function getPromptSaveCount(prompt) {
@@ -716,10 +825,12 @@ function isPromptPendingUnsave(promptId) {
   return state.pendingUnsaveIds.has(promptId);
 }
 
-function commitPendingUnsaves(nextRoute = state.route) {
-  if (state.route !== "saved" || nextRoute === "saved" || state.pendingUnsaveIds.size === 0) return;
+function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myPageTab) {
+  const staysInLibrary = state.route === "saved" && nextRoute === "saved" && state.myPageTab === "library" && nextMyPageTab === "library";
+  if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return;
 
   state.pendingUnsaveIds.forEach((promptId) => {
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
     const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
     if (savedIndex >= 0) {
       if (savedPrompts[savedIndex].source === "mine") {
@@ -727,6 +838,7 @@ function commitPendingUnsaves(nextRoute = state.route) {
       } else {
         savedPrompts.splice(savedIndex, 1);
       }
+      state.userLibraryPromptIds.delete(promptId);
     }
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
       state.detailPromptId = null;
@@ -740,15 +852,17 @@ function commitPendingUnsaves(nextRoute = state.route) {
 function PromptCard(prompt, options = {}) {
   const isSaved = isPromptSaved(prompt.id);
   const isPendingUnsave = isPromptPendingUnsave(prompt.id);
-  const canDelete = prompt.source === "mine";
-  const isMine = prompt.source === "mine";
+  const isMine = state.isLoggedIn && prompt.source === "mine";
+  const canDelete = isMine;
   const isLiked = state.likedPromptIds.has(prompt.id);
-  const isReported = state.reportedPromptIds.has(prompt.id);
+  const isReported = canShowReportedState() && state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
   const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
   const hasMakeHistory = isMine && Array.isArray(prompt.messages) && prompt.messages.length > 0;
   const commentCount = getPromptCommentCount(prompt);
   const showStatus = options.showStatus !== false;
+  const isCardMenuOpen = state.openPromptCardMenuId === prompt.id;
+  const previewTags = getPromptCardPreviewTags(prompt.tags || []);
   const statusBadges = [
     isMine
       ? `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`
@@ -762,11 +876,24 @@ function PromptCard(prompt, options = {}) {
       <div class="card-head">
         <h2>${prompt.title}</h2>
         <div class="card-actions">
-          ${isMine ? `<button class="icon-button edit-card-button" data-edit-prompt="${prompt.id}" aria-label="수정">${icons.edit}</button>` : ""}
-          ${isMine && !isShared ? `<button class="icon-button share-card-button" data-share-saved="${prompt.id}" aria-label="공유">${icons.share}</button>` : ""}
-          ${isMine && isShared ? `<button class="icon-button unshare-card-button" data-unshare-prompt="${prompt.id}" aria-label="공유 취소">${icons.share}</button>` : ""}
+          ${
+            isMine
+              ? `<div class="prompt-card-menu-wrap">
+                  <button class="icon-button prompt-card-more" type="button" data-prompt-card-menu="${prompt.id}" aria-label="프롬프트 더보기" aria-expanded="${isCardMenuOpen ? "true" : "false"}">${icons.more}</button>
+                  ${
+                    isCardMenuOpen
+                      ? `<div class="prompt-card-menu" role="menu">
+                          <button type="button" data-edit-prompt="${prompt.id}" role="menuitem">${icons.edit}<span>수정</span></button>
+                          ${!isShared ? `<button type="button" data-share-saved="${prompt.id}" role="menuitem">${icons.share}<span>공유하기</span></button>` : ""}
+                          ${isShared ? `<button type="button" data-unshare-prompt="${prompt.id}" role="menuitem">${icons.share}<span>공유 취소</span></button>` : ""}
+                          <button type="button" data-delete-prompt="${prompt.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                        </div>`
+                      : ""
+                  }
+                </div>`
+              : ""
+          }
           ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${prompt.id}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
-          ${canDelete ? `<button class="icon-button delete-card-button" data-delete-prompt="${prompt.id}" aria-label="삭제">${icons.trash}</button>` : ""}
           <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${prompt.id}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
           <button class="icon-button metric-action comment-card-button" data-open-comments="${prompt.id}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
           <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
@@ -774,13 +901,36 @@ function PromptCard(prompt, options = {}) {
       </div>
       ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}
       <p>${prompt.text}</p>
-      <div class="tag-row">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
+      <div class="tag-row card-tag-row">
+        ${previewTags.visibleTags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}
+        ${previewTags.hiddenCount > 0 ? `<span class="tag-more">+${previewTags.hiddenCount}</span>` : ""}
+      </div>
       <footer class="card-meta">
         <span>${icons.eye}${formatNumber(prompt.views)}</span>
-        <span>${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
+        <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
       </footer>
     </article>
   `;
+}
+
+function BackendStatusBadge() {
+  const status = state.backendStatus || "checking";
+  const message = state.backendStatusMessage || "백엔드 연결 확인 중";
+  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "Demo data 표시 중" : "Backend 확인 중";
+  return `
+    <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
+      <span class="backend-status-dot" aria-hidden="true"></span>
+      <span>${label}</span>
+    </div>
+  `;
+}
+
+function getPromptCardPreviewTags(tags) {
+  const normalizedTags = Array.isArray(tags) ? tags : [];
+  return {
+    visibleTags: normalizedTags.slice(0, 3),
+    hiddenCount: Math.max(0, normalizedTags.length - 3),
+  };
 }
 
 function PromptDetailModal() {
@@ -789,13 +939,13 @@ function PromptDetailModal() {
 
   const isSaved = isPromptSaved(prompt.id);
   const isPendingUnsave = isPromptPendingUnsave(prompt.id);
-  const canDelete = prompt.source === "mine";
+  const canDelete = state.isLoggedIn && prompt.source === "mine";
   const comments = getSortedPromptComments(prompt.id);
   const commentCount = getPromptCommentCount(prompt);
   const isCommentsExpanded = Boolean(state.expandedComments[prompt.id]);
   const visibleComments = isCommentsExpanded ? comments : comments.slice(0, 3);
   const isLiked = state.likedPromptIds.has(prompt.id);
-  const isReported = state.reportedPromptIds.has(prompt.id);
+  const isReported = canShowReportedState() && state.reportedPromptIds.has(prompt.id);
   const isShared = prompt.isShared === true || prompt.source === "community";
   const isAdminReview = Boolean(state.adminMode);
   const isHiddenByAdmin = state.adminHiddenPromptIds.has(prompt.id);
@@ -830,7 +980,7 @@ function PromptDetailModal() {
             <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
               <span>${icons.eye}${formatNumber(prompt.views)}</span>
-              <span>${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
+              <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
               <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
             </footer>
           </section>
@@ -871,18 +1021,27 @@ function PromptDetailModal() {
         <div class="modal-actions detail-actions">
           ${
             isAdminReview
-              ? `<button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-                 <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
-                 <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
-                 <button class="secondary-button danger-button" type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>`
-              : `<button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-                 <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
-                 <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-                 <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-                 ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">공유하기</button>` : ""}
-                 ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">공유 취소</button>` : ""}
-                 ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">삭제</button>` : ""}
-                 <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>`
+              ? `<div class="detail-action-group manage-actions">
+                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                   <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
+                   <button class="secondary-button danger-button" type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
+                 </div>
+                 <div class="detail-action-group use-actions">
+                   <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
+                 </div>`
+              : `<div class="detail-action-group manage-actions">
+                   ${canDelete ? `<button class="secondary-button" type="button" data-edit-prompt="${prompt.id}">${icons.edit}<span>수정</span></button>` : ""}
+                   ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">${icons.share}<span>공유하기</span></button>` : ""}
+                   ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">${icons.share}<span>공유 취소</span></button>` : ""}
+                   ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">${icons.trash}<span>삭제</span></button>` : ""}
+                 </div>
+                 <div class="detail-action-group use-actions">
+                   <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
+                   <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
+                   <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
+                   <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
+                   <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>
+                 </div>`
           }
         </div>
       </article>
@@ -953,21 +1112,22 @@ function AdminRevisionRequestModal() {
 }
 
 function CommentItem(comment) {
-  const canDelete = canDeleteComment(comment);
-  const isReported = state.reportedCommentIds.has(comment.id);
+  const isDeleted = Boolean(comment.deleted);
+  const canDelete = !isDeleted && canDeleteComment(comment);
+  const isReported = canShowReportedState() && state.reportedCommentIds.has(comment.id);
   const isLiked = state.likedCommentIds.has(comment.id);
   const isAdminReview = Boolean(state.adminMode);
   const isHighlighted = isAdminReview && state.detailHighlightCommentId === comment.id;
   const replies = getSortedCommentReplies(comment);
-  const isReplying = state.replyingCommentId === comment.id;
-  const isEditing = !isAdminReview && state.editingCommentId === comment.id;
+  const isReplying = !isDeleted && state.replyingCommentId === comment.id;
+  const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === comment.id;
 
   return `
-    <article class="comment-item ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
+    <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
       <div class="comment-item-head">
-        <strong>${comment.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : comment.author}</strong>
         ${
-          isAdminReview
+          isAdminReview || isDeleted
             ? ""
             : `<div class="comment-actions">
                 ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
@@ -987,7 +1147,7 @@ function CommentItem(comment) {
               <input name="comment" type="text" value="${escapeHtml(comment.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${comment.text}${comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : comment.text}${!isDeleted && comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
       ${
         replies.length || (!isAdminReview && isReplying)
@@ -1009,19 +1169,20 @@ function CommentItem(comment) {
 }
 
 function ReplyItem(reply) {
-  const canDelete = canDeleteComment(reply);
-  const isReported = state.reportedCommentIds.has(reply.id);
+  const isDeleted = Boolean(reply.deleted);
+  const canDelete = !isDeleted && canDeleteComment(reply);
+  const isReported = canShowReportedState() && state.reportedCommentIds.has(reply.id);
   const isLiked = state.likedCommentIds.has(reply.id);
   const isAdminReview = Boolean(state.adminMode);
   const isHighlighted = isAdminReview && state.detailHighlightCommentId === reply.id;
-  const isEditing = !isAdminReview && state.editingCommentId === reply.id;
+  const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === reply.id;
 
   return `
-    <article class="reply-item ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(reply.id)}">
+    <article class="reply-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(reply.id)}">
       <div class="reply-item-head">
-        <strong>${reply.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : reply.author}</strong>
         ${
-          isAdminReview
+          isAdminReview || isDeleted
             ? ""
             : `<div class="reply-actions">
                 ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${reply.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
@@ -1040,7 +1201,7 @@ function ReplyItem(reply) {
               <input name="comment" type="text" value="${escapeHtml(reply.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${reply.text}${reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : reply.text}${!isDeleted && reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
     </article>
   `;
@@ -1162,6 +1323,14 @@ function MakePage() {
 }
 
 function MakeSidePanel() {
+  const uncategorizedCount = countThreadsInFolder("uncategorized");
+  const visibleFolders = state.makeFolders.filter((folder) => folder.id !== "uncategorized" || uncategorizedCount > 0);
+  const customFolderCount = getCustomMakeFolderCount();
+  const canManageFolders = state.isLoggedIn;
+  const canCreateFolder = canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS;
+  if (state.activeFolderId === "uncategorized" && uncategorizedCount === 0) {
+    state.activeFolderId = "all";
+  }
   const visibleThreads =
     state.activeFolderId === "all"
       ? state.recentThreads
@@ -1172,8 +1341,11 @@ function MakeSidePanel() {
       <section class="make-folder-section">
         <div class="make-side-head">
           <strong>폴더</strong>
-          <button type="button" data-show-folder-form>새 폴더</button>
+          <button type="button" data-show-folder-form ${canCreateFolder ? "" : "disabled"} title="${canManageFolders ? (canCreateFolder ? "새 폴더 만들기" : `폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`) : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">새 폴더</button>
         </div>
+        ${!canManageFolders ? `<p class="make-folder-limit">로그인하면 대화를 폴더로 정리할 수 있습니다.</p>` : ""}
+        ${canManageFolders && !canCreateFolder ? `<p class="make-folder-limit">폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.</p>` : ""}
+        ${state.makeBackendMessage ? `<p class="make-backend-note">${escapeHtml(state.makeBackendMessage)}</p>` : ""}
         ${
           state.creatingFolder
             ? `<form class="make-folder-form" data-folder-create-form>
@@ -1185,7 +1357,7 @@ function MakeSidePanel() {
         }
         <div class="make-folder-list">
           ${MakeFolderButton("all", "전체", state.recentThreads.length)}
-          ${state.makeFolders.map((folder) => MakeFolderButton(folder.id, folder.name, countThreadsInFolder(folder.id))).join("")}
+          ${visibleFolders.map((folder) => MakeFolderButton(folder.id, folder.name, countThreadsInFolder(folder.id))).join("")}
         </div>
       </section>
       <div class="make-side-head">
@@ -1209,10 +1381,21 @@ function MakeSidePanel() {
                         ? `<div class="recent-thread-menu" role="menu">
                             <label class="recent-thread-folder-field">
                               <span>폴더 이동</span>
-                              <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더">
+                              <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더" ${canManageFolders ? "" : "disabled"} title="${canManageFolders ? "대화 폴더 이동" : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">
                                 ${state.makeFolders.map((folder) => `<option value="${folder.id}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
                               </select>
                             </label>
+                            ${
+                              state.creatingThreadFolderId === thread.id
+                                ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${thread.id}">
+                                    <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
+                                    <div>
+                                      <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
+                                      <button type="button" data-cancel-thread-folder-create>취소</button>
+                                    </div>
+                                  </form>`
+                                : `<button type="button" data-start-thread-folder-create="${thread.id}" ${canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS ? "" : "disabled"} role="menuitem"><span>+</span><span>새 폴더로 이동...</span></button>`
+                            }
                             <button type="button" data-delete-thread="${thread.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
                           </div>`
                         : ""
@@ -1228,9 +1411,10 @@ function MakeSidePanel() {
 }
 
 function MakeFolderButton(folderId, name, count) {
-  const isEditing = state.editingFolderId === folderId && folderId !== "all" && folderId !== "uncategorized";
-  const canManage = folderId !== "all" && folderId !== "uncategorized";
-  const isMenuOpen = state.openFolderMenuId === folderId;
+  const isUserFolder = folderId !== "all" && folderId !== "uncategorized";
+  const canManage = state.isLoggedIn && isUserFolder;
+  const isEditing = canManage && state.editingFolderId === folderId;
+  const isMenuOpen = canManage && state.openFolderMenuId === folderId;
   if (isEditing) {
     return `
       <form class="make-folder-edit-form" data-folder-edit-form="${folderId}">
@@ -1242,7 +1426,7 @@ function MakeFolderButton(folderId, name, count) {
   }
 
   return `
-    <div class="make-folder-item ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${folderId}">
+    <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${folderId}">
       <button type="button" data-open-folder="${folderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
       ${
         canManage
@@ -1310,7 +1494,7 @@ function SavedPage() {
     { id: "library", label: "내 보관함", count: getSavedPagePrompts().length },
     { id: "mine", label: "내가 만든 프롬프트", count: getMyPrompts().length },
     { id: "comments", label: "댓글 관리", count: getMyComments().length },
-    { id: "reports", label: "신고 내역", count: state.reportedPromptIds.size + state.reportedCommentIds.size },
+    { id: "reports", label: "신고 내역", count: getMyReports().length },
   ];
 
   return `
@@ -1332,8 +1516,33 @@ function SavedPage() {
           )
           .join("")}
       </nav>
+      ${DemoLibraryPrompt()}
       ${MyPagePanel()}
     </section>
+  `;
+}
+
+function DemoLibraryPrompt() {
+  if (state.myBackendStatus === "connected") {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 보관함 기준</strong>
+          <p>내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역은 백엔드 API 응답을 우선 반영합니다.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  const isSeeded = state.libraryDemoSeeded;
+  return `
+    <div class="demo-library-prompt">
+      <div>
+        <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
+        <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
+      </div>
+      <button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>
+    </div>
   `;
 }
 
@@ -1557,15 +1766,16 @@ function AdminPage() {
     { id: "hidden", label: "숨김" },
     { id: "reported", label: "신고됨" },
   ];
-  const adminTags = getKnownTags()
-    .map((tag) => ({ label: tag, key: normalizeTag(tag), status: getAdminTagStatus(tag) }))
-    .sort((a, b) => getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko"))
-    .slice(0, 16);
-  const adminTabs = [
-    { id: "reports", label: "신고 관리", count: reportRecords.length },
-    { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
-    { id: "tags", label: "태그 관리", count: adminTags.length },
+  const adminTags = getAdminManagedTags();
+  const adminTagFilter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const adminTagSort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
+  const adminTagFilters = [
+    { id: "all", label: "전체" },
+    { id: "pending", label: "검토 중" },
+    { id: "approved", label: "검토 완료" },
+    { id: "rejected", label: "추천 제외" },
   ];
+  const adminTabs = getAdminTabs();
   const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
   const reportsPanel = `
     <section class="admin-panel">
@@ -1685,6 +1895,24 @@ function AdminPage() {
     <section class="admin-panel">
       <h2>태그 관리</h2>
       <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
+      <div class="admin-filter-list" aria-label="태그 상태 분류">
+        ${adminTagFilters
+          .map(
+            (filter) =>
+              `<button class="${adminTagFilter === filter.id ? "active" : ""}" type="button" data-admin-tag-filter="${filter.id}">${filter.label}</button>`,
+          )
+          .join("")}
+      </div>
+      <div class="admin-search-toolbar">
+        <label class="admin-search-field">
+          <span>${icons.search}</span>
+          <input type="search" data-admin-tag-search value="${escapeHtml(state.adminTagQuery || "")}" placeholder="태그명을 검색" autocomplete="off" />
+        </label>
+        <select class="admin-sort-select" data-admin-tag-sort aria-label="태그 정렬">
+          <option value="usage" ${adminTagSort === "usage" ? "selected" : ""}>사용량</option>
+          <option value="recent" ${adminTagSort === "recent" ? "selected" : ""}>최신</option>
+        </select>
+      </div>
       ${
         adminTags.length
           ? adminTags
@@ -1694,11 +1922,13 @@ function AdminPage() {
                     <div>
                       <strong>#${escapeHtml(tag.label)}</strong>
                       <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
+                      <span class="admin-tag-usage">사용 ${formatNumber(tag.count)}회</span>
                     </div>
                     <div class="admin-actions">
                       ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
                       ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-                      ${tag.status !== "pending" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
+                      ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">검토 완료 취소</button>` : ""}
+                      ${tag.status === "rejected" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
                     </div>
                   </article>
                 `,
@@ -1720,18 +1950,6 @@ function AdminPage() {
         <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 숨김, 삭제, 검토 상태 변경만 수행합니다.</p>
       </div>
       <div class="admin-workspace">
-        <aside class="admin-side-panel" aria-label="관리자 메뉴">
-          ${adminTabs
-            .map(
-              (tab) => `
-                <button class="${activeAdminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
-                  <span>${tab.label}</span>
-                  <em>${formatNumber(tab.count)}</em>
-                </button>
-              `,
-            )
-            .join("")}
-        </aside>
         <div class="admin-content-panel">
           ${activePanel}
         </div>
@@ -1847,6 +2065,13 @@ function AuthModal() {
   const isFindPassword = state.authView === "find-password";
   const isWithdraw = state.authView === "withdraw";
   const title = isFindId ? "아이디 찾기" : isFindPassword ? "비밀번호 찾기" : isWithdraw ? "회원탈퇴" : isSignup ? "회원가입" : "로그인";
+  const nicknameChecked = state.authDuplicateChecks.nickname && state.authDuplicateChecks.nickname === String(state.authDraft.nickname || "").trim();
+  const userIdChecked = state.authDuplicateChecks.userId && state.authDuplicateChecks.userId === String(state.authDraft.userId || "").trim();
+
+  if (isWithdraw && !state.isLoggedIn) {
+    state.authView = "login";
+    return AuthModal();
+  }
 
   if (isWithdraw) {
     return `
@@ -1856,8 +2081,13 @@ function AuthModal() {
             <h2 id="auth-title">${title}</h2>
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
-          <p class="auth-helper">회원탈퇴는 백엔드 연동 후 계정과 작성 데이터 정책에 맞춰 처리됩니다. 현재는 데모 흐름입니다.</p>
-          <button class="primary-button danger-primary full" type="submit">회원탈퇴 데모</button>
+          <p class="auth-helper">회원탈퇴를 진행하면 계정이 비활성화되고 기존 토큰으로 다시 사용할 수 없습니다. 본인 확인을 위해 비밀번호를 입력해주세요.</p>
+          <label class="password-field">
+            <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />
+            <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
+          </label>
+          <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
+          <button class="primary-button danger-primary full" type="submit">회원탈퇴</button>
           <button class="text-button" type="button" data-close-auth>취소</button>
         </form>
       </div>
@@ -1872,14 +2102,15 @@ function AuthModal() {
             <h2 id="auth-title">${title}</h2>
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
-          <p class="auth-helper">${isFindId ? "이름과 전화번호 또는 이메일로 아이디 찾기 데모를 진행합니다." : "아이디와 전화번호 또는 이메일로 비밀번호 재설정 데모를 진행합니다."}</p>
+          <p class="auth-helper">${isFindId ? "이름과 이메일로 아이디 찾기 데모를 진행합니다. 전화번호는 선택 보조 정보입니다." : "아이디와 이메일로 비밀번호 재설정 데모를 진행합니다. 전화번호는 선택 보조 정보입니다."}</p>
           ${
             isFindId
               ? `<input name="name" placeholder="이름" autocomplete="name" />`
-              : `<input name="userId" placeholder="아이디" autocomplete="username" />`
+              : `<input name="userId" placeholder="아이디" autocomplete="username" />
+                 <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>`
           }
-          <input name="phone" placeholder="전화번호" autocomplete="tel" />
           <input name="email" type="email" placeholder="이메일" autocomplete="email" />
+          <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" />
           <button class="primary-button full" type="submit">${isFindId ? "아이디 찾기" : "비밀번호 재설정 요청"}</button>
           <div class="auth-link-row">
             <button class="text-button inline" type="button" data-open-auth="login">로그인으로 돌아가기</button>
@@ -1899,19 +2130,41 @@ function AuthModal() {
         </div>
         <button class="google-auth-button" type="button" data-google-auth><span>G</span>${isSignup ? "Google로 회원가입" : "Google로 로그인"}</button>
         <div class="auth-divider"><span>또는</span></div>
-        ${isSignup ? `<div class="auth-check-row"><input name="nickname" placeholder="닉네임" /><button type="button" data-check-duplicate="nickname">중복 확인</button></div><input name="name" placeholder="이름" /><div class="auth-check-row"><input name="userId" placeholder="아이디" autocomplete="username" /><button type="button" data-check-duplicate="userId">중복 확인</button></div><input name="email" type="email" placeholder="이메일 (선택)" autocomplete="email" /><input name="birth" type="date" aria-label="생년월일 선택" />` : `<input name="userId" placeholder="아이디" autocomplete="username" />`}
+        ${
+          isSignup
+            ? `<div class="auth-check-row">
+                <input name="nickname" placeholder="닉네임" value="${escapeHtml(state.authDraft.nickname || "")}" />
+                <button type="button" data-check-duplicate="nickname" ${nicknameChecked ? "disabled" : ""}>${nicknameChecked ? "확인 완료" : "중복 확인"}</button>
+              </div>
+              <input name="name" placeholder="이름" value="${escapeHtml(state.authDraft.name || "")}" />
+              <div class="auth-check-row">
+                <input name="userId" placeholder="아이디" autocomplete="username" value="${escapeHtml(state.authDraft.userId || "")}" />
+                <button type="button" data-check-duplicate="userId" ${userIdChecked ? "disabled" : ""}>${userIdChecked ? "확인 완료" : "중복 확인"}</button>
+              </div>
+              <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>
+              <input name="email" type="email" placeholder="이메일" autocomplete="email" value="${escapeHtml(state.authDraft.email || "")}" />
+              <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" value="${escapeHtml(state.authDraft.phone || "")}" />
+              <label class="date-field ${state.authDraft.birth ? "has-value" : ""}">
+                <input name="birth" type="date" aria-label="생년월일 선택" value="${escapeHtml(state.authDraft.birth || "")}" />
+                <span>생년월일</span>
+              </label>`
+            : `<input name="userId" placeholder="아이디" autocomplete="username" />
+               <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>`
+        }
         <label class="password-field">
-          <input name="password" type="password" placeholder="비밀번호" autocomplete="${isSignup ? "new-password" : "current-password"}" />
+          <input name="password" type="password" placeholder="비밀번호" autocomplete="${isSignup ? "new-password" : "current-password"}" value="${isSignup ? escapeHtml(state.authDraft.password || "") : ""}" />
           <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
         </label>
+        <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
         ${
           isSignup
             ? `<label class="password-field">
-                <input name="passwordConfirm" type="password" placeholder="비밀번호 확인" autocomplete="new-password" />
+                <input name="passwordConfirm" type="password" placeholder="비밀번호 확인" autocomplete="new-password" value="${escapeHtml(state.authDraft.passwordConfirm || "")}" />
                 <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
               </label>
-              <label class="agreement-row"><input type="checkbox" name="terms" /> 사이트 이용 약관에 동의합니다</label>
-              <label class="agreement-row"><input type="checkbox" name="privacy" /> 개인정보 수집 및 이용에 동의합니다</label>`
+              <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
+              <label class="agreement-row"><input type="checkbox" name="terms" ${state.authDraft.terms ? "checked" : ""} /> 사이트 이용 약관에 동의합니다</label>
+              <label class="agreement-row"><input type="checkbox" name="privacy" ${state.authDraft.privacy ? "checked" : ""} /> 개인정보 수집 및 이용에 동의합니다</label>`
             : ""
         }
         <button class="primary-button full" type="submit">${isSignup ? "가입하기" : "로그인"}</button>
@@ -1924,19 +2177,162 @@ function AuthModal() {
                 <button class="text-button inline" type="button" data-open-auth="signup">회원가입</button>
               </div>`
         }
-        ${isSignup ? `<button class="text-button" type="button" data-open-auth="login">이미 계정이 있어요</button>` : `<button class="text-button" type="button" data-open-auth="withdraw">회원탈퇴 데모</button>`}
+        ${isSignup ? `<button class="text-button" type="button" data-open-auth="login">이미 계정이 있어요</button>` : state.isLoggedIn ? `<button class="text-button" type="button" data-open-auth="withdraw">회원탈퇴</button>` : ""}
       </form>
     </div>
   `;
+}
+
+function saveAuthDraftFromForm() {
+  if (state.authView !== "signup") return;
+  const form = document.querySelector("[data-auth-form]");
+  if (!form) return;
+  const formData = new FormData(form);
+  state.authDraft = {
+    nickname: String(formData.get("nickname") || ""),
+    name: String(formData.get("name") || ""),
+    userId: String(formData.get("userId") || ""),
+    email: String(formData.get("email") || ""),
+    phone: String(formData.get("phone") || ""),
+    birth: String(formData.get("birth") || ""),
+    password: String(formData.get("password") || ""),
+    passwordConfirm: String(formData.get("passwordConfirm") || ""),
+    terms: formData.has("terms"),
+    privacy: formData.has("privacy"),
+  };
+}
+
+function isDuplicateAuthValue(field, value) {
+  const normalized = normalizeSearchText(value);
+  if (!normalized) return false;
+  const source = field === "nickname" ? DEMO_EXISTING_NICKNAMES : DEMO_EXISTING_USER_IDS;
+  return source.some((item) => normalizeSearchText(item) === normalized);
+}
+
+function getUserIdValidationMessage(value) {
+  const userId = String(value || "").trim();
+  if (!userId) return "";
+  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(userId)) return "아이디에는 한글을 사용할 수 없습니다.";
+  if (!/^[a-z0-9_-]+$/.test(userId)) return "아이디는 영문 소문자, 숫자, _, -만 사용할 수 있습니다.";
+  return "";
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function normalizeAuthResult(payload, fallbackUserId = "") {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+  const user = data.user || data.member || data.account || {};
+  const token = String(data.accessToken || data.token || data.authToken || data.jwt || "").trim();
+  const nickname = String(user.nickname || user.name || data.nickname || fallbackUserId || "사용자").trim() || "사용자";
+  const role = String(user.role || data.role || "user").toLowerCase().replace(/^role_/, "");
+
+  return {
+    token,
+    user: {
+      id: user.id || user.memberId || data.memberId || null,
+      userId: user.userId || user.username || data.userId || fallbackUserId || "",
+      nickname,
+      role,
+    },
+    raw: payload,
+  };
+}
+
+function applyAuthenticatedUser(authResult) {
+  state.isLoggedIn = true;
+  state.currentUser = authResult.user.nickname;
+  state.currentUserId = authResult.user.id;
+  state.currentUserRole = authResult.user.role || "user";
+  state.authToken = authResult.token;
+  state.token = authResult.token;
+  state.adminMode = state.currentUserRole === "admin";
+  if (state.adminMode) state.route = "admin";
+  state.myBackendStatus = "idle";
+  state.adminBackendStatus = "idle";
+  state.makeBackendStatus = "idle";
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, authResult.token);
+  } catch (_error) {
+    // Local preview can still run if browser storage is blocked.
+  }
+}
+
+function clearAuthenticatedSession({ keepRoute = false } = {}) {
+  state.isLoggedIn = false;
+  state.currentUser = null;
+  state.currentUserId = null;
+  state.currentUserRole = "user";
+  state.authToken = "";
+  state.token = "";
+  state.adminMode = false;
+  state.authView = null;
+  state.myBackendStatus = "idle";
+  state.adminBackendStatus = "idle";
+  state.makeBackendStatus = "idle";
+  state.backendMyComments = [];
+  state.backendMyReports = [];
+  state.backendLibraryPromptIds = new Set();
+  state.backendAdminReports = [];
+  state.backendAdminTags = [];
+  state.creatingFolder = false;
+  state.editingFolderId = null;
+  state.openFolderMenuId = null;
+  state.creatingThreadFolderId = null;
+  state.openThreadMenuId = null;
+  state.openPromptCardMenuId = null;
+  state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
+  state.reportPromptId = null;
+  state.reportCommentId = null;
+  state.editingPromptId = null;
+  state.adminRequestTargetKey = null;
+  state.editingMessageId = null;
+  state.executeMessageId = null;
+  state.executePromptId = null;
+  if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch (_error) {
+    // Local preview can continue if browser storage is unavailable.
+  }
+}
+
+function normalizeUserIdInput(input) {
+  if (!input) return "";
+  const lowered = input.value.toLowerCase();
+  if (input.value !== lowered) input.value = lowered;
+  return lowered.trim();
+}
+
+function updateUserIdWarning(input) {
+  const warning = getUserIdValidationMessage(input?.value);
+  state.authUserIdWarning = warning;
+  const warningElement = document.querySelector("[data-user-id-warning]");
+  if (warningElement) warningElement.textContent = warning;
+  return warning;
+}
+
+function updateCapsLockWarning(input, event) {
+  const warningElement = input.closest(".password-field")?.nextElementSibling;
+  if (!warningElement?.matches("[data-caps-warning]")) return;
+  const isOn = Boolean(event?.getModifierState?.("CapsLock"));
+  warningElement.hidden = !isOn;
 }
 
 function bindEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
     const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
     const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
-    if (!shouldCloseFolderMenu && !shouldCloseThreadMenu) return;
+    const shouldClosePromptCardMenu = state.openPromptCardMenuId && !event.target.closest(".prompt-card-menu-wrap");
+    if (!shouldCloseFolderMenu && !shouldCloseThreadMenu && !shouldClosePromptCardMenu) return;
     if (shouldCloseFolderMenu) state.openFolderMenuId = null;
-    if (shouldCloseThreadMenu) state.openThreadMenuId = null;
+    if (shouldCloseThreadMenu) {
+      state.openThreadMenuId = null;
+      state.creatingThreadFolderId = null;
+    }
+    if (shouldClosePromptCardMenu) state.openPromptCardMenuId = null;
     render();
   });
 
@@ -1973,9 +2369,16 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-toggle-library-demo]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleLibraryDemoData();
+    });
+  });
+
   document.querySelectorAll("[data-open-auth]").forEach((button) => {
     button.addEventListener("click", () => {
       state.authView = button.dataset.openAuth;
+      state.authUserIdWarning = "";
       render();
     });
   });
@@ -2019,6 +2422,14 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-search-author]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      searchByAuthor(button.dataset.searchAuthor);
+    });
+  });
+
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
     button.addEventListener("click", () => {
       togglePasswordVisibility(button);
@@ -2035,15 +2446,44 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-check-duplicate]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const row = button.closest(".auth-check-row");
       const input = row?.querySelector("input");
-      if (!String(input?.value || "").trim()) {
+      const field = button.dataset.checkDuplicate;
+      if (field === "userId") normalizeUserIdInput(input);
+      const value = String(input?.value || "").trim();
+      saveAuthDraftFromForm();
+      if (!value) {
         window.alert("중복 확인할 값을 입력해주세요.");
         return;
       }
-      button.textContent = "확인 완료";
-      button.disabled = true;
+      if (field === "userId") {
+        const warning = updateUserIdWarning(input);
+        if (warning) {
+          window.alert(warning);
+          return;
+        }
+      }
+      let isDuplicate = isDuplicateAuthValue(field, value);
+      const api = window.TTALKAK_API;
+      const checkHandler = field === "nickname" ? api?.checkNickname : api?.checkUserId;
+      if (checkHandler) {
+        try {
+          const result = await checkHandler(value);
+          if (typeof result?.available === "boolean") {
+            isDuplicate = !result.available;
+          }
+        } catch (error) {
+          console.warn("[TTALKAK] 중복 확인 API 호출에 실패해 데모 중복 목록으로 확인합니다.", error);
+        }
+      }
+      if (isDuplicate) {
+        delete state.authDuplicateChecks[field];
+        window.alert(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
+        render();
+        return;
+      }
+      state.authDuplicateChecks[field] = value;
       showNotice("사용 가능한 값입니다.");
     });
   });
@@ -2108,8 +2548,18 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-confirm-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      runConfirmedAction();
+    button.addEventListener("click", async () => {
+      await runConfirmedAction();
+    });
+  });
+
+  document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const promptId = button.dataset.promptCardMenu;
+      state.openPromptCardMenuId = state.openPromptCardMenuId === promptId ? null : promptId;
+      render();
     });
   });
 
@@ -2136,7 +2586,9 @@ function bindEvents() {
 
   document.querySelectorAll("[data-my-tab]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.myPageTab = button.dataset.myTab;
+      const nextTab = button.dataset.myTab || "library";
+      commitPendingUnsaves(state.route, nextTab);
+      state.myPageTab = nextTab;
       state.savedPage = 1;
       render();
     });
@@ -2186,6 +2638,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      state.openPromptCardMenuId = null;
       publishSavedPrompt(button.dataset.shareSaved);
     });
   });
@@ -2194,6 +2647,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      state.openPromptCardMenuId = null;
       unshareOwnPrompt(button.dataset.unsharePrompt);
     });
   });
@@ -2210,11 +2664,23 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      state.openPromptCardMenuId = null;
       deleteOwnPrompt(button.dataset.deletePrompt);
     });
   });
 
   const searchInput = document.querySelector("[data-tag-search]");
+  const searchScopeSelect = document.querySelector("[data-search-scope]");
+  if (searchScopeSelect) {
+    searchScopeSelect.addEventListener("change", () => {
+      state.searchScope = getValidSearchScope(searchScopeSelect.value);
+      state.popularPage = 1;
+      refreshBackendHomePrompts();
+      render();
+      restoreSearchFocus();
+    });
+  }
+
   if (searchInput) {
     searchInput.addEventListener("focus", () => {
       showSearchTipOnce();
@@ -2252,6 +2718,7 @@ function bindEvents() {
     popularSortSelect.addEventListener("change", () => {
       state.popularSort = popularSortSelect.value;
       state.popularPage = 1;
+      refreshBackendHomePrompts();
       render();
     });
   }
@@ -2290,7 +2757,7 @@ function bindEvents() {
       });
     }
 
-    composer.addEventListener("submit", (event) => {
+    composer.addEventListener("submit", async (event) => {
       event.preventDefault();
       const value = new FormData(composer).get("prompt").trim();
       if (!value) return;
@@ -2307,15 +2774,17 @@ function bindEvents() {
       const assistantMessageId = `make-${now}`;
       state.activeThreadId = threadId;
       state.messages.push({ id: `user-${now}`, role: "user", content: value });
+      const improvedPrompt = await improvePromptWithBackend(value);
       state.messages.push({
         id: assistantMessageId,
         role: "assistant",
-        content: polishPrompt(value),
+        content: improvedPrompt,
         sourcePrompt: value,
       });
       state.composerDraft = "";
       pendingLatestMessageScrollId = assistantMessageId;
       updateRecentThread(threadId);
+      syncMakeThreadWithBackend(threadId);
       render();
     });
   }
@@ -2389,15 +2858,52 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-admin-prompt-search]").forEach((input) => {
-    input.addEventListener("input", () => {
-      state.adminPromptQuery = input.value;
-      render();
+    input.addEventListener("compositionstart", () => {
+      state.isComposingAdminPromptSearch = true;
+      window.clearTimeout(adminPromptSearchCommitTimer);
+    });
+    input.addEventListener("compositionend", () => {
+      state.isComposingAdminPromptSearch = false;
+      scheduleAdminPromptSearchCommit(input.value);
+    });
+    input.addEventListener("input", (event) => {
+      if (state.isComposingAdminPromptSearch || event.isComposing) return;
+      scheduleAdminPromptSearchCommit(input.value);
     });
   });
 
   document.querySelectorAll("[data-admin-prompt-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.adminPromptFilter = button.dataset.adminPromptFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-search]").forEach((input) => {
+    input.addEventListener("compositionstart", () => {
+      state.isComposingAdminTagSearch = true;
+      window.clearTimeout(adminTagSearchCommitTimer);
+    });
+    input.addEventListener("compositionend", () => {
+      state.isComposingAdminTagSearch = false;
+      scheduleAdminTagSearchCommit(input.value);
+    });
+    input.addEventListener("input", (event) => {
+      if (state.isComposingAdminTagSearch || event.isComposing) return;
+      scheduleAdminTagSearchCommit(input.value);
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminTagFilter = button.dataset.adminTagFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-sort]").forEach((select) => {
+    select.addEventListener("change", () => {
+      state.adminTagSort = select.value || "usage";
       render();
     });
   });
@@ -2413,14 +2919,20 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
       if (!tag) return;
-      if (decision === "pending") {
-        const nextDecisions = { ...state.adminTagDecisions };
-        delete nextDecisions[tag];
-        state.adminTagDecisions = nextDecisions;
-      } else {
-        state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
+      if (decision === "rejected") {
+        openConfirmAction({
+          type: "admin-tag-status",
+          targetId: tag,
+          value: decision,
+          title: "태그 추천 제외",
+          message: "이 태그를 추천 태그 목록에서 제외할까요? 제외 후에도 태그 관리에서 재검토할 수 있습니다.",
+          confirmLabel: "추천 제외",
+          danger: true,
+        });
+        return;
       }
-      showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+      updateAdminTagDecision(tag, decision);
+      render();
     });
   });
 
@@ -2447,7 +2959,14 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      state.editingPromptId = button.dataset.editPrompt;
+      state.openPromptCardMenuId = null;
+      const prompt = findPromptById(button.dataset.editPrompt);
+      if (!state.isLoggedIn || prompt?.source !== "mine") {
+        state.authView = "login";
+        showNotice("로그인 후 본인 프롬프트만 수정할 수 있습니다.");
+        return;
+      }
+      state.editingPromptId = prompt.id;
       render();
     });
   });
@@ -2486,12 +3005,17 @@ function bindEvents() {
       event.stopPropagation();
       const threadId = button.dataset.threadMenu;
       state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
+      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
       render();
     });
   });
 
   document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
       state.creatingFolder = true;
       render();
       window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
@@ -2524,6 +3048,10 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
       const folderId = button.dataset.folderMenu;
       state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
       render();
@@ -2565,8 +3093,47 @@ function bindEvents() {
 
   document.querySelectorAll("[data-thread-folder]").forEach((select) => {
     select.addEventListener("change", () => {
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        render();
+        return;
+      }
       state.openThreadMenuId = null;
       moveThreadToFolder(select.dataset.threadFolder, select.value);
+    });
+  });
+
+  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
+        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+        return;
+      }
+      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
+      render();
+      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.creatingThreadFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
     });
   });
 
@@ -2602,8 +3169,37 @@ function bindEvents() {
 
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
-    authForm.addEventListener("submit", (event) => {
+    authForm.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+
+      if (target.name === "userId") {
+        normalizeUserIdInput(target);
+        updateUserIdWarning(target);
+      }
+
+      if (state.authView === "signup") {
+        saveAuthDraftFromForm();
+        if ((target.name === "nickname" || target.name === "userId") && state.authDuplicateChecks[target.name] !== target.value.trim()) {
+          delete state.authDuplicateChecks[target.name];
+          const checkButton = target.closest(".auth-check-row")?.querySelector("[data-check-duplicate]");
+          if (checkButton) {
+            checkButton.textContent = "중복 확인";
+            checkButton.disabled = false;
+          }
+        }
+      }
+    });
+
+    authForm.querySelectorAll("input[type='password']").forEach((input) => {
+      input.addEventListener("keydown", (event) => updateCapsLockWarning(input, event));
+      input.addEventListener("keyup", (event) => updateCapsLockWarning(input, event));
+      input.addEventListener("blur", () => updateCapsLockWarning(input, null));
+    });
+
+    authForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      saveAuthDraftFromForm();
       const formData = new FormData(authForm);
       const isSignup = state.authView === "signup";
       const isFindId = state.authView === "find-id";
@@ -2611,14 +3207,20 @@ function bindEvents() {
       const isWithdraw = state.authView === "withdraw";
       const userId = String(formData.get("userId") || "").trim();
       const password = String(formData.get("password") || "").trim();
+      const userIdWarning = getUserIdValidationMessage(userId);
 
       if (isWithdraw) {
+        if (!password) {
+          window.alert("회원탈퇴를 위해 비밀번호를 입력해주세요.");
+          return;
+        }
         openConfirmAction({
           type: "withdraw",
           title: "회원탈퇴",
-          message: "회원탈퇴 데모를 진행할까요?",
+          message: "정말 회원탈퇴를 진행할까요? 탈퇴 후에는 이 계정으로 다시 로그인할 수 없습니다.",
           confirmLabel: "회원탈퇴",
           danger: true,
+          password,
         });
         return;
       }
@@ -2627,40 +3229,71 @@ function bindEvents() {
         const name = String(formData.get("name") || "").trim();
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
-        if (!name || (!phone && !email)) {
-          window.alert("이름과 전화번호 또는 이메일을 입력해주세요.");
+        if (!name || !email) {
+          window.alert("이름과 이메일을 입력해주세요.");
+          return;
+        }
+        if (!isValidEmail(email)) {
+          window.alert("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
           window.alert("전화번호 형식을 확인해주세요.");
           return;
         }
+        try {
+          const api = window.TTALKAK_API;
+          const result = api?.findId ? await api.findId({ method: "email", name, email, phone }) : null;
+          const maskedUserId = result?.maskedUserId || "";
+          showNotice(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
+        } catch (error) {
+          const backendMessage = error?.payload?.message || error?.message || "";
+          window.alert(backendMessage || "아이디 찾기 요청에 실패했습니다.");
+          return;
+        }
         state.authView = "login";
-        showNotice("입력한 정보로 아이디 찾기 요청을 보냈습니다.");
         return;
       }
 
       if (isFindPassword) {
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
-        if (!userId || (!phone && !email)) {
-          window.alert("아이디와 전화번호 또는 이메일을 입력해주세요.");
+        if (!userId || !email) {
+          window.alert("아이디와 이메일을 입력해주세요.");
+          return;
+        }
+        if (userIdWarning) {
+          window.alert(userIdWarning);
+          return;
+        }
+        if (!isValidEmail(email)) {
+          window.alert("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
           window.alert("전화번호 형식을 확인해주세요.");
           return;
         }
+        try {
+          const api = window.TTALKAK_API;
+          if (api?.requestPasswordReset) await api.requestPasswordReset({ userId, email, phone });
+          showNotice("비밀번호 재설정 요청을 보냈습니다.");
+        } catch (error) {
+          const backendMessage = error?.payload?.message || error?.message || "";
+          window.alert(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
+          return;
+        }
         state.authView = "login";
-        showNotice("비밀번호 재설정 요청을 보냈습니다.");
         return;
       }
 
       if (isSignup) {
+        const nickname = String(formData.get("nickname") || "").trim();
         const requiredFields = [
           ["nickname", "닉네임"],
           ["name", "이름"],
           ["userId", "아이디"],
+          ["email", "이메일"],
           ["password", "비밀번호"],
           ["passwordConfirm", "비밀번호 확인"],
         ];
@@ -2670,6 +3303,33 @@ function bindEvents() {
 
         if (missingFields.length > 0) {
           window.alert(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
+          return;
+        }
+        if (userIdWarning) {
+          window.alert(userIdWarning);
+          return;
+        }
+        const email = String(formData.get("email") || "").trim();
+        const phone = String(formData.get("phone") || "").trim();
+        if (!isValidEmail(email)) {
+          window.alert("이메일 형식을 확인해주세요.");
+          return;
+        }
+        if (phone && !isValidPhone(phone)) {
+          window.alert("전화번호 형식을 확인해주세요.");
+          return;
+        }
+
+        if (isDuplicateAuthValue("nickname", nickname)) {
+          window.alert("이미 사용 중인 닉네임입니다.");
+          return;
+        }
+        if (isDuplicateAuthValue("userId", userId)) {
+          window.alert("이미 사용 중인 아이디입니다.");
+          return;
+        }
+        if (state.authDuplicateChecks.nickname !== nickname || state.authDuplicateChecks.userId !== userId) {
+          window.alert("닉네임과 아이디 중복 확인을 완료해주세요.");
           return;
         }
 
@@ -2689,16 +3349,57 @@ function bindEvents() {
       } else if (!userId || !password) {
         window.alert("아이디와 비밀번호를 모두 입력해주세요.");
         return;
+      } else if (userIdWarning) {
+        window.alert(userIdWarning);
+        return;
       }
 
       if (isSignup && formData.get("password") !== formData.get("passwordConfirm")) {
         window.alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
         return;
       }
-      state.isLoggedIn = true;
-      state.currentUser = String(formData.get("nickname") || formData.get("name") || userId || "사용자").trim() || "사용자";
-      state.authView = null;
-      showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
+
+      const api = window.TTALKAK_API;
+      if (!api?.login) {
+        window.alert("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
+        return;
+      }
+
+      try {
+        const authPayload = isSignup
+          ? {
+              nickname: String(formData.get("nickname") || "").trim(),
+              name: String(formData.get("name") || "").trim(),
+              userId,
+              email: String(formData.get("email") || "").trim(),
+              phone: String(formData.get("phone") || "").trim(),
+              birth: String(formData.get("birth") || "").trim(),
+              password,
+              passwordConfirm: String(formData.get("passwordConfirm") || "").trim(),
+              agreeTerms: formData.get("terms") === "on",
+              agreePrivacy: formData.get("privacy") === "on",
+            }
+          : { userId, password };
+        const authResponse = isSignup && api.signup ? await api.signup(authPayload) : await api.login(authPayload);
+        const authResult = normalizeAuthResult(authResponse, userId);
+
+        if (!authResult.token) {
+          window.alert("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
+          return;
+        }
+
+        applyAuthenticatedUser(authResult);
+        state.authView = null;
+        state.authDraft = {};
+        state.authDuplicateChecks = {};
+        state.authUserIdWarning = "";
+        showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
+        await loadMakeBackendData({ shouldRender: false });
+        render();
+      } catch (error) {
+        const backendMessage = error?.payload?.message || error?.message || "";
+        window.alert(backendMessage || "로그인 요청에 실패했습니다.");
+      }
     });
   }
 
@@ -2847,16 +3548,25 @@ function bindEvents() {
 }
 
 function toggleSavedPrompt(promptId) {
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 저장할 수 있습니다.");
+    return;
+  }
+
   const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
 
   if (savedIndex >= 0) {
     const savedPrompt = savedPrompts[savedIndex];
     const isSavedByMe = Boolean(savedPrompt.savedByMe);
+    const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
 
-    if (!isSavedByMe) {
+    if (!isSavedByMe || wasHiddenDemoPrompt) {
       savedPrompt.savedByMe = true;
+      state.userLibraryPromptIds.add(promptId);
       state.pendingUnsaveIds.delete(promptId);
       updatePromptField(promptId, "saves", 1);
+      if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
       showNotice("저장했습니다.");
       return;
     }
@@ -2882,7 +3592,9 @@ function toggleSavedPrompt(promptId) {
     } else {
       savedPrompts.splice(savedIndex, 1);
     }
+    state.userLibraryPromptIds.delete(promptId);
     updatePromptField(promptId, "saves", -1);
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
       state.detailPromptId = null;
     }
@@ -2908,24 +3620,40 @@ function toggleSavedPrompt(promptId) {
     source: prompt.source === "mine" ? "mine" : "community",
     savedByMe: true,
   });
+  state.userLibraryPromptIds.add(promptId);
+  if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
 
   showNotice("저장했습니다.");
 }
 
 function toggleLikePrompt(promptId) {
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 좋아요를 누를 수 있습니다.");
+    return;
+  }
+
   const isLiked = state.likedPromptIds.has(promptId);
   if (isLiked) {
     state.likedPromptIds.delete(promptId);
     updatePromptField(promptId, "likes", -1);
+    if (isBackendNumericId(promptId)) callBackendApi("unlikePrompt", promptId);
   } else {
     state.likedPromptIds.add(promptId);
     updatePromptField(promptId, "likes", 1);
+    if (isBackendNumericId(promptId)) callBackendApi("likePrompt", promptId);
   }
   showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
 
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 신고할 수 있습니다.");
+    render();
+    return;
+  }
   if (state.reportedPromptIds.has(promptId)) {
     showNotice("이미 신고한 프롬프트입니다.");
     return;
@@ -2937,6 +3665,12 @@ function openReportPrompt(promptId) {
 
 function openReportComment(commentId) {
   if (!findCommentById(commentId)) return;
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 신고할 수 있습니다.");
+    render();
+    return;
+  }
   if (state.reportedCommentIds.has(commentId)) {
     showNotice("이미 신고한 댓글입니다.");
     return;
@@ -2970,6 +3704,9 @@ function reportPrompt(promptId, reason) {
     createdAt: Date.now(),
   };
   state.reportPromptId = null;
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("reportPrompt", promptId, { reason: content });
+  }
   showNotice("신고가 접수되었습니다.");
 }
 
@@ -2993,6 +3730,9 @@ function reportComment(commentId, reason) {
     createdAt: Date.now(),
   };
   state.reportCommentId = null;
+  if (isBackendNumericId(commentId)) {
+    callBackendApi("reportComment", commentId, { reason: content });
+  }
   showNotice("댓글 신고가 접수되었습니다.");
 }
 
@@ -3121,9 +3861,10 @@ function openPromptDetail(promptId, options = {}) {
   incrementPromptViews(promptId);
   state.detailPromptId = promptId;
   state.detailHighlightCommentId = options.highlightCommentId || null;
-  if (state.detailHighlightCommentId) {
+  if (state.detailHighlightCommentId || shouldOpenCommentsByDefault()) {
     state.expandedComments[promptId] = true;
   }
+  hydratePromptComments(promptId);
   render();
 }
 
@@ -3132,7 +3873,28 @@ function openPromptComments(promptId) {
   state.detailPromptId = promptId;
   state.detailHighlightCommentId = null;
   state.expandedComments[promptId] = true;
+  hydratePromptComments(promptId);
   render();
+}
+
+async function hydratePromptComments(promptId) {
+  const api = window.TTALKAK_API;
+  if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return;
+
+  try {
+    const comments = await api.getPromptComments(promptId, state.authToken || state.token || undefined);
+    if (Array.isArray(comments)) {
+      commentsByPrompt[promptId] = comments;
+      if (state.detailPromptId === promptId) render();
+    }
+  } catch (error) {
+    console.warn("[TTALKAK] /api/prompts/{id}/comments 호출에 실패해 데모 댓글을 유지합니다.", error);
+  }
+}
+
+function shouldOpenCommentsByDefault() {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(min-width: 900px)").matches;
 }
 
 function incrementPromptViews(promptId) {
@@ -3186,7 +3948,7 @@ function findCommentInList(comments, commentId) {
 }
 
 function countCommentThread(comments) {
-  return (comments || []).reduce((total, comment) => total + 1 + countCommentThread(comment.replies || []), 0);
+  return (comments || []).reduce((total, comment) => total + (comment.deleted ? 0 : 1) + countCommentThread(comment.replies || []), 0);
 }
 
 function getCommentLikes(comment) {
@@ -3194,6 +3956,13 @@ function getCommentLikes(comment) {
 }
 
 function toggleLikeComment(commentId) {
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 댓글에 좋아요를 누를 수 있습니다.");
+    render();
+    return;
+  }
+
   const comment = findCommentById(commentId);
   if (!comment) return;
   if (canDeleteComment(comment)) {
@@ -3205,16 +3974,19 @@ function toggleLikeComment(commentId) {
   if (isLiked) {
     state.likedCommentIds.delete(commentId);
     comment.likes = Math.max(0, getCommentLikes(comment) - 1);
+    callBackendApi("unlikeComment", commentId);
   } else {
     state.likedCommentIds.add(commentId);
     comment.likes = getCommentLikes(comment) + 1;
+    callBackendApi("likeComment", commentId);
   }
 
   showNotice(isLiked ? "댓글 좋아요를 취소했습니다." : "댓글에 좋아요를 눌렀습니다.");
 }
 
 function getPromptCommentCount(prompt) {
-  return countCommentThread(getPromptComments(prompt.id));
+  const threadCount = countCommentThread(getPromptComments(prompt.id));
+  return threadCount || Number(prompt.comments || prompt.commentCount || 0);
 }
 
 function getDisplayPromptAuthor(prompt) {
@@ -3248,6 +4020,13 @@ function addPromptComment(promptId, text) {
   const content = String(text || "").trim();
   if (!content) return;
 
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("댓글을 작성하려면 로그인이 필요합니다.");
+    render();
+    return;
+  }
+
   if (!commentsByPrompt[promptId]) {
     commentsByPrompt[promptId] = [];
   }
@@ -3263,6 +4042,7 @@ function addPromptComment(promptId, text) {
 
   state.expandedComments[promptId] = true;
   incrementPromptComments(promptId);
+  callBackendApi("addComment", promptId, { text: content });
   render();
 }
 
@@ -3279,6 +4059,13 @@ function toggleReplyForm(commentId) {
 function addCommentReply(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("답글을 작성하려면 로그인이 필요합니다.");
+    render();
+    return;
+  }
 
   const parentComment = findCommentById(commentId);
   if (!parentComment) return;
@@ -3297,6 +4084,7 @@ function addCommentReply(commentId, text) {
   });
 
   state.replyingCommentId = null;
+  callBackendApi("addReply", commentId, { text: content });
   showNotice("답글을 등록했습니다.");
 }
 
@@ -3319,6 +4107,9 @@ function updateOwnComment(commentId, text) {
   if (comment.text !== content) {
     comment.text = content;
     comment.edited = true;
+    if (isBackendNumericId(commentId)) {
+      callBackendApi("updateComment", commentId, { text: content });
+    }
   }
 
   const revisionKey = makeRevisionRequestKey("comment", commentId);
@@ -3351,6 +4142,7 @@ function deleteOwnComment(commentId) {
 function canDeleteComment(comment) {
   if (!comment) return false;
   if (state.adminMode) return true;
+  if (!state.isLoggedIn) return false;
   const owner = comment.owner || comment.author;
   return owner === "나" || owner === state.currentUser || comment.author === state.currentUser;
 }
@@ -3360,7 +4152,7 @@ function openConfirmAction(action) {
   render();
 }
 
-function runConfirmedAction() {
+async function runConfirmedAction() {
   const action = state.confirmAction;
   if (!action) return;
 
@@ -3386,22 +4178,35 @@ function runConfirmedAction() {
     performDeleteFolder(action.targetId);
   }
 
+  if (action.type === "admin-tag-status") {
+    updateAdminTagDecision(action.targetId, action.value);
+  }
+
   if (action.type === "logout") {
     stampCurrentUserOwnedPrompts();
     const wasAdminMode = state.adminMode;
-    state.isLoggedIn = false;
-    state.currentUser = null;
-    state.adminMode = false;
-    if (state.route === "admin") state.route = "home";
+    clearAuthenticatedSession();
     showNotice(wasAdminMode ? "로그아웃하여 관리자 데모를 종료했습니다." : "로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {
-    stampCurrentUserOwnedPrompts();
-    state.isLoggedIn = false;
-    state.currentUser = null;
-    state.authView = null;
-    showNotice("회원탈퇴 데모가 완료되었습니다.");
+    const api = window.TTALKAK_API;
+    if (!state.authToken && !state.token) {
+      state.authView = "login";
+      showNotice("로그인이 필요합니다.");
+      render();
+      return;
+    }
+    try {
+      if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
+      const result = await api.withdrawAccount({ password: action.password || "" }, state.authToken || state.token);
+      clearAuthenticatedSession();
+      showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
+    } catch (error) {
+      handleBackendAccessError(error, "회원탈퇴 요청에 실패했습니다.");
+      render();
+      return;
+    }
   }
 
   if (action.type === "reset-demo") {
@@ -3417,6 +4222,9 @@ function performDeleteComment(commentId) {
     const removed = removeCommentFromList(comments, commentId);
     if (!removed) continue;
 
+    if (isBackendNumericId(commentId)) {
+      callBackendApi("deleteComment", commentId);
+    }
     decrementPromptComments(promptId);
     state.likedCommentIds.delete(commentId);
     state.reportedCommentIds.delete(commentId);
@@ -3437,7 +4245,21 @@ function performDeleteThread(threadId) {
   showNotice("대화를 삭제했습니다.");
 }
 
-function createMakeFolder(folderName) {
+async function createMakeFolder(folderName) {
+  if (!state.isLoggedIn) {
+    state.creatingFolder = false;
+    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+    render();
+    return;
+  }
+
+  if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
+    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    state.creatingFolder = false;
+    render();
+    return;
+  }
+
   const cleanName = String(folderName || "").trim();
   if (!cleanName) {
     window.alert("폴더 이름을 입력해주세요.");
@@ -3454,37 +4276,140 @@ function createMakeFolder(folderName) {
   state.makeFolders.push(folder);
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
+  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
+  if (backendFolderId) folder.serverId = backendFolderId;
   showNotice("폴더를 추가했습니다.");
   render();
 }
 
-function renameMakeFolder(folderId, name) {
+async function createMakeFolderAndMoveThread(threadId, folderName) {
+  if (!state.isLoggedIn) {
+    state.creatingThreadFolderId = null;
+    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+    render();
+    return;
+  }
+
+  const thread = state.recentThreads.find((item) => item.id === threadId);
+  if (!thread) return;
+
+  if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
+    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    state.creatingThreadFolderId = null;
+    render();
+    return;
+  }
+
+  const cleanName = String(folderName || "").trim();
+  if (!cleanName) {
+    window.alert("폴더 이름을 입력해주세요.");
+    return;
+  }
+
+  const exists = state.makeFolders.some((folder) => folder.name === cleanName);
+  if (exists) {
+    window.alert("이미 같은 이름의 폴더가 있습니다.");
+    return;
+  }
+
+  const folder = { id: `folder-${Date.now()}`, name: cleanName };
+  state.makeFolders.push(folder);
+  thread.folderId = folder.id;
+  state.activeFolderId = folder.id;
+  state.openThreadMenuId = null;
+  state.creatingThreadFolderId = null;
+  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
+  if (backendFolderId) {
+    folder.serverId = backendFolderId;
+    await moveThreadToFolderOnBackend(thread, backendFolderId);
+  } else {
+    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+  }
+  showNotice("새 폴더를 만들고 대화를 이동했습니다.");
+  render();
+}
+
+function getCustomMakeFolderCount() {
+  return state.makeFolders.filter((folder) => folder.id !== "all" && folder.id !== "uncategorized").length;
+}
+
+async function renameMakeFolder(folderId, name) {
+  if (!state.isLoggedIn) {
+    state.editingFolderId = null;
+    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+    render();
+    return;
+  }
+
   const folder = state.makeFolders.find((item) => item.id === folderId);
   const cleanName = String(name || "").trim();
   if (!folder || !cleanName) return;
 
   folder.name = cleanName;
   state.editingFolderId = null;
+  const backendFolderId = getBackendFolderId(folderId);
+  if (backendFolderId) {
+    callBackendApi("updateMakeFolder", backendFolderId, { name: cleanName });
+  }
   showNotice("폴더 이름을 수정했습니다.");
   render();
 }
 
 function performDeleteFolder(folderId) {
+  if (!state.isLoggedIn) {
+    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+    render();
+    return;
+  }
+
   if (!folderId || folderId === "uncategorized") return;
+  const backendFolderId = getBackendFolderId(folderId);
   state.makeFolders = state.makeFolders.filter((folder) => folder.id !== folderId);
   state.recentThreads.forEach((thread) => {
     if (thread.folderId === folderId) thread.folderId = "uncategorized";
   });
   if (state.activeFolderId === folderId) state.activeFolderId = "all";
+  if (backendFolderId) {
+    callBackendApi("deleteMakeFolder", backendFolderId);
+  }
   showNotice("폴더를 삭제했습니다.");
 }
 
-function moveThreadToFolder(threadId, folderId) {
+async function moveThreadToFolder(threadId, folderId) {
+  if (!state.isLoggedIn) {
+    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+    render();
+    return;
+  }
+
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
   thread.folderId = folderId || "uncategorized";
+  await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
   showNotice("대화 폴더를 변경했습니다.");
   render();
+}
+
+async function moveThreadToFolderOnBackend(thread, backendFolderId) {
+  const api = window.TTALKAK_API;
+  if (!api?.moveMakeThread) return;
+
+  const backendThreadId = await ensureBackendMakeThreadId(thread);
+  if (!backendThreadId) {
+    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+    return;
+  }
+
+  try {
+    await api.moveMakeThread(
+      backendThreadId,
+      { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
+      state.authToken || state.token || undefined,
+    );
+  } catch (error) {
+    handleBackendAccessError(error, "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.");
+    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패해 로컬 데모 상태만 유지합니다.", error);
+  }
 }
 
 function countThreadsInFolder(folderId) {
@@ -3504,6 +4429,16 @@ function removeCommentFromList(comments, commentId) {
   for (let index = 0; index < comments.length; index += 1) {
     const comment = comments[index];
     if (comment.id === commentId && canDeleteComment(comment)) {
+      if ((comment.replies || []).length > 0) {
+        comment.deleted = true;
+        comment.text = "삭제된 댓글입니다.";
+        comment.author = "삭제된 댓글";
+        comment.owner = null;
+        comment.likes = 0;
+        comment.edited = false;
+        return true;
+      }
+
       comments.splice(index, 1);
       return true;
     }
@@ -3523,6 +4458,13 @@ function resetDemoState() {
     // Ignore storage failures in preview mode.
   }
   window.location.reload();
+}
+
+function toggleLibraryDemoData() {
+  state.libraryDemoSeeded = !state.libraryDemoSeeded;
+  state.savedPage = 1;
+  showNotice(state.libraryDemoSeeded ? "보관함 데모 데이터를 표시합니다." : "보관함 데모 데이터를 숨겼습니다.");
+  render();
 }
 
 function incrementPromptComments(promptId) {
@@ -3575,6 +4517,7 @@ function saveMakeMessage(messageId) {
   const savedIndex = savedPrompts.findIndex((item) => item.id === messageId);
   if (savedIndex >= 0) {
     savedPrompts.splice(savedIndex, 1);
+    state.userLibraryPromptIds.delete(messageId);
     state.savedPage = 1;
     showNotice("저장한 프롬프트에서 제거했습니다.");
     render();
@@ -3597,13 +4540,14 @@ function saveMakeMessage(messageId) {
     sourcePrompt: message.sourcePrompt || finalPrompt,
     messages: state.messages.map((item) => ({ ...item })),
   });
+  state.userLibraryPromptIds.add(message.id);
 
   state.savedPage = 1;
   showNotice("저장한 프롬프트에 추가했습니다.");
   render();
 }
 
-function resendEditedMessage(messageId, value) {
+async function resendEditedMessage(messageId, value) {
   const cleanValue = String(value || "").trim();
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
@@ -3612,15 +4556,17 @@ function resendEditedMessage(messageId, value) {
   const assistantMessageId = `make-${now}`;
   state.messages = state.messages.slice(0, index + 1);
   state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
+  const improvedPrompt = await improvePromptWithBackend(cleanValue);
   state.messages.push({
     id: assistantMessageId,
     role: "assistant",
-    content: polishPrompt(cleanValue),
+    content: improvedPrompt,
     sourcePrompt: cleanValue,
   });
   state.editingMessageId = null;
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
+  syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
   showNotice("수정한 메시지로 다시 전송했습니다.");
   render();
 }
@@ -3697,18 +4643,18 @@ function updateRecentThread(threadId) {
   const firstUser = state.messages.find((message) => message.role === "user");
   const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
   const existingThread = state.recentThreads.find((item) => item.id === threadId);
-  const dedupeKey = getRecentThreadKey(firstUser?.content || lastUser?.content || "");
   const thread = {
     id: threadId,
-    dedupeKey,
+    dedupeKey: threadId,
     title: makePromptTitle(lastUser?.content || "새 대화"),
     preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
     createdAt: existingThread?.createdAt || Date.now(),
     folderId: existingThread?.folderId || (state.activeFolderId !== "all" ? state.activeFolderId : "uncategorized"),
+    serverId: existingThread?.serverId || "",
     messages: state.messages.map((item) => ({ ...item })),
   };
 
-  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId && getRecentThreadKeyFromThread(item) !== dedupeKey)].slice(0, 8);
+  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId)].slice(0, 8);
 }
 
 function openRecentThread(threadId) {
@@ -3742,9 +4688,7 @@ function startNewChat() {
 }
 
 function getRecentThreadKeyFromThread(thread) {
-  if (thread.dedupeKey) return thread.dedupeKey;
-  const firstUser = thread.messages?.find((message) => message.role === "user");
-  return getRecentThreadKey(firstUser?.content || thread.title || "");
+  return thread.id || thread.dedupeKey || "";
 }
 
 function getRecentThreadKey(text) {
@@ -3807,6 +4751,11 @@ function autosizeTextarea(textarea) {
 
 function deleteOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (!state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 본인 프롬프트만 삭제할 수 있습니다.");
+    return;
+  }
   if (!prompt || prompt.source !== "mine") return;
 
   openConfirmAction({
@@ -3821,6 +4770,11 @@ function deleteOwnPrompt(promptId) {
 
 function unshareOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (!state.adminMode && !state.isLoggedIn) {
+    state.authView = "login";
+    showNotice("로그인 후 본인 프롬프트만 공유 취소할 수 있습니다.");
+    return;
+  }
   if (!prompt || (prompt.source !== "mine" && !state.adminMode)) return;
 
   openConfirmAction({
@@ -3833,7 +4787,7 @@ function unshareOwnPrompt(promptId) {
   });
 }
 
-function publishSavedPrompt(promptId) {
+async function publishSavedPrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt || prompt.source !== "mine") return;
 
@@ -3841,6 +4795,26 @@ function publishSavedPrompt(promptId) {
     state.authView = "login";
     render();
     return;
+  }
+
+  let backendPrompt = null;
+  if (isBackendNumericId(promptId) && window.TTALKAK_API?.shareExistingPrompt) {
+    try {
+      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, state.authToken || state.token || undefined);
+    } catch (error) {
+      handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
+      return;
+    }
+  }
+
+  if (backendPrompt) {
+    Object.assign(prompt, backendPrompt, {
+      source: "mine",
+      isShared: true,
+      savedByMe: prompt.savedByMe,
+      author: state.currentUser || backendPrompt.author,
+      owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
+    });
   }
 
   prompt.isShared = true;
@@ -3858,11 +4832,12 @@ function publishSavedPrompt(promptId) {
 
   state.popularSort = "latest";
   state.popularPage = 1;
+  state.userLibraryPromptIds.add(prompt.id);
   showNotice("프롬프트를 공유됨 상태로 전환했습니다.");
   render();
 }
 
-function updateOwnPrompt(promptId, formData) {
+async function updateOwnPrompt(promptId, formData) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
 
@@ -3875,13 +4850,28 @@ function updateOwnPrompt(promptId, formData) {
     return;
   }
 
+  let backendPrompt = null;
+  if (isBackendNumericId(promptId) && window.TTALKAK_API?.updatePrompt) {
+    try {
+      backendPrompt = await window.TTALKAK_API.updatePrompt(
+        promptId,
+        { title, text, tags },
+        state.authToken || state.token || undefined,
+      );
+    } catch (error) {
+      handleBackendAccessError(error, "프롬프트 수정 요청에 실패했습니다.");
+      return;
+    }
+  }
+
+  const nextValues = backendPrompt
+    ? { ...backendPrompt, source: "mine", savedByMe: prompt.savedByMe, isShared: prompt.isShared }
+    : { title, text, tags, updatedAt: Date.now() };
+
   [popularPrompts, savedPrompts].forEach((list) => {
     const item = list.find((entry) => entry.id === promptId);
     if (!item) return;
-    item.title = title;
-    item.text = text;
-    item.tags = tags;
-    item.updatedAt = Date.now();
+    Object.assign(item, nextValues);
   });
 
   const revisionKey = makeRevisionRequestKey("prompt", promptId);
@@ -3896,8 +4886,13 @@ function updateOwnPrompt(promptId, formData) {
 }
 
 function performDeletePrompt(promptId) {
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("deletePrompt", promptId);
+  }
   removePromptById(popularPrompts, promptId);
   removePromptById(savedPrompts, promptId);
+  state.userLibraryPromptIds.delete(promptId);
+  state.backendLibraryPromptIds.delete(promptId);
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
   normalizeSavedPage();
   showNotice("프롬프트를 삭제했습니다.");
@@ -3918,6 +4913,9 @@ function performUnsharePrompt(promptId) {
 
   state.popularPage = 1;
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+  if (isBackendNumericId(promptId)) {
+    callBackendApi("unsharePrompt", promptId);
+  }
   showNotice("프롬프트 공유를 취소했습니다.");
 }
 
@@ -3953,7 +4951,18 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
-  const merged = [...savedPrompts];
+  if (state.myBackendStatus === "connected") {
+    return savedPrompts.filter((prompt) => {
+      if (!state.backendLibraryPromptIds.has(prompt.id)) return false;
+      return prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id);
+    });
+  }
+
+  const merged = savedPrompts.filter(
+    (prompt) =>
+      !isHiddenDemoLibraryPrompt(prompt) &&
+      (prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id)),
+  );
   const seen = new Set(merged.map((prompt) => prompt.id));
 
   popularPrompts.forEach((prompt) => {
@@ -3963,6 +4972,10 @@ function getSavedPagePrompts() {
   });
 
   return merged;
+}
+
+function hasUserLibraryContent() {
+  return getSavedPagePrompts().length > 0;
 }
 
 function matchesSavedFilter(prompt) {
@@ -4017,8 +5030,59 @@ function commitSearchQuery(value) {
 
   state.searchQuery = nextQuery;
   state.popularPage = 1;
+  refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
+}
+
+function scheduleAdminPromptSearchCommit(value) {
+  window.clearTimeout(adminPromptSearchCommitTimer);
+  adminPromptSearchCommitTimer = window.setTimeout(() => {
+    commitAdminPromptSearchQuery(value);
+  }, SEARCH_DEBOUNCE_MS);
+}
+
+function commitAdminPromptSearchQuery(value) {
+  const nextQuery = String(value || "");
+  window.clearTimeout(adminPromptSearchCommitTimer);
+  if (state.adminPromptQuery === nextQuery) return;
+
+  state.adminPromptQuery = nextQuery;
+  render();
+  restoreAdminPromptSearchFocus();
+}
+
+function restoreAdminPromptSearchFocus() {
+  const nextInput = document.querySelector("[data-admin-prompt-search]");
+  if (!nextInput) return;
+
+  nextInput.focus();
+  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+}
+
+function scheduleAdminTagSearchCommit(value) {
+  window.clearTimeout(adminTagSearchCommitTimer);
+  adminTagSearchCommitTimer = window.setTimeout(() => {
+    commitAdminTagSearchQuery(value);
+  }, SEARCH_DEBOUNCE_MS);
+}
+
+function commitAdminTagSearchQuery(value) {
+  const nextQuery = String(value || "");
+  window.clearTimeout(adminTagSearchCommitTimer);
+  if (state.adminTagQuery === nextQuery) return;
+
+  state.adminTagQuery = nextQuery;
+  render();
+  restoreAdminTagSearchFocus();
+}
+
+function restoreAdminTagSearchFocus() {
+  const nextInput = document.querySelector("[data-admin-tag-search]");
+  if (!nextInput) return;
+
+  nextInput.focus();
+  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
 }
 
 function searchByTag(tag) {
@@ -4026,10 +5090,28 @@ function searchByTag(tag) {
   if (!cleanTag) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchQuery = `#${cleanTag}`;
+  state.searchScope = "tag";
+  state.searchQuery = cleanTag;
   state.popularPage = 1;
   state.detailPromptId = null;
   state.route = "home";
+  refreshBackendHomePrompts();
+  render();
+  restoreSearchFocus();
+}
+
+function searchByAuthor(author) {
+  const cleanAuthor = String(author || "").trim();
+  if (!cleanAuthor) return;
+
+  window.clearTimeout(searchCommitTimer);
+  state.searchScope = "author";
+  state.searchQuery = cleanAuthor;
+  state.popularPage = 1;
+  state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
+  state.route = "home";
+  refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
 }
@@ -4038,7 +5120,7 @@ function findPromptById(promptId) {
   return savedPrompts.find((item) => item.id === promptId) || popularPrompts.find((item) => item.id === promptId);
 }
 
-function sharePrompt(formData) {
+async function sharePrompt(formData) {
   if (!state.isLoggedIn) {
     state.authView = "login";
     render();
@@ -4078,10 +5160,43 @@ function sharePrompt(formData) {
     delete existingSavedPrompt.messages;
   }
 
-  upsertPrompt(popularPrompts, prompt);
-  upsertPrompt(savedPrompts, prompt);
-  if (!commentsByPrompt[prompt.id]) {
-    commentsByPrompt[prompt.id] = [];
+  let finalPrompt = prompt;
+  const api = window.TTALKAK_API;
+  if (api?.sharePrompt) {
+    try {
+      const backendPrompt = await api.sharePrompt(
+        {
+          title: prompt.title,
+          text: prompt.text,
+          tags: prompt.tags,
+          isShared: true,
+        },
+        state.authToken || state.token || undefined,
+      );
+      finalPrompt = {
+        ...backendPrompt,
+        source: "mine",
+        isShared: true,
+        savedByMe: Boolean(existingPrompt?.savedByMe || backendPrompt.savedByMe),
+        author: state.currentUser || backendPrompt.author,
+        owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
+      };
+      if (prompt.id !== finalPrompt.id) {
+        removePromptById(popularPrompts, prompt.id);
+        removePromptById(savedPrompts, prompt.id);
+      }
+    } catch (error) {
+      handleBackendAccessError(error, "프롬프트 공유 요청에 실패했습니다.");
+      return;
+    }
+  }
+
+  upsertPrompt(popularPrompts, finalPrompt);
+  upsertPrompt(savedPrompts, finalPrompt);
+  state.userLibraryPromptIds.add(finalPrompt.id);
+  state.backendLibraryPromptIds.add(finalPrompt.id);
+  if (!commentsByPrompt[finalPrompt.id]) {
+    commentsByPrompt[finalPrompt.id] = [];
   }
   state.searchQuery = "";
   state.popularSort = "latest";
@@ -4109,22 +5224,39 @@ function parseSharedTags(value) {
 }
 
 function getVisiblePopularPrompts() {
-  const criteria = parsePromptSearchQuery(state.searchQuery);
+  const criteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const prompts = getUniquePrompts(popularPrompts);
 
-  if (criteria.tagTokens.length === 0 && criteria.keywordTokens.length === 0) {
+  if (!hasPromptSearchCriteria(criteria)) {
     return sortPopularPrompts(prompts);
   }
 
   return sortPopularPrompts(
     prompts.filter((prompt) => {
-      const tags = prompt.tags.map(normalizeTag);
-      const matchesTags =
-        criteria.tagTokens.length === 0 || criteria.tagTokens.every((token) => tags.some((tag) => tag.includes(token)));
-      if (!matchesTags) return false;
+      if (criteria.tagTokens.length) {
+        const tags = prompt.tags.map(normalizeTag);
+        const matchesTags = criteria.tagTokens.every((token) => tags.some((tag) => tag.includes(token)));
+        if (!matchesTags) return false;
+      }
 
-      const haystack = normalizeSearchText([prompt.title, prompt.text, prompt.author, ...(prompt.tags || [])].join(" "));
-      return criteria.keywordTokens.every((token) => haystack.includes(token));
+      if (criteria.keywordTokens.length) {
+        const keywordHaystack = normalizeSearchText([prompt.title, prompt.text].join(" "));
+        const matchesKeywords = criteria.keywordTokens.every((token) => keywordHaystack.includes(token));
+        if (!matchesKeywords) return false;
+      }
+
+      if (criteria.authorTokens.length) {
+        const authorHaystack = normalizeSearchText(getDisplayPromptAuthor(prompt));
+        const matchesAuthor = criteria.authorTokens.every((token) => authorHaystack.includes(token));
+        if (!matchesAuthor) return false;
+      }
+
+      if (criteria.allTokens.length) {
+        const allHaystack = normalizeSearchText([prompt.title, prompt.text, getDisplayPromptAuthor(prompt), ...(prompt.tags || [])].join(" "));
+        return criteria.allTokens.every((token) => allHaystack.includes(token));
+      }
+
+      return true;
     }),
   );
 }
@@ -4132,19 +5264,33 @@ function getVisiblePopularPrompts() {
 function getPopularTags(prompts) {
   const counts = new Map();
   const labels = new Map();
+  const recentUsedAt = new Map();
+  const createdOrder = new Map();
 
-  prompts.forEach((prompt) => {
+  prompts.forEach((prompt, promptIndex) => {
+    const usedAt = new Date(getPromptCreatedAt(prompt) || 0).getTime() || 0;
     (prompt.tags || []).forEach((tag) => {
       const label = String(tag || "").replace(/^#+/, "").trim();
       if (!label) return;
       const key = normalizeTag(label);
+      if (getAdminTagStatus(label) !== "approved") return;
       counts.set(key, (counts.get(key) || 0) + 1);
       if (!labels.has(key)) labels.set(key, label);
+      if (!createdOrder.has(key)) createdOrder.set(key, promptIndex);
+      recentUsedAt.set(key, Math.max(recentUsedAt.get(key) || 0, usedAt));
     });
   });
 
   return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || labels.get(a[0]).localeCompare(labels.get(b[0]), "ko-KR"))
+    .sort((a, b) => {
+      const countDiff = b[1] - a[1];
+      if (countDiff) return countDiff;
+
+      const recentDiff = (recentUsedAt.get(b[0]) || 0) - (recentUsedAt.get(a[0]) || 0);
+      if (recentDiff) return recentDiff;
+
+      return (createdOrder.get(b[0]) || 0) - (createdOrder.get(a[0]) || 0);
+    })
     .slice(0, 8)
     .map(([key]) => labels.get(key))
     .filter(Boolean);
@@ -4165,11 +5311,87 @@ function getKnownTags() {
   return [...tags.values()].sort((a, b) => a.localeCompare(b, "ko-KR"));
 }
 
+function getAdminManagedTags() {
+  const stats = getTagStats();
+  const query = normalizeTag(state.adminTagQuery || "");
+  const filter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const sort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
+
+  const backendTags = (state.backendAdminTags || []).map((tag) => ({
+    label: tag.label,
+    key: tag.key,
+    id: tag.id,
+    status: tag.status || getAdminTagStatus(tag.label),
+    count: tag.count || 0,
+    recentAt: tag.recentAt || 0,
+    backend: true,
+  }));
+  const backendKeys = new Set(backendTags.map((tag) => tag.key));
+  const localTags = getKnownTags()
+    .filter((tag) => !backendKeys.has(normalizeTag(tag)))
+    .map((tag) => {
+      const key = normalizeTag(tag);
+      const stat = stats.get(key) || {};
+      return {
+        label: tag,
+        key,
+        status: getAdminTagStatus(tag),
+        count: stat.count || 0,
+        recentAt: stat.recentAt || 0,
+      };
+    });
+
+  return [...backendTags, ...localTags]
+    .filter((tag) => filter === "all" || tag.status === filter)
+    .filter((tag) => !query || normalizeTag(tag.label).includes(query))
+    .sort((a, b) => {
+      if (sort === "recent") {
+        return b.recentAt - a.recentAt || b.count - a.count || a.label.localeCompare(b.label, "ko");
+      }
+
+      return b.count - a.count || b.recentAt - a.recentAt || getAdminTagStatusOrder(a.status) - getAdminTagStatusOrder(b.status) || a.label.localeCompare(b.label, "ko");
+    })
+    .slice(0, 16);
+}
+
+function getTagStats() {
+  const stats = new Map();
+
+  [...popularPrompts, ...savedPrompts].forEach((prompt) => {
+    const usedAt = new Date(getPromptCreatedAt(prompt) || 0).getTime() || 0;
+    (prompt.tags || []).forEach((tag) => {
+      const key = normalizeTag(tag);
+      if (!key) return;
+
+      const current = stats.get(key) || { count: 0, recentAt: 0 };
+      stats.set(key, {
+        count: current.count + 1,
+        recentAt: Math.max(current.recentAt, usedAt),
+      });
+    });
+  });
+
+  return stats;
+}
+
 function getMyPrompts() {
-  return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine"));
+  if (state.myBackendStatus === "connected") {
+    return getUniquePrompts(
+      savedPrompts.filter((prompt) => state.backendLibraryPromptIds.has(prompt.id) && prompt.source === "mine"),
+    );
+  }
+  return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt)));
 }
 
 function getMyComments() {
+  if (state.backendMyComments.length) {
+    return state.backendMyComments.map((comment) => ({
+      promptId: String(comment.promptId || ""),
+      prompt: findPromptById(String(comment.promptId || "")),
+      comment,
+    }));
+  }
+
   const owner = state.currentUser || "나";
   const items = [];
 
@@ -4182,7 +5404,7 @@ function getMyComments() {
 
 function collectOwnedComments(items, promptId, comments, owner) {
   (comments || []).forEach((comment) => {
-    if (comment.owner === owner || comment.author === owner || comment.owner === "나" || comment.author === "나") {
+    if (!comment.deleted && (comment.owner === owner || comment.author === owner || comment.owner === "나" || comment.author === "나")) {
       items.push({ promptId, prompt: findPromptById(promptId), comment });
     }
     collectOwnedComments(items, promptId, comment.replies || [], owner);
@@ -4190,6 +5412,15 @@ function collectOwnedComments(items, promptId, comments, owner) {
 }
 
 function getMyReports() {
+  const backendReports = state.backendMyReports.map((report) => ({
+    type: report.type,
+    title: report.type === "comment" ? "댓글 신고" : "프롬프트 신고",
+    id: report.targetId,
+    label: report.reason || report.raw?.targetPreview || report.raw?.promptTitle || "신고 내역",
+    reason: report.reason,
+    status: mapBackendReportStatus(report.status),
+    requestedAt: report.createdAt,
+  }));
   const promptReports = [...state.reportedPromptIds].map((promptId) => {
     const prompt = findPromptById(promptId);
     const record = getReportRecord(`prompt:${promptId}`);
@@ -4229,13 +5460,26 @@ function getMyReports() {
     })
     .filter(Boolean);
 
-  return [...revisionRequests, ...promptReports, ...commentReports].sort(
+  return [...revisionRequests, ...backendReports, ...promptReports, ...commentReports].sort(
     (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
   );
 }
 
 function getReportRecord(key) {
   return state.reportRecords[key] || { status: "pending" };
+}
+
+function mapBackendReportStatus(status) {
+  const normalized = String(status || "pending").toLowerCase();
+  if (["reviewed", "resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
+  if (["dismissed", "rejected", "reject"].includes(normalized)) return "dismissed";
+  return "pending";
+}
+
+function mapFrontendReportStatus(status) {
+  if (status === "resolved") return "REVIEWED";
+  if (status === "dismissed") return "DISMISSED";
+  return "PENDING";
 }
 
 function makeRevisionRequestKey(type, id) {
@@ -4284,6 +5528,26 @@ function isRevisionTargetOwnedByCurrentUser(target) {
 }
 
 function getAdminReportRecords() {
+  if (state.backendAdminReports.length) {
+    return state.backendAdminReports.map((report) => {
+      const prompt = report.promptId ? findPromptById(report.promptId) : report.type === "prompt" ? findPromptById(report.targetId) : null;
+      const record = getReportRecord(report.key);
+      return {
+        key: report.key,
+        type: report.type,
+        targetId: report.targetId,
+        promptId: report.promptId || prompt?.id || "",
+        status: record.status || mapBackendReportStatus(report.status),
+        title: report.type === "comment" ? "댓글 신고" : (prompt?.title || report.raw?.promptTitle || "프롬프트 신고"),
+        contextTitle: prompt?.title || report.raw?.promptTitle || "게시물 확인 필요",
+        promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : report.raw?.promptAuthorNickname || "",
+        commentAuthor: report.raw?.commentAuthorNickname || "",
+        targetPreview: report.raw?.targetPreview || report.raw?.commentText || makePreview(prompt?.text || ""),
+        summary: report.reason ? `신고 사유: ${report.reason}` : "신고 사유 없음",
+      };
+    }).sort((a, b) => Number(getReportRecord(b.key).createdAt || 0) - Number(getReportRecord(a.key).createdAt || 0));
+  }
+
   const records = [];
   [...state.reportedPromptIds].forEach((promptId) => {
     const prompt = findPromptById(promptId);
@@ -4391,8 +5655,53 @@ function getAdminTagStatusOrder(status) {
   return 2;
 }
 
-function updateReportRecordStatus(key, status) {
+async function updateAdminTagDecision(tag, decision) {
+  if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
+
+  const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
+  if (backendTag?.id && window.TTALKAK_API?.updateAdminTagStatus) {
+    try {
+      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, decision.toUpperCase(), state.authToken || state.token || undefined);
+      state.backendAdminTags = state.backendAdminTags.map((item) =>
+        item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
+      );
+    } catch (error) {
+      handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
+      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+    }
+  }
+
+  if (decision === "pending") {
+    const nextDecisions = { ...state.adminTagDecisions };
+    delete nextDecisions[tag];
+    state.adminTagDecisions = nextDecisions;
+  } else {
+    state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
+  }
+
+  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+}
+
+async function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "dismissed", "resolved"].includes(status)) return;
+  const record = getReportRecord(key);
+  if (record.backendId && window.TTALKAK_API?.updateAdminReportStatus) {
+    try {
+      const updated = await window.TTALKAK_API.updateAdminReportStatus(
+        record.backendId,
+        mapFrontendReportStatus(status),
+        state.authToken || state.token || undefined,
+      );
+      const backendStatus = mapBackendReportStatus(updated?.status || status);
+      state.backendAdminReports = state.backendAdminReports.map((report) =>
+        report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
+      );
+      status = backendStatus;
+    } catch (error) {
+      handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
+      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+    }
+  }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
 }
@@ -4480,17 +5789,37 @@ function getUniquePrompts(prompts) {
 function applyReportedVisibility(prompts) {
   return prompts.filter((prompt) => {
     if (state.adminHiddenPromptIds.has(prompt.id)) return false;
-    if (state.hideReportedPrompts && state.reportedPromptIds.has(prompt.id)) return false;
+    if (canShowReportedState() && state.hideReportedPrompts && state.reportedPromptIds.has(prompt.id)) return false;
     return true;
   });
 }
 
-function toggleAdminPromptHidden(promptId) {
+function canShowReportedState() {
+  return state.isLoggedIn || state.adminMode;
+}
+
+async function toggleAdminPromptHidden(promptId) {
   if (!promptId) return;
   if (state.adminHiddenPromptIds.has(promptId)) {
+    if (window.TTALKAK_API?.restoreAdminPrompt && isBackendNumericId(promptId)) {
+      try {
+        await window.TTALKAK_API.restoreAdminPrompt(promptId, state.authToken || state.token || undefined);
+      } catch (error) {
+        handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
+      }
+    }
     state.adminHiddenPromptIds.delete(promptId);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
+    if (window.TTALKAK_API?.hideAdminPrompt && isBackendNumericId(promptId)) {
+      try {
+        await window.TTALKAK_API.hideAdminPrompt(promptId, state.authToken || state.token || undefined);
+      } catch (error) {
+        handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
+      }
+    }
     state.adminHiddenPromptIds.add(promptId);
     showNotice("관리자 숨김 처리했습니다.");
   }
@@ -4500,26 +5829,46 @@ function getPopularTotalPages(count) {
   return Math.max(1, Math.ceil(count / 16));
 }
 
-function parsePromptSearchQuery(query) {
+function parsePromptSearchQuery(query, scope = "all") {
+  const searchScope = getValidSearchScope(scope);
   const tagTokens = [];
   const keywordTokens = [];
+  const authorTokens = [];
+  const allTokens = [];
 
   String(query || "")
     .split(/[,\s]+/)
     .map((token) => token.trim())
     .filter(Boolean)
     .forEach((token) => {
-      if (token.startsWith("#")) {
+      if (searchScope === "tag" || token.startsWith("#")) {
         const tag = normalizeTag(token);
         if (tag) tagTokens.push(tag);
         return;
       }
 
       const keyword = normalizeSearchText(token);
-      if (keyword) keywordTokens.push(keyword);
+      if (!keyword) return;
+      if (searchScope === "keyword") {
+        keywordTokens.push(keyword);
+        return;
+      }
+      if (searchScope === "author") {
+        authorTokens.push(keyword);
+        return;
+      }
+      allTokens.push(keyword);
     });
 
-  return { tagTokens, keywordTokens };
+  return { tagTokens, keywordTokens, authorTokens, allTokens };
+}
+
+function hasPromptSearchCriteria(criteria) {
+  return Boolean(criteria.tagTokens.length || criteria.keywordTokens.length || criteria.authorTokens.length || criteria.allTokens.length);
+}
+
+function getValidSearchScope(scope) {
+  return ["all", "tag", "keyword", "author"].includes(scope) ? scope : "all";
 }
 
 function normalizeSearchText(value) {
@@ -4598,6 +5947,309 @@ function showNotice(message) {
   }, 1700);
 }
 
+function getBackendErrorMessage(error) {
+  const payload = error?.payload;
+  return String(
+    payload?.message ||
+      payload?.error ||
+      payload?.code ||
+      error?.message ||
+      "",
+  ).trim();
+}
+
+function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.") {
+  const status = Number(error?.status || error?.payload?.status || 0);
+  const backendMessage = getBackendErrorMessage(error);
+
+  if (status === 401) {
+    clearAuthenticatedSession({ keepRoute: true });
+    state.authView = "login";
+    showNotice("로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+    return true;
+  }
+
+  if (status === 403) {
+    showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
+    return true;
+  }
+
+  if (backendMessage || fallbackMessage) {
+    showNotice(backendMessage || fallbackMessage);
+    return true;
+  }
+
+  return false;
+}
+
+function callBackendApi(action, ...args) {
+  const api = window.TTALKAK_API;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return;
+
+  Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
+    handleBackendAccessError(error, "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다.");
+    console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
+  });
+}
+
+async function createBackendMakeFolder(payload) {
+  const api = window.TTALKAK_API;
+  if (!api?.createMakeFolder) return "";
+
+  try {
+    const result = await api.createMakeFolder(payload, state.authToken || state.token || undefined);
+    return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
+  } catch (error) {
+    handleBackendAccessError(error, "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.");
+    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패해 로컬 데모 폴더만 유지합니다.", error);
+    return "";
+  }
+}
+
+async function createBackendMakeThread(thread) {
+  const api = window.TTALKAK_API;
+  if (!api?.createMakeThread || !thread) return "";
+
+  const messages = Array.isArray(thread.messages) && thread.messages.length
+    ? thread.messages
+    : state.messages;
+  const backendThreadId = isBackendNumericId(thread.serverId)
+    ? Number(thread.serverId)
+    : isBackendNumericId(thread.id)
+      ? Number(thread.id)
+      : null;
+
+  try {
+    const payload = {
+        title: thread.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
+        preview: thread.preview || makePreview(messages[messages.length - 1]?.content || ""),
+        folderId: getBackendFolderId(thread.folderId),
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          sourcePrompt: message.sourcePrompt || "",
+        })),
+      };
+    if (backendThreadId) {
+      payload.id = backendThreadId;
+      payload.threadId = backendThreadId;
+    }
+
+    const result = await api.createMakeThread(
+      payload,
+      state.authToken || state.token || undefined,
+    );
+    return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
+  } catch (error) {
+    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.");
+    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
+    return "";
+  }
+}
+
+async function ensureBackendMakeThreadId(thread) {
+  if (!thread) return "";
+  if (isBackendNumericId(thread.serverId)) return String(thread.serverId);
+  if (isBackendNumericId(thread.id)) {
+    thread.serverId = String(thread.id);
+    return thread.serverId;
+  }
+
+  const serverId = await createBackendMakeThread(thread);
+  if (serverId) {
+    thread.serverId = serverId;
+    return serverId;
+  }
+  return "";
+}
+
+function getBackendFolderId(folderId) {
+  if (!folderId || folderId === "all" || folderId === "uncategorized") return null;
+  const folder = state.makeFolders.find((item) => item.id === folderId || item.serverId === folderId);
+  const candidate = folder?.serverId || folderId;
+  return isBackendNumericId(candidate) ? Number(candidate) : null;
+}
+
+function isBackendNumericId(value) {
+  return value !== null && value !== undefined && /^\d+$/.test(String(value));
+}
+
+async function improvePromptWithBackend(prompt) {
+  const api = window.TTALKAK_API;
+  if (!api?.improvePrompt) return polishPrompt(prompt);
+
+  try {
+    const improved = await api.improvePrompt({ prompt }, state.authToken || state.token || undefined);
+    state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
+    return improved || polishPrompt(prompt);
+  } catch (error) {
+    state.makeBackendMessage = "Make demo data 표시 중: /api/prompts/improve 호출 실패로 데모 첨삭을 표시합니다.";
+    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.");
+    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
+    return polishPrompt(prompt);
+  }
+}
+
+async function syncMakeThreadWithBackend(threadId) {
+  const thread = state.recentThreads.find((item) => item.id === threadId);
+  if (!thread) return;
+  const serverId = await createBackendMakeThread(thread);
+  if (serverId) thread.serverId = serverId;
+}
+
+async function hydrateBackendMakeDataIfNeeded() {
+  if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+
+  const api = window.TTALKAK_API;
+  if (!api?.getMakeThreads && !api?.getMakeFolders) {
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다.";
+    render();
+    return;
+  }
+
+  state.makeBackendStatus = "checking";
+  state.makeBackendMessage = "Make API 연결 확인 중";
+
+  const [threadsResult, foldersResult] = await Promise.allSettled([
+    api.getMakeThreads?.(state.authToken || state.token || undefined),
+    api.getMakeFolders?.(state.authToken || state.token || undefined),
+  ]);
+
+  let shouldRender = false;
+
+  if (foldersResult.status === "fulfilled" && Array.isArray(foldersResult.value)) {
+    const folders = foldersResult.value.filter((folder) => folder.id && folder.name);
+    if (folders.length) {
+      state.makeFolders = normalizeMakeFolders(folders);
+      shouldRender = true;
+    }
+  } else if (foldersResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/make/folders 연동에 실패해 데모 폴더를 유지합니다.", foldersResult.reason);
+  }
+
+  if (threadsResult.status === "fulfilled" && Array.isArray(threadsResult.value)) {
+    const threads = threadsResult.value.filter((thread) => thread.id);
+    if (threads.length) {
+      state.recentThreads = threads.map((thread) => ({
+        id: thread.id,
+        dedupeKey: thread.id,
+        serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
+        title: thread.title || "새 대화",
+        preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
+        folderId: thread.folderId || "uncategorized",
+        createdAt: thread.createdAt || Date.now(),
+        messages: Array.isArray(thread.messages) ? thread.messages : [],
+      }));
+      normalizeRecentThreads();
+      shouldRender = true;
+    }
+  } else if (threadsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/make/threads 연동에 실패해 데모 대화를 유지합니다.", threadsResult.reason);
+  }
+
+  const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
+  state.makeBackendStatus = anyConnected ? "connected" : "fallback";
+  state.makeBackendMessage = anyConnected
+    ? "Make API 연결됨: GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
+    : "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다.";
+
+  if (shouldRender || state.route === "make") render();
+}
+
+async function hydrateBackendMyPageDataIfNeeded() {
+  if (state.route !== "saved" || !state.isLoggedIn || state.myBackendStatus !== "idle") return;
+  const api = window.TTALKAK_API;
+  if (!api?.getMyLibrary) return;
+
+  state.myBackendStatus = "checking";
+  const token = state.authToken || state.token || undefined;
+  const [libraryResult, commentsResult, reportsResult] = await Promise.allSettled([
+    api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
+    api.getMyComments?.(token),
+    api.getMyReports?.(token),
+  ]);
+
+  let shouldRender = false;
+  if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
+    state.backendLibraryPromptIds = new Set();
+    libraryResult.value.items.forEach((prompt) => {
+      const normalized = {
+        ...prompt,
+        source: prompt.source || (prompt.isMine ? "mine" : "community"),
+        savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
+      };
+      upsertPrompt(savedPrompts, normalized);
+      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+      state.userLibraryPromptIds.add(normalized.id);
+      state.backendLibraryPromptIds.add(normalized.id);
+    });
+    shouldRender = true;
+  } else if (libraryResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/me/library 연동에 실패해 데모 보관함을 유지합니다.", libraryResult.reason);
+  }
+
+  if (commentsResult.status === "fulfilled" && Array.isArray(commentsResult.value)) {
+    state.backendMyComments = commentsResult.value;
+    shouldRender = true;
+  }
+
+  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
+    state.backendMyReports = reportsResult.value;
+    shouldRender = true;
+  }
+
+  state.myBackendStatus = "connected";
+  if (shouldRender) render();
+}
+
+async function hydrateBackendAdminDataIfNeeded() {
+  if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
+  const api = window.TTALKAK_API;
+  if (!api?.getAdminReports && !api?.getAdminTags) return;
+
+  state.adminBackendStatus = "checking";
+  const token = state.authToken || state.token || undefined;
+  const [reportsResult, tagsResult] = await Promise.allSettled([
+    api.getAdminReports?.({}, token),
+    api.getAdminTags?.({}, token),
+  ]);
+
+  let shouldRender = false;
+  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
+    state.backendAdminReports = reportsResult.value;
+    reportsResult.value.forEach((report) => {
+      state.reportRecords[report.key] = {
+        ...getReportRecord(report.key),
+        backendId: report.id,
+        status: mapBackendReportStatus(report.status),
+        reason: report.reason || getReportRecord(report.key).reason || "",
+        createdAt: report.createdAt || Date.now(),
+      };
+      if (report.type === "prompt") state.reportedPromptIds.add(report.targetId);
+      if (report.type === "comment") state.reportedCommentIds.add(report.targetId);
+    });
+    shouldRender = true;
+  } else if (reportsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/reports 연동에 실패해 데모 신고 데이터를 유지합니다.", reportsResult.reason);
+  }
+
+  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
+    state.backendAdminTags = tagsResult.value;
+    tagsResult.value.forEach((tag) => {
+      if (!tag.key) return;
+      state.adminTagDecisions = { ...state.adminTagDecisions, [tag.key]: tag.status };
+    });
+    shouldRender = true;
+  } else if (tagsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/tags 연동에 실패해 데모 태그 데이터를 유지합니다.", tagsResult.reason);
+  }
+
+  state.adminBackendStatus = "connected";
+  if (shouldRender) render();
+}
+
 function persistState() {
   try {
     localStorage.setItem(
@@ -4613,6 +6265,12 @@ function persistState() {
         state: {
           isLoggedIn: state.isLoggedIn,
           currentUser: state.currentUser,
+          currentUserId: state.currentUserId,
+          currentUserRole: state.currentUserRole,
+          authToken: state.authToken,
+          token: state.token,
+          libraryDemoSeeded: state.libraryDemoSeeded,
+          userLibraryPromptIds: [...state.userLibraryPromptIds],
           likedPromptIds: [...state.likedPromptIds],
           likedCommentIds: [...state.likedCommentIds],
           reportedPromptIds: [...state.reportedPromptIds],
@@ -4624,8 +6282,12 @@ function persistState() {
           adminTab: state.adminTab,
           adminPromptQuery: state.adminPromptQuery,
           adminPromptFilter: state.adminPromptFilter,
+          adminTagQuery: state.adminTagQuery,
+          adminTagFilter: state.adminTagFilter,
+          adminTagSort: state.adminTagSort,
           adminPromptRevisionRequests: state.adminPromptRevisionRequests,
           reportRecords: state.reportRecords,
+          searchScope: state.searchScope,
           popularSort: state.popularSort,
           savedSort: state.savedSort,
           guestImproveCount: state.guestImproveCount,
@@ -4663,14 +6325,22 @@ function loadPersistedState() {
     }
 
     const savedState = parsed.state || {};
-    state.isLoggedIn = Boolean(savedState.isLoggedIn);
-    state.currentUser = savedState.currentUser || null;
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const restoredToken = storedToken || savedState.authToken || savedState.token || "";
+    state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);
+    state.currentUser = state.isLoggedIn ? savedState.currentUser || null : null;
+    state.currentUserId = state.isLoggedIn ? savedState.currentUserId || null : null;
+    state.currentUserRole = state.isLoggedIn ? savedState.currentUserRole || "user" : "user";
+    state.authToken = state.isLoggedIn ? restoredToken : "";
+    state.token = state.isLoggedIn ? restoredToken : "";
+    state.libraryDemoSeeded = Boolean(savedState.libraryDemoSeeded);
+    state.userLibraryPromptIds = new Set(Array.isArray(savedState.userLibraryPromptIds) ? savedState.userLibraryPromptIds : []);
     state.likedPromptIds = new Set(Array.isArray(savedState.likedPromptIds) ? savedState.likedPromptIds : []);
     state.likedCommentIds = new Set(Array.isArray(savedState.likedCommentIds) ? savedState.likedCommentIds : []);
     state.reportedPromptIds = new Set(Array.isArray(savedState.reportedPromptIds) ? savedState.reportedPromptIds : []);
     state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
     state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
-    state.adminMode = Boolean(savedState.adminMode);
+    state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && savedState.adminMode);
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
@@ -4679,11 +6349,17 @@ function loadPersistedState() {
     state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
       ? savedState.adminPromptFilter
       : "all";
+    state.adminTagQuery = savedState.adminTagQuery || "";
+    state.adminTagFilter = ["all", "pending", "approved", "rejected"].includes(savedState.adminTagFilter)
+      ? savedState.adminTagFilter
+      : "all";
+    state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
     state.adminPromptRevisionRequests =
       savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
         ? savedState.adminPromptRevisionRequests
         : {};
     state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
+    state.searchScope = getValidSearchScope(savedState.searchScope);
     state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(savedState.popularSort)
       ? savedState.popularSort
       : "popular";
@@ -4731,8 +6407,11 @@ function normalizePersistedLikeCounts() {
 function normalizeRecentThreads() {
   const seen = new Set();
 
-  state.recentThreads = state.recentThreads.filter((thread) => {
-    const key = getRecentThreadKeyFromThread(thread);
+  state.recentThreads = state.recentThreads.filter((thread, index) => {
+    if (!thread.id) {
+      thread.id = `legacy-thread-${Date.now()}-${index}`;
+    }
+    const key = thread.id;
     if (!key || seen.has(key)) return false;
     seen.add(key);
     thread.dedupeKey = key;
@@ -4785,9 +6464,103 @@ function normalizeDemoCopy() {
   });
 }
 
+async function hydrateBackendHomeData() {
+  const api = window.TTALKAK_API;
+  if (!api?.getCommunityPosts) {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다.";
+    render();
+    return;
+  }
+
+  const [promptsResult, tagsResult] = await Promise.allSettled([
+    api.getCommunityPosts({ page: 1, size: 64, sort: state.popularSort }),
+    api.getPopularTags?.({ limit: 8 }),
+  ]);
+
+  let shouldRender = false;
+
+  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
+    popularPrompts.splice(
+      0,
+      popularPrompts.length,
+      ...promptsResult.value.items.map((prompt) => ({
+        ...prompt,
+        source: prompt.source || "community",
+        isShared: prompt.isShared ?? true,
+      })),
+    );
+    normalizePersistedLikeCounts();
+    state.backendStatus = "connected";
+    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+    shouldRender = true;
+  } else if (promptsResult.status === "rejected") {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다.";
+    console.warn("[TTALKAK] /api/prompts 연동에 실패해 데모 데이터를 유지합니다.", promptsResult.reason);
+  }
+
+  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
+    state.backendPopularTags = tagsResult.value.slice(0, 8);
+    if (state.backendStatus === "connected") {
+      state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
+    }
+    shouldRender = true;
+  } else if (tagsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/tags/popular 연동에 실패해 데모 태그를 유지합니다.", tagsResult.reason);
+  }
+
+  if (shouldRender) render();
+}
+
+async function refreshBackendHomePrompts() {
+  const api = window.TTALKAK_API;
+  if (!api?.searchCommunityPosts) return;
+
+  const query = String(state.searchQuery || "").trim();
+  const scope = getValidSearchScope(state.searchScope);
+  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort });
+  state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
+
+  try {
+    const result = await api.searchCommunityPosts({
+      scope,
+      query,
+      page: 1,
+      size: 64,
+      sort: state.popularSort,
+    });
+    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort })) {
+      return;
+    }
+    if (Array.isArray(result?.items)) {
+      popularPrompts.splice(
+        0,
+        popularPrompts.length,
+        ...result.items.map((prompt) => ({
+          ...prompt,
+          source: prompt.source || (prompt.isMine ? "mine" : "community"),
+          isShared: prompt.isShared ?? true,
+        })),
+      );
+      state.backendStatus = "connected";
+      state.backendStatusMessage = query
+        ? `GET /api/prompts?scope=${scope}&query=... 검색 결과를 Home에 반영 중입니다.`
+        : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+      normalizePersistedLikeCounts();
+      render();
+    }
+  } catch (error) {
+    state.backendStatus = "fallback";
+    state.backendStatusMessage = "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다.";
+    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패해 로컬 필터를 유지합니다.", error);
+  }
+}
+
 loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
 normalizeRecentThreads();
 ensureDemoComments();
 render();
+hydrateBackendHomeData();
