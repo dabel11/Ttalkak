@@ -365,6 +365,8 @@ const state = {
   adminTagQuery: "",
   adminTagFilter: "all",
   adminTagSort: "usage",
+  adminUserQuery: "",
+  adminUserActivityNickname: "",
   adminPromptRevisionRequests: {},
   reportRecords: {},
   isLoggedIn: false,
@@ -455,6 +457,8 @@ const icons = {
   flag: `<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-1 5 1 5H5"/></svg>`,
   user: `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.8-4 4.5-6 8-6s6.2 2 8 6"/></svg>`,
   shield: `<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  siren: `<svg viewBox="0 0 24 24"><path d="M7 15v-4a5 5 0 0 1 10 0v4"/><path d="M5 15h14l1 5H4z"/><path d="M12 2v3M4.5 5.5l2 2M19.5 5.5l-2 2"/></svg>`,
+  hash: `<svg viewBox="0 0 24 24"><path d="M8 3 6 21M18 3l-2 18M4 9h17M3 15h17"/></svg>`,
   bookmark: `<svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-3.8L6 21z"/></svg>`,
   send: `<svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>`,
   copy: `<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
@@ -537,6 +541,13 @@ function scrollToPendingLatestMessage() {
 function navigateTo(route) {
   if (state.adminMode && route !== "admin") {
     state.route = "admin";
+    render();
+    return;
+  }
+
+  if (isAdminAccount() && !["home", "admin"].includes(route)) {
+    state.route = "home";
+    showNotice("관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.");
     render();
     return;
   }
@@ -625,6 +636,19 @@ function Sidebar() {
       <span>${label}</span>
     </button>
   `;
+  const adminIcons = {
+    reports: icons.siren,
+    prompts: icons.edit,
+    tags: icons.hash,
+    users: icons.user,
+  };
+  const adminItem = (tab) => `
+    <button class="nav-item admin-nav-item ${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
+      <span class="nav-icon">${adminIcons[tab.id] || icons.shield}</span>
+      <span>${tab.label}</span>
+      ${tab.hideCount ? "" : `<em>${formatNumber(tab.count)}</em>`}
+    </button>
+  `;
   const showAdminShell = state.adminMode;
   const adminTabs = showAdminShell ? getAdminTabs() : [];
 
@@ -633,24 +657,12 @@ function Sidebar() {
       <nav class="nav-list">
         ${
           showAdminShell
-            ? `${item("admin", "Admin", icons.shield)}
-               <div class="admin-subnav" aria-label="관리자 하위 메뉴">
-                 ${adminTabs
-                   .map(
-                     (tab) => `
-                       <button class="${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
-                         <span>${tab.label}</span>
-                         <em>${formatNumber(tab.count)}</em>
-                       </button>
-                     `,
-                   )
-                   .join("")}
-               </div>`
+            ? adminTabs.map(adminItem).join("")
             : `
               ${item("home", "Home", icons.home)}
-              ${item("make", "Make", icons.make)}
-              ${state.isLoggedIn ? item("saved", "My page", icons.user) : ""}
-              ${item("share", "Share", icons.share)}
+              ${!isAdminAccount() ? item("make", "Make", icons.make) : ""}
+              ${state.isLoggedIn && !isAdminAccount() ? item("saved", "My page", icons.user) : ""}
+              ${!isAdminAccount() ? item("share", "Share", icons.share) : ""}
             `
         }
       </nav>
@@ -674,6 +686,7 @@ function getAdminTabs() {
     { id: "reports", label: "신고 관리", count: reportRecords.length },
     { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
     { id: "tags", label: "태그 관리", count: adminTags.length },
+    { id: "users", label: "사용자 활동", count: 0, hideCount: true },
   ];
 }
 
@@ -714,8 +727,16 @@ function Header() {
 
 function Page() {
   if (state.adminMode) return AdminPage();
+  if (isAdminAccount() && !["home", "admin"].includes(state.route)) {
+    state.route = "home";
+    return HomePage();
+  }
   if (state.route === "make") return MakePage();
   if (state.route === "saved") {
+    if (isAdminAccount()) {
+      state.route = "home";
+      return HomePage();
+    }
     if (state.isLoggedIn) return SavedPage();
     state.route = "home";
     state.authView = "login";
@@ -1006,7 +1027,11 @@ function PromptDetailModal() {
             <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
               <span>${icons.eye}${formatNumber(prompt.views)}</span>
-              <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
+              ${
+                isAdminReview
+                  ? `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
+                  : `<button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
+              }
               <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
             </footer>
           </section>
@@ -1792,6 +1817,26 @@ function AdminPage() {
     { id: "hidden", label: "숨김" },
     { id: "reported", label: "신고됨" },
   ];
+  const adminUserNickname = String(state.adminUserActivityNickname || "").trim();
+  const adminUserActivity = adminUserNickname ? getAdminUserActivity(adminUserNickname) : null;
+  const adminUserPanel = `
+    <section class="admin-user-activity-panel" aria-label="사용자 활동 조회">
+      <div class="admin-user-activity-head">
+        <div>
+          <h3>사용자 활동 조회</h3>
+        </div>
+      </div>
+      <form class="admin-user-search-form" data-admin-user-search-form>
+        <input name="nickname" type="search" value="${escapeHtml(state.adminUserQuery || adminUserNickname)}" placeholder="닉네임을 입력하세요" autocomplete="off" />
+        <button type="submit">조회</button>
+      </form>
+      ${
+        adminUserActivity
+          ? AdminUserActivitySummary(adminUserActivity)
+          : `<p class="admin-panel-note">원문 보기에서 작성자 닉네임을 클릭하거나 닉네임을 검색하면 활동 내역이 표시됩니다.</p>`
+      }
+    </section>
+  `;
   const adminTags = getAdminManagedTags();
   const adminTagFilter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const adminTagSort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
@@ -1885,7 +1930,7 @@ function AdminPage() {
                     <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
                     <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
                     <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
-                    <span>작성자 ${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
+                    <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
                     <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
                   </div>
                   <div class="tag-row admin-prompt-tags">${(prompt.tags || []).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}</div>
@@ -1964,7 +2009,15 @@ function AdminPage() {
       }
     </section>
   `;
-  const activePanel = activeAdminTab === "prompts" ? promptsPanel : activeAdminTab === "tags" ? tagsPanel : reportsPanel;
+  const usersPanel = `
+    <section class="admin-panel">
+      <h2>사용자 활동</h2>
+      <p class="admin-panel-note">닉네임 기준으로 작성한 프롬프트, 댓글, 답글, 신고 맥락을 확인합니다.</p>
+      ${adminUserPanel}
+    </section>
+  `;
+  const activePanel =
+    activeAdminTab === "prompts" ? promptsPanel : activeAdminTab === "tags" ? tagsPanel : activeAdminTab === "users" ? usersPanel : reportsPanel;
 
   return `
     <section class="admin-page" aria-labelledby="admin-heading">
@@ -1981,6 +2034,56 @@ function AdminPage() {
         </div>
       </div>
     </section>
+  `;
+}
+
+function AdminUserActivitySummary(activity) {
+  const groups = [
+    { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
+    { id: "comments", title: "작성한 댓글", items: activity.comments, empty: "작성한 댓글이 없습니다." },
+    { id: "replies", title: "작성한 답글", items: activity.replies, empty: "작성한 답글이 없습니다." },
+    { id: "reports-made", title: "신고한 내역", items: activity.reportsMade, empty: "신고한 내역은 아직 확인할 수 없습니다." },
+    { id: "reports-received", title: "신고당한 내역", items: activity.reportsReceived, empty: "신고당한 내역이 없습니다." },
+  ];
+
+  return `
+    <div class="admin-user-activity-result">
+      <div class="admin-user-activity-title">
+        <strong>${escapeHtml(activity.nickname)}</strong>
+        <span>프롬프트 ${formatNumber(activity.prompts.length)}개 · 댓글 ${formatNumber(activity.comments.length)}개 · 답글 ${formatNumber(activity.replies.length)}개</span>
+      </div>
+      <div class="admin-user-activity-grid">
+        ${groups
+          .map(
+            (group) => `
+              <section class="admin-user-activity-card">
+                <h4>${group.title}<small>${formatNumber(group.items.length)}</small></h4>
+                ${
+                  group.items.length
+                    ? group.items
+                        .slice(0, 4)
+                        .map(
+                          (item) => `
+                            <article>
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <p>${escapeHtml(item.preview)}</p>
+                              ${
+                                item.promptId
+                                  ? `<button type="button" data-open-prompt="${escapeHtml(item.promptId)}" ${item.commentId ? `data-highlight-comment="${escapeHtml(item.commentId)}"` : ""}>원문 보기</button>`
+                                  : ""
+                              }
+                            </article>
+                          `,
+                        )
+                        .join("")
+                    : `<p class="admin-user-activity-empty">${group.empty}</p>`
+                }
+              </section>
+            `,
+          )
+          .join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -2481,6 +2584,36 @@ function bindEvents() {
       event.stopPropagation();
       searchByAuthor(button.dataset.searchAuthor);
     });
+  });
+
+  document.querySelectorAll("[data-admin-user-author]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openAdminUserActivity(button.dataset.adminUserAuthor);
+    });
+  });
+
+  const adminUserSearchForm = document.querySelector("[data-admin-user-search-form]");
+  const adminUserSearchInput = adminUserSearchForm?.querySelector('input[name="nickname"]');
+  adminUserSearchInput?.addEventListener("input", () => {
+    const nickname = String(adminUserSearchInput.value || "").trim();
+    state.adminUserQuery = adminUserSearchInput.value;
+    if (!nickname && state.adminUserActivityNickname) {
+      state.adminUserActivityNickname = "";
+      render();
+    }
+  });
+  adminUserSearchForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nickname = String(new FormData(adminUserSearchForm).get("nickname") || "").trim();
+    if (!nickname) {
+      state.adminUserQuery = "";
+      state.adminUserActivityNickname = "";
+      render();
+      return;
+    }
+    openAdminUserActivity(nickname, { keepQuery: true });
   });
 
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
@@ -3782,6 +3915,7 @@ function reportPrompt(promptId, reason) {
     type: "prompt",
     targetId: promptId,
     status: "pending",
+    reporter: state.currentUser || "",
     reason: content,
     createdAt: Date.now(),
   };
@@ -3805,6 +3939,7 @@ function reportComment(commentId, reason) {
     type: "comment",
     targetId: commentId,
     promptId: context?.promptId || "",
+    reporter: state.currentUser || "",
     targetAuthor: context?.comment?.author || context?.comment?.owner || "",
     targetPreview: makePreview(context?.comment?.text || ""),
     status: "pending",
@@ -5257,6 +5392,62 @@ function searchByAuthor(author) {
   restoreSearchFocus();
 }
 
+function openAdminUserActivity(nickname, options = {}) {
+  const cleanNickname = String(nickname || "").trim();
+  if (!cleanNickname) return;
+  const resolvedNickname = resolveAdminUserNickname(cleanNickname);
+
+  state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
+  state.adminUserActivityNickname = resolvedNickname;
+  state.adminTab = "users";
+  state.route = "admin";
+  state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
+  showNotice(`${resolvedNickname}님의 활동을 조회합니다.`);
+  render();
+}
+
+function resolveAdminUserNickname(value) {
+  const cleanValue = String(value || "").trim();
+  const normalizedValue = normalizeAdminSearchText(cleanValue);
+  if (!normalizedValue) return cleanValue;
+
+  const nicknames = getAdminKnownNicknames();
+  const exactMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname) === normalizedValue);
+  if (exactMatch) return exactMatch;
+
+  const startsWithMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname).startsWith(normalizedValue));
+  if (startsWithMatch) return startsWithMatch;
+
+  const includesMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname).includes(normalizedValue));
+  return includesMatch || cleanValue;
+}
+
+function getAdminKnownNicknames() {
+  const nicknameMap = new Map();
+  const addNickname = (nickname) => {
+    const cleanNickname = String(nickname || "").trim();
+    const normalizedNickname = normalizeAdminSearchText(cleanNickname);
+    if (!normalizedNickname || nicknameMap.has(normalizedNickname)) return;
+    nicknameMap.set(normalizedNickname, cleanNickname);
+  };
+
+  getUniquePrompts([...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+    addNickname(getDisplayPromptAuthor(prompt));
+    getSortedPromptComments(prompt.id).forEach((comment) => {
+      addNickname(comment.author || comment.owner);
+      (comment.replies || []).forEach((reply) => addNickname(reply.author || reply.owner));
+    });
+  });
+  getAdminReportRecords().forEach((record) => {
+    addNickname(record.reporter);
+    addNickname(record.promptAuthor);
+    addNickname(record.commentAuthor);
+  });
+
+  return Array.from(nicknameMap.values()).sort((a, b) => a.localeCompare(b, "ko"));
+}
+
 function findPromptById(promptId) {
   return savedPrompts.find((item) => item.id === promptId) || popularPrompts.find((item) => item.id === promptId);
 }
@@ -5608,6 +5799,74 @@ function getMyReports() {
   );
 }
 
+function getAdminUserActivity(nickname) {
+  const cleanNickname = String(nickname || "").trim();
+  const normalizedNickname = normalizeAdminSearchText(cleanNickname);
+  const prompts = getUniquePrompts([...popularPrompts, ...savedPrompts])
+    .filter((prompt) => normalizeAdminSearchText(getDisplayPromptAuthor(prompt)) === normalizedNickname)
+    .map((prompt) => ({
+      title: prompt.title,
+      preview: makePreview(prompt.text),
+      promptId: prompt.id,
+    }));
+
+  const comments = [];
+  const replies = [];
+  getUniquePrompts([...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+    getSortedPromptComments(prompt.id).forEach((comment) => {
+      if (normalizeAdminSearchText(comment.author || comment.owner) === normalizedNickname) {
+        comments.push({
+          title: prompt.title,
+          preview: comment.deleted ? "삭제된 댓글입니다." : makePreview(comment.text),
+          promptId: prompt.id,
+          commentId: comment.id,
+        });
+      }
+      (comment.replies || []).forEach((reply) => {
+        if (normalizeAdminSearchText(reply.author || reply.owner) === normalizedNickname) {
+          replies.push({
+            title: prompt.title,
+            preview: reply.deleted ? "삭제된 댓글입니다." : makePreview(reply.text),
+            promptId: prompt.id,
+            commentId: reply.id,
+          });
+        }
+      });
+    });
+  });
+
+  const reportRecords = getAdminReportRecords();
+  const reportsMade = reportRecords
+    .filter((record) => normalizeAdminSearchText(record.reporter) === normalizedNickname)
+    .map((record) => ({
+      title: record.type === "comment" ? `댓글 신고 · ${record.contextTitle || "게시물 확인 필요"}` : record.title,
+      preview: record.summary || record.targetPreview || "신고 내용 확인 필요",
+      promptId: record.promptId,
+      commentId: record.type === "comment" ? record.targetId : "",
+    }));
+  const reportsReceived = reportRecords
+    .filter((record) => {
+      const promptAuthor = normalizeAdminSearchText(record.promptAuthor);
+      const commentAuthor = normalizeAdminSearchText(record.commentAuthor);
+      return promptAuthor === normalizedNickname || commentAuthor === normalizedNickname;
+    })
+    .map((record) => ({
+      title: record.type === "comment" ? `댓글 신고 · ${record.contextTitle || "게시물 확인 필요"}` : record.title,
+      preview: record.targetPreview || record.summary || "신고 대상 확인 필요",
+      promptId: record.promptId,
+      commentId: record.type === "comment" ? record.targetId : "",
+    }));
+
+  return {
+    nickname: cleanNickname,
+    prompts,
+    comments,
+    replies,
+    reportsMade,
+    reportsReceived,
+  };
+}
+
 function getReportRecord(key) {
   return state.reportRecords[key] || { status: "pending" };
 }
@@ -5683,6 +5942,7 @@ function getAdminReportRecords() {
         status: record.status || mapBackendReportStatus(report.status),
         title: report.type === "comment" ? "댓글 신고" : (prompt?.title || report.raw?.promptTitle || "프롬프트 신고"),
         contextTitle: prompt?.title || report.raw?.promptTitle || "게시물 확인 필요",
+        reporter: report.raw?.reporterNickname || report.raw?.reporter?.nickname || record.reporter || "",
         promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : report.raw?.promptAuthorNickname || "",
         commentAuthor: report.raw?.commentAuthorNickname || "",
         targetPreview: report.raw?.targetPreview || report.raw?.commentText || makePreview(prompt?.text || ""),
@@ -5703,6 +5963,7 @@ function getAdminReportRecords() {
       promptId,
       status: record.status || "pending",
       title: prompt?.title || "삭제된 프롬프트",
+      reporter: record.reporter || "",
       promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
       summary: record.reason || makePreview(prompt?.text || ""),
     });
@@ -5721,6 +5982,7 @@ function getAdminReportRecords() {
       status: record.status || "pending",
       title: "댓글 신고",
       contextTitle: prompt?.title || "삭제된 게시물",
+      reporter: record.reporter || "",
       promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
       commentAuthor: record.targetAuthor || comment?.author || comment?.owner || "",
       targetPreview: record.targetPreview || makePreview(comment?.text || "삭제된 댓글"),
@@ -6468,6 +6730,8 @@ function persistState() {
           adminTagQuery: state.adminTagQuery,
           adminTagFilter: state.adminTagFilter,
           adminTagSort: state.adminTagSort,
+          adminUserQuery: state.adminUserQuery,
+          adminUserActivityNickname: state.adminUserActivityNickname,
           adminPromptRevisionRequests: state.adminPromptRevisionRequests,
           reportRecords: state.reportRecords,
           searchScope: state.searchScope,
@@ -6527,7 +6791,7 @@ function loadPersistedState() {
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
-    state.adminTab = ["reports", "prompts", "tags"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
+    state.adminTab = ["reports", "prompts", "tags", "users"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
     state.adminPromptQuery = savedState.adminPromptQuery || "";
     state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
       ? savedState.adminPromptFilter
@@ -6537,6 +6801,8 @@ function loadPersistedState() {
       ? savedState.adminTagFilter
       : "all";
     state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
+    state.adminUserQuery = savedState.adminUserQuery || "";
+    state.adminUserActivityNickname = savedState.adminUserActivityNickname || "";
     state.adminPromptRevisionRequests =
       savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
         ? savedState.adminPromptRevisionRequests

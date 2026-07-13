@@ -72,13 +72,18 @@
 ## Admin
 
 - 관리자 권한 계정으로 로그인했을 때만 Admin 메뉴가 보이는지 확인합니다.
-- Admin 모드에서는 Home/Make/My page/Share 같은 일반 사용자 행동 메뉴가 제한되는지 확인합니다.
+- 관리자 계정에서 Admin 화면을 닫아도 Home 검토 화면만 접근 가능하고, Make/My page/Share 메뉴는 숨겨지는지 확인합니다.
+- 관리자 계정에서는 My page 메뉴가 숨겨지고, 개인 신고 내역 대신 Admin > 신고 관리에서 운영 신고를 처리하는지 확인합니다.
 - 신고 관리 / 프롬프트 관리 / 태그 관리가 사이드바 하위 메뉴로 표시되는지 확인합니다.
 - 관리자 원문 보기는 Execute, 좋아요, 저장, 공유, 일반 신고 같은 사용자 액션 없이 운영 액션만 보여야 합니다.
 - 신고 관리는 원문 보기, 수정 요청, 게시물 숨김, 검토 완료, 기각, 재처리, 대상 삭제 흐름을 확인합니다.
 - 댓글 신고에서는 게시물 작성자와 댓글 작성자 맥락이 구분되어 보이는지 확인합니다.
 - 프롬프트 관리는 관리자가 직접 본문을 수정하지 않고 수정 요청, 숨김/해제, 삭제 중심으로 동작하는지 확인합니다.
 - 태그 관리는 검색, 상태 필터, 사용량/최신 정렬, 검토 완료, 재검토, 추천 제외가 구분되는지 확인합니다.
+
+Additional admin check:
+
+- Admin prompt review: click an author nickname and confirm the user activity lookup shows authored prompts, comments, replies, reports made, and reports received.
 
 ## Known Partial Areas
 

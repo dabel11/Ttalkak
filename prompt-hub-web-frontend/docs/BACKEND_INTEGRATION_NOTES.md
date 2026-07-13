@@ -37,8 +37,11 @@
 
 - Admin accounts are treated as operation-only accounts.
 - When an admin is logged in, the frontend centers the sidebar on Admin and blocks normal community actions such as Make submit, Share submit, save, like, report, comment, prompt edit/delete/share, and folder management outside the Admin screen.
-- The admin can switch to user-facing screens for read/review, but user actions remain blocked with the notice: `관리자 계정은 운영 기능만 사용할 수 있습니다.`
+- My page is hidden for admin accounts because library, my prompts, comment management, and my reports are personal user areas. Admin report handling should happen only in Admin > Reports.
+- The admin can switch to the user-facing Home screen for read/review only. Make, Share, and My page are hidden for admin accounts because they are personal/community user features.
+- If an admin tries to access Make, Share, or My page directly, the frontend returns to Home and shows: `관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.`
 - Backend should mirror this policy with authorization checks. Admin APIs should allow operational actions, while community action APIs should reject admin-as-user behavior when that is the agreed service policy.
+- Admin prompt review now has a frontend-only user activity lookup. Final backend support should provide admin-only endpoints for nickname lookup and user activity: authored prompts, comments, replies, reports made, and reports received.
 
 ## Prompt Improve / RAG Frontend Handling
 
