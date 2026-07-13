@@ -160,6 +160,62 @@ Make thread identity policy:
 - If a user starts two separate conversations with the same input text, both conversations must remain as separate thread records.
 - Updating a thread should replace only the record with the same `threadId`.
 
+## Prompt Improve / RAG Response Contract
+
+`POST /api/prompts/improve`는 Make 화면의 핵심 연동 지점입니다. 프론트는 현재 여러 응답 필드를 방어적으로 받을 수 있지만, 백엔드/RAG 계약은 아래 형태 중 하나로 통일하는 것을 권장합니다.
+
+### Request
+
+```json
+{
+  "prompt": "사용자가 입력한 원문",
+  "category": "blog"
+}
+```
+
+### Success: improved prompt
+
+```json
+{
+  "mode": "improve",
+  "improved_prompt": "바로 복사해서 사용할 수 있는 최종 프롬프트",
+  "techniques": [
+    {
+      "name": "명확한 목표 설정",
+      "reason": "요청 목적을 먼저 고정하기 위해 적용"
+    }
+  ],
+  "changes": ["역할과 출력 형식을 보강함"],
+  "score": 0.86
+}
+```
+
+프론트는 `improved_prompt`, `improvedPrompt`, `final_prompt`, `finalPrompt`, `answer`, `text`, `content`, `prompt`를 모두 fallback으로 읽습니다. 다만 최종 계약은 `improved_prompt` 하나로 맞추는 것이 가장 깔끔합니다.
+
+### Success: more information needed
+
+```json
+{
+  "mode": "question",
+  "questions": [
+    "어떤 독자를 대상으로 하나요?",
+    "원하는 출력 형식이 있나요?"
+  ]
+}
+```
+
+이 경우 프론트는 질문 목록을 assistant 메시지로 보여주고, 사용자가 추가 답변을 보낼 수 있게 합니다.
+
+### Error states
+
+| HTTP status | Meaning | Frontend behavior |
+| --- | --- | --- |
+| `401` | 로그인 필요 또는 토큰 만료 | 로그인 팝업 표시 |
+| `403` | 권한 없음 | 권한 없음 안내 |
+| `404` | 관련 기법 또는 RAG 근거 없음 | 데모 첨삭 fallback, 관련 기법 없음 안내 |
+| `429` | 요청 과다 | 잠시 후 재시도 안내 |
+| `500` / `503` | 백엔드 또는 RAG 서버 오류 | 데모 첨삭 fallback, RAG 장애 안내 |
+
 ## Suggested Prompt Response
 
 ```json

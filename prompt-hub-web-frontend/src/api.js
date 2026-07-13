@@ -1,6 +1,6 @@
 (function () {
   const API_BASE_URL = window.__API_BASE_URL__ || window.TTALKAK_API_BASE_URL || "http://localhost:8080";
-  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 4500);
+  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 15000);
 
   function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
@@ -46,6 +46,15 @@
       if (response.status === 204) return null;
       const text = await response.text();
       return text ? JSON.parse(text) : null;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 서버 로그와 로그인 API 응답 지연을 확인해주세요.");
+        timeoutError.status = 0;
+        timeoutError.code = "REQUEST_TIMEOUT";
+        timeoutError.cause = error;
+        throw timeoutError;
+      }
+      throw error;
     } finally {
       window.clearTimeout(timeoutId);
     }
@@ -241,13 +250,30 @@
 
   function normalizeImproveResult(payload, fallbackPrompt = "") {
     if (typeof payload === "string") return payload;
+
+    const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+    const result = data?.result && typeof data.result === "object" ? data.result : data;
+    const questions = result?.questions || result?.followUpQuestions || result?.additionalQuestions;
+
+    if (String(result?.mode || result?.type || "").toLowerCase() === "question" && Array.isArray(questions) && questions.length) {
+      return [
+        "더 정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
+        "",
+        ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
+      ].join("\n");
+    }
+
     return String(
-      payload?.improvedPrompt ||
-        payload?.finalPrompt ||
-        payload?.result ||
-        payload?.text ||
-        payload?.content ||
-        payload?.prompt ||
+      result?.improvedPrompt ||
+        result?.improved_prompt ||
+        result?.finalPrompt ||
+        result?.final_prompt ||
+        result?.answer ||
+        result?.markdown ||
+        result?.text ||
+        result?.content ||
+        result?.prompt ||
+        (typeof result?.result === "string" ? result.result : "") ||
         fallbackPrompt,
     );
   }

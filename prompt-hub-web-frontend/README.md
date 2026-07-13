@@ -1,5 +1,28 @@
 # TTALKAK Web Frontend Prototype
 
+## Current Branch Purpose
+
+`jaewon7025/web-demo-preview` is a frontend demo and backend handoff branch. It is not the final production integration branch. The goal is to let teammates run the UI, inspect Network requests, and compare the current frontend behavior against backend API contracts.
+
+Recommended review order:
+
+1. Home: prompt list, search scope, sort, tags, detail modal.
+2. Auth: signup/login token storage, 401 login popup, 403 permission notice, withdrawal.
+3. Make: thread/folder smoke calls, `POST /api/prompts/improve`, RAG fallback states.
+4. Share: logged-in sharing flow and tag selection.
+5. My page: library, my prompts, comments, reports, demo data toggle.
+6. Admin: report, prompt, and tag management demo flows. If backend login times out for `admin / Admin1234!`, the frontend enters admin demo fallback mode for UI review only.
+
+Key limitations:
+
+- Several screens still use optimistic local state after firing API requests.
+- Google OAuth is a demo flow until the final OAuth redirect/token exchange is connected.
+- Admin screens are frontend demos; real service must rely on server-side ADMIN authorization.
+- If `admin / Admin1234!` login times out while the backend is running slowly or unavailable, the frontend opens an admin demo session so reviewers can still inspect Admin UI. This fallback is only for frontend QA and is not real authentication.
+- RAG response handling is defensive and accepts multiple temporary field names. The preferred final field is `improved_prompt`.
+
+See `docs/QA_CHECKLIST.md`, `docs/API_SPEC.md`, and `docs/BACKEND_INTEGRATION_NOTES.md` before backend verification.
+
 프롬프트 첨삭 Chrome Extension의 흐름을 웹 커뮤니티로 확장한 프론트엔드 프로토타입입니다.
 
 > 이 브랜치는 `jaewon7025/web-demo-preview` 체험용 브랜치입니다. 기존 `jaewon7025/develop` 작업물을 건드리지 않고, 팀원이 현재 웹 프론트엔드 데모 수준을 확인할 수 있도록 별도로 공유하는 용도입니다.

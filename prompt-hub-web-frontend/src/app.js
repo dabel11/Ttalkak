@@ -261,6 +261,25 @@ const promptTemplates = [
 const FREE_MAKE_LIMIT = 3;
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const AUTH_TOKEN_KEY = "ttalkak_access_token";
+const DEMO_AUTH_TOKEN = "demo-token";
+const PROTECTED_BACKEND_ACTIONS = new Set([
+  "addComment",
+  "addReply",
+  "deleteComment",
+  "deleteMakeFolder",
+  "deletePrompt",
+  "likeComment",
+  "likePrompt",
+  "reportComment",
+  "reportPrompt",
+  "savePrompt",
+  "unlikeComment",
+  "unlikePrompt",
+  "unsavePrompt",
+  "unsharePrompt",
+  "updateComment",
+  "updateMakeFolder",
+]);
 const SAVED_PAGE_SIZE = 16;
 const SEARCH_DEBOUNCE_MS = 320;
 const MAX_CUSTOM_MAKE_FOLDERS = 5;
@@ -522,6 +541,10 @@ function navigateTo(route) {
     return;
   }
 
+  if (isAdminAccount() && route === "admin") {
+    state.adminMode = true;
+  }
+
   if (route === "home" && state.route === "home") {
     resetHomeView();
     render();
@@ -588,6 +611,8 @@ function focusActiveModal() {
   window.setTimeout(() => {
     const modals = document.querySelectorAll(".modal");
     const modal = modals[modals.length - 1];
+    if (modal?.classList.contains("prompt-detail-modal")) return;
+
     const focusable = modal?.querySelector("input, textarea, button, [href], [tabindex]:not([tabindex='-1'])");
     focusable?.focus();
   }, 0);
@@ -600,13 +625,14 @@ function Sidebar() {
       <span>${label}</span>
     </button>
   `;
-  const adminTabs = state.adminMode ? getAdminTabs() : [];
+  const showAdminShell = state.adminMode;
+  const adminTabs = showAdminShell ? getAdminTabs() : [];
 
   return `
     <aside class="sidebar" aria-label="주요 메뉴">
       <nav class="nav-list">
         ${
-          state.adminMode
+          showAdminShell
             ? `${item("admin", "Admin", icons.shield)}
                <div class="admin-subnav" aria-label="관리자 하위 메뉴">
                  ${adminTabs
@@ -653,11 +679,11 @@ function getAdminTabs() {
 
 function Header() {
   const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
-  const canUseReportTools = state.isLoggedIn || state.adminMode;
+  const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
-  const adminAccessButton = state.currentUserRole === "admin"
-    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="관리자 권한 화면입니다." aria-label="관리자 화면">${state.adminMode ? "Admin 종료" : "Admin"}</button>`
+  const adminAccessButton = isAdminAccount()
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="${state.adminMode ? "일반 화면을 읽기 전용으로 확인합니다." : "관리자 운영 화면으로 이동합니다."}" aria-label="관리자 화면 전환">${state.adminMode ? "사용자 화면 보기" : "관리자 화면"}</button>`
     : "";
   const authButton = state.isLoggedIn
     ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
@@ -2259,6 +2285,33 @@ function applyAuthenticatedUser(authResult) {
   }
 }
 
+function isAdminDemoCredential(userId, password) {
+  return String(userId || "").trim().toLowerCase() === "admin" && String(password || "") === "Admin1234!";
+}
+
+function isBackendTimeoutError(error) {
+  const message = String(error?.message || "");
+  return error?.code === "REQUEST_TIMEOUT" || error?.name === "AbortError" || /aborted|timeout|시간이 초과/i.test(message);
+}
+
+function applyAdminDemoFallback() {
+  applyAuthenticatedUser({
+    token: DEMO_AUTH_TOKEN,
+    user: {
+      id: "demo-admin-user",
+      userId: "admin",
+      nickname: "관리자",
+      role: "admin",
+    },
+  });
+  state.authView = null;
+  state.authDraft = {};
+  state.authDuplicateChecks = {};
+  state.authUserIdWarning = "";
+  showNotice("백엔드 로그인 응답 지연으로 관리자 데모 세션을 사용합니다.");
+  render();
+}
+
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
   state.isLoggedIn = false;
   state.currentUser = null;
@@ -2404,7 +2457,7 @@ function bindEvents() {
       }
       state.adminMode = !state.adminMode;
       state.route = state.adminMode ? "admin" : "home";
-      showNotice(state.adminMode ? "관리자 데모 UI를 켰습니다." : "관리자 데모 UI를 껐습니다.");
+      showNotice(state.adminMode ? "관리자 운영 화면으로 이동했습니다." : "사용자 화면을 읽기 전용으로 확인합니다.");
     });
   });
 
@@ -2438,10 +2491,18 @@ function bindEvents() {
 
   document.querySelectorAll("[data-google-auth]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.isLoggedIn = true;
-      state.currentUser = "Google닉네임";
+      applyAuthenticatedUser({
+        token: DEMO_AUTH_TOKEN,
+        user: {
+          id: "demo-google-user",
+          userId: "google",
+          nickname: "Google닉네임",
+          role: "user",
+        },
+      });
       state.authView = null;
       showNotice("Google 계정으로 로그인했습니다.");
+      render();
     });
   });
 
@@ -2759,6 +2820,7 @@ function bindEvents() {
 
     composer.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (guardAdminUserAction()) return;
       const value = new FormData(composer).get("prompt").trim();
       if (!value) return;
       if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
@@ -3012,6 +3074,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (guardAdminUserAction()) return;
       if (!state.isLoggedIn) {
         showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
         return;
@@ -3048,6 +3111,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (guardAdminUserAction()) return;
       if (!state.isLoggedIn) {
         showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
         return;
@@ -3093,6 +3157,10 @@ function bindEvents() {
 
   document.querySelectorAll("[data-thread-folder]").forEach((select) => {
     select.addEventListener("change", () => {
+      if (guardAdminUserAction()) {
+        render();
+        return;
+      }
       if (!state.isLoggedIn) {
         showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
         render();
@@ -3107,6 +3175,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (guardAdminUserAction()) return;
       if (!state.isLoggedIn) {
         showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
         return;
@@ -3397,6 +3466,11 @@ function bindEvents() {
         await loadMakeBackendData({ shouldRender: false });
         render();
       } catch (error) {
+        if (!isSignup && isAdminDemoCredential(userId, password) && isBackendTimeoutError(error)) {
+          applyAdminDemoFallback();
+          return;
+        }
+
         const backendMessage = error?.payload?.message || error?.message || "";
         window.alert(backendMessage || "로그인 요청에 실패했습니다.");
       }
@@ -3548,6 +3622,8 @@ function bindEvents() {
 }
 
 function toggleSavedPrompt(promptId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 저장할 수 있습니다.");
@@ -3627,6 +3703,8 @@ function toggleSavedPrompt(promptId) {
 }
 
 function toggleLikePrompt(promptId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 좋아요를 누를 수 있습니다.");
@@ -3648,6 +3726,8 @@ function toggleLikePrompt(promptId) {
 
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 신고할 수 있습니다.");
@@ -3665,6 +3745,8 @@ function openReportPrompt(promptId) {
 
 function openReportComment(commentId) {
   if (!findCommentById(commentId)) return;
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 신고할 수 있습니다.");
@@ -3956,6 +4038,8 @@ function getCommentLikes(comment) {
 }
 
 function toggleLikeComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 댓글에 좋아요를 누를 수 있습니다.");
@@ -4019,6 +4103,7 @@ function stampCurrentUserOwnedPrompts() {
 function addPromptComment(promptId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4047,6 +4132,8 @@ function addPromptComment(promptId, text) {
 }
 
 function toggleReplyForm(commentId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     return render();
@@ -4059,6 +4146,7 @@ function toggleReplyForm(commentId) {
 function addCommentReply(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4089,6 +4177,8 @@ function addCommentReply(commentId, text) {
 }
 
 function toggleEditComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
 
@@ -4100,6 +4190,7 @@ function toggleEditComment(commentId) {
 function updateOwnComment(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
@@ -4123,6 +4214,8 @@ function updateOwnComment(commentId, text) {
 }
 
 function deleteOwnComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
     const comment = findCommentInList(comments, commentId);
     if (!comment || !canDeleteComment(comment)) continue;
@@ -4246,6 +4339,12 @@ function performDeleteThread(threadId) {
 }
 
 async function createMakeFolder(folderName) {
+  if (guardAdminUserAction()) {
+    state.creatingFolder = false;
+    render();
+    return;
+  }
+
   if (!state.isLoggedIn) {
     state.creatingFolder = false;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4283,6 +4382,12 @@ async function createMakeFolder(folderName) {
 }
 
 async function createMakeFolderAndMoveThread(threadId, folderName) {
+  if (guardAdminUserAction()) {
+    state.creatingThreadFolderId = null;
+    render();
+    return;
+  }
+
   if (!state.isLoggedIn) {
     state.creatingThreadFolderId = null;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4334,6 +4439,12 @@ function getCustomMakeFolderCount() {
 }
 
 async function renameMakeFolder(folderId, name) {
+  if (guardAdminUserAction()) {
+    state.editingFolderId = null;
+    render();
+    return;
+  }
+
   if (!state.isLoggedIn) {
     state.editingFolderId = null;
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
@@ -4356,6 +4467,11 @@ async function renameMakeFolder(folderId, name) {
 }
 
 function performDeleteFolder(folderId) {
+  if (guardAdminUserAction()) {
+    render();
+    return;
+  }
+
   if (!state.isLoggedIn) {
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
     render();
@@ -4376,6 +4492,11 @@ function performDeleteFolder(folderId) {
 }
 
 async function moveThreadToFolder(threadId, folderId) {
+  if (guardAdminUserAction()) {
+    render();
+    return;
+  }
+
   if (!state.isLoggedIn) {
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
     render();
@@ -4510,6 +4631,8 @@ async function copyMakeMessage(messageId) {
 }
 
 function saveMakeMessage(messageId) {
+  if (guardAdminUserAction()) return;
+
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
@@ -4551,6 +4674,7 @@ async function resendEditedMessage(messageId, value) {
   const cleanValue = String(value || "").trim();
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
+  if (guardAdminUserAction()) return;
 
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
@@ -4574,6 +4698,7 @@ async function resendEditedMessage(messageId, value) {
 function openShareFromMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4751,6 +4876,8 @@ function autosizeTextarea(textarea) {
 
 function deleteOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 본인 프롬프트만 삭제할 수 있습니다.");
@@ -4770,6 +4897,8 @@ function deleteOwnPrompt(promptId) {
 
 function unshareOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (guardAdminUserAction()) return;
+
   if (!state.adminMode && !state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 본인 프롬프트만 공유 취소할 수 있습니다.");
@@ -4790,6 +4919,7 @@ function unshareOwnPrompt(promptId) {
 async function publishSavedPrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt || prompt.source !== "mine") return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4840,6 +4970,7 @@ async function publishSavedPrompt(promptId) {
 async function updateOwnPrompt(promptId, formData) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
+  if (guardAdminUserAction()) return;
 
   const title = String(formData.get("title") || "").trim();
   const text = String(formData.get("text") || "").trim();
@@ -4943,8 +5074,18 @@ function togglePasswordVisibility(button) {
 }
 
 function restoreSearchFocus() {
+  if (state.detailPromptId || state.authView || state.reportPromptId || state.reportCommentId || state.confirmAction) return;
+
   const nextInput = document.querySelector("[data-tag-search]");
   if (!nextInput) return;
+
+  const activeElement = document.activeElement;
+  const isEditingField =
+    activeElement &&
+    activeElement !== document.body &&
+    activeElement !== nextInput &&
+    activeElement.matches?.("input, textarea, select, [contenteditable='true']");
+  if (isEditingField) return;
 
   nextInput.focus();
   nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
@@ -5121,6 +5262,8 @@ function findPromptById(promptId) {
 }
 
 async function sharePrompt(formData) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     render();
@@ -5958,11 +6101,25 @@ function getBackendErrorMessage(error) {
   ).trim();
 }
 
+function getAuthToken() {
+  return String(state.authToken || state.token || "").trim();
+}
+
+function isDemoAuthToken(token = getAuthToken()) {
+  return String(token || "").trim() === DEMO_AUTH_TOKEN;
+}
+
 function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.") {
   const status = Number(error?.status || error?.payload?.status || 0);
   const backendMessage = getBackendErrorMessage(error);
 
   if (status === 401) {
+    const token = getAuthToken();
+    if (!token || isDemoAuthToken(token)) {
+      showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 데모 화면 상태는 유지합니다.");
+      return true;
+    }
+
     clearAuthenticatedSession({ keepRoute: true });
     state.authView = "login";
     showNotice("로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
@@ -5982,12 +6139,29 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
   return false;
 }
 
+function isAdminAccount() {
+  return state.isLoggedIn && String(state.currentUserRole || "").toLowerCase() === "admin";
+}
+
+function guardAdminUserAction() {
+  if (!isAdminAccount() || state.adminMode) return false;
+
+  showNotice("관리자 계정은 운영 기능만 사용할 수 있습니다.");
+  return true;
+}
+
 function callBackendApi(action, ...args) {
   const api = window.TTALKAK_API;
   const handler = api?.[action];
   if (typeof handler !== "function") return;
 
-  Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
+  const token = getAuthToken();
+  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+    console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다. 로컬 데모 상태만 유지합니다.`);
+    return;
+  }
+
+  Promise.resolve(handler(...args, token || undefined)).catch((error) => {
     handleBackendAccessError(error, "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다.");
     console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
   });
@@ -6084,8 +6258,17 @@ async function improvePromptWithBackend(prompt) {
     state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
     return improved || polishPrompt(prompt);
   } catch (error) {
-    state.makeBackendMessage = "Make demo data 표시 중: /api/prompts/improve 호출 실패로 데모 첨삭을 표시합니다.";
-    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.");
+    const status = Number(error?.status || error?.payload?.status || 0);
+    let fallbackMessage = "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.";
+    if (status === 404) {
+      fallbackMessage = "관련 프롬프트 기법을 찾지 못해 데모 첨삭을 표시합니다.";
+    } else if (status === 429) {
+      fallbackMessage = "요청이 많아 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+    } else if (status === 500 || status === 503) {
+      fallbackMessage = "RAG 또는 백엔드 응답 지연으로 데모 첨삭을 표시합니다.";
+    }
+    state.makeBackendMessage = `Make demo data 표시 중: ${fallbackMessage}`;
+    handleBackendAccessError(error, fallbackMessage);
     console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
     return polishPrompt(prompt);
   }
