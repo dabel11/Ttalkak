@@ -34,6 +34,7 @@ public class CommentController {
     @GetMapping("/api/prompts/{promptId}/comments")
     public List<Map<String, Object>> comments(@PathVariable Long promptId,
                                               @RequestHeader(value = "Authorization", required = false) String authorization) {
+        requireViewablePrompt(promptId, authorization);
         Long memberId = authService.currentMemberIdOrNull(authorization);
         return commentRepository.findByPromptIdAndParentIdIsNullOrderByLikesDescCreatedAtAsc(promptId).stream()
                 .map(comment -> toResponse(comment, memberId, true))
@@ -46,9 +47,7 @@ public class CommentController {
                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         String nickname = authService.currentNickname(authorization);
-        PromptPost prompt = promptRepository.findById(promptId)
-                .filter(item -> !item.isDeleted())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "프롬프트를 찾을 수 없습니다."));
+        PromptPost prompt = requireViewablePrompt(promptId, authorization);
         Comment comment = commentRepository.save(new Comment(promptId, null, memberId, nickname, resolvedText(request)));
         prompt.increaseComments();
         promptRepository.save(prompt);
@@ -62,6 +61,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
         Comment parent = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        requireViewablePrompt(parent.getPromptId(), authorization);
         String nickname = authService.currentNickname(authorization);
         Comment reply = commentRepository.save(new Comment(parent.getPromptId(), commentId, memberId, nickname, resolvedText(request)));
         promptRepository.findById(parent.getPromptId()).ifPresent(prompt -> {
@@ -78,6 +78,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        requireViewablePrompt(comment.getPromptId(), authorization);
         if (!canManage(comment, authorization)) {
             return ResponseEntity.status(403).body(Map.of("message", "댓글 수정 권한이 없습니다."));
         }
@@ -95,6 +96,7 @@ public class CommentController {
         requireMemberId(authorization);
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        requireViewablePrompt(comment.getPromptId(), authorization);
         if (!canManage(comment, authorization)) {
             return ResponseEntity.status(403).body(Map.of("message", "댓글 삭제 권한이 없습니다."));
         }
@@ -120,6 +122,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        requireViewablePrompt(comment.getPromptId(), authorization);
         if (!commentLikeRepository.existsByCommentIdAndMemberId(commentId, memberId)) {
             commentLikeRepository.save(new CommentLike(commentId, memberId));
             comment.increaseLikes();
@@ -134,6 +137,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+        requireViewablePrompt(comment.getPromptId(), authorization);
         commentLikeRepository.findByCommentIdAndMemberId(commentId, memberId).ifPresent(like -> {
             commentLikeRepository.delete(like);
             comment.decreaseLikes();
@@ -166,6 +170,35 @@ public class CommentController {
                     .toList());
         }
         return body;
+    }
+
+    private PromptPost requireViewablePrompt(Long promptId, String authorization) {
+        PromptPost prompt = promptRepository.findById(promptId)
+                .filter(item -> !item.isDeleted())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Prompt not found."
+                ));
+
+        if (prompt.isShared()) {
+            return prompt;
+        }
+
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        boolean isAuthor = memberId != null
+                && Objects.equals(prompt.getAuthorId(), memberId);
+        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+
+        if (!isAuthor && !isAdmin) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Prompt not found."
+            );
+        }
+
+        return prompt;
     }
 
     private Long requireMemberId(String authorization) {

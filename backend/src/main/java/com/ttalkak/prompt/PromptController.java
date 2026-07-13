@@ -68,10 +68,18 @@ public class PromptController {
     public ResponseEntity<?> detail(@PathVariable Long id,
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = authService.currentMemberIdOrNull(authorization);
-        return promptRepository.findById(id)
-                .filter(prompt -> !prompt.isDeleted())
-                .map(prompt -> ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId))))
-                .orElse(ResponseEntity.notFound().build());
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(
+                PromptMapper.toPromptResponse(
+                        prompt,
+                        memberId,
+                        isSaved(id, memberId),
+                        isLiked(id, memberId)
+                )
+        );
     }
 
     @PostMapping
@@ -92,7 +100,7 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         if (!canManage(prompt, authorization)) {
             return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
         }
@@ -122,7 +130,7 @@ public class PromptController {
                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         if (!canManage(prompt, authorization)) {
             return ResponseEntity.status(403).body(Map.of("message", "공유 상태 변경 권한이 없습니다."));
         }
@@ -132,9 +140,10 @@ public class PromptController {
     }
 
     @PostMapping("/{id}/view")
-    public ResponseEntity<?> view(@PathVariable Long id) {
+    public ResponseEntity<?> view(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         prompt.increaseViews();
         promptRepository.save(prompt);
         return ResponseEntity.ok(Map.of("id", id, "views", prompt.getViews()));
@@ -145,7 +154,7 @@ public class PromptController {
                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         if (!saveRepository.existsByPromptIdAndMemberId(id, memberId)) {
             saveRepository.save(new PromptSave(id, memberId));
             prompt.increaseSaves();
@@ -159,7 +168,7 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         saveRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(save -> {
             saveRepository.delete(save);
             prompt.decreaseSaves();
@@ -173,7 +182,7 @@ public class PromptController {
                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         if (!likeRepository.existsByPromptIdAndMemberId(id, memberId)) {
             likeRepository.save(new PromptLike(id, memberId));
             prompt.increaseLikes();
@@ -187,7 +196,7 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || prompt.isDeleted()) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
         likeRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(like -> {
             likeRepository.delete(like);
             prompt.decreaseLikes();
@@ -305,6 +314,29 @@ public class PromptController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
         return memberId;
+    }
+
+    private boolean canView(PromptPost prompt, String authorization) {
+        if (prompt == null || prompt.isDeleted()) {
+            return false;
+        }
+
+        if (prompt.isShared()) {
+            return true;
+        }
+
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) {
+            return false;
+        }
+
+        if (Objects.equals(prompt.getAuthorId(), memberId)) {
+            return true;
+        }
+
+        return authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
     }
 
     private boolean canManage(PromptPost prompt, String authorization) {
