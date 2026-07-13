@@ -101,12 +101,24 @@ public class CommentController {
             return ResponseEntity.status(403).body(Map.of("message", "댓글 삭제 권한이 없습니다."));
         }
         boolean shouldDecreaseCount = !comment.isDeleted();
+        Long parentId = comment.getParentId();
+
         if (commentRepository.countByParentId(commentId) > 0) {
             comment.softDelete();
             commentRepository.save(comment);
         } else {
             commentRepository.delete(comment);
         }
+
+        if (parentId != null) {
+            commentRepository.findById(parentId).ifPresent(parent -> {
+                if (parent.isDeleted()
+                        && commentRepository.countByParentId(parentId) == 0) {
+                    commentRepository.delete(parent);
+                }
+            });
+        }
+
         if (shouldDecreaseCount) {
             promptRepository.findById(comment.getPromptId()).ifPresent(prompt -> {
                 prompt.decreaseComments();

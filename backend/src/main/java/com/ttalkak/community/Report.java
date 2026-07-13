@@ -14,6 +14,9 @@ public class Report {
     @Column(columnDefinition = "TEXT")
     private String reason;
     private String status = "pending";
+    @Column(columnDefinition = "TEXT")
+    private String memo;
+    private LocalDateTime reviewedAt;
     private LocalDateTime createdAt = LocalDateTime.now();
 
     protected Report() {}
@@ -29,7 +32,18 @@ public class Report {
     public Long getReporterId() { return reporterId; }
     public String getReason() { return reason; }
     public String getStatus() { return status; }
+    public String getMemo() { return memo; }
+    public LocalDateTime getReviewedAt() { return reviewedAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
-    public void changeStatus(String status) { this.status = status; }
+
+    public void changeStatus(String status) {
+        changeStatus(status, null);
+    }
+
+    public void changeStatus(String status, String memo) {
+        this.status = status;
+        this.memo = memo;
+        this.reviewedAt = LocalDateTime.now();
+    }
 }
 

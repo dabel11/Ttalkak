@@ -42,7 +42,7 @@ public class AdminController {
     public ResponseEntity<?> updateReportStatus(@PathVariable Long id, @RequestBody StatusRequest request) {
         Report report = reportRepository.findById(id).orElse(null);
         if (report == null) return ResponseEntity.notFound().build();
-        report.changeStatus(normalizeStatus(request.status(), "reviewed"));
+        report.changeStatus(normalizeStatus(request.status(), "reviewed"), request.memo());
         reportRepository.save(report);
         return ResponseEntity.ok(reportMap(report));
     }
@@ -90,6 +90,10 @@ public class AdminController {
         body.put("reporterId", report.getReporterId());
         body.put("reason", report.getReason());
         body.put("status", report.getStatus());
+        body.put("memo", report.getMemo());
+        body.put("reviewedAt", report.getReviewedAt() == null
+                ? null
+                : report.getReviewedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         body.put("createdAt", report.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return body;
     }
@@ -109,5 +113,5 @@ public class AdminController {
         return status == null || status.isBlank() ? defaultStatus : status.trim().toLowerCase();
     }
 
-    public record StatusRequest(String status) {}
+    public record StatusRequest(String status, String memo) {}
 }

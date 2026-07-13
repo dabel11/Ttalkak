@@ -64,6 +64,10 @@ public class ReportController {
         body.put("targetId", report.getTargetId());
         body.put("reason", report.getReason());
         body.put("status", report.getStatus());
+        body.put("memo", report.getMemo());
+        body.put("reviewedAt", report.getReviewedAt() == null
+                ? null
+                : report.getReviewedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         body.put("createdAt", report.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
 
         return body;

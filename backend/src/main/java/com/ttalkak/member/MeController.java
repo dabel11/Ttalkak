@@ -62,21 +62,83 @@ public class MeController {
     }
 
     @GetMapping("/prompts")
-    public List<Map<String, Object>> myPrompts(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> myPrompts(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(resolvedSize, 1);
         Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
-        return promptRepository.findByDeletedFalseAndAuthorId(memberId).stream()
-                .map(prompt -> PromptMapper.toPromptResponse(prompt, memberId,
-                        saveRepository.existsByPromptIdAndMemberId(prompt.getId(), memberId),
-                        likeRepository.existsByPromptIdAndMemberId(prompt.getId(), memberId)))
-                .toList();
-    }
 
+        if (memberId == null) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("items", List.of());
+            empty.put("content", List.of());
+            empty.put("page", safePage);
+            empty.put("size", safeSize);
+            empty.put("total", 0);
+            empty.put("totalPages", 0);
+            return empty;
+        }
+
+        List<PromptPost> prompts = promptRepository
+                .findByDeletedFalseAndAuthorId(memberId)
+                .stream()
+                .sorted(java.util.Comparator.comparing(PromptPost::getCreatedAt).reversed())
+                .toList();
+
+        int from = Math.min((safePage - 1) * safeSize, prompts.size());
+        int to = Math.min(from + safeSize, prompts.size());
+
+        List<Map<String, Object>> items = prompts.subList(from, to).stream()
+                .map(prompt -> PromptMapper.toPromptResponse(
+                        prompt,
+                        memberId,
+                        saveRepository.existsByPromptIdAndMemberId(prompt.getId(), memberId),
+                        likeRepository.existsByPromptIdAndMemberId(prompt.getId(), memberId)
+                ))
+                .toList();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", prompts.size());
+        body.put("totalPages", (int) Math.ceil((double) prompts.size() / safeSize));
+        return body;
+    }
     @GetMapping("/comments")
-    public List<Map<String, Object>> myComments(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> myComments(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(resolvedSize, 1);
         Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
-        return commentRepository.findByAuthorIdOrderByCreatedAtDesc(memberId).stream()
+
+        if (memberId == null) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("items", List.of());
+            empty.put("content", List.of());
+            empty.put("page", safePage);
+            empty.put("size", safeSize);
+            empty.put("total", 0);
+            empty.put("totalPages", 0);
+            return empty;
+        }
+
+        var comments = commentRepository.findByAuthorIdOrderByCreatedAtDesc(memberId);
+        int from = Math.min((safePage - 1) * safeSize, comments.size());
+        int to = Math.min(from + safeSize, comments.size());
+
+        List<Map<String, Object>> items = comments.subList(from, to).stream()
                 .map(comment -> {
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put("id", comment.getId());
@@ -85,21 +147,81 @@ public class MeController {
                     map.put("text", comment.getText());
                     map.put("likes", comment.getLikes());
                     map.put("edited", comment.isEdited());
+                    map.put("deleted", comment.isDeleted());
                     map.put("isMine", true);
+                    map.put("createdAt", comment.getCreatedAt().toString());
+
+                    promptRepository.findById(comment.getPromptId()).ifPresentOrElse(prompt -> {
+                        Map<String, Object> author = new LinkedHashMap<>();
+                        author.put("id", prompt.getAuthorId());
+                        author.put("nickname", prompt.getAuthorNickname());
+
+                        Map<String, Object> originalPrompt = new LinkedHashMap<>();
+                        originalPrompt.put("id", prompt.getId());
+                        originalPrompt.put("title", prompt.getTitle());
+                        originalPrompt.put("text", prompt.getText());
+                        originalPrompt.put("author", author);
+
+                        map.put("prompt", originalPrompt);
+                        map.put("promptTitle", prompt.getTitle());
+                    }, () -> {
+                        map.put("prompt", null);
+                        map.put("promptTitle", null);
+                    });
+
                     return map;
                 })
                 .toList();
-    }
 
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", comments.size());
+        body.put("totalPages", (int) Math.ceil((double) comments.size() / safeSize));
+        return body;
+    }
     @GetMapping("/reports")
-    public List<Map<String, Object>> myReports(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> myReports(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(resolvedSize, 1);
         Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
-        return reportRepository.findByReporterIdOrderByCreatedAtDesc(memberId).stream()
+
+        if (memberId == null) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("items", List.of());
+            empty.put("content", List.of());
+            empty.put("page", safePage);
+            empty.put("size", safeSize);
+            empty.put("total", 0);
+            empty.put("totalPages", 0);
+            return empty;
+        }
+
+        var reports = reportRepository.findByReporterIdOrderByCreatedAtDesc(memberId);
+        int from = Math.min((safePage - 1) * safeSize, reports.size());
+        int to = Math.min(from + safeSize, reports.size());
+
+        List<Map<String, Object>> items = reports.subList(from, to).stream()
                 .map(reportController::toResponse)
                 .toList();
-    }
 
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", reports.size());
+        body.put("totalPages", (int) Math.ceil((double) reports.size() / safeSize));
+        return body;
+    }
     private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {
         int safePage = Math.max(page, 1);
         int safeSize = Math.max(size, 1);

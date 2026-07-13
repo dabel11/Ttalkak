@@ -289,14 +289,23 @@ public class PromptController {
 
     private Comparator<PromptPost> comparator(String sort) {
         Comparator<PromptPost> byLatest = Comparator.comparing(PromptPost::getCreatedAt).reversed();
+        Comparator<PromptPost> byViews = Comparator.comparing(PromptPost::getViews).reversed();
+
         return switch (sort == null ? "popular" : sort) {
-            case "saves" -> Comparator.comparing(PromptPost::getSaves).reversed().thenComparing(PromptPost::getViews).reversed();
-            case "comments" -> Comparator.comparing(PromptPost::getComments).reversed().thenComparing(PromptPost::getViews).reversed();
-            case "likes" -> Comparator.comparing(PromptPost::getLikes).reversed().thenComparing(PromptPost::getViews).reversed();
+            case "saves" -> Comparator.comparing(PromptPost::getSaves).reversed()
+                    .thenComparing(byViews)
+                    .thenComparing(byLatest);
+            case "comments" -> Comparator.comparing(PromptPost::getComments).reversed()
+                    .thenComparing(byViews)
+                    .thenComparing(byLatest);
+            case "likes" -> Comparator.comparing(PromptPost::getLikes).reversed()
+                    .thenComparing(byViews)
+                    .thenComparing(byLatest);
             case "latest" -> byLatest;
-            default -> Comparator.comparing(PromptPost::getViews).reversed()
-                    .thenComparing(PromptPost::getComments).reversed()
-                    .thenComparing(PromptPost::getSaves).reversed();
+            default -> byViews
+                    .thenComparing(Comparator.comparing(PromptPost::getComments).reversed())
+                    .thenComparing(Comparator.comparing(PromptPost::getSaves).reversed())
+                    .thenComparing(byLatest);
         };
     }
 
