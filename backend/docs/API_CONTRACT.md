@@ -57,7 +57,7 @@ POST /api/auth/login
 ```json
 {
   "userId": "admin",
-  "password": "Admin1234!"
+  "password": "<configured-admin-password>"
 }
 ```
 
@@ -87,37 +87,38 @@ DB와 Spring Security 내부 역할은 각각 `USER`, `ADMIN`을 사용합니다
 
 ---
 
-## 3. 개발용 관리자 계정
+## 3. 관리자 계정 초기화
 
-빈 DB에서 백엔드를 최초 실행하면 개발용 관리자 계정을 자동 생성합니다.
+관리자 계정 자동 생성은 기본적으로 비활성화되어 있습니다.
 
-기본 계정:
+빈 DB에 관리자 계정이 필요한 개발 환경에서만 아래 환경변수를 명시적으로 설정합니다.
 
 ```text
-아이디: admin
-비밀번호: Admin1234!
-역할: ADMIN
+ADMIN_SEED_ENABLED=true
+ADMIN_USER_ID=admin
+ADMIN_PASSWORD=<12자 이상의 안전한 비밀번호>
+ADMIN_NICKNAME=admin
+ADMIN_NAME=관리자
 ```
 
-로그인 응답에서는 다음과 같이 반환됩니다.
+처리 규칙:
+
+- `ADMIN_SEED_ENABLED`의 기본값은 `false`입니다.
+- 자동 생성을 사용하지 않으면 기존 DB의 관리자 계정은 변경하거나 삭제하지 않습니다.
+- 자동 생성을 사용할 때는 `ADMIN_PASSWORD`를 반드시 설정해야 합니다.
+- 관리자 비밀번호는 최소 12자 이상이어야 합니다.
+- 비밀번호가 없거나 기준보다 짧으면 서버 시작에 실패합니다.
+- 소스 코드와 설정 파일에는 관리자 기본 비밀번호를 저장하지 않습니다.
+- 실제 비밀번호가 포함된 `.env` 파일은 Git에 커밋하지 않습니다.
+- 같은 아이디의 계정이 이미 있으면 환경변수의 관리자 설정으로 동기화합니다.
+
+로그인 응답의 역할은 다음과 같이 반환됩니다.
 
 ```json
 {
   "role": "admin"
 }
 ```
-
-설정 가능한 환경변수:
-
-```text
-ADMIN_SEED_ENABLED
-ADMIN_USER_ID
-ADMIN_PASSWORD
-ADMIN_NICKNAME
-ADMIN_NAME
-```
-
-기본 관리자 비밀번호는 개발 환경 전용입니다. 운영 환경에서는 반드시 환경변수로 변경해야 합니다.
 
 ---
 
@@ -958,6 +959,5 @@ DELETE /api/auth/withdraw
 
 - demo token을 JWT 또는 세션 인증으로 교체
 - Make와 Admin 목록 API 페이지네이션 통일
-- 운영 환경 관리자 기본 비밀번호 제거
 
 API 응답 형식을 변경할 때는 반드시 프론트 담당자와 동시에 수정합니다.
