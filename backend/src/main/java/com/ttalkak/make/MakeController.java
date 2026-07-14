@@ -114,7 +114,7 @@ public class MakeController {
         Long memberId = requireMemberId(authorization);
         validateFolderName(request.name());
         if (folderRepository.countByMemberId(memberId) >= 5) {
-            return ResponseEntity.badRequest().body(Map.of("message", "폴더는 최대 5개까지 만들 수 있습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "폴더는 최대 5개까지 만들 수 있습니다.");
         }
         MakeFolder folder = folderRepository.save(new MakeFolder(memberId, request.name().trim()));
         return ResponseEntity.ok(folderMap(folder));

@@ -103,12 +103,12 @@ http://localhost:8080/api/make/folders
 
 현재 백엔드는 프론트 연동 테스트를 위해 demo token 기반 인증을 사용합니다.
 
-로그인 성공 시 `demo-token-{memberId}` 형태의 accessToken이 발급됩니다.
+로그인 성공 시 서명된 JWT accessToken이 발급됩니다.
 
 프론트는 로그인 이후 주요 변경 API 요청에 아래 헤더를 포함해야 합니다.
 
 ```text
-Authorization: Bearer demo-token-{memberId}
+Authorization: Bearer <JWT accessToken>
 ```
 
 로그인이 필요한 API에서 토큰이 없거나 잘못된 경우 `401 Unauthorized`를 반환합니다.
@@ -259,3 +259,46 @@ PATCH  /api/make/threads/{숫자id}/folder    200
 프론트와 백엔드 응답 필드 계약은 아래 문서에 정리합니다.
 
 backend/docs/API_CONTRACT.md
+
+## JWT 인증 설정
+
+백엔드 실행 전에 JWT 서명키를 환경변수로 설정해야 합니다.
+
+PowerShell 개발 실행 예시:
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+
+$env:JWT_SECRET_BASE64 = [Convert]::ToBase64String($bytes)
+$env:JWT_EXPIRATION_MINUTES = "120"
+$env:JWT_ISSUER = "ttalkak"
+
+.\gradlew.bat bootRun
+```
+
+- `JWT_SECRET_BASE64`는 Base64 디코딩 기준 최소 32바이트여야 합니다.
+- 운영 환경에서는 고정된 안전한 서명키를 비밀 환경변수로 관리합니다.
+- 서버를 다시 시작할 때 서명키가 바뀌면 기존 JWT는 사용할 수 없습니다.
+- 실제 서명키를 README, 소스 코드, `.env.example`에 기록하지 않습니다.
+
+## 공통 에러 응답 처리
+
+백엔드의 실패 응답은 다음 필드로 통일되어 있습니다.
+
+```text
+timestamp, status, error, code, message, path
+```
+
+프론트엔드에서는 다음 기준으로 처리합니다.
+
+- AUTHENTICATION_REQUIRED: 로그인 화면 이동 또는 로그인 안내
+- ACCESS_DENIED: 권한 부족 안내
+- RESOURCE_NOT_FOUND: 대상이 없거나 접근할 수 없다는 안내
+- INVALID_REQUEST, VALIDATION_FAILED: 폼 또는 토스트에 message 표시
+- CONFLICT, INVALID_STATE: 중복 처리 또는 상태 충돌 안내
+- INTERNAL_SERVER_ERROR: 일반 서버 오류 안내
+
+세부 계약은 docs/API_CONTRACT.md를 확인합니다.

@@ -13,14 +13,35 @@
 로그인이 필요한 API는 아래 헤더를 요구합니다.
 
 ```http
-Authorization: Bearer demo-token-{memberId}
+Authorization: Bearer <JWT accessToken>
 ```
 
-현재 `demo-token`은 프론트 연동 검증용 임시 인증 방식입니다.
+로그인 또는 회원가입 성공 시 서명된 JWT access token을 발급합니다.
 
-- 토큰 서명 검증이 없는 개발용 구조입니다.
-- 운영 배포 전 JWT 또는 세션 인증으로 교체해야 합니다.
-- 탈퇴하거나 비활성화된 회원의 토큰은 인증되지 않습니다.
+- JWT 서명 알고리즘은 `HS256`을 사용합니다.
+- 회원 ID는 JWT의 `sub`에 저장합니다.
+- 발급자 기본값은 `ttalkak`입니다.
+- 토큰 유효시간 기본값은 120분입니다.
+- 서버는 JWT 서명, 발급자, 만료시간을 검증합니다.
+- 서명이 잘못됐거나 만료된 토큰은 인증되지 않습니다.
+- 탈퇴하거나 비활성화된 회원의 토큰도 인증되지 않습니다.
+- 서버는 세션을 생성하지 않는 stateless 인증 방식을 사용합니다.
+
+필수 환경변수:
+
+```text
+JWT_SECRET_BASE64=<32바이트 이상의 무작위 값을 Base64로 인코딩한 값>
+```
+
+선택 환경변수:
+
+```text
+JWT_EXPIRATION_MINUTES=120
+JWT_ISSUER=ttalkak
+```
+
+`JWT_SECRET_BASE64`가 없거나 기준보다 짧으면 서버 시작에 실패합니다.
+실제 서명키는 Git에 커밋하지 않습니다.
 
 ### 공통 상태 코드
 
@@ -72,7 +93,7 @@ POST /api/auth/login
     "role": "admin",
     "active": true
   },
-  "accessToken": "demo-token-1"
+  "accessToken": "<jwt-access-token>"
 }
 ```
 
@@ -983,7 +1004,7 @@ DELETE /api/auth/withdraw
 - 로그인한 사용자 본인만 탈퇴할 수 있습니다.
 - 비밀번호가 일치해야 합니다.
 - 탈퇴 시 `active=false` 처리합니다.
-- 탈퇴 이후 같은 demo token은 더 이상 인증되지 않습니다.
+- 탈퇴 이후 기존 JWT access token은 더 이상 인증되지 않습니다.
 - 탈퇴 계정은 재로그인할 수 없습니다.
 - 기존 프롬프트, 댓글, Make 데이터는 즉시 삭제하지 않고 보존합니다.
 - 탈퇴 회원의 닉네임과 이름은 비식별 형태로 변경합니다.
@@ -994,6 +1015,51 @@ DELETE /api/auth/withdraw
 
 아래 기능은 아직 최종 구현이 아닙니다.
 
-- demo token을 JWT 또는 세션 인증으로 교체
 
 API 응답 형식을 변경할 때는 반드시 프론트 담당자와 동시에 수정합니다.
+
+---
+
+## 공통 에러 응답
+
+API 요청 처리에 실패하면 다음 형식으로 응답합니다.
+
+```json
+{
+  "timestamp": "2026-07-15T03:37:14.4782516+09:00",
+  "status": 401,
+  "error": "Unauthorized",
+  "code": "AUTHENTICATION_REQUIRED",
+  "message": "로그인이 필요합니다.",
+  "path": "/api/make/threads"
+}
+```
+
+### 공통 필드
+
+| 필드 | 설명 |
+|---|---|
+| 	imestamp | 오류 발생 시각 |
+| status | HTTP 상태 코드 |
+| error | HTTP 상태 설명 |
+| code | 프론트엔드 분기용 오류 코드 |
+| message | 사용자에게 표시할 오류 메시지 |
+| path | 요청 API 경로 |
+
+### 주요 오류 코드
+
+| HTTP 상태 | code | 의미 |
+|---:|---|---|
+| 400 | INVALID_REQUEST | 잘못된 요청 또는 입력값 |
+| 400 | VALIDATION_FAILED | 요청값 검증 실패 |
+| 400 | INVALID_REQUEST_BODY | JSON 요청 본문 파싱 실패 |
+| 400 | MISSING_PARAMETER | 필수 파라미터 누락 |
+| 400 | INVALID_PARAMETER | 파라미터 형식 오류 |
+| 401 | AUTHENTICATION_REQUIRED | 로그인 또는 유효한 JWT 필요 |
+| 403 | ACCESS_DENIED | 요청 권한 부족 |
+| 404 | RESOURCE_NOT_FOUND | 요청 대상 없음 |
+| 409 | CONFLICT | 상태 충돌 또는 중복 처리 |
+| 409 | INVALID_STATE | 현재 상태에서 처리할 수 없음 |
+| 500 | INTERNAL_SERVER_ERROR | 서버 내부 오류 |
+
+프론트엔드는 HTTP 상태와 함께 code를 기준으로 동작을 분기하고, 사용자 안내에는 message를 사용할 수 있습니다.

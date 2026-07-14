@@ -66,8 +66,7 @@ public class CommentController {
         requireViewablePrompt(parent.getPromptId(), authorization);
 
         if (parent.isDeleted() || parent.isHidden()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "삭제되었거나 숨겨진 댓글에는 답글을 작성할 수 없습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제되었거나 숨겨진 댓글에는 답글을 작성할 수 없습니다.");
         }
 
         String nickname = authService.currentNickname(authorization);
@@ -88,16 +87,14 @@ public class CommentController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         requireViewablePrompt(comment.getPromptId(), authorization);
         if (!canManage(comment, authorization)) {
-            return ResponseEntity.status(403).body(Map.of("message", "댓글 수정 권한이 없습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "댓글 수정 권한이 없습니다.");
         }
         if (comment.isDeleted()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "삭제된 댓글은 수정할 수 없습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제된 댓글은 수정할 수 없습니다.");
         }
 
         if (comment.isHidden()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "숨김 해제 후 댓글을 수정할 수 있습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "숨김 해제 후 댓글을 수정할 수 있습니다.");
         }
 
         comment.updateText(resolvedText(request));
@@ -113,8 +110,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
         }
 
         Comment comment = commentRepository.findById(commentId)
@@ -130,8 +126,7 @@ public class CommentController {
                 ));
 
         if (comment.isDeleted()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "삭제된 댓글은 숨길 수 없습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제된 댓글은 숨길 수 없습니다.");
         }
 
         boolean changed = comment.hide();
@@ -158,8 +153,7 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
         }
 
         Comment comment = commentRepository.findById(commentId)
@@ -175,8 +169,7 @@ public class CommentController {
                 ));
 
         if (comment.isDeleted()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "삭제된 댓글은 숨김 해제할 수 없습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제된 댓글은 숨김 해제할 수 없습니다.");
         }
 
         boolean changed = comment.unhide();
@@ -211,8 +204,7 @@ public class CommentController {
         requireViewablePrompt(comment.getPromptId(), authorization);
 
         if (!canManage(comment, authorization)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "댓글 삭제 권한이 없습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "댓글 삭제 권한이 없습니다.");
         }
 
         return deleteCommentEntity(comment);
@@ -226,8 +218,7 @@ public class CommentController {
         requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
         }
 
         Comment comment = commentRepository.findById(commentId)
@@ -288,8 +279,7 @@ public class CommentController {
         requireViewablePrompt(comment.getPromptId(), authorization);
 
         if (comment.isDeleted() || comment.isHidden()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "삭제되었거나 숨겨진 댓글에는 좋아요를 누를 수 없습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제되었거나 숨겨진 댓글에는 좋아요를 누를 수 없습니다.");
         }
 
         if (!commentLikeRepository.existsByCommentIdAndMemberId(commentId, memberId)) {

@@ -196,7 +196,7 @@ public class AdminController {
         Report report = reportRepository.findById(id).orElse(null);
 
         if (report == null) {
-            return ResponseEntity.notFound().build();
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
 
         ReportStatus nextStatus = normalizeReportStatus(
@@ -283,7 +283,7 @@ public class AdminController {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
 
         if (prompt == null) {
-            return ResponseEntity.notFound().build();
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
 
         prompt.delete();
@@ -297,7 +297,7 @@ public class AdminController {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
 
         if (prompt == null) {
-            return ResponseEntity.notFound().build();
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
 
         prompt.restore();
@@ -346,7 +346,7 @@ public class AdminController {
         Tag tag = tagRepository.findById(id).orElse(null);
 
         if (tag == null) {
-            return ResponseEntity.notFound().build();
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
 
         TagStatus nextStatus = normalizeTagStatus(

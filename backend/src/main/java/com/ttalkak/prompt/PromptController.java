@@ -70,7 +70,7 @@ public class PromptController {
         Long memberId = authService.currentMemberIdOrNull(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null || !canView(prompt, authorization)) {
-            return ResponseEntity.notFound().build();
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
         return ResponseEntity.ok(
                 PromptMapper.toPromptResponse(
@@ -100,9 +100,9 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "수정 권한이 없습니다.");
         }
         prompt.update(request.title(), request.text(), PromptMapper.joinTags(request.tags()));
         promptRepository.save(prompt);
@@ -115,9 +115,9 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null) return ResponseEntity.notFound().build();
+        if (prompt == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            return ResponseEntity.status(403).body(Map.of("message", "삭제 권한이 없습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "삭제 권한이 없습니다.");
         }
         prompt.delete();
         promptRepository.save(prompt);
@@ -130,9 +130,9 @@ public class PromptController {
                                         @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            return ResponseEntity.status(403).body(Map.of("message", "공유 상태 변경 권한이 없습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "공유 상태 변경 권한이 없습니다.");
         }
         prompt.changeVisibility(Boolean.TRUE.equals(request.isShared()));
         promptRepository.save(prompt);
@@ -143,7 +143,7 @@ public class PromptController {
     public ResponseEntity<?> view(@PathVariable Long id,
                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         prompt.increaseViews();
         promptRepository.save(prompt);
         return ResponseEntity.ok(Map.of("id", id, "views", prompt.getViews()));
@@ -154,7 +154,7 @@ public class PromptController {
                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!saveRepository.existsByPromptIdAndMemberId(id, memberId)) {
             saveRepository.save(new PromptSave(id, memberId));
             prompt.increaseSaves();
@@ -168,7 +168,7 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         saveRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(save -> {
             saveRepository.delete(save);
             prompt.decreaseSaves();
@@ -182,7 +182,7 @@ public class PromptController {
                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!likeRepository.existsByPromptIdAndMemberId(id, memberId)) {
             likeRepository.save(new PromptLike(id, memberId));
             prompt.increaseLikes();
@@ -196,7 +196,7 @@ public class PromptController {
                                     @RequestHeader(value = "Authorization", required = false) String authorization) {
         Long memberId = requireMemberId(authorization);
         PromptPost prompt = promptRepository.findById(id).orElse(null);
-        if (prompt == null || !canView(prompt, authorization)) return ResponseEntity.notFound().build();
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         likeRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(like -> {
             likeRepository.delete(like);
             prompt.decreaseLikes();

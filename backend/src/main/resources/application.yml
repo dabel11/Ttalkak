@@ -25,3 +25,8 @@ ttalkak:
     password: "${ADMIN_PASSWORD:}"
     nickname: "${ADMIN_NICKNAME:admin}"
     name: "${ADMIN_NAME:관리자}"
+
+  jwt:
+    secret-base64: "${JWT_SECRET_BASE64:}"
+    expiration-minutes: "${JWT_EXPIRATION_MINUTES:120}"
+    issuer: "${JWT_ISSUER:ttalkak}"

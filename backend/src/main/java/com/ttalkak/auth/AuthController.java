@@ -2,9 +2,11 @@ package com.ttalkak.auth;
 
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -27,35 +29,35 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody SignupRequest request) {
         if (request.userId() == null || request.userId().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "아이디를 입력해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디를 입력해주세요.");
         }
 
         if (request.password() == null || request.password().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "비밀번호를 입력해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호를 입력해주세요.");
         }
 
         if (!request.password().equals(request.passwordConfirm())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "비밀번호 확인이 일치하지 않습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호 확인이 일치하지 않습니다.");
         }
 
         if (request.nickname() == null || request.nickname().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "닉네임을 입력해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "닉네임을 입력해주세요.");
         }
 
         if (request.name() == null || request.name().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "이름을 입력해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름을 입력해주세요.");
         }
 
         if (memberRepository.existsByUserId(request.userId())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 아이디입니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 사용 중인 아이디입니다.");
         }
 
         if (memberRepository.existsByNicknameAndActiveTrue(request.nickname())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 닉네임입니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 사용 중인 닉네임입니다.");
         }
 
         if (!Boolean.TRUE.equals(request.agreeTerms()) || !Boolean.TRUE.equals(request.agreePrivacy())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "약관과 개인정보 수집 및 이용에 동의해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "약관과 개인정보 수집 및 이용에 동의해주세요.");
         }
 
         LocalDate birth = null;
@@ -84,7 +86,7 @@ public class AuthController {
                 .orElse(null);
 
         if (member == null || !passwordEncoder.matches(request.password(), member.getPassword())) {
-            return ResponseEntity.status(401).body(Map.of("message", "아이디 또는 비밀번호가 올바르지 않습니다."));
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
         return ResponseEntity.ok(authResponse(member));
@@ -99,15 +101,15 @@ public class AuthController {
                 .orElse(null);
 
         if (member == null) {
-            return ResponseEntity.status(401).body(Map.of("message", "로그인이 필요합니다."));
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
 
         if (request == null || request.password() == null || request.password().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "회원탈퇴를 위해 비밀번호를 입력해주세요."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회원탈퇴를 위해 비밀번호를 입력해주세요.");
         }
 
         if (!passwordEncoder.matches(request.password(), member.getPassword())) {
-            return ResponseEntity.status(403).body(Map.of("message", "비밀번호가 올바르지 않습니다."));
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "비밀번호가 올바르지 않습니다.");
         }
 
         member.withdraw();
@@ -159,7 +161,7 @@ public class AuthController {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("user", user);
-        body.put("accessToken", authService.issueDemoToken(member));
+        body.put("accessToken", authService.issueAccessToken(member));
 
         return body;
     }
