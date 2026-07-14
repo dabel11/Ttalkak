@@ -591,7 +591,7 @@ make_folder
 PATCH /api/admin/reports/{id}/status
 ```
 
-요청:
+요청 예시:
 
 ```json
 {
@@ -600,15 +600,57 @@ PATCH /api/admin/reports/{id}/status
 }
 ```
 
-현재 기본 신고 상태는 다음과 같습니다.
+허용 상태:
 
 ```text
 pending
+reviewed
+resolved
+dismissed
 ```
 
-현재 구현은 상태 문자열을 소문자로 저장하지만 허용 상태를 enum으로 엄격하게 제한하지는 않습니다.
+상태 의미:
 
-신고 상태값의 정식 제한은 추후 작업입니다.
+- `pending`: 접수되어 아직 검토되지 않은 상태
+- `reviewed`: 관리자가 신고 내용을 검토한 상태
+- `resolved`: 신고에 대한 조치가 완료된 최종 상태
+- `dismissed`: 신고 사유가 인정되지 않아 종결된 최종 상태
+
+허용되는 상태 전이:
+
+```text
+pending  -> reviewed
+pending  -> resolved
+pending  -> dismissed
+reviewed -> resolved
+reviewed -> dismissed
+```
+
+처리 규칙:
+
+- 신고 생성 시 상태는 항상 `pending`입니다.
+- `resolved`와 `dismissed`는 최종 상태이므로 이후 다른 상태로 변경할 수 없습니다.
+- 같은 상태로 다시 변경하는 요청도 허용하지 않습니다.
+- 허용되지 않는 상태 전이는 `409 Conflict`를 반환합니다.
+- 지원하지 않는 상태값은 `400 Bad Request`를 반환합니다.
+- 요청의 `status`를 생략하거나 빈 값으로 보내면 기본적으로 `reviewed`를 사용합니다.
+- 상태가 정상 변경되면 `reviewedAt`을 현재 시각으로 갱신합니다.
+- `memo`는 앞뒤 공백을 제거하며 빈 문자열은 `null`로 저장합니다.
+- API 응답과 DB에는 상태값을 소문자로 유지합니다.
+
+관리자 신고 목록 필터:
+
+```http
+GET /api/admin/reports
+GET /api/admin/reports?status=pending
+GET /api/admin/reports?status=reviewed
+GET /api/admin/reports?status=resolved
+GET /api/admin/reports?status=dismissed
+GET /api/admin/reports?status=all
+```
+
+- 필터를 생략하면 전체 신고를 반환합니다.
+- 잘못된 필터값은 `400 Bad Request`를 반환합니다.
 
 ### 관리자 목록 응답
 
@@ -804,7 +846,6 @@ DELETE /api/auth/withdraw
 아래 기능은 아직 최종 구현이 아닙니다.
 
 - demo token을 JWT 또는 세션 인증으로 교체
-- 신고 상태값 enum 및 전이 규칙
 - 태그 추천 상태값 enum 및 전이 규칙
 - Make와 Admin 목록 API 페이지네이션 통일
 - 운영 환경 관리자 기본 비밀번호 제거

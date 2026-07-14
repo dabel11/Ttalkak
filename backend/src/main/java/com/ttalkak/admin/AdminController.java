@@ -5,6 +5,7 @@ import com.ttalkak.community.CommentRepository;
 import com.ttalkak.community.Report;
 import com.ttalkak.community.ReportRepository;
 import com.ttalkak.community.ReportResponseMapper;
+import com.ttalkak.community.ReportStatus;
 import com.ttalkak.make.MakeFolder;
 import com.ttalkak.make.MakeFolderRepository;
 import com.ttalkak.make.MakeThread;
@@ -153,11 +154,19 @@ public class AdminController {
     }
 
     @GetMapping("/reports")
-    public List<Map<String, Object>> reports(@RequestParam(required = false) String status) {
+    public List<Map<String, Object>> reports(
+            @RequestParam(required = false) String status
+    ) {
+        String normalizedStatus =
+                normalizeReportFilterStatus(status);
+
         return reportRepository.findAll().stream()
-                .filter(report -> status == null
-                        || status.isBlank()
-                        || status.equalsIgnoreCase(report.getStatus()))
+                .filter(report ->
+                        "all".equals(normalizedStatus)
+                                || normalizedStatus.equals(
+                                        report.getStatus()
+                                )
+                )
                 .map(this::reportMap)
                 .toList();
     }
@@ -173,10 +182,23 @@ public class AdminController {
             return ResponseEntity.notFound().build();
         }
 
-        report.changeStatus(
-                normalizeStatus(request.status(), "reviewed"),
-                request.memo()
+        ReportStatus nextStatus = normalizeReportStatus(
+                request.status(),
+                ReportStatus.REVIEWED
         );
+
+        if (!report.canTransitionTo(nextStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "신고 상태를 "
+                            + report.getStatus()
+                            + "에서 "
+                            + nextStatus.value()
+                            + "(으)로 변경할 수 없습니다."
+            );
+        }
+
+        report.changeStatus(nextStatus, request.memo());
 
         reportRepository.save(report);
         return ResponseEntity.ok(reportMap(report));
@@ -513,6 +535,43 @@ public class AdminController {
                 )
         );
         return body;
+    }
+
+    private ReportStatus normalizeReportStatus(
+            String status,
+            ReportStatus defaultStatus
+    ) {
+        if (status == null || status.isBlank()) {
+            return defaultStatus;
+        }
+
+        try {
+            return ReportStatus.fromValue(status);
+        }
+        catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "status는 pending, reviewed, resolved, dismissed 중 하나여야 합니다."
+            );
+        }
+    }
+
+    private String normalizeReportFilterStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "all";
+        }
+
+        String normalized =
+                status.trim().toLowerCase(Locale.ROOT);
+
+        if ("all".equals(normalized)) {
+            return normalized;
+        }
+
+        return normalizeReportStatus(
+                normalized,
+                ReportStatus.PENDING
+        ).value();
     }
 
     private String normalizeStatus(
