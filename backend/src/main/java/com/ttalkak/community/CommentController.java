@@ -91,17 +91,59 @@ public class CommentController {
     }
 
     @DeleteMapping("/api/comments/{commentId}")
-    public ResponseEntity<?> deleteComment(@PathVariable Long commentId,
-                                           @RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<?> deleteComment(
+            @PathVariable Long commentId,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
         requireMemberId(authorization);
+
         Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "댓글을 찾을 수 없습니다."
+                ));
+
         requireViewablePrompt(comment.getPromptId(), authorization);
+
         if (!canManage(comment, authorization)) {
-            return ResponseEntity.status(403).body(Map.of("message", "댓글 삭제 권한이 없습니다."));
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "댓글 삭제 권한이 없습니다."));
         }
-        boolean shouldDecreaseCount = !comment.isDeleted();
+
+        return deleteCommentEntity(comment);
+    }
+
+    @DeleteMapping("/api/admin/comments/{commentId}")
+    public ResponseEntity<?> adminDeleteComment(
+            @PathVariable Long commentId,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        requireMemberId(authorization);
+
+        if (!isAdmin(authorization)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+        }
+
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "댓글을 찾을 수 없습니다."
+                ));
+
+        promptRepository.findById(comment.getPromptId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "프롬프트를 찾을 수 없습니다."
+                ));
+
+        return deleteCommentEntity(comment);
+    }
+
+    private ResponseEntity<?> deleteCommentEntity(Comment comment) {
+        Long commentId = comment.getId();
         Long parentId = comment.getParentId();
+        boolean shouldDecreaseCount = !comment.isDeleted();
 
         if (commentRepository.countByParentId(commentId) > 0) {
             comment.softDelete();
@@ -125,7 +167,11 @@ public class CommentController {
                 promptRepository.save(prompt);
             });
         }
-        return ResponseEntity.ok(Map.of("deleted", true, "id", commentId));
+
+        return ResponseEntity.ok(Map.of(
+                "deleted", true,
+                "id", commentId
+        ));
     }
 
     @PostMapping("/api/comments/{commentId}/like")
@@ -199,11 +245,9 @@ public class CommentController {
         Long memberId = authService.currentMemberIdOrNull(authorization);
         boolean isAuthor = memberId != null
                 && Objects.equals(prompt.getAuthorId(), memberId);
-        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
-                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
-                .orElse(false);
+        boolean admin = isAdmin(authorization);
 
-        if (!isAuthor && !isAdmin) {
+        if (!isAuthor && !admin) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "Prompt not found."
@@ -223,12 +267,23 @@ public class CommentController {
 
     private boolean canManage(Comment comment, String authorization) {
         Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return false;
-        boolean isAuthor = Objects.equals(comment.getAuthorId(), memberId);
-        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+
+        if (memberId == null) {
+            return false;
+        }
+
+        boolean isAuthor = Objects.equals(
+                comment.getAuthorId(),
+                memberId
+        );
+
+        return isAuthor || isAdmin(authorization);
+    }
+
+    private boolean isAdmin(String authorization) {
+        return authService.getMemberFromAuthorization(authorization)
                 .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
                 .orElse(false);
-        return isAuthor || isAdmin;
     }
 
     private String resolvedText(CommentRequest request) {
