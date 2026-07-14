@@ -261,7 +261,7 @@ public class AdminController {
     }
 
     private Map<String, Object> reportMap(Report report) {
-        return reportResponseMapper.toResponse(report);
+        return reportResponseMapper.toResponse(report, true);
     }
 
     private Map<String, Object> tagMap(Tag tag) {

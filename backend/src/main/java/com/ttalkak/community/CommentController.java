@@ -36,8 +36,10 @@ public class CommentController {
                                               @RequestHeader(value = "Authorization", required = false) String authorization) {
         requireViewablePrompt(promptId, authorization);
         Long memberId = authService.currentMemberIdOrNull(authorization);
+        boolean admin = isAdmin(authorization);
+
         return commentRepository.findByPromptIdAndParentIdIsNullOrderByLikesDescCreatedAtAsc(promptId).stream()
-                .map(comment -> toResponse(comment, memberId, true))
+                .map(comment -> toResponse(comment, memberId, true, admin))
                 .toList();
     }
 
@@ -51,7 +53,7 @@ public class CommentController {
         Comment comment = commentRepository.save(new Comment(promptId, null, memberId, nickname, resolvedText(request)));
         prompt.increaseComments();
         promptRepository.save(prompt);
-        return ResponseEntity.ok(toResponse(comment, memberId, true));
+        return ResponseEntity.ok(toResponse(comment, memberId, true, isAdmin(authorization)));
     }
 
     @PostMapping("/api/comments/{commentId}/replies")
@@ -62,13 +64,19 @@ public class CommentController {
         Comment parent = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         requireViewablePrompt(parent.getPromptId(), authorization);
+
+        if (parent.isDeleted() || parent.isHidden()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "삭제되었거나 숨겨진 댓글에는 답글을 작성할 수 없습니다."));
+        }
+
         String nickname = authService.currentNickname(authorization);
         Comment reply = commentRepository.save(new Comment(parent.getPromptId(), commentId, memberId, nickname, resolvedText(request)));
         promptRepository.findById(parent.getPromptId()).ifPresent(prompt -> {
             prompt.increaseComments();
             promptRepository.save(prompt);
         });
-        return ResponseEntity.ok(toResponse(reply, memberId, false));
+        return ResponseEntity.ok(toResponse(reply, memberId, false, isAdmin(authorization)));
     }
 
     @PatchMapping("/api/comments/{commentId}")
@@ -83,11 +91,108 @@ public class CommentController {
             return ResponseEntity.status(403).body(Map.of("message", "댓글 수정 권한이 없습니다."));
         }
         if (comment.isDeleted()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "삭제된 댓글은 수정할 수 없습니다."));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "삭제된 댓글은 수정할 수 없습니다."));
         }
+
+        if (comment.isHidden()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "숨김 해제 후 댓글을 수정할 수 있습니다."));
+        }
+
         comment.updateText(resolvedText(request));
         commentRepository.save(comment);
-        return ResponseEntity.ok(toResponse(comment, memberId, comment.getParentId() == null));
+        return ResponseEntity.ok(toResponse(comment, memberId, comment.getParentId() == null, isAdmin(authorization)));
+    }
+
+    @PatchMapping("/api/admin/comments/{commentId}/hide")
+    public ResponseEntity<?> hideComment(
+            @PathVariable Long commentId,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        Long memberId = requireMemberId(authorization);
+
+        if (!isAdmin(authorization)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+        }
+
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "댓글을 찾을 수 없습니다."
+                ));
+
+        PromptPost prompt = promptRepository.findById(comment.getPromptId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "프롬프트를 찾을 수 없습니다."
+                ));
+
+        if (comment.isDeleted()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "삭제된 댓글은 숨길 수 없습니다."));
+        }
+
+        boolean changed = comment.hide();
+
+        if (changed) {
+            commentRepository.save(comment);
+            prompt.decreaseComments();
+            promptRepository.save(prompt);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>(
+                toResponse(comment, memberId, false, true)
+        );
+        body.put("changed", changed);
+
+        return ResponseEntity.ok(body);
+    }
+
+    @PatchMapping("/api/admin/comments/{commentId}/unhide")
+    public ResponseEntity<?> unhideComment(
+            @PathVariable Long commentId,
+            @RequestHeader(value = "Authorization", required = false) String authorization
+    ) {
+        Long memberId = requireMemberId(authorization);
+
+        if (!isAdmin(authorization)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "관리자 권한이 필요합니다."));
+        }
+
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "댓글을 찾을 수 없습니다."
+                ));
+
+        PromptPost prompt = promptRepository.findById(comment.getPromptId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "프롬프트를 찾을 수 없습니다."
+                ));
+
+        if (comment.isDeleted()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "삭제된 댓글은 숨김 해제할 수 없습니다."));
+        }
+
+        boolean changed = comment.unhide();
+
+        if (changed) {
+            commentRepository.save(comment);
+            prompt.increaseComments();
+            promptRepository.save(prompt);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>(
+                toResponse(comment, memberId, false, true)
+        );
+        body.put("changed", changed);
+
+        return ResponseEntity.ok(body);
     }
 
     @DeleteMapping("/api/comments/{commentId}")
@@ -143,7 +248,7 @@ public class CommentController {
     private ResponseEntity<?> deleteCommentEntity(Comment comment) {
         Long commentId = comment.getId();
         Long parentId = comment.getParentId();
-        boolean shouldDecreaseCount = !comment.isDeleted();
+        boolean shouldDecreaseCount = !comment.isDeleted() && !comment.isHidden();
 
         if (commentRepository.countByParentId(commentId) > 0) {
             comment.softDelete();
@@ -181,6 +286,12 @@ public class CommentController {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         requireViewablePrompt(comment.getPromptId(), authorization);
+
+        if (comment.isDeleted() || comment.isHidden()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "삭제되었거나 숨겨진 댓글에는 좋아요를 누를 수 없습니다."));
+        }
+
         if (!commentLikeRepository.existsByCommentIdAndMemberId(commentId, memberId)) {
             commentLikeRepository.save(new CommentLike(commentId, memberId));
             comment.increaseLikes();
@@ -204,29 +315,56 @@ public class CommentController {
         return ResponseEntity.ok(Map.of("id", commentId, "likes", comment.getLikes(), "isLiked", false));
     }
 
-    private Map<String, Object> toResponse(Comment comment, Long memberId, boolean includeReplies) {
+    private Map<String, Object> toResponse(
+            Comment comment,
+            Long memberId,
+            boolean includeReplies,
+            boolean revealHiddenText
+    ) {
         Map<String, Object> author = new LinkedHashMap<>();
         author.put("id", comment.getAuthorId());
         author.put("nickname", comment.getAuthorNickname());
+
+        boolean hidden = comment.isHidden();
+        String responseText = hidden && !revealHiddenText
+                ? "관리자에 의해 숨겨진 댓글입니다."
+                : comment.getText();
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", comment.getId());
         body.put("promptId", comment.getPromptId());
         body.put("parentId", comment.getParentId());
         body.put("author", author);
-        body.put("text", comment.getText());
+        body.put("text", responseText);
         body.put("likes", comment.getLikes());
         body.put("edited", comment.isEdited());
         body.put("deleted", comment.isDeleted());
+        body.put("hidden", hidden);
+        body.put(
+                "hiddenAt",
+                revealHiddenText && comment.getHiddenAt() != null
+                        ? comment.getHiddenAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                        : null
+        );
         body.put("isMine", memberId != null && memberId.equals(comment.getAuthorId()));
         body.put("isLiked", memberId != null && commentLikeRepository.existsByCommentIdAndMemberId(comment.getId(), memberId));
         body.put("isReported", false);
         body.put("createdAt", comment.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+
         if (includeReplies) {
-            body.put("replies", commentRepository.findByParentIdOrderByLikesDescCreatedAtAsc(comment.getId()).stream()
-                    .map(reply -> toResponse(reply, memberId, false))
-                    .toList());
+            body.put(
+                    "replies",
+                    commentRepository.findByParentIdOrderByLikesDescCreatedAtAsc(comment.getId()).stream()
+                            .map(reply -> toResponse(
+                                    reply,
+                                    memberId,
+                                    false,
+                                    revealHiddenText
+                            ))
+                            .toList()
+            );
         }
+
         return body;
     }
 

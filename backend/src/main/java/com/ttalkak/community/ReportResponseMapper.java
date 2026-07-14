@@ -31,6 +31,13 @@ public class ReportResponseMapper {
     }
 
     public Map<String, Object> toResponse(Report report) {
+        return toResponse(report, false);
+    }
+
+    public Map<String, Object> toResponse(
+            Report report,
+            boolean revealHiddenCommentText
+    ) {
         Map<String, Object> body = new LinkedHashMap<>();
 
         Member reporter = memberRepository.findById(report.getReporterId())
@@ -56,7 +63,7 @@ public class ReportResponseMapper {
         if ("prompt".equals(targetType)) {
             putPromptContext(body, report.getTargetId());
         } else if ("comment".equals(targetType)) {
-            putCommentContext(body, report.getTargetId());
+            putCommentContext(body, report.getTargetId(), revealHiddenCommentText);
         }
 
         return body;
@@ -65,6 +72,7 @@ public class ReportResponseMapper {
     private void putEmptyTargetContext(Map<String, Object> body) {
         body.put("targetExists", false);
         body.put("targetDeleted", null);
+        body.put("targetHidden", null);
         body.put("targetPreview", null);
         body.put("targetAuthorId", null);
         body.put("targetAuthorNickname", null);
@@ -94,7 +102,11 @@ public class ReportResponseMapper {
         body.put("promptAuthorNickname", prompt.getAuthorNickname());
     }
 
-    private void putCommentContext(Map<String, Object> body, Long commentId) {
+    private void putCommentContext(
+            Map<String, Object> body,
+            Long commentId,
+            boolean revealHiddenCommentText
+    ) {
         Comment comment = commentRepository.findById(commentId)
                 .orElse(null);
 
@@ -102,9 +114,14 @@ public class ReportResponseMapper {
             return;
         }
 
+        String targetText = comment.isHidden() && !revealHiddenCommentText
+                ? "관리자에 의해 숨겨진 댓글입니다."
+                : comment.getText();
+
         body.put("targetExists", true);
         body.put("targetDeleted", comment.isDeleted());
-        body.put("targetPreview", preview(comment.getText()));
+        body.put("targetHidden", comment.isHidden());
+        body.put("targetPreview", preview(targetText));
         body.put("targetAuthorId", comment.getAuthorId());
         body.put("targetAuthorNickname", comment.getAuthorNickname());
         body.put("promptId", comment.getPromptId());

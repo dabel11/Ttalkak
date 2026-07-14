@@ -138,6 +138,7 @@ ADMIN_NAME
 | `GET /api/make/folders` | 필수 | 배열 |
 | `GET /api/admin/reports` | ADMIN | 배열 |
 | `GET /api/admin/tags` | ADMIN | 배열 |
+| `GET /api/admin/prompts` | ADMIN | 페이지 객체 |
 
 ### 공통 페이지 객체
 
@@ -290,6 +291,8 @@ pageSize
   "likes": 0,
   "edited": false,
   "deleted": false,
+  "hidden": false,
+  "hiddenAt": null,
   "isMine": true,
   "createdAt": "2026-07-10T00:00:00",
   "promptTitle": "원문 프롬프트 제목",
@@ -310,6 +313,16 @@ pageSize
 ```text
 삭제된 댓글입니다.
 ```
+
+`hidden=true`인 댓글은 일반 사용자 응답에서 원문 대신 다음 문구를 반환합니다.
+
+```text
+관리자에 의해 숨겨진 댓글입니다.
+```
+
+일반 사용자에게는 `hiddenAt=null`로 반환합니다.
+
+관리자 댓글 조회 및 관리자 신고 응답에서는 숨겨진 댓글의 원문과 숨김 시각을 확인할 수 있습니다.
 
 ---
 
@@ -454,6 +467,7 @@ POST /api/reports/comments/{commentId}
   "createdAt": "2026-07-10T00:00:00",
   "targetExists": true,
   "targetDeleted": false,
+  "targetHidden": false,
   "targetPreview": "신고 대상 내용 미리보기",
   "targetAuthorId": 3,
   "targetAuthorNickname": "대상 작성자",
@@ -493,8 +507,12 @@ GET /api/admin/reports
 PATCH /api/admin/reports/{id}/status
 GET /api/admin/tags
 PATCH /api/admin/tags/{id}/status
+GET /api/admin/prompts
 PATCH /api/admin/prompts/{id}/hide
 PATCH /api/admin/prompts/{id}/restore
+DELETE /api/admin/comments/{commentId}
+PATCH /api/admin/comments/{commentId}/hide
+PATCH /api/admin/comments/{commentId}/unhide
 ```
 
 ### 신고 상태 변경
@@ -533,15 +551,35 @@ GET /api/admin/tags
 
 ---
 
-## 11. 댓글 삭제 정책
+## 11. 댓글 삭제 및 숨김 정책
 
-- 작성자 또는 관리자만 댓글을 수정·삭제할 수 있습니다.
-- 답글이 없는 댓글은 실제 삭제할 수 있습니다.
+### 댓글 삭제
+
+- 작성자 또는 관리자만 일반 댓글 삭제 API를 사용할 수 있습니다.
+- 관리자는 `DELETE /api/admin/comments/{commentId}`를 사용할 수 있습니다.
+- 답글이 없는 댓글은 DB에서 실제 삭제합니다.
 - 답글이 있는 부모 댓글은 soft delete 처리합니다.
 - soft delete된 댓글은 `deleted=true`가 됩니다.
 - 본문은 `삭제된 댓글입니다.`로 변경됩니다.
 - 기존 답글은 유지됩니다.
 - 마지막 답글이 삭제되면 soft delete된 부모 댓글도 DB에서 정리됩니다.
+
+### 관리자 댓글 숨김
+
+```http
+PATCH /api/admin/comments/{commentId}/hide
+PATCH /api/admin/comments/{commentId}/unhide
+```
+
+- 댓글 숨김과 숨김 해제는 `ADMIN` 역할만 가능합니다.
+- 숨김은 원문을 삭제하지 않으며 `hidden=true`와 `hiddenAt`을 저장합니다.
+- 일반 사용자에게는 원문 대신 `관리자에 의해 숨겨진 댓글입니다.`를 반환합니다.
+- 관리자 댓글 조회와 관리자 신고 응답에서는 원문을 확인할 수 있습니다.
+- 중복 숨김 또는 중복 숨김 해제 요청은 성공 응답과 함께 `changed=false`를 반환합니다.
+- 숨겨진 댓글은 수정, 답글 작성, 좋아요가 제한됩니다.
+- 숨김 처리 시 프롬프트의 공개 댓글 수를 1 감소시킵니다.
+- 숨김 해제 시 공개 댓글 수를 1 증가시킵니다.
+- 이미 숨겨진 댓글을 삭제하더라도 댓글 수를 다시 감소시키지 않습니다.
 
 ---
 
@@ -577,8 +615,6 @@ DELETE /api/auth/withdraw
 
 - demo token을 JWT 또는 세션 인증으로 교체
 - 관리자 사용자 활동 조회 API
-- 관리자 프롬프트 관리 목록 API
-- 관리자 댓글 삭제·숨김 API
 - 프롬프트 수정 요청 API
 - 신고 상태값 enum 및 전이 규칙
 - 태그 추천 상태값 enum 및 전이 규칙

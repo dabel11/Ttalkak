@@ -144,10 +144,17 @@ public class MeController {
                     map.put("id", comment.getId());
                     map.put("promptId", comment.getPromptId());
                     map.put("parentId", comment.getParentId());
-                    map.put("text", comment.getText());
+                    map.put(
+                            "text",
+                            comment.isHidden()
+                                    ? "관리자에 의해 숨겨진 댓글입니다."
+                                    : comment.getText()
+                    );
                     map.put("likes", comment.getLikes());
                     map.put("edited", comment.isEdited());
                     map.put("deleted", comment.isDeleted());
+                    map.put("hidden", comment.isHidden());
+                    map.put("hiddenAt", null);
                     map.put("isMine", true);
                     map.put("createdAt", comment.getCreatedAt().toString());
 
