@@ -17,6 +17,7 @@ import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
 import com.ttalkak.prompt.Tag;
 import com.ttalkak.prompt.TagRepository;
+import com.ttalkak.prompt.TagStatus;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -293,10 +294,24 @@ public class AdminController {
     public List<Map<String, Object>> tags(
             @RequestParam(required = false) String status
     ) {
+        String normalizedStatus =
+                normalizeTagFilterStatus(status);
+
         return tagRepository.findAll().stream()
-                .filter(tag -> status == null
-                        || status.isBlank()
-                        || status.equalsIgnoreCase(tag.getStatus()))
+                .filter(tag ->
+                        "all".equals(normalizedStatus)
+                                || normalizedStatus.equals(
+                                        tag.getStatus()
+                                )
+                )
+                .sorted(
+                        Comparator.comparing(Tag::getCreatedAt)
+                                .reversed()
+                                .thenComparing(
+                                        Tag::getId,
+                                        Comparator.reverseOrder()
+                                )
+                )
                 .map(this::tagMap)
                 .toList();
     }
@@ -312,7 +327,23 @@ public class AdminController {
             return ResponseEntity.notFound().build();
         }
 
-        tag.changeStatus(normalizeStatus(request.status(), "approved"));
+        TagStatus nextStatus = normalizeTagStatus(
+                request.status(),
+                TagStatus.APPROVED
+        );
+
+        if (!tag.canTransitionTo(nextStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "태그 상태를 "
+                            + tag.getStatus()
+                            + "에서 "
+                            + nextStatus.value()
+                            + "(으)로 변경할 수 없습니다."
+            );
+        }
+
+        tag.changeStatus(nextStatus);
         tagRepository.save(tag);
 
         return ResponseEntity.ok(tagMap(tag));
@@ -574,13 +605,41 @@ public class AdminController {
         ).value();
     }
 
-    private String normalizeStatus(
+    private TagStatus normalizeTagStatus(
             String status,
-            String defaultStatus
+            TagStatus defaultStatus
     ) {
-        return status == null || status.isBlank()
-                ? defaultStatus
-                : status.trim().toLowerCase(Locale.ROOT);
+        if (status == null || status.isBlank()) {
+            return defaultStatus;
+        }
+
+        try {
+            return TagStatus.fromValue(status);
+        }
+        catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "status는 pending, approved, rejected, disabled 중 하나여야 합니다."
+            );
+        }
+    }
+
+    private String normalizeTagFilterStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "all";
+        }
+
+        String normalized =
+                status.trim().toLowerCase(Locale.ROOT);
+
+        if ("all".equals(normalized)) {
+            return normalized;
+        }
+
+        return normalizeTagStatus(
+                normalized,
+                TagStatus.APPROVED
+        ).value();
     }
 
     private record ActivityItem(

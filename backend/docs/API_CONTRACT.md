@@ -652,6 +652,117 @@ GET /api/admin/reports?status=all
 - 필터를 생략하면 전체 신고를 반환합니다.
 - 잘못된 필터값은 `400 Bad Request`를 반환합니다.
 
+### 태그 제안 및 상태 관리
+
+공개 태그 조회:
+
+```http
+GET /api/tags?query=검색어&limit=8
+GET /api/tags/popular?limit=8
+```
+
+- 로그인 없이 호출할 수 있습니다.
+- `approved` 상태인 태그만 공개 조회 결과에 포함됩니다.
+- `pending`, `rejected`, `disabled` 상태의 태그는 공개되지 않습니다.
+- `limit`은 최소 1, 최대 100으로 보정합니다.
+- 태그 검색은 이름의 일부가 일치하는 결과를 사용 횟수 내림차순으로 반환합니다.
+
+태그 제안:
+
+```http
+POST /api/tags/proposals
+```
+
+- 로그인이 필요합니다.
+- 비로그인 요청은 `401 Unauthorized`를 반환합니다.
+- 태그 이름에서 앞뒤 공백과 `#`을 제거하고 소문자로 정규화합니다.
+- 빈 태그 이름은 `400 Bad Request`를 반환합니다.
+- 새로운 제안 태그는 `pending` 상태로 생성됩니다.
+- 같은 이름의 태그가 이미 존재하면 새 레코드를 만들지 않고 기존 태그를 반환합니다.
+
+요청 예시:
+
+```json
+{
+  "name": "#SpringBoot"
+}
+```
+
+신규 태그 응답 예시:
+
+```json
+{
+  "id": 15,
+  "name": "springboot",
+  "useCount": 0,
+  "status": "pending"
+}
+```
+
+관리자 태그 조회:
+
+```http
+GET /api/admin/tags
+GET /api/admin/tags?status=pending
+GET /api/admin/tags?status=approved
+GET /api/admin/tags?status=rejected
+GET /api/admin/tags?status=disabled
+GET /api/admin/tags?status=all
+```
+
+- `ADMIN` 역할이 필요합니다.
+- 필터를 생략하면 전체 태그를 반환합니다.
+- 최신 생성 태그부터 정렬합니다.
+- 잘못된 필터값은 `400 Bad Request`를 반환합니다.
+
+관리자 태그 상태 변경:
+
+```http
+PATCH /api/admin/tags/{id}/status
+```
+
+요청 예시:
+
+```json
+{
+  "status": "approved"
+}
+```
+
+허용 상태:
+
+```text
+pending
+approved
+rejected
+disabled
+```
+
+상태 의미:
+
+- `pending`: 사용자가 제안하여 관리자 검토를 기다리는 상태
+- `approved`: 공개 검색과 인기 태그 목록에 노출되는 상태
+- `rejected`: 제안이 거절되어 종결된 상태
+- `disabled`: 승인된 태그를 일시적으로 공개하지 않는 상태
+
+허용되는 상태 전이:
+
+```text
+pending  -> approved
+pending  -> rejected
+approved -> disabled
+disabled -> approved
+```
+
+처리 규칙:
+
+- `rejected`는 최종 상태이므로 이후 다른 상태로 변경할 수 없습니다.
+- 같은 상태로 다시 변경하는 요청도 허용하지 않습니다.
+- 허용되지 않는 상태 전이는 `409 Conflict`를 반환합니다.
+- 지원하지 않는 상태값은 `400 Bad Request`를 반환합니다.
+- 상태 변경 요청에서 `status`가 비어 있으면 기본값으로 `approved`를 사용합니다.
+- API 응답과 DB에는 상태값을 소문자로 유지합니다.
+
 ### 관리자 목록 응답
 
 현재 아래 API는 페이지 객체가 아니라 배열을 반환합니다.
@@ -846,7 +957,6 @@ DELETE /api/auth/withdraw
 아래 기능은 아직 최종 구현이 아닙니다.
 
 - demo token을 JWT 또는 세션 인증으로 교체
-- 태그 추천 상태값 enum 및 전이 규칙
 - Make와 Admin 목록 API 페이지네이션 통일
 - 운영 환경 관리자 기본 비밀번호 제거
 
