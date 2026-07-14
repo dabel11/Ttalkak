@@ -365,6 +365,7 @@ const state = {
   adminTagQuery: "",
   adminTagFilter: "all",
   adminTagSort: "usage",
+  adminTagPromptKey: "",
   adminUserQuery: "",
   adminUserActivityNickname: "",
   adminPromptRevisionRequests: {},
@@ -1990,23 +1991,26 @@ function AdminPage() {
       ${
         adminTags.length
           ? adminTags
-              .map(
-                (tag) => `
-                  <article class="admin-row tag-status-${tag.status}">
+              .map((tag) => {
+                const isSelectedTag = state.adminTagPromptKey === tag.key;
+                return `
+                  <article class="admin-row tag-status-${tag.status} ${isSelectedTag ? "admin-tag-selected" : ""}">
                     <div>
                       <strong>#${escapeHtml(tag.label)}</strong>
                       <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
                       <span class="admin-tag-usage">사용 ${formatNumber(tag.count)}회</span>
                     </div>
                     <div class="admin-actions">
+                      <button type="button" data-admin-tag-prompts="${escapeHtml(tag.key)}">${isSelectedTag ? "사용 게시물 닫기" : "사용 게시물 보기"}</button>
                       ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
                       ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
                       ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">검토 완료 취소</button>` : ""}
                       ${tag.status === "rejected" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
                     </div>
                   </article>
-                `,
-              )
+                  ${isSelectedTag ? AdminTagPromptUsagePanel(tag) : ""}
+                `;
+              })
               .join("")
           : `<p class="admin-empty">관리할 태그가 없습니다.</p>`
       }
@@ -2036,6 +2040,52 @@ function AdminPage() {
           ${activePanel}
         </div>
       </div>
+    </section>
+  `;
+}
+
+function AdminTagPromptUsagePanel(tag) {
+  const prompts = getAdminPromptsByTag(tag.key);
+  const visiblePrompts = prompts.slice(0, 5);
+  const remainingCount = Math.max(0, prompts.length - visiblePrompts.length);
+
+  return `
+    <section class="admin-tag-usage-panel" aria-label="#${escapeHtml(tag.label)} 사용 게시물">
+      <div class="admin-tag-usage-head">
+        <div>
+          <h3>#${escapeHtml(tag.label)} 사용 게시물</h3>
+          <p>태그 검토를 위해 이 태그가 붙은 게시물 맥락을 확인합니다.</p>
+        </div>
+        <span>${formatNumber(prompts.length)}개</span>
+      </div>
+      ${
+        visiblePrompts.length
+          ? visiblePrompts
+              .map((prompt) => {
+                const isShared = prompt.isShared || prompt.source === "community";
+                const isHidden = state.adminHiddenPromptIds.has(prompt.id);
+                return `
+                  <article class="admin-tag-prompt-item">
+                    <div>
+                      <strong>${escapeHtml(prompt.title)}</strong>
+                      <p>${escapeHtml(makePreview(prompt.text))}</p>
+                      <div class="admin-prompt-meta">
+                        <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
+                        <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
+                        <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
+                        ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
+                      </div>
+                    </div>
+                    <div class="admin-actions">
+                      <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<p class="admin-empty">이 태그가 붙은 게시물이 없습니다.</p>`
+      }
+      ${remainingCount ? `<p class="admin-panel-note">먼저 5개만 표시합니다. 나머지 ${formatNumber(remainingCount)}개는 백엔드 페이지네이션 API 연결 후 이어서 확인할 수 있습니다.</p>` : ""}
     </section>
   `;
 }
@@ -3136,6 +3186,14 @@ function bindEvents() {
         return;
       }
       updateAdminTagDecision(tag, decision);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-tag-prompts]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tag = button.dataset.adminTagPrompts || "";
+      state.adminTagPromptKey = state.adminTagPromptKey === tag ? "" : tag;
       render();
     });
   });
@@ -5748,6 +5806,15 @@ function getAdminManagedTags() {
     .slice(0, 16);
 }
 
+function getAdminPromptsByTag(tagKey) {
+  const normalizedTag = normalizeTag(tagKey || "");
+  if (!normalizedTag) return [];
+
+  return getUniquePrompts([...popularPrompts, ...savedPrompts])
+    .filter((prompt) => (prompt.tags || []).some((tag) => normalizeTag(tag) === normalizedTag))
+    .sort((a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a));
+}
+
 function getTagStats() {
   const stats = new Map();
 
@@ -6835,6 +6902,7 @@ function persistState() {
           adminTagQuery: state.adminTagQuery,
           adminTagFilter: state.adminTagFilter,
           adminTagSort: state.adminTagSort,
+          adminTagPromptKey: state.adminTagPromptKey,
           adminUserQuery: state.adminUserQuery,
           adminUserActivityNickname: state.adminUserActivityNickname,
           adminPromptRevisionRequests: state.adminPromptRevisionRequests,
@@ -6906,6 +6974,7 @@ function loadPersistedState() {
       ? savedState.adminTagFilter
       : "all";
     state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
+    state.adminTagPromptKey = savedState.adminTagPromptKey || "";
     state.adminUserQuery = savedState.adminUserQuery || "";
     state.adminUserActivityNickname = savedState.adminUserActivityNickname || "";
     state.adminPromptRevisionRequests =
