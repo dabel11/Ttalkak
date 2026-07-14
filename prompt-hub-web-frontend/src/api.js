@@ -147,6 +147,7 @@
       saves: toNumber(item?.saves, item?.saveCount, item?.savedCount, item?.bookmarkCount),
       likes: toNumber(item?.likes, item?.likeCount, item?.likedCount),
       author: normalizedAuthor,
+      authorId: String(item?.author?.id || item?.authorId || item?.memberId || item?.writerId || ""),
       owner: normalizeAuthor(item?.owner, normalizedAuthor),
       source: item?.source || (item?.mine || item?.isMine ? "mine" : "community"),
       isShared: item?.isShared ?? item?.shared ?? item?.public ?? true,
@@ -187,7 +188,8 @@
 
   function normalizeAdminTag(item, index = 0) {
     const label = normalizePopularTag(item) || `tag-${index}`;
-    const status = String(item?.status || "pending").toLowerCase();
+    const rawStatus = String(item?.status || "pending").toLowerCase();
+    const status = rawStatus === "disabled" ? "rejected" : rawStatus;
     return {
       id: String(item?.id || item?.tagId || label),
       key: label.replace(/^#+/, "").trim().toLowerCase(),
@@ -196,6 +198,58 @@
       count: toNumber(item?.useCount, item?.count, item?.usageCount),
       recentAt: toTimestamp(item?.createdAt, item?.updatedAt),
       raw: item,
+    };
+  }
+
+  function normalizeRevisionRequest(item, index = 0) {
+    const prompt = item?.prompt && typeof item.prompt === "object" ? normalizePrompt(item.prompt) : null;
+    const targetType = String(item?.targetType || item?.type || (item?.commentId ? "comment" : "prompt")).toLowerCase();
+    return {
+      id: String(item?.id || item?.requestId || item?.revisionRequestId || `backend-revision-${index}`),
+      key: `${targetType}:${item?.targetId || item?.promptId || item?.commentId || prompt?.id || item?.id || index}`,
+      type: targetType,
+      targetId: String(item?.targetId || item?.promptId || item?.commentId || prompt?.id || ""),
+      promptId: String(item?.promptId || prompt?.id || ""),
+      status: String(item?.status || "pending").toLowerCase(),
+      reason: String(item?.reason || item?.memo || item?.adminMemo || item?.message || ""),
+      requestedAt: toTimestamp(item?.requestedAt, item?.createdAt, item?.createdDate),
+      reviewedAt: item?.reviewedAt ? toTimestamp(item.reviewedAt) : 0,
+      prompt,
+      raw: item,
+    };
+  }
+
+  function normalizeAdminUserActivity(payload) {
+    const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+    const member = data.member || data.user || {};
+    const activities = unwrapItems(data.activities || data.items || data.content);
+    const nickname = normalizeAuthor(member, data.nickname || data.memberNickname || "사용자");
+    const groups = { prompts: [], comments: [], replies: [], reportsMade: [], reportsReceived: [] };
+
+    activities.forEach((activity) => {
+      const type = String(activity?.type || "").toLowerCase();
+      const item = {
+        title: String(activity?.title || activity?.promptTitle || activity?.targetTitle || type || "활동"),
+        preview: String(activity?.preview || activity?.text || activity?.content || activity?.reason || ""),
+        promptId: activity?.promptId ? String(activity.promptId) : "",
+        commentId: activity?.commentId || activity?.id ? String(activity.commentId || activity.id) : "",
+        occurredAt: toTimestamp(activity?.occurredAt, activity?.createdAt, activity?.updatedAt),
+        raw: activity,
+      };
+
+      if (type === "prompt") groups.prompts.push(item);
+      else if (type === "comment") groups.comments.push(item);
+      else if (type === "reply") groups.replies.push(item);
+      else if (type === "report" || type === "report_made") groups.reportsMade.push(item);
+      else if (type === "reported" || type === "report_received") groups.reportsReceived.push(item);
+    });
+
+    return {
+      nickname,
+      memberId: member.id || data.memberId || data.userId || "",
+      summary: data.summary || {},
+      ...groups,
+      raw: data,
     };
   }
 
@@ -488,6 +542,40 @@
     checkNickname(nickname) {
       const query = new URLSearchParams({ nickname });
       return request(`/api/auth/check-nickname?${query.toString()}`);
+    },
+    getAdminPrompts({ status = "", page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      if (status) query.set("status", status);
+      return request(`/api/admin/prompts?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizePrompt));
+    },
+    getAdminUserActivity(memberId, { limit = 20 } = {}, token) {
+      const query = new URLSearchParams({ limit });
+      return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
+    },
+    getMyRevisionRequests({ status = "all" } = {}, token) {
+      const query = new URLSearchParams();
+      if (status) query.set("status", status);
+      return request(`/api/me/revision-requests${query.toString() ? `?${query.toString()}` : ""}`, { token }).then((payload) => unwrapItems(payload).map(normalizeRevisionRequest));
+    },
+    getAdminRevisionRequests({ status = "all", page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      if (status) query.set("status", status);
+      return request(`/api/admin/revision-requests?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeRevisionRequest));
+    },
+    requestPromptRevision(promptId, payload, token) {
+      return request(`/api/prompts/${promptId}/revision-requests`, { method: "POST", token, body: JSON.stringify(payload) }).then(normalizeRevisionRequest);
+    },
+    updateAdminRevisionRequestStatus(requestId, status, token, memo = "") {
+      return request(`/api/admin/revision-requests/${requestId}/status`, { method: "PATCH", token, body: JSON.stringify({ status, memo }) }).then(normalizeRevisionRequest);
+    },
+    hideAdminComment(commentId, token) {
+      return request(`/api/admin/comments/${commentId}/hide`, { method: "PATCH", token }).then(normalizeComment);
+    },
+    unhideAdminComment(commentId, token) {
+      return request(`/api/admin/comments/${commentId}/unhide`, { method: "PATCH", token }).then(normalizeComment);
+    },
+    deleteAdminComment(commentId, token) {
+      return request(`/api/admin/comments/${commentId}`, { method: "DELETE", token });
     },
     getAdminReports({ status = "" } = {}, token) {
       const query = new URLSearchParams();

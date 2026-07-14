@@ -1,5 +1,18 @@
 # Backend Handoff Message
 
+## 2026-07-14 Frontend Admin Integration Summary
+
+The frontend now attempts real Admin API calls before local demo fallback.
+
+- Reports: `GET /api/admin/reports`, `PATCH /api/admin/reports/{id}/status`
+- Prompts: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`
+- Revision requests: `POST /api/prompts/{promptId}/revision-requests`, `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
+- Comments: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
+- Tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
+- User activity: `GET /api/admin/users/{memberId}/activities`
+
+The frontend maps report statuses as `pending`, `reviewed`, `resolved`, `dismissed`, and maps tag recommendation exclusion to backend `disabled`. Admin accounts are treated as operation-only accounts: normal user actions are hidden/blocked in the UI, and the backend should enforce the same policy server-side.
+
 TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
 현재 버전은 백엔드 없이도 전체 UX를 확인할 수 있도록 `src/app.js`의 로컬 상태와 브라우저 `localStorage` fallback을 유지합니다. 동시에 Home, Make, 인증, 저장/좋아요/댓글/공유 일부 흐름은 `src/api.js`를 통해 Spring Boot API 요청을 발생시키므로 Network 탭에서 연동 상태를 확인할 수 있습니다.

@@ -1,5 +1,28 @@
 # TTALKAK API Spec Draft
 
+## Current Admin API Contract Used By Frontend
+
+The frontend first attempts the following backend endpoints for Admin features. If a request fails during local QA, the UI may keep demo fallback state so reviewers can continue checking layout, but production behavior must be server-authorized.
+
+| Feature | Method + path | Request body | Notes |
+| --- | --- | --- | --- |
+| Report list | `GET /api/admin/reports?status=pending` | none | Should return report target context, reporter, author/comment author, status, memo, reviewedAt |
+| Report status update | `PATCH /api/admin/reports/{id}/status` | `{ status, memo? }` | `status`: `pending`, `reviewed`, `resolved`, `dismissed` |
+| Admin prompt list | `GET /api/admin/prompts?page=1&pageSize=64&status=...` | none | Used by prompt management and user activity fallback |
+| Hide prompt | `PATCH /api/admin/prompts/{id}/hide` | none or `{ memo? }` | Admin moderation action |
+| Restore prompt | `PATCH /api/admin/prompts/{id}/restore` | none or `{ memo? }` | Admin moderation action |
+| Prompt revision request | `POST /api/prompts/{promptId}/revision-requests` | `{ reason, memo? }` | Admin asks author to revise; admin should not directly edit user text |
+| Admin revision requests | `GET /api/admin/revision-requests?page=1&pageSize=64&status=...` | none | Used to show revision-requested state in Admin/My page |
+| Revision request status | `PATCH /api/admin/revision-requests/{requestId}/status` | `{ status, memo? }` | Same status family as reports where possible |
+| Hide comment | `PATCH /api/admin/comments/{commentId}/hide` | none or `{ memo? }` | Admin moderation action |
+| Unhide comment | `PATCH /api/admin/comments/{commentId}/unhide` | none or `{ memo? }` | Admin moderation action |
+| Delete comment | `DELETE /api/admin/comments/{commentId}` | none or `{ memo? }` | Admin moderation action |
+| Admin tags | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `disabled` supported by frontend |
+| Tag status update | `PATCH /api/admin/tags/{id}/status` | `{ status }` | Frontend maps recommendation-excluded UI to `disabled` |
+| User activity | `GET /api/admin/users/{memberId}/activities?limit=20` | none | Admin-only lookup for authored prompts, comments, replies, reports made, reports received |
+
+Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked.
+
 프론트엔드 프로토타입 기준의 백엔드 API 초안입니다. 실제 경로와 응답 형태는 Spring Boot 구현 방식에 맞춰 조정해도 됩니다.
 
 ## Auth
@@ -44,7 +67,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, My page에는 내 프롬프트로 유지 |
 | 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | My page의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
-| 관리자 프롬프트 수정 요청/삭제 | `POST /api/admin/prompts/:id/revision-request`, `DELETE /api/admin/prompts/:id` | varies | 관리자는 사용자 콘텐츠를 직접 수정하지 않고 수정 요청 또는 운영 조치만 수행 |
+| 관리자 프롬프트 수정 요청/삭제 | `POST /api/prompts/:id/revision-requests`, `DELETE /api/prompts/:id` | varies | 관리자는 사용자 콘텐츠를 직접 수정하지 않고 수정 요청 또는 운영 조치만 수행 |
 | 저장 | `POST /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 저장 취소 | `DELETE /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 좋아요 | `POST /api/prompts/:id/like` | none | 좋아요 수와 `isLiked` 반환 |
@@ -80,14 +103,14 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
 | 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 게시물 작성자, 댓글 작성자, 처리 상태, 원문 강조용 target id |
-| 신고 검토 완료 | `PATCH /api/admin/reports/:id` | `{ status: "resolved", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
-| 신고 기각 | `PATCH /api/admin/reports/:id` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
-| 신고 재처리 | `PATCH /api/admin/reports/:id` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |
+| 신고 검토 완료 | `PATCH /api/admin/reports/:id/status` | `{ status: "reviewed", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
+| 신고 기각 | `PATCH /api/admin/reports/:id/status` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
+| 신고 재처리 | `PATCH /api/admin/reports/:id/status` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |
 | 신고 대상 삭제 | `DELETE /api/admin/reports/:id/target` | `{ memo? }` | 대상이 프롬프트/댓글/대댓글인지에 따라 삭제 |
-| 프롬프트 수정 요청 | `POST /api/admin/prompts/:id/revision-request` | `{ reason }` | 작성자에게 수정 요청을 전달, 관리자와 요청 시각 감사 로그 필요 |
+| 프롬프트 수정 요청 | `POST /api/prompts/:id/revision-requests` | `{ reason, memo? }` | 작성자에게 수정 요청을 전달, 관리자와 요청 시각 감사 로그 필요 |
 | 전체 프롬프트 삭제 | `DELETE /api/admin/prompts/:id` | `{ memo? }` | 삭제 사유와 관리자 감사 로그 필요 |
 | 태그 관리 | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected` 상태와 사용 횟수 반환 |
-| 태그 상태 변경 | `PATCH /api/admin/tags/:id` | `{ status: "pending" \| "approved" \| "rejected", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
+| 태그 상태 변경 | `PATCH /api/admin/tags/:id/status` | `{ status: "pending" \| "approved" \| "disabled", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
 
 Admin status model:
 

@@ -266,17 +266,26 @@ const PROTECTED_BACKEND_ACTIONS = new Set([
   "addComment",
   "addReply",
   "deleteComment",
+  "deleteAdminComment",
   "deleteMakeFolder",
   "deletePrompt",
+  "hideAdminComment",
+  "hideAdminPrompt",
   "likeComment",
   "likePrompt",
   "reportComment",
   "reportPrompt",
+  "requestPromptRevision",
+  "restoreAdminPrompt",
   "savePrompt",
   "unlikeComment",
   "unlikePrompt",
+  "unhideAdminComment",
   "unsavePrompt",
   "unsharePrompt",
+  "updateAdminReportStatus",
+  "updateAdminRevisionRequestStatus",
+  "updateAdminTagStatus",
   "updateComment",
   "updateMakeFolder",
 ]);
@@ -404,6 +413,9 @@ const state = {
   backendLibraryPromptIds: new Set(),
   backendAdminReports: [],
   backendAdminTags: [],
+  backendAdminPrompts: [],
+  backendAdminRevisionRequests: [],
+  backendAdminUserActivities: {},
   makeBackendStatus: "idle",
   makeBackendMessage: "",
   popularSort: "popular",
@@ -674,7 +686,9 @@ function Sidebar() {
 
 function getAdminTabs() {
   const reportRecords = getAdminReportRecords();
-  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const allPrompts = state.backendAdminPrompts.length
+    ? getUniquePrompts(state.backendAdminPrompts)
+    : getUniquePrompts([...popularPrompts, ...savedPrompts]);
   const adminPromptQuery = state.adminPromptQuery || "";
   const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
     ? state.adminPromptFilter
@@ -1031,7 +1045,7 @@ function PromptDetailModal() {
               <span>${icons.eye}${formatNumber(prompt.views)}</span>
               ${
                 isAdminReview
-                  ? `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
+                  ? `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
                   : `<button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
               }
               <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
@@ -1780,7 +1794,7 @@ function MyReportsPanel() {
                         ${report.memo ? `<p class="activity-reason">처리 메모: ${escapeHtml(report.memo)}</p>` : ""}
                         ${report.reviewedAt ? `<small class="activity-meta">처리 일시 ${formatShortDate(report.reviewedAt)}</small>` : ""}
                       </div>
-                      <span class="status-badge ${report.status === "resolved" ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
+                      <span class="status-badge ${["reviewed", "resolved"].includes(report.status) ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
                     </article>
                   `,
                 )
@@ -1806,7 +1820,9 @@ function AdminPage() {
 
   const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
   const reportRecords = getAdminReportRecords();
-  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const allPrompts = state.backendAdminPrompts.length
+    ? getUniquePrompts(state.backendAdminPrompts)
+    : getUniquePrompts([...popularPrompts, ...savedPrompts]);
   const adminPromptQuery = state.adminPromptQuery || "";
   const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
     ? state.adminPromptFilter
@@ -1867,7 +1883,7 @@ function AdminPage() {
                       ${record.contextTitle ? `<p class="admin-report-context">게시물: ${escapeHtml(record.contextTitle)}</p>` : ""}
                       ${record.targetPreview ? `<p class="admin-report-target">${escapeHtml(record.targetPreview)}</p>` : ""}
                       <p>${escapeHtml(record.summary)}</p>
-                      <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
+                      <span class="status-badge ${record.status === "dismissed" ? "private" : ["reviewed", "resolved"].includes(record.status) ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
                       ${record.promptAuthor ? `<span class="status-badge private">게시물 작성자 ${escapeHtml(record.promptAuthor)}</span>` : ""}
                       ${record.commentAuthor ? `<span class="status-badge private">댓글 작성자 ${escapeHtml(record.commentAuthor)}</span>` : ""}
                       ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
@@ -1880,9 +1896,9 @@ function AdminPage() {
                       }
                       <button type="button" data-admin-request-revision="${record.key}">수정 요청</button>
                       ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "게시물 숨김 해제" : "게시물 숨김"}</button>` : ""}
-                      ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">검토 완료</button>` : ""}
+                      ${record.status !== "reviewed" ? `<button type="button" data-admin-report-status="${record.key}:reviewed">검토 완료</button>` : ""}
                       ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
-                      ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
+                      ${["reviewed", "resolved"].includes(record.status) ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
                       ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
                       ${
                         record.type === "comment"
@@ -1934,7 +1950,7 @@ function AdminPage() {
                     <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
                     <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
                     <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
-                    <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
+                    <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
                     <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
                   </div>
                   <div class="tag-row admin-prompt-tags">${(prompt.tags || []).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}</div>
@@ -2070,7 +2086,7 @@ function AdminTagPromptUsagePanel(tag) {
                       <strong>${escapeHtml(prompt.title)}</strong>
                       <p>${escapeHtml(makePreview(prompt.text))}</p>
                       <div class="admin-prompt-meta">
-                        <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
+                        <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
                         <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
                         <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
                         ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
@@ -2649,7 +2665,7 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openAdminUserActivity(button.dataset.adminUserAuthor);
+      openAdminUserActivity(button.dataset.adminUserAuthor, { memberId: button.dataset.adminUserId });
     });
   });
 
@@ -4328,6 +4344,10 @@ function getDisplayPromptAuthor(prompt) {
   return "익명 사용자";
 }
 
+function getPromptAuthorId(prompt) {
+  return String(prompt?.authorId || prompt?.raw?.author?.id || prompt?.raw?.authorId || prompt?.raw?.memberId || "");
+}
+
 function stampCurrentUserOwnedPrompts() {
   const currentUser = String(state.currentUser || "").trim();
   if (!currentUser) return;
@@ -4567,7 +4587,8 @@ function performDeleteComment(commentId) {
     if (!removed) continue;
 
     if (isBackendNumericId(commentId)) {
-      callBackendApi("deleteComment", commentId).then(() => {
+      const apiName = state.adminMode && window.TTALKAK_API?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
+      callBackendApi(apiName, commentId).then(() => {
         if (hasBackendAuthToken()) hydratePromptComments(promptId);
       });
     }
@@ -5510,7 +5531,7 @@ function searchByAuthor(author) {
   restoreSearchFocus();
 }
 
-function openAdminUserActivity(nickname, options = {}) {
+async function openAdminUserActivity(nickname, options = {}) {
   const cleanNickname = String(nickname || "").trim();
   if (!cleanNickname) return;
   const resolvedNickname = resolveAdminUserNickname(cleanNickname);
@@ -5523,6 +5544,24 @@ function openAdminUserActivity(nickname, options = {}) {
   state.detailHighlightCommentId = null;
   showNotice(`${resolvedNickname}님의 활동을 조회합니다.`);
   render();
+
+  const memberId = String(options.memberId || "").trim();
+  if (memberId && window.TTALKAK_API?.getAdminUserActivity) {
+    try {
+      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, {}, state.authToken || state.token || undefined);
+      state.backendAdminUserActivities = {
+        ...state.backendAdminUserActivities,
+        [normalizeAdminSearchText(resolvedNickname)]: {
+          ...activity,
+          nickname: activity.nickname || resolvedNickname,
+        },
+      };
+      render();
+    } catch (error) {
+      handleBackendAccessError(error, "사용자 활동 API 조회에 실패했습니다. 데모 데이터로 표시합니다.");
+      console.warn("[TTALKAK] /api/admin/users/{memberId}/activities 호출에 실패해 데모 활동을 유지합니다.", error);
+    }
+  }
 }
 
 function resolveAdminUserNickname(value) {
@@ -5550,7 +5589,7 @@ function getAdminKnownNicknames() {
     nicknameMap.set(normalizedNickname, cleanNickname);
   };
 
-  getUniquePrompts([...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+  getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts]).forEach((prompt) => {
     addNickname(getDisplayPromptAuthor(prompt));
     getSortedPromptComments(prompt.id).forEach((comment) => {
       addNickname(comment.author || comment.owner);
@@ -5938,7 +5977,9 @@ function getMyReports() {
 function getAdminUserActivity(nickname) {
   const cleanNickname = String(nickname || "").trim();
   const normalizedNickname = normalizeAdminSearchText(cleanNickname);
-  const prompts = getUniquePrompts([...popularPrompts, ...savedPrompts])
+  const backendActivity = state.backendAdminUserActivities[normalizedNickname];
+  if (backendActivity) return backendActivity;
+  const prompts = getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts])
     .filter((prompt) => normalizeAdminSearchText(getDisplayPromptAuthor(prompt)) === normalizedNickname)
     .map((prompt) => ({
       title: prompt.title,
@@ -5948,7 +5989,7 @@ function getAdminUserActivity(nickname) {
 
   const comments = [];
   const replies = [];
-  getUniquePrompts([...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+  getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts]).forEach((prompt) => {
     getSortedPromptComments(prompt.id).forEach((comment) => {
       if (normalizeAdminSearchText(comment.author || comment.owner) === normalizedNickname) {
         comments.push({
@@ -6009,15 +6050,17 @@ function getReportRecord(key) {
 
 function mapBackendReportStatus(status) {
   const normalized = String(status || "pending").toLowerCase();
-  if (["reviewed", "resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
+  if (normalized === "reviewed") return "reviewed";
+  if (["resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
   if (["dismissed", "rejected", "reject"].includes(normalized)) return "dismissed";
   return "pending";
 }
 
 function mapFrontendReportStatus(status) {
-  if (status === "resolved") return "REVIEWED";
-  if (status === "dismissed") return "DISMISSED";
-  return "PENDING";
+  if (status === "reviewed") return "reviewed";
+  if (status === "resolved") return "resolved";
+  if (status === "dismissed") return "dismissed";
+  return "pending";
 }
 
 function makeRevisionRequestKey(type, id) {
@@ -6131,6 +6174,7 @@ function getAdminReportRecords() {
 function getReportStatusLabel(status) {
   if (status === "revision-requested") return "수정 요청됨";
   if (status === "dismissed") return "기각";
+  if (status === "reviewed") return "검토 완료";
   if (status === "resolved") return "검토 완료";
   return "접수";
 }
@@ -6200,9 +6244,10 @@ async function updateAdminTagDecision(tag, decision) {
   if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
 
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
-  if (backendTag?.id && window.TTALKAK_API?.updateAdminTagStatus) {
+  if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
     try {
-      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, decision.toUpperCase(), state.authToken || state.token || undefined);
+      const backendDecision = decision === "rejected" ? "disabled" : decision;
+      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, backendDecision, state.authToken || state.token || undefined);
       state.backendAdminTags = state.backendAdminTags.map((item) =>
         item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
       );
@@ -6224,9 +6269,9 @@ async function updateAdminTagDecision(tag, decision) {
 }
 
 async function updateReportRecordStatus(key, status) {
-  if (!key || !["pending", "dismissed", "resolved"].includes(status)) return;
+  if (!key || !["pending", "reviewed", "dismissed", "resolved"].includes(status)) return;
   const record = getReportRecord(key);
-  if (record.backendId && window.TTALKAK_API?.updateAdminReportStatus) {
+  if (record.backendId && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminReportStatus) {
     try {
       const updated = await window.TTALKAK_API.updateAdminReportStatus(
         record.backendId,
@@ -6248,7 +6293,7 @@ async function updateReportRecordStatus(key, status) {
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
 }
 
-function requestPromptRevision(targetKey, reason) {
+async function requestPromptRevision(targetKey, reason) {
   const target = getRevisionRequestTarget(targetKey);
   const content = String(reason || "").trim();
 
@@ -6258,14 +6303,29 @@ function requestPromptRevision(targetKey, reason) {
     return;
   }
 
+  let backendRequest = null;
+  if (target.type === "prompt" && isBackendNumericId(target.id) && hasBackendAuthToken() && window.TTALKAK_API?.requestPromptRevision) {
+    try {
+      backendRequest = await window.TTALKAK_API.requestPromptRevision(
+        target.id,
+        { reason: content, memo: content },
+        state.authToken || state.token || undefined,
+      );
+    } catch (error) {
+      handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다. 데모 상태로만 표시합니다.");
+      console.warn("[TTALKAK] /api/prompts/{id}/revision-requests 호출에 실패해 데모 상태만 변경합니다.", error);
+    }
+  }
+
   state.adminPromptRevisionRequests = {
     ...state.adminPromptRevisionRequests,
     [target.key]: {
+      id: backendRequest?.id || "",
       type: target.type,
       targetId: target.id,
-      reason: content,
-      requestedAt: Date.now(),
-      status: "requested",
+      reason: backendRequest?.reason || content,
+      requestedAt: backendRequest?.requestedAt || Date.now(),
+      status: backendRequest?.status || "pending",
     },
   };
   state.adminRequestTargetKey = null;
@@ -6824,13 +6884,19 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
 async function hydrateBackendAdminDataIfNeeded() {
   if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
   const api = window.TTALKAK_API;
-  if (!api?.getAdminReports && !api?.getAdminTags) return;
+  if (!api?.getAdminReports && !api?.getAdminTags && !api?.getAdminPrompts && !api?.getAdminRevisionRequests) return;
+  if (!hasBackendAuthToken()) {
+    state.adminBackendStatus = "demo";
+    return;
+  }
 
   state.adminBackendStatus = "checking";
   const token = state.authToken || state.token || undefined;
-  const [reportsResult, tagsResult] = await Promise.allSettled([
+  const [reportsResult, tagsResult, promptsResult, revisionRequestsResult] = await Promise.allSettled([
     api.getAdminReports?.({}, token),
     api.getAdminTags?.({}, token),
+    api.getAdminPrompts?.({}, token),
+    api.getAdminRevisionRequests?.({}, token),
   ]);
 
   let shouldRender = false;
@@ -6861,6 +6927,34 @@ async function hydrateBackendAdminDataIfNeeded() {
     shouldRender = true;
   } else if (tagsResult.status === "rejected") {
     console.warn("[TTALKAK] /api/admin/tags 연동에 실패해 데모 태그 데이터를 유지합니다.", tagsResult.reason);
+  }
+
+  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value)) {
+    state.backendAdminPrompts = promptsResult.value;
+    shouldRender = true;
+  } else if (promptsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/prompts 연동에 실패해 데모 프롬프트 데이터를 유지합니다.", promptsResult.reason);
+  }
+
+  if (revisionRequestsResult.status === "fulfilled" && Array.isArray(revisionRequestsResult.value)) {
+    state.backendAdminRevisionRequests = revisionRequestsResult.value;
+    revisionRequestsResult.value.forEach((request) => {
+      if (!request.key) return;
+      state.adminPromptRevisionRequests = {
+        ...state.adminPromptRevisionRequests,
+        [request.key]: {
+          id: request.id,
+          type: request.type,
+          targetId: request.targetId,
+          reason: request.reason,
+          requestedAt: request.requestedAt,
+          status: request.status,
+        },
+      };
+    });
+    shouldRender = true;
+  } else if (revisionRequestsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/revision-requests 연동에 실패해 데모 수정 요청 데이터를 유지합니다.", revisionRequestsResult.reason);
   }
 
   state.adminBackendStatus = "connected";

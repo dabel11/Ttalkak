@@ -1,5 +1,38 @@
 # Backend Integration Notes
 
+## 2026-07-14 Admin API Integration Update
+
+The Admin UI now calls backend Admin APIs when they exist and falls back to local demo state only when those calls fail. This branch should be treated as a frontend integration preview, not as the final production contract.
+
+Connected or attempted endpoints:
+
+- `GET /api/admin/reports`
+- `PATCH /api/admin/reports/{id}/status`
+- `GET /api/admin/prompts`
+- `PATCH /api/admin/prompts/{id}/hide`
+- `PATCH /api/admin/prompts/{id}/restore`
+- `POST /api/prompts/{promptId}/revision-requests`
+- `GET /api/admin/revision-requests`
+- `PATCH /api/admin/revision-requests/{requestId}/status`
+- `PATCH /api/admin/comments/{commentId}/hide`
+- `PATCH /api/admin/comments/{commentId}/unhide`
+- `DELETE /api/admin/comments/{commentId}`
+- `GET /api/admin/tags`
+- `PATCH /api/admin/tags/{id}/status`
+- `GET /api/admin/users/{memberId}/activities`
+
+Frontend status mapping:
+
+- Report status: `pending`, `reviewed`, `resolved`, `dismissed`
+- Tag status: `pending`, `approved`, `disabled`; `disabled` is displayed as recommendation-excluded/rejected in the UI.
+- Revision request status: `pending`, `reviewed`, `resolved`, `dismissed` where supported.
+
+Admin account policy:
+
+- Admin users are operation-only accounts.
+- Admin users may review Home content but cannot perform normal user actions such as Make submit, Share submit, save, like, report, comment, or personal My page actions.
+- Backend should enforce the same policy with server-side authorization. Frontend hiding/disable logic is only UX protection.
+
 이 문서는 `jaewon7025/web-demo-preview` 브랜치의 프론트엔드가 현재 백엔드와 어디까지 연결되어 있고, 어떤 부분이 아직 데모/optimistic 상태인지 정리합니다.
 
 ## Current Backend Smoke Integration
@@ -15,7 +48,7 @@
 - 401 responses clear the stored token and open the login modal.
 - 403 responses show a permission notice.
 - Account withdrawal calls `DELETE http://localhost:8080/api/auth/withdraw` and clears frontend auth/local session state on success.
-- Admin QA fallback: when `admin / Admin1234!` login fails because the backend request times out, the frontend uses a demo admin session so reviewers can inspect Admin UI. This does not represent production authentication and should not be used as a backend contract.
+- Admin QA fallback: when backend login or admin APIs are unavailable, the frontend can use a demo admin session so reviewers can inspect Admin UI. This does not represent production authentication and should not be used as a backend contract.
 
 ## Backend Status Badge
 
@@ -29,7 +62,7 @@
 - Make threads/folders emit backend calls, but the UI still updates optimistically first.
 - Make thread delete is local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
 - If folder creation does not return a server folder id, the frontend skips the immediate move API to avoid sending temporary `folder-...` ids.
-- Admin screens are still mostly local demo operations. Real service must enforce ADMIN authorization and audit logging server-side.
+- Admin screens call real admin endpoints when an authenticated backend token is available. Real service must enforce ADMIN authorization and audit logging server-side; local fallback exists only for frontend QA.
 - Google OAuth buttons are demo flows until OAuth redirect/token exchange is finalized.
 - Admin demo fallback uses the local `demo-token` only after a timeout for the known QA credential. Real admin login must return a backend token and role from `/api/auth/login`.
 

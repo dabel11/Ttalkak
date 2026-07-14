@@ -11,15 +11,34 @@ Recommended review order:
 3. Make: thread/folder smoke calls, `POST /api/prompts/improve`, RAG fallback states.
 4. Share: logged-in sharing flow and tag selection.
 5. My page: library, my prompts, comments, reports, demo data toggle.
-6. Admin: report, prompt, and tag management demo flows. If backend login times out for `admin / Admin1234!`, the frontend enters admin demo fallback mode for UI review only.
+6. Admin: report, prompt, tag, and user activity management flows. When backend admin APIs are available, the UI calls them first and falls back to local demo data only for preview continuity.
 
 Key limitations:
 
 - Several screens still use optimistic local state after firing API requests.
 - Google OAuth is a demo flow until the final OAuth redirect/token exchange is connected.
-- Admin screens are frontend demos; real service must rely on server-side ADMIN authorization.
-- If `admin / Admin1234!` login times out while the backend is running slowly or unavailable, the frontend opens an admin demo session so reviewers can still inspect Admin UI. This fallback is only for frontend QA and is not real authentication.
+- Admin screens call backend admin APIs when available. Real service must still rely on server-side ADMIN authorization and audit logging.
+- Admin demo fallback is only for frontend QA when the backend login/admin APIs are unavailable. It is not real authentication and should not be treated as a backend contract.
 - RAG response handling is defensive and accepts multiple temporary field names. The preferred final field is `improved_prompt`.
+
+## Admin Integration Update
+
+The frontend now attempts real Admin API integration before using local demo fallback.
+
+- Report list/status: `GET /api/admin/reports`, `PATCH /api/admin/reports/{id}/status`
+- Prompt management: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`, `DELETE /api/prompts/{id}`
+- Revision requests: `POST /api/prompts/{promptId}/revision-requests`, `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
+- Comment moderation: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
+- Tag moderation: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
+- User activity lookup: `GET /api/admin/users/{memberId}/activities`
+
+Status mapping used by the frontend:
+
+- Reports: `pending`, `reviewed`, `resolved`, `dismissed`
+- Tags: `pending`, `approved`, `disabled` (shown as recommendation excluded/rejected in the UI)
+- Revision requests: `pending`, `reviewed`, `resolved`, `dismissed` where supported by the backend
+
+Admin accounts are operation-only in this prototype. Home is read/review-oriented, while Make, Share, and My page are hidden for admin users.
 
 See `docs/QA_CHECKLIST.md`, `docs/API_SPEC.md`, and `docs/BACKEND_INTEGRATION_NOTES.md` before backend verification.
 

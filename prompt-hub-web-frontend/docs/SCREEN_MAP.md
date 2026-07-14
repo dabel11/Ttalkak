@@ -106,7 +106,7 @@ Additional My page tabs:
 필요 API:
 
 - `GET /api/admin/reports`
-- `PATCH /api/admin/reports/:id`
+- `PATCH /api/admin/reports/:id/status`
 - `DELETE /api/admin/reports/:id/target`
 - `PATCH /api/admin/prompts/:id`
 - `DELETE /api/admin/prompts/:id`

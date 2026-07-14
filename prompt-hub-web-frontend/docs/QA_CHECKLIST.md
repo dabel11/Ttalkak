@@ -23,7 +23,7 @@
 
 ## Auth
 
-- 관리자 계정 `admin / Admin1234!` 로그인은 우선 실제 `/api/auth/login` 응답 토큰으로 동작해야 합니다.
+- 관리자 계정 로그인은 우선 실제 `/api/auth/login` 응답 토큰으로 동작해야 합니다. 테스트 계정은 백엔드 시드/환경 설정과 맞춰 확인합니다.
 - 단, 백엔드 로그인 요청이 timeout 되는 경우 프론트는 Admin UI 검수를 위해 관리자 데모 세션으로 fallback할 수 있습니다. 이 상태는 실서비스 인증이 아니라 QA용 완충 동작입니다.
 - 회원가입 후 `ttalkak_access_token`이 localStorage에 저장되는지 확인합니다.
 - 로그인 후 보호 API 요청에 `Authorization: Bearer ...` 헤더가 붙는지 확인합니다.
