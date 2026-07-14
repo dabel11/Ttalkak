@@ -32,9 +32,25 @@ public class MakeController {
     }
 
     @GetMapping("/threads")
-    public List<Map<String, Object>> threads(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> threads(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
         Long memberId = requireMemberId(authorization);
-        return threadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId).stream().map(this::threadMap).toList();
+
+        List<Map<String, Object>> items =
+                threadRepository
+                        .findByMemberIdOrderByUpdatedAtDesc(memberId)
+                        .stream()
+                        .map(this::threadMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PostMapping("/threads")
@@ -71,9 +87,25 @@ public class MakeController {
     }
 
     @GetMapping("/folders")
-    public List<Map<String, Object>> folders(@RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> folders(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
         Long memberId = requireMemberId(authorization);
-        return folderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::folderMap).toList();
+
+        List<Map<String, Object>> items =
+                folderRepository
+                        .findByMemberIdOrderByCreatedAtDesc(memberId)
+                        .stream()
+                        .map(this::folderMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PostMapping("/folders")
@@ -129,6 +161,45 @@ public class MakeController {
         thread.moveFolder(folderId);
         threadRepository.save(thread);
         return ResponseEntity.ok(threadMap(thread));
+    }
+
+    private Map<String, Object> pageResponse(
+            List<Map<String, Object>> allItems,
+            int page,
+            Integer size,
+            Integer pageSize
+    ) {
+        int resolvedSize = size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(resolvedSize, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<Map<String, Object>> items =
+                allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     private Map<String, Object> threadMap(MakeThread thread) {
@@ -199,6 +270,48 @@ public class MakeController {
         } catch (Exception e) {
             return json;
         }
+    }
+
+    private int resolvePageSize(
+            Integer size,
+            Integer pageSize
+    ) {
+        return size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+    }
+
+    private <T> Map<String, Object> pageResponse(
+            List<T> allItems,
+            int page,
+            int size
+    ) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<T> items = allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     public record SaveThreadRequest(Long id, Long threadId, String title, Object messages, Long folderId) {}

@@ -152,23 +152,30 @@ public class PromptRevisionRequestController {
     }
 
     @GetMapping("/api/admin/revision-requests")
-    public List<Map<String, Object>> adminRevisionRequests(
-            @RequestParam(required = false) String status
+    public Map<String, Object> adminRevisionRequests(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
     ) {
+        int resolvedSize = resolvePageSize(size, pageSize);
         String normalizedStatus = normalizeListStatus(status);
 
-        List<PromptRevisionRequest> revisions =
-                "all".equals(normalizedStatus)
-                        ? revisionRequestRepository
-                                .findAllByOrderByCreatedAtDesc()
-                        : revisionRequestRepository
-                                .findByStatusIgnoreCaseOrderByCreatedAtDesc(
-                                        normalizedStatus
-                                );
+        List<Map<String, Object>> revisions =
+                (
+                        "all".equals(normalizedStatus)
+                                ? revisionRequestRepository
+                                        .findAllByOrderByCreatedAtDesc()
+                                : revisionRequestRepository
+                                        .findByStatusIgnoreCaseOrderByCreatedAtDesc(
+                                                normalizedStatus
+                                        )
+                )
+                        .stream()
+                        .map(this::toResponse)
+                        .toList();
 
-        return revisions.stream()
-                .map(this::toResponse)
-                .toList();
+        return pageResponse(revisions, page, resolvedSize);
     }
 
     @Transactional
@@ -397,6 +404,48 @@ public class PromptRevisionRequestController {
                 : value.format(
                         DateTimeFormatter.ISO_LOCAL_DATE_TIME
                 );
+    }
+
+    private int resolvePageSize(
+            Integer size,
+            Integer pageSize
+    ) {
+        return size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+    }
+
+    private <T> Map<String, Object> pageResponse(
+            List<T> allItems,
+            int page,
+            int size
+    ) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<T> items = allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     public record RevisionCreateRequest(

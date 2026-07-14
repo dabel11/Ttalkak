@@ -155,21 +155,37 @@ public class AdminController {
     }
 
     @GetMapping("/reports")
-    public List<Map<String, Object>> reports(
-            @RequestParam(required = false) String status
+    public Map<String, Object> reports(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
     ) {
         String normalizedStatus =
                 normalizeReportFilterStatus(status);
 
-        return reportRepository.findAll().stream()
-                .filter(report ->
-                        "all".equals(normalizedStatus)
-                                || normalizedStatus.equals(
-                                        report.getStatus()
-                                )
-                )
-                .map(this::reportMap)
-                .toList();
+        List<Map<String, Object>> items =
+                reportRepository.findAll().stream()
+                        .filter(report ->
+                                "all".equals(normalizedStatus)
+                                        || normalizedStatus.equals(
+                                                report.getStatus()
+                                        )
+                        )
+                        .sorted(
+                                Comparator.comparing(
+                                                Report::getCreatedAt
+                                        )
+                                        .reversed()
+                                        .thenComparing(
+                                                Report::getId,
+                                                Comparator.reverseOrder()
+                                        )
+                        )
+                        .map(this::reportMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PatchMapping("/reports/{id}/status")
@@ -291,29 +307,35 @@ public class AdminController {
     }
 
     @GetMapping("/tags")
-    public List<Map<String, Object>> tags(
-            @RequestParam(required = false) String status
+    public Map<String, Object> tags(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
     ) {
         String normalizedStatus =
                 normalizeTagFilterStatus(status);
 
-        return tagRepository.findAll().stream()
-                .filter(tag ->
-                        "all".equals(normalizedStatus)
-                                || normalizedStatus.equals(
-                                        tag.getStatus()
-                                )
-                )
-                .sorted(
-                        Comparator.comparing(Tag::getCreatedAt)
-                                .reversed()
-                                .thenComparing(
-                                        Tag::getId,
-                                        Comparator.reverseOrder()
-                                )
-                )
-                .map(this::tagMap)
-                .toList();
+        List<Map<String, Object>> items =
+                tagRepository.findAll().stream()
+                        .filter(tag ->
+                                "all".equals(normalizedStatus)
+                                        || normalizedStatus.equals(
+                                                tag.getStatus()
+                                        )
+                        )
+                        .sorted(
+                                Comparator.comparing(Tag::getCreatedAt)
+                                        .reversed()
+                                        .thenComparing(
+                                                Tag::getId,
+                                                Comparator.reverseOrder()
+                                        )
+                        )
+                        .map(this::tagMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PatchMapping("/tags/{id}/status")
@@ -347,6 +369,45 @@ public class AdminController {
         tagRepository.save(tag);
 
         return ResponseEntity.ok(tagMap(tag));
+    }
+
+    private Map<String, Object> pageResponse(
+            List<Map<String, Object>> allItems,
+            int page,
+            Integer size,
+            Integer pageSize
+    ) {
+        int resolvedSize = size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(resolvedSize, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<Map<String, Object>> items =
+                allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     private Map<String, Object> memberActivityMap(Member member) {
@@ -640,6 +701,48 @@ public class AdminController {
                 normalized,
                 TagStatus.APPROVED
         ).value();
+    }
+
+    private int resolvePageSize(
+            Integer size,
+            Integer pageSize
+    ) {
+        return size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+    }
+
+    private <T> Map<String, Object> pageResponse(
+            List<T> allItems,
+            int page,
+            int size
+    ) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<T> items = allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     private record ActivityItem(

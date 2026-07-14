@@ -135,13 +135,13 @@ ADMIN_NAME=관리자
 | `GET /api/me/prompts` | 필수 | 페이지 객체 |
 | `GET /api/me/comments` | 필수 | 페이지 객체 |
 | `GET /api/me/reports` | 필수 | 페이지 객체 |
-| `GET /api/make/threads` | 필수 | 배열 |
-| `GET /api/make/folders` | 필수 | 배열 |
-| `GET /api/admin/reports` | ADMIN | 배열 |
-| `GET /api/admin/tags` | ADMIN | 배열 |
+| `GET /api/make/threads` | 필수 | 페이지 객체 |
+| `GET /api/make/folders` | 필수 | 페이지 객체 |
+| `GET /api/admin/reports` | ADMIN | 페이지 객체 |
+| `GET /api/admin/tags` | ADMIN | 페이지 객체 |
 | `GET /api/admin/prompts` | ADMIN | 페이지 객체 |
 | `GET /api/me/revision-requests` | 필수 | 배열 |
-| `GET /api/admin/revision-requests` | ADMIN | 배열 |
+| `GET /api/admin/revision-requests` | ADMIN | 페이지 객체 |
 
 ### 공통 페이지 객체
 
@@ -378,20 +378,34 @@ Make API는 모두 로그인이 필요합니다.
 GET /api/make/threads
 ```
 
-현재 응답 형식은 배열입니다.
+페이지네이션 매개변수:
+
+```http
+GET /api/make/threads?page=1&size=16
+GET /api/make/threads?page=1&pageSize=16
+```
+
+응답은 공통 페이지 객체 형식을 사용합니다.
 
 ```json
-[
-  {
-    "id": 1,
-    "threadId": 1,
-    "folderId": 1,
-    "title": "string",
-    "messages": [],
-    "createdAt": "2026-07-10T00:00:00",
-    "updatedAt": "2026-07-10T00:00:00"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "threadId": 1,
+      "folderId": 1,
+      "title": "string",
+      "messages": [],
+      "createdAt": "2026-07-10T00:00:00",
+      "updatedAt": "2026-07-10T00:00:00"
+    }
+  ],
+  "content": [],
+  "page": 1,
+  "size": 16,
+  "total": 1,
+  "totalPages": 1
+}
 ```
 
 ### Thread 저장 및 수정
@@ -424,16 +438,30 @@ PATCH /api/make/threads/{numberId}/folder
 GET /api/make/folders
 ```
 
-현재 응답 형식은 배열입니다.
+페이지네이션 매개변수:
+
+```http
+GET /api/make/folders?page=1&size=16
+GET /api/make/folders?page=1&pageSize=16
+```
+
+응답은 공통 페이지 객체 형식을 사용합니다.
 
 ```json
-[
-  {
-    "id": 1,
-    "name": "폴더 이름",
-    "createdAt": "2026-07-10T00:00:00"
-  }
-]
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "폴더 이름",
+      "createdAt": "2026-07-10T00:00:00"
+    }
+  ],
+  "content": [],
+  "page": 1,
+  "size": 16,
+  "total": 1,
+  "totalPages": 1
+}
 ```
 
 ---
@@ -766,13 +794,21 @@ disabled -> approved
 
 ### 관리자 목록 응답
 
-현재 아래 API는 페이지 객체가 아니라 배열을 반환합니다.
+아래 관리자 목록 API는 공통 페이지 객체를 반환합니다.
 
 ```http
-GET /api/admin/reports
-GET /api/admin/tags
-GET /api/admin/revision-requests
+GET /api/admin/reports?page=1&size=16
+GET /api/admin/tags?page=1&size=16
+GET /api/admin/revision-requests?page=1&size=16
 ```
+
+- `page`는 1부터 시작합니다.
+- 기본 `size`는 16입니다.
+- `size`는 최소 1, 최대 100으로 보정합니다.
+- `size`와 `pageSize`를 모두 지원합니다.
+- 두 값을 함께 전달하면 `size`를 우선 적용합니다.
+- 기존 `status` 필터와 함께 사용할 수 있습니다.
+- 응답은 `items`, `content`, `page`, `size`, `total`, `totalPages`를 포함합니다.
 
 ---
 
@@ -827,7 +863,8 @@ GET /api/admin/revision-requests?status=pending
 ```
 
 - `ADMIN` 역할만 호출할 수 있습니다.
-- 배열 응답이며 `createdAt` 내림차순으로 정렬합니다.
+- 공통 페이지 객체를 반환하며 `createdAt` 내림차순으로 정렬합니다.
+- `page`, `size`, `pageSize`를 사용할 수 있습니다.
 - `status`는 `all`, `pending`, `approved`, `rejected`를 사용할 수 있습니다.
 
 ### 관리자 승인 및 거절
@@ -958,6 +995,5 @@ DELETE /api/auth/withdraw
 아래 기능은 아직 최종 구현이 아닙니다.
 
 - demo token을 JWT 또는 세션 인증으로 교체
-- Make와 Admin 목록 API 페이지네이션 통일
 
 API 응답 형식을 변경할 때는 반드시 프론트 담당자와 동시에 수정합니다.
