@@ -33,8 +33,7 @@ public class MakeController {
 
     @GetMapping("/threads")
     public List<Map<String, Object>> threads(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
+        Long memberId = requireMemberId(authorization);
         return threadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId).stream().map(this::threadMap).toList();
     }
 
@@ -73,8 +72,7 @@ public class MakeController {
 
     @GetMapping("/folders")
     public List<Map<String, Object>> folders(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
+        Long memberId = requireMemberId(authorization);
         return folderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::folderMap).toList();
     }
 
