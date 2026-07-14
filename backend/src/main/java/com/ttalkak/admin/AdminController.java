@@ -2,6 +2,7 @@ package com.ttalkak.admin;
 
 import com.ttalkak.community.Report;
 import com.ttalkak.community.ReportRepository;
+import com.ttalkak.community.ReportResponseMapper;
 import com.ttalkak.prompt.PromptMapper;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
@@ -19,13 +20,16 @@ import java.util.Map;
 @RequestMapping("/api/admin")
 public class AdminController {
     private final ReportRepository reportRepository;
+    private final ReportResponseMapper reportResponseMapper;
     private final PromptRepository promptRepository;
     private final TagRepository tagRepository;
 
     public AdminController(ReportRepository reportRepository,
+                           ReportResponseMapper reportResponseMapper,
                            PromptRepository promptRepository,
                            TagRepository tagRepository) {
         this.reportRepository = reportRepository;
+        this.reportResponseMapper = reportResponseMapper;
         this.promptRepository = promptRepository;
         this.tagRepository = tagRepository;
     }
@@ -83,19 +87,7 @@ public class AdminController {
     }
 
     private Map<String, Object> reportMap(Report report) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", report.getId());
-        body.put("targetType", report.getTargetType());
-        body.put("targetId", report.getTargetId());
-        body.put("reporterId", report.getReporterId());
-        body.put("reason", report.getReason());
-        body.put("status", report.getStatus());
-        body.put("memo", report.getMemo());
-        body.put("reviewedAt", report.getReviewedAt() == null
-                ? null
-                : report.getReviewedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        body.put("createdAt", report.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        return body;
+        return reportResponseMapper.toResponse(report);
     }
 
     private Map<String, Object> tagMap(Tag tag) {

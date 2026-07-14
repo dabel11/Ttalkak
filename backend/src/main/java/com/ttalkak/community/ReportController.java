@@ -5,8 +5,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -15,10 +13,16 @@ public class ReportController {
 
     private final ReportRepository reportRepository;
     private final AuthService authService;
+    private final ReportResponseMapper reportResponseMapper;
 
-    public ReportController(ReportRepository reportRepository, AuthService authService) {
+    public ReportController(
+            ReportRepository reportRepository,
+            AuthService authService,
+            ReportResponseMapper reportResponseMapper
+    ) {
         this.reportRepository = reportRepository;
         this.authService = authService;
+        this.reportResponseMapper = reportResponseMapper;
     }
 
     @PostMapping("/prompts/{promptId}")
@@ -58,19 +62,7 @@ public class ReportController {
     }
 
     public Map<String, Object> toResponse(Report report) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", report.getId());
-        body.put("targetType", report.getTargetType());
-        body.put("targetId", report.getTargetId());
-        body.put("reason", report.getReason());
-        body.put("status", report.getStatus());
-        body.put("memo", report.getMemo());
-        body.put("reviewedAt", report.getReviewedAt() == null
-                ? null
-                : report.getReviewedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        body.put("createdAt", report.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-
-        return body;
+        return reportResponseMapper.toResponse(report);
     }
 
     public record ReportRequest(String reason) {
