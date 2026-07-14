@@ -508,11 +508,76 @@ PATCH /api/admin/reports/{id}/status
 GET /api/admin/tags
 PATCH /api/admin/tags/{id}/status
 GET /api/admin/prompts
+GET /api/admin/users/{memberId}/activities
 PATCH /api/admin/prompts/{id}/hide
 PATCH /api/admin/prompts/{id}/restore
 DELETE /api/admin/comments/{commentId}
 PATCH /api/admin/comments/{commentId}/hide
 PATCH /api/admin/comments/{commentId}/unhide
+```
+
+### 사용자 활동 조회
+
+```http
+GET /api/admin/users/{memberId}/activities?limit=20
+```
+
+- `ADMIN` 역할만 호출할 수 있습니다.
+- 존재하지 않는 회원 ID는 `404 Not Found`를 반환합니다.
+- `limit` 기본값은 20이며 최소 1, 최대 100으로 제한합니다.
+- 회원 기본 정보, 유형별 활동 수와 최근 활동을 반환합니다.
+- 최근 활동은 `occurredAt` 내림차순으로 정렬합니다.
+- 프롬프트 수정과 Make 스레드 수정은 `updatedAt`을 활동 시각으로 사용합니다.
+- 댓글, 신고, Make 폴더는 `createdAt`을 활동 시각으로 사용합니다.
+
+응답 예시:
+
+```json
+{
+  "member": {
+    "id": 5,
+    "userId": "user01",
+    "nickname": "사용자",
+    "name": "사용자 이름",
+    "role": "USER",
+    "active": true,
+    "createdAt": "2026-07-14T14:11:10",
+    "withdrawnAt": null
+  },
+  "summary": {
+    "prompts": 1,
+    "comments": 2,
+    "reports": 1,
+    "makeThreads": 1,
+    "makeFolders": 1,
+    "total": 6
+  },
+  "activities": [
+    {
+      "type": "comment",
+      "id": 9,
+      "promptId": 6,
+      "parentId": null,
+      "preview": "댓글 내용 미리보기",
+      "status": "active",
+      "createdAt": "2026-07-14T15:15:54",
+      "occurredAt": "2026-07-14T15:15:54"
+    }
+  ],
+  "limit": 20,
+  "returned": 6,
+  "latestActivityAt": "2026-07-14T15:15:54"
+}
+```
+
+활동 유형:
+
+```text
+prompt
+comment
+report
+make_thread
+make_folder
 ```
 
 ### 신고 상태 변경
@@ -614,7 +679,6 @@ DELETE /api/auth/withdraw
 아래 기능은 아직 최종 구현이 아닙니다.
 
 - demo token을 JWT 또는 세션 인증으로 교체
-- 관리자 사용자 활동 조회 API
 - 프롬프트 수정 요청 API
 - 신고 상태값 enum 및 전이 규칙
 - 태그 추천 상태값 enum 및 전이 규칙

@@ -1,8 +1,16 @@
 package com.ttalkak.admin;
 
+import com.ttalkak.community.Comment;
+import com.ttalkak.community.CommentRepository;
 import com.ttalkak.community.Report;
 import com.ttalkak.community.ReportRepository;
 import com.ttalkak.community.ReportResponseMapper;
+import com.ttalkak.make.MakeFolder;
+import com.ttalkak.make.MakeFolderRepository;
+import com.ttalkak.make.MakeThread;
+import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.member.Member;
+import com.ttalkak.member.MemberRepository;
 import com.ttalkak.prompt.PromptMapper;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
@@ -13,7 +21,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,15 +37,119 @@ public class AdminController {
     private final ReportResponseMapper reportResponseMapper;
     private final PromptRepository promptRepository;
     private final TagRepository tagRepository;
+    private final MemberRepository memberRepository;
+    private final CommentRepository commentRepository;
+    private final MakeThreadRepository makeThreadRepository;
+    private final MakeFolderRepository makeFolderRepository;
 
-    public AdminController(ReportRepository reportRepository,
-                           ReportResponseMapper reportResponseMapper,
-                           PromptRepository promptRepository,
-                           TagRepository tagRepository) {
+    public AdminController(
+            ReportRepository reportRepository,
+            ReportResponseMapper reportResponseMapper,
+            PromptRepository promptRepository,
+            TagRepository tagRepository,
+            MemberRepository memberRepository,
+            CommentRepository commentRepository,
+            MakeThreadRepository makeThreadRepository,
+            MakeFolderRepository makeFolderRepository
+    ) {
         this.reportRepository = reportRepository;
         this.reportResponseMapper = reportResponseMapper;
         this.promptRepository = promptRepository;
         this.tagRepository = tagRepository;
+        this.memberRepository = memberRepository;
+        this.commentRepository = commentRepository;
+        this.makeThreadRepository = makeThreadRepository;
+        this.makeFolderRepository = makeFolderRepository;
+    }
+
+    @GetMapping("/users/{memberId}/activities")
+    public Map<String, Object> userActivities(
+            @PathVariable Long memberId,
+            @RequestParam(defaultValue = "20") int limit
+    ) {
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "회원을 찾을 수 없습니다."
+                ));
+
+        List<PromptPost> prompts =
+                promptRepository.findByAuthorIdOrderByUpdatedAtDesc(memberId);
+
+        List<Comment> comments =
+                commentRepository.findByAuthorIdOrderByCreatedAtDesc(memberId);
+
+        List<Report> reports =
+                reportRepository.findByReporterIdOrderByCreatedAtDesc(memberId);
+
+        List<MakeThread> makeThreads =
+                makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId);
+
+        List<MakeFolder> makeFolders =
+                makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(memberId);
+
+        List<ActivityItem> allActivities = new ArrayList<>();
+
+        prompts.forEach(prompt ->
+                allActivities.add(promptActivity(prompt))
+        );
+
+        comments.forEach(comment ->
+                allActivities.add(commentActivity(comment))
+        );
+
+        reports.forEach(report ->
+                allActivities.add(reportActivity(report))
+        );
+
+        makeThreads.forEach(thread ->
+                allActivities.add(makeThreadActivity(thread))
+        );
+
+        makeFolders.forEach(folder ->
+                allActivities.add(makeFolderActivity(folder))
+        );
+
+        List<Map<String, Object>> activities = allActivities.stream()
+                .sorted(
+                        Comparator.comparing(ActivityItem::occurredAt)
+                                .reversed()
+                )
+                .limit(safeLimit)
+                .map(ActivityItem::body)
+                .toList();
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("prompts", prompts.size());
+        summary.put("comments", comments.size());
+        summary.put("reports", reports.size());
+        summary.put("makeThreads", makeThreads.size());
+        summary.put("makeFolders", makeFolders.size());
+        summary.put(
+                "total",
+                prompts.size()
+                        + comments.size()
+                        + reports.size()
+                        + makeThreads.size()
+                        + makeFolders.size()
+        );
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("member", memberActivityMap(member));
+        body.put("summary", summary);
+        body.put("activities", activities);
+        body.put("limit", safeLimit);
+        body.put("returned", activities.size());
+        body.put(
+                "latestActivityAt",
+                activities.isEmpty()
+                        ? null
+                        : activities.get(0).get("occurredAt")
+        );
+
+        return body;
     }
 
     @GetMapping("/reports")
@@ -182,6 +296,127 @@ public class AdminController {
         return ResponseEntity.ok(tagMap(tag));
     }
 
+    private Map<String, Object> memberActivityMap(Member member) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", member.getId());
+        body.put("userId", member.getUserId());
+        body.put("nickname", member.getNickname());
+        body.put("name", member.getName());
+        body.put("role", member.getRole());
+        body.put("active", member.isActive());
+        body.put("createdAt", formatDateTime(member.getCreatedAt()));
+        body.put("withdrawnAt", formatDateTime(member.getWithdrawnAt()));
+        return body;
+    }
+
+    private ActivityItem promptActivity(PromptPost prompt) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "prompt");
+        body.put("id", prompt.getId());
+        body.put("title", prompt.getTitle());
+        body.put("preview", preview(prompt.getText()));
+        body.put(
+                "status",
+                prompt.isDeleted()
+                        ? "deleted"
+                        : (prompt.isShared() ? "active" : "private")
+        );
+        body.put("shared", prompt.isShared());
+        body.put("deleted", prompt.isDeleted());
+        body.put("views", prompt.getViews());
+        body.put("likes", prompt.getLikes());
+        body.put("comments", prompt.getComments());
+        body.put("saves", prompt.getSaves());
+        body.put("createdAt", formatDateTime(prompt.getCreatedAt()));
+        body.put("updatedAt", formatDateTime(prompt.getUpdatedAt()));
+        body.put("occurredAt", formatDateTime(prompt.getUpdatedAt()));
+
+        return new ActivityItem(prompt.getUpdatedAt(), body);
+    }
+
+    private ActivityItem commentActivity(Comment comment) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "comment");
+        body.put("id", comment.getId());
+        body.put("promptId", comment.getPromptId());
+        body.put("parentId", comment.getParentId());
+        body.put("preview", preview(comment.getText()));
+        body.put("likes", comment.getLikes());
+        body.put("edited", comment.isEdited());
+        body.put("deleted", comment.isDeleted());
+        body.put("hidden", comment.isHidden());
+        body.put(
+                "status",
+                comment.isDeleted()
+                        ? "deleted"
+                        : (comment.isHidden() ? "hidden" : "active")
+        );
+        body.put("createdAt", formatDateTime(comment.getCreatedAt()));
+        body.put("occurredAt", formatDateTime(comment.getCreatedAt()));
+
+        return new ActivityItem(comment.getCreatedAt(), body);
+    }
+
+    private ActivityItem reportActivity(Report report) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "report");
+        body.put("id", report.getId());
+        body.put("targetType", report.getTargetType());
+        body.put("targetId", report.getTargetId());
+        body.put("reason", preview(report.getReason()));
+        body.put("status", report.getStatus());
+        body.put("memo", preview(report.getMemo()));
+        body.put("reviewedAt", formatDateTime(report.getReviewedAt()));
+        body.put("createdAt", formatDateTime(report.getCreatedAt()));
+        body.put("occurredAt", formatDateTime(report.getCreatedAt()));
+
+        return new ActivityItem(report.getCreatedAt(), body);
+    }
+
+    private ActivityItem makeThreadActivity(MakeThread thread) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "make_thread");
+        body.put("id", thread.getId());
+        body.put("folderId", thread.getFolderId());
+        body.put("title", thread.getTitle());
+        body.put("createdAt", formatDateTime(thread.getCreatedAt()));
+        body.put("updatedAt", formatDateTime(thread.getUpdatedAt()));
+        body.put("occurredAt", formatDateTime(thread.getUpdatedAt()));
+
+        return new ActivityItem(thread.getUpdatedAt(), body);
+    }
+
+    private ActivityItem makeFolderActivity(MakeFolder folder) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("type", "make_folder");
+        body.put("id", folder.getId());
+        body.put("name", folder.getName());
+        body.put("createdAt", formatDateTime(folder.getCreatedAt()));
+        body.put("occurredAt", formatDateTime(folder.getCreatedAt()));
+
+        return new ActivityItem(folder.getCreatedAt(), body);
+    }
+
+    private String preview(String text) {
+        if (text == null) {
+            return null;
+        }
+
+        String normalized = text.replaceAll("\\s+", " ").trim();
+
+        if (normalized.length() <= 120) {
+            return normalized;
+        }
+
+        return normalized.substring(0, 120) + "…";
+    }
+
+    private String formatDateTime(LocalDateTime value) {
+        return value == null
+                ? null
+                : value.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    }
+
     private boolean matchesPromptStatus(
             PromptPost prompt,
             String status
@@ -287,6 +522,12 @@ public class AdminController {
         return status == null || status.isBlank()
                 ? defaultStatus
                 : status.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private record ActivityItem(
+            LocalDateTime occurredAt,
+            Map<String, Object> body
+    ) {
     }
 
     public record StatusRequest(String status, String memo) {
