@@ -139,6 +139,8 @@ ADMIN_NAME
 | `GET /api/admin/reports` | ADMIN | 배열 |
 | `GET /api/admin/tags` | ADMIN | 배열 |
 | `GET /api/admin/prompts` | ADMIN | 페이지 객체 |
+| `GET /api/me/revision-requests` | 필수 | 배열 |
+| `GET /api/admin/revision-requests` | ADMIN | 배열 |
 
 ### 공통 페이지 객체
 
@@ -270,6 +272,7 @@ GET /api/me/library
 GET /api/me/prompts
 GET /api/me/comments
 GET /api/me/reports
+GET /api/me/revision-requests
 ```
 
 주요 페이지 파라미터:
@@ -509,6 +512,8 @@ GET /api/admin/tags
 PATCH /api/admin/tags/{id}/status
 GET /api/admin/prompts
 GET /api/admin/users/{memberId}/activities
+GET /api/admin/revision-requests
+PATCH /api/admin/revision-requests/{requestId}/status
 PATCH /api/admin/prompts/{id}/hide
 PATCH /api/admin/prompts/{id}/restore
 DELETE /api/admin/comments/{commentId}
@@ -612,11 +617,131 @@ pending
 ```http
 GET /api/admin/reports
 GET /api/admin/tags
+GET /api/admin/revision-requests
 ```
 
 ---
 
-## 11. 댓글 삭제 및 숨김 정책
+## 11. 프롬프트 수정 요청 API
+
+다른 사용자가 공유한 프롬프트에 개선 내용을 제안하고, 관리자가 승인하거나 거절하는 기능입니다.
+
+### 수정 요청 등록
+
+```http
+POST /api/prompts/{promptId}/revision-requests
+```
+
+- 로그인이 필요합니다.
+- 공유 중이며 삭제되지 않은 프롬프트에만 요청할 수 있습니다.
+- 본인이 작성한 프롬프트에는 수정 요청을 등록할 수 없습니다.
+- 같은 사용자가 같은 프롬프트에 `pending` 요청을 중복 등록하면 `409 Conflict`를 반환합니다.
+- `title`, `text`, `tags` 중 생략된 값은 기존 프롬프트 값을 사용합니다.
+- 기존 프롬프트와 실제로 다른 내용이 하나 이상 있어야 합니다.
+- 제목이나 본문을 전달할 경우 빈 문자열은 허용하지 않습니다.
+
+요청 예시:
+
+```json
+{
+  "title": "개선된 프롬프트 제목",
+  "text": "개선된 프롬프트 본문",
+  "tags": ["요약", "문서"],
+  "reason": "출력 형식을 더 명확하게 만들었습니다."
+}
+```
+
+성공 상태 코드는 `201 Created`입니다.
+
+### 내 수정 요청 목록
+
+```http
+GET /api/me/revision-requests
+GET /api/me/revision-requests?status=pending
+```
+
+- 로그인한 사용자가 직접 등록한 요청만 반환합니다.
+- 배열 응답이며 `createdAt` 내림차순으로 정렬합니다.
+- `status`는 `all`, `pending`, `approved`, `rejected`를 사용할 수 있습니다.
+- 기본값은 `all`입니다.
+
+### 관리자 수정 요청 목록
+
+```http
+GET /api/admin/revision-requests
+GET /api/admin/revision-requests?status=pending
+```
+
+- `ADMIN` 역할만 호출할 수 있습니다.
+- 배열 응답이며 `createdAt` 내림차순으로 정렬합니다.
+- `status`는 `all`, `pending`, `approved`, `rejected`를 사용할 수 있습니다.
+
+### 관리자 승인 및 거절
+
+```http
+PATCH /api/admin/revision-requests/{requestId}/status
+```
+
+승인 요청:
+
+```json
+{
+  "status": "approved",
+  "memo": "제안 내용을 프롬프트에 반영했습니다."
+}
+```
+
+거절 요청:
+
+```json
+{
+  "status": "rejected",
+  "memo": "기존 프롬프트의 목적과 맞지 않습니다."
+}
+```
+
+처리 정책:
+
+- `status`는 `approved` 또는 `rejected`만 허용합니다.
+- 승인 시 제안된 제목, 본문, 태그를 실제 프롬프트에 반영합니다.
+- 거절 시 실제 프롬프트 내용은 변경하지 않습니다.
+- 처리한 관리자 ID를 `reviewedBy`에 저장합니다.
+- 처리 시각을 `reviewedAt`에 저장합니다.
+- 이미 처리된 요청을 다시 처리하면 `409 Conflict`를 반환합니다.
+- 삭제된 프롬프트의 수정 요청은 승인할 수 없습니다.
+
+응답 주요 필드:
+
+```json
+{
+  "id": 1,
+  "promptId": 6,
+  "requester": {
+    "id": 5,
+    "nickname": "사용자"
+  },
+  "reason": "수정 요청 사유",
+  "status": "approved",
+  "original": {
+    "title": "기존 제목",
+    "text": "기존 본문",
+    "tags": ["기존 태그"]
+  },
+  "proposed": {
+    "title": "제안 제목",
+    "text": "제안 본문",
+    "tags": ["제안 태그"]
+  },
+  "adminMemo": "관리자 처리 메모",
+  "reviewedBy": 1,
+  "reviewedAt": "2026-07-14T16:10:00",
+  "createdAt": "2026-07-14T16:09:00"
+}
+```
+
+---
+
+## 12. 댓글 삭제 및 숨김 정책
 
 ### 댓글 삭제
 
@@ -648,7 +773,7 @@ PATCH /api/admin/comments/{commentId}/unhide
 
 ---
 
-## 12. 회원탈퇴
+## 13. 회원탈퇴
 
 ```http
 DELETE /api/auth/withdraw
@@ -674,12 +799,11 @@ DELETE /api/auth/withdraw
 
 ---
 
-## 13. 현재 남은 주요 작업
+## 14. 현재 남은 주요 작업
 
 아래 기능은 아직 최종 구현이 아닙니다.
 
 - demo token을 JWT 또는 세션 인증으로 교체
-- 프롬프트 수정 요청 API
 - 신고 상태값 enum 및 전이 규칙
 - 태그 추천 상태값 enum 및 전이 규칙
 - Make와 Admin 목록 API 페이지네이션 통일
