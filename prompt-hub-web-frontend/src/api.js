@@ -48,7 +48,7 @@
       return text ? JSON.parse(text) : null;
     } catch (error) {
       if (error?.name === "AbortError") {
-        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 서버 로그와 로그인 API 응답 지연을 확인해주세요.");
+        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 서버 실행 상태와 API 응답 지연을 확인해주세요.");
         timeoutError.status = 0;
         timeoutError.code = "REQUEST_TIMEOUT";
         timeoutError.cause = error;
@@ -123,7 +123,7 @@
 
   function normalizePrompt(item, index = 0) {
     const rawText = item?.text || item?.prompt || item?.content || item?.body || item?.description || "";
-    const text = String(rawText || item?.title || "프롬프트 내용을 불러왔습니다.").trim();
+    const text = String(rawText || item?.title || "프롬프트 내용을 불러오지 못했습니다.").trim();
     const title = String(item?.title || item?.name || text.split(/\n/)[0] || "프롬프트").trim();
     const author =
       item?.authorNickname ||
@@ -135,7 +135,7 @@
       item?.username ||
       "작성자";
 
-    const normalizedAuthor = normalizeAuthor(author);
+    const normalizedAuthor = normalizeAuthor(author, "작성자");
 
     return {
       id: String(item?.id || item?.promptId || item?.prompt_id || item?.uuid || `backend-prompt-${index}`),
@@ -158,6 +158,7 @@
   }
 
   function normalizeComment(item, index = 0) {
+    const prompt = item?.prompt && typeof item.prompt === "object" ? normalizePrompt(item.prompt) : null;
     const author = item?.author?.nickname || item?.authorNickname || item?.nickname || item?.author || "익명 사용자";
     return {
       id: String(item?.id || item?.commentId || `backend-comment-${index}`),
@@ -165,13 +166,15 @@
       parentId: item?.parentId ? String(item.parentId) : null,
       author: normalizeAuthor(author, "사용자"),
       owner: normalizeAuthor(author, "사용자"),
-      text: String(item?.text || item?.content || ""),
+      text: String(item?.deleted || item?.isDeleted ? "삭제된 댓글입니다." : item?.text || item?.content || ""),
       likes: toNumber(item?.likes, item?.likeCount),
       edited: Boolean(item?.edited || item?.isEdited),
       deleted: Boolean(item?.deleted || item?.isDeleted),
       likedByMe: Boolean(item?.likedByMe || item?.isLiked),
       isReported: Boolean(item?.isReported || item?.reportedByMe),
       createdAt: toTimestamp(item?.createdAt, item?.createdDate),
+      promptTitle: item?.promptTitle || prompt?.title || "",
+      prompt,
       replies: unwrapItems(item?.replies).map((reply, replyIndex) => normalizeComment(reply, replyIndex)),
       raw: item,
     };
@@ -198,15 +201,28 @@
 
   function normalizeReport(item, index = 0) {
     const targetType = String(item?.targetType || item?.type || "prompt").toLowerCase();
+    const prompt = item?.prompt && typeof item.prompt === "object" ? normalizePrompt(item.prompt) : null;
+    const reporter = item?.reporter || item?.reporterNickname || item?.reporterName || "";
+    const targetAuthor = item?.targetAuthor || item?.targetAuthorNickname || item?.commentAuthorNickname || item?.promptAuthorNickname || item?.author || "";
     return {
       id: String(item?.id || item?.reportId || `backend-report-${index}`),
       key: `${targetType}:${item?.targetId || item?.promptId || item?.commentId || item?.id || index}`,
       type: targetType,
       targetId: String(item?.targetId || item?.promptId || item?.commentId || ""),
-      promptId: item?.promptId ? String(item.promptId) : "",
+      promptId: item?.promptId ? String(item.promptId) : prompt?.id || "",
       status: String(item?.status || "pending").toLowerCase(),
       reason: item?.reason || "",
+      memo: item?.memo || "",
+      reviewedAt: item?.reviewedAt ? toTimestamp(item.reviewedAt) : 0,
       createdAt: toTimestamp(item?.createdAt, item?.createdDate),
+      title: item?.title || item?.targetTitle || item?.promptTitle || prompt?.title || "",
+      contextTitle: item?.contextTitle || item?.promptTitle || prompt?.title || "",
+      summary: item?.summary || item?.description || "",
+      targetPreview: item?.targetPreview || item?.commentText || item?.targetText || item?.promptText || item?.text || prompt?.text || "",
+      reporter: normalizeAuthor(reporter, ""),
+      targetAuthor: normalizeAuthor(targetAuthor, ""),
+      promptAuthor: normalizeAuthor(item?.promptAuthor || item?.promptAuthorNickname || prompt?.author || "", ""),
+      commentAuthor: normalizeAuthor(item?.commentAuthor || item?.commentAuthorNickname || "", ""),
       raw: item,
     };
   }
@@ -423,11 +439,24 @@
         items: unwrapItems(payload).map(normalizePrompt),
       }));
     },
-    getMyComments(token) {
-      return request("/api/me/comments", { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
+    getMyPrompts({ page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/me/prompts?${query.toString()}`, { token }).then((payload) => ({
+        ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
+        items: unwrapItems(payload).map((prompt) => ({
+          ...normalizePrompt(prompt),
+          source: "mine",
+          isShared: prompt?.isShared ?? prompt?.shared ?? prompt?.public ?? true,
+        })),
+      }));
     },
-    getMyReports(token) {
-      return request("/api/me/reports", { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
+    getMyComments({ page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/me/comments?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
+    },
+    getMyReports({ page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/me/reports?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
     },
     sharePrompt(payload, token) {
       return request("/api/prompts", { method: "POST", token, body: JSON.stringify(payload) }).then(normalizePrompt);
@@ -465,8 +494,8 @@
       if (status) query.set("status", status);
       return request(`/api/admin/reports${query.toString() ? `?${query.toString()}` : ""}`, { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
     },
-    updateAdminReportStatus(reportId, status, token) {
-      return request(`/api/admin/reports/${reportId}/status`, { method: "PATCH", token, body: JSON.stringify({ status }) }).then(normalizeReport);
+    updateAdminReportStatus(reportId, status, token, memo = "") {
+      return request(`/api/admin/reports/${reportId}/status`, { method: "PATCH", token, body: JSON.stringify({ status, memo }) }).then(normalizeReport);
     },
     hideAdminPrompt(promptId, token) {
       return request(`/api/admin/prompts/${promptId}/hide`, { method: "PATCH", token }).then(normalizePrompt);
