@@ -1,29 +1,149 @@
 # Ttalkak Backend API Contract
 
-프론트엔드와 백엔드 연동 시 유지해야 하는 응답 필드 계약입니다.
+프론트엔드와 백엔드 연동 시 유지해야 하는 현재 API 응답 계약입니다.
 
-## 공통 인증 정책
-
-로그인이 필요한 API는 아래 헤더를 요구합니다.
-
-Authorization: Bearer demo-token-{memberId}
-
-토큰이 없거나 잘못된 경우:
-
-401 Unauthorized
-
-권한이 없는 사용자가 수정, 삭제, 관리자 API를 호출한 경우:
-
-403 Forbidden
+이 문서는 `trytur/develop` 브랜치의 실제 구현을 기준으로 작성합니다.
 
 ---
 
-## Prompt 목록 응답
+## 1. 공통 인증 정책
 
-GET /api/prompts
+### 인증 헤더
 
-프론트는 아래 필드를 사용합니다.
+로그인이 필요한 API는 아래 헤더를 요구합니다.
 
+```http
+Authorization: Bearer demo-token-{memberId}
+```
+
+현재 `demo-token`은 프론트 연동 검증용 임시 인증 방식입니다.
+
+- 토큰 서명 검증이 없는 개발용 구조입니다.
+- 운영 배포 전 JWT 또는 세션 인증으로 교체해야 합니다.
+- 탈퇴하거나 비활성화된 회원의 토큰은 인증되지 않습니다.
+
+### 공통 상태 코드
+
+토큰이 없거나 잘못된 경우:
+
+```text
+401 Unauthorized
+```
+
+일반 사용자가 관리자 API를 호출하거나, 다른 사용자의 데이터를 수정·삭제하려는 경우:
+
+```text
+403 Forbidden
+```
+
+대상을 찾을 수 없는 경우:
+
+```text
+404 Not Found
+```
+
+---
+
+## 2. 인증 응답
+
+### 로그인
+
+```http
+POST /api/auth/login
+```
+
+요청 예시:
+
+```json
+{
+  "userId": "admin",
+  "password": "Admin1234!"
+}
+```
+
+응답 예시:
+
+```json
+{
+  "user": {
+    "id": 1,
+    "userId": "admin",
+    "nickname": "admin",
+    "role": "admin",
+    "active": true
+  },
+  "accessToken": "demo-token-1"
+}
+```
+
+`user.role`은 프론트 응답에서 아래 소문자 값으로 반환합니다.
+
+```text
+user
+admin
+```
+
+DB와 Spring Security 내부 역할은 각각 `USER`, `ADMIN`을 사용합니다.
+
+---
+
+## 3. 개발용 관리자 계정
+
+빈 DB에서 백엔드를 최초 실행하면 개발용 관리자 계정을 자동 생성합니다.
+
+기본 계정:
+
+```text
+아이디: admin
+비밀번호: Admin1234!
+역할: ADMIN
+```
+
+로그인 응답에서는 다음과 같이 반환됩니다.
+
+```json
+{
+  "role": "admin"
+}
+```
+
+설정 가능한 환경변수:
+
+```text
+ADMIN_SEED_ENABLED
+ADMIN_USER_ID
+ADMIN_PASSWORD
+ADMIN_NICKNAME
+ADMIN_NAME
+```
+
+기본 관리자 비밀번호는 개발 환경 전용입니다. 운영 환경에서는 반드시 환경변수로 변경해야 합니다.
+
+---
+
+## 4. 목록 API 응답 형식
+
+현재 목록 API는 모두 동일한 형식이 아닙니다.
+
+프론트에서는 아래 구분을 따라야 합니다.
+
+| API | 인증 | 현재 응답 형식 |
+|---|---:|---|
+| `GET /api/prompts` | 선택 | 페이지 객체 |
+| `GET /api/me/library` | 필수 | 페이지 객체 |
+| `GET /api/me/prompts` | 필수 | 페이지 객체 |
+| `GET /api/me/comments` | 필수 | 페이지 객체 |
+| `GET /api/me/reports` | 필수 | 페이지 객체 |
+| `GET /api/make/threads` | 필수 | 배열 |
+| `GET /api/make/folders` | 필수 | 배열 |
+| `GET /api/admin/reports` | ADMIN | 배열 |
+| `GET /api/admin/tags` | ADMIN | 배열 |
+
+### 공통 페이지 객체
+
+페이지 객체를 반환하는 API는 아래 필드를 사용합니다.
+
+```json
 {
   "items": [],
   "content": [],
@@ -32,9 +152,76 @@ GET /api/prompts
   "total": 0,
   "totalPages": 0
 }
+```
 
-각 prompt item은 아래 필드를 유지해야 합니다.
+- `items`와 `content`는 같은 목록의 호환용 필드입니다.
+- 프론트에서는 `items`를 우선 사용해도 됩니다.
+- `page`는 현재 1부터 시작합니다.
+- 일부 API는 `size`와 `pageSize`를 모두 지원합니다.
 
+배열을 반환하는 API 예시:
+
+```json
+[
+  {
+    "id": 1
+  }
+]
+```
+
+응답 형식을 변경할 때는 프론트와 백엔드를 동시에 수정해야 합니다.
+
+---
+
+## 5. Prompt 목록 및 검색
+
+### 목록 조회
+
+```http
+GET /api/prompts
+```
+
+주요 쿼리 파라미터:
+
+```text
+scope
+query
+sort
+page
+size
+pageSize
+```
+
+검색 범위:
+
+```text
+all
+tag
+keyword
+author
+```
+
+정렬:
+
+```text
+popular
+latest
+saves
+likes
+comments
+```
+
+호출 예시:
+
+```http
+GET /api/prompts?scope=tag&query=marketing&page=1&size=16
+GET /api/prompts?scope=keyword&query=SEO&sort=latest&page=1&size=16
+GET /api/prompts?scope=author&query=nickname&page=1&size=16
+```
+
+각 Prompt 응답 필드:
+
+```json
 {
   "id": 1,
   "title": "string",
@@ -53,90 +240,349 @@ GET /api/prompts
   "isSaved": false,
   "isLiked": false,
   "isMine": false,
-  "isShared": true
+  "isShared": true,
+  "isReported": false
 }
+```
 
----
+프론트에서 아래 필드명을 임의로 변경하면 안 됩니다.
 
-## Make thread 응답
-
-Make thread는 서버 숫자 id를 기준으로 관리합니다.
-
-프론트 임시 id 예시:
-
-thread-1783608277086
-
-위와 같은 임시 id는 백엔드 폴더 이동 API에 보내면 안 됩니다.
-
-정상 폴더 이동 API:
-
-PATCH /api/make/threads/{numberId}/folder
-
-Make thread 응답은 아래 필드를 유지합니다.
-
-{
-  "id": 1,
-  "threadId": 1,
-  "title": "string",
-  "folderId": 1,
-  "messages": [],
-  "createdAt": "2026-07-10T00:00:00",
-  "updatedAt": "2026-07-10T00:00:00"
-}
-
----
-
-## Account withdrawal
-
-회원탈퇴 API:
-
-DELETE /api/auth/withdraw
-
-요청:
-
-{
-  "password": "user password"
-}
-
-정책:
-
-- 로그인한 사용자 본인만 탈퇴할 수 있습니다.
-- 비밀번호가 일치해야 합니다.
-- 탈퇴 시 active=false 처리합니다.
-- 탈퇴 이후 같은 demo token은 더 이상 인증되지 않습니다.
-- 탈퇴 계정은 재로그인할 수 없습니다.
-- 현재 정책상 기존 프롬프트, 댓글, Make 데이터는 즉시 삭제하지 않고 보존합니다.
-- 화면 표시 정책은 프론트와 협의 후 추가 조정합니다.
-
----
-
-## Report
-
-신고 생성 API는 로그인 사용자만 호출할 수 있습니다.
-
-POST /api/reports/prompts/{promptId}
-POST /api/reports/comments/{commentId}
-
-비로그인 요청은 401 Unauthorized를 반환합니다.
-
----
-
-## 주의
-
-프론트에서 사용하는 필드명을 임의로 변경하면 화면이 깨질 수 있습니다.
-
-특히 아래 필드는 유지해야 합니다.
-
-items
-content
-total
-totalPages
+```text
+author.id
 author.nickname
 isSaved
 isLiked
 isMine
 isShared
+isReported
 createdAt
-threadId
-folderId
-messages
+```
+
+---
+
+## 6. My Page 목록
+
+아래 API는 모두 로그인이 필요하며 페이지 객체를 반환합니다.
+
+```http
+GET /api/me/library
+GET /api/me/prompts
+GET /api/me/comments
+GET /api/me/reports
+```
+
+주요 페이지 파라미터:
+
+```text
+page
+size
+pageSize
+```
+
+### 내 댓글 응답 주요 필드
+
+```json
+{
+  "id": 1,
+  "promptId": 1,
+  "parentId": null,
+  "text": "댓글 내용",
+  "likes": 0,
+  "edited": false,
+  "deleted": false,
+  "isMine": true,
+  "createdAt": "2026-07-10T00:00:00",
+  "promptTitle": "원문 프롬프트 제목",
+  "prompt": {
+    "id": 1,
+    "title": "원문 프롬프트 제목",
+    "text": "원문 프롬프트 내용",
+    "author": {
+      "id": 1,
+      "nickname": "작성자 닉네임"
+    }
+  }
+}
+```
+
+`deleted=true`인 댓글은 프론트에서 다음 문구로 표시합니다.
+
+```text
+삭제된 댓글입니다.
+```
+
+---
+
+## 7. 저장 및 좋아요
+
+### 저장
+
+```http
+POST /api/prompts/{id}/save
+DELETE /api/prompts/{id}/save
+```
+
+저장 목록 조회:
+
+```http
+GET /api/me/library?filter=community
+```
+
+### 좋아요
+
+```http
+POST /api/prompts/{id}/like
+DELETE /api/prompts/{id}/like
+```
+
+좋아요 목록 조회:
+
+```http
+GET /api/me/library?filter=liked
+```
+
+저장 또는 좋아요 취소 성공 후 프론트는 관련 목록을 다시 조회해야 합니다.
+
+---
+
+## 8. Make API
+
+Make API는 모두 로그인이 필요합니다.
+
+비로그인 요청은 빈 배열이 아니라 다음 상태를 반환합니다.
+
+```text
+401 Unauthorized
+```
+
+### Thread 목록
+
+```http
+GET /api/make/threads
+```
+
+현재 응답 형식은 배열입니다.
+
+```json
+[
+  {
+    "id": 1,
+    "threadId": 1,
+    "folderId": 1,
+    "title": "string",
+    "messages": [],
+    "createdAt": "2026-07-10T00:00:00",
+    "updatedAt": "2026-07-10T00:00:00"
+  }
+]
+```
+
+### Thread 저장 및 수정
+
+```http
+POST /api/make/threads
+```
+
+요청에 `id` 또는 `threadId`가 존재하면 본인의 기존 thread를 수정합니다.
+
+둘 다 없으면 새 thread를 생성합니다.
+
+프론트 임시 ID 예시:
+
+```text
+thread-1783608277086
+```
+
+위와 같은 문자열 임시 ID는 백엔드 폴더 이동 API에 직접 보내면 안 됩니다.
+
+서버 저장 후 반환된 숫자 ID를 사용해야 합니다.
+
+```http
+PATCH /api/make/threads/{numberId}/folder
+```
+
+### Folder 목록
+
+```http
+GET /api/make/folders
+```
+
+현재 응답 형식은 배열입니다.
+
+```json
+[
+  {
+    "id": 1,
+    "name": "폴더 이름",
+    "createdAt": "2026-07-10T00:00:00"
+  }
+]
+```
+
+---
+
+## 9. 신고 API
+
+신고 생성은 로그인 사용자만 가능합니다.
+
+```http
+POST /api/reports/prompts/{promptId}
+POST /api/reports/comments/{commentId}
+```
+
+비로그인 요청:
+
+```text
+401 Unauthorized
+```
+
+### 신고 응답
+
+일반 신고 생성, 내 신고 목록, 관리자 신고 목록은 동일한 신고 맥락 필드를 사용합니다.
+
+```json
+{
+  "id": 1,
+  "targetType": "comment",
+  "targetId": 1,
+  "reporterId": 2,
+  "reporterNickname": "신고자",
+  "reason": "신고 사유",
+  "status": "pending",
+  "memo": null,
+  "reviewedAt": null,
+  "createdAt": "2026-07-10T00:00:00",
+  "targetExists": true,
+  "targetDeleted": false,
+  "targetPreview": "신고 대상 내용 미리보기",
+  "targetAuthorId": 3,
+  "targetAuthorNickname": "대상 작성자",
+  "promptId": 10,
+  "promptTitle": "원문 프롬프트 제목",
+  "promptAuthorId": 4,
+  "promptAuthorNickname": "프롬프트 작성자",
+  "parentId": null
+}
+```
+
+### 필드 의미
+
+- `reporterId`: 신고자 회원 ID
+- `reporterNickname`: 신고자 닉네임
+- `targetExists`: 신고 대상이 현재 DB에 존재하는지 여부
+- `targetDeleted`: 신고 대상의 삭제 상태
+- `targetPreview`: 신고 대상의 최대 200자 미리보기
+- `targetAuthorId`: 신고 대상 작성자 ID
+- `targetAuthorNickname`: 신고 대상 작성자 닉네임
+- `promptId`: 연관된 프롬프트 ID
+- `promptTitle`: 연관된 프롬프트 제목
+- `promptAuthorId`: 연관된 프롬프트 작성자 ID
+- `promptAuthorNickname`: 연관된 프롬프트 작성자 닉네임
+- `parentId`: 답글인 경우 부모 댓글 ID
+
+신고 대상이 실제 삭제되어 존재하지 않으면 일부 맥락 필드는 `null`일 수 있습니다.
+
+---
+
+## 10. 관리자 API
+
+관리자 API는 `ADMIN` 역할이 필요합니다.
+
+```http
+GET /api/admin/reports
+PATCH /api/admin/reports/{id}/status
+GET /api/admin/tags
+PATCH /api/admin/tags/{id}/status
+PATCH /api/admin/prompts/{id}/hide
+PATCH /api/admin/prompts/{id}/restore
+```
+
+### 신고 상태 변경
+
+```http
+PATCH /api/admin/reports/{id}/status
+```
+
+요청:
+
+```json
+{
+  "status": "reviewed",
+  "memo": "신고 내용을 확인했습니다."
+}
+```
+
+현재 기본 신고 상태는 다음과 같습니다.
+
+```text
+pending
+```
+
+현재 구현은 상태 문자열을 소문자로 저장하지만 허용 상태를 enum으로 엄격하게 제한하지는 않습니다.
+
+신고 상태값의 정식 제한은 추후 작업입니다.
+
+### 관리자 목록 응답
+
+현재 아래 API는 페이지 객체가 아니라 배열을 반환합니다.
+
+```http
+GET /api/admin/reports
+GET /api/admin/tags
+```
+
+---
+
+## 11. 댓글 삭제 정책
+
+- 작성자 또는 관리자만 댓글을 수정·삭제할 수 있습니다.
+- 답글이 없는 댓글은 실제 삭제할 수 있습니다.
+- 답글이 있는 부모 댓글은 soft delete 처리합니다.
+- soft delete된 댓글은 `deleted=true`가 됩니다.
+- 본문은 `삭제된 댓글입니다.`로 변경됩니다.
+- 기존 답글은 유지됩니다.
+- 마지막 답글이 삭제되면 soft delete된 부모 댓글도 DB에서 정리됩니다.
+
+---
+
+## 12. 회원탈퇴
+
+```http
+DELETE /api/auth/withdraw
+```
+
+요청:
+
+```json
+{
+  "password": "user password"
+}
+```
+
+정책:
+
+- 로그인한 사용자 본인만 탈퇴할 수 있습니다.
+- 비밀번호가 일치해야 합니다.
+- 탈퇴 시 `active=false` 처리합니다.
+- 탈퇴 이후 같은 demo token은 더 이상 인증되지 않습니다.
+- 탈퇴 계정은 재로그인할 수 없습니다.
+- 기존 프롬프트, 댓글, Make 데이터는 즉시 삭제하지 않고 보존합니다.
+- 탈퇴 회원의 닉네임과 이름은 비식별 형태로 변경합니다.
+
+---
+
+## 13. 현재 남은 주요 작업
+
+아래 기능은 아직 최종 구현이 아닙니다.
+
+- demo token을 JWT 또는 세션 인증으로 교체
+- 관리자 사용자 활동 조회 API
+- 관리자 프롬프트 관리 목록 API
+- 관리자 댓글 삭제·숨김 API
+- 프롬프트 수정 요청 API
+- 신고 상태값 enum 및 전이 규칙
+- 태그 추천 상태값 enum 및 전이 규칙
+- Make와 Admin 목록 API 페이지네이션 통일
+- 운영 환경 관리자 기본 비밀번호 제거
+
+API 응답 형식을 변경할 때는 반드시 프론트 담당자와 동시에 수정합니다.
