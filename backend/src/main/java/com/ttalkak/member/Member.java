@@ -52,6 +52,37 @@ public class Member {
         this.email = email;
     }
 
+    public static Member createAdmin(
+            String userId,
+            String encodedPassword,
+            String nickname,
+            String name
+    ) {
+        Member member = new Member(
+                userId,
+                encodedPassword,
+                nickname,
+                name,
+                null,
+                null,
+                null
+        );
+        member.role = "ADMIN";
+        return member;
+    }
+
+    public void synchronizeAdminAccount(
+            String encodedPassword,
+            String nickname,
+            String name
+    ) {
+        this.password = encodedPassword;
+        this.nickname = nickname;
+        this.name = name;
+        this.role = "ADMIN";
+        this.active = true;
+        this.withdrawnAt = null;
+    }
     public Long getId() {
         return id;
     }
