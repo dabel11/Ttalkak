@@ -19,11 +19,18 @@ public class AuthController {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
+    private final AccountWithdrawalService accountWithdrawalService;
 
-    public AuthController(MemberRepository memberRepository, PasswordEncoder passwordEncoder, AuthService authService) {
+    public AuthController(
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder,
+            AuthService authService,
+            AccountWithdrawalService accountWithdrawalService
+    ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.authService = authService;
+        this.accountWithdrawalService = accountWithdrawalService;
     }
 
     @PostMapping("/signup")
@@ -82,7 +89,11 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        Member member = memberRepository.findByUserIdAndActiveTrue(request.userId())
+        Member member = memberRepository
+                .findByUserIdAndAuthProviderAndActiveTrue(
+                        request.userId(),
+                        Member.PROVIDER_LOCAL
+                )
                 .orElse(null);
 
         if (member == null || !passwordEncoder.matches(request.password(), member.getPassword())) {
@@ -94,30 +105,25 @@ public class AuthController {
 
     @DeleteMapping("/withdraw")
     public ResponseEntity<?> withdraw(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestBody(required = false) WithdrawRequest request
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            @RequestBody(required = false)
+            WithdrawRequest request
     ) {
-        Member member = authService.getMemberFromAuthorization(authorization)
+        Member member = authService
+                .getMemberFromAuthorization(authorization)
                 .orElse(null);
 
-        if (member == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
-
-        if (request == null || request.password() == null || request.password().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회원탈퇴를 위해 비밀번호를 입력해주세요.");
-        }
-
-        if (!passwordEncoder.matches(request.password(), member.getPassword())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "비밀번호가 올바르지 않습니다.");
-        }
-
-        member.withdraw();
-        memberRepository.save(member);
+        accountWithdrawalService.withdraw(
+                member,
+                request == null ? null : request.password(),
+                request == null ? null : request.credential()
+        );
 
         return ResponseEntity.ok(Map.of(
                 "ok", true,
-                "message", "회원탈퇴가 완료되었습니다. 기존 토큰은 더 이상 사용할 수 없습니다."
+                "message",
+                "회원탈퇴가 완료되었습니다. 기존 토큰은 더 이상 사용할 수 없습니다."
         ));
     }
 
@@ -136,8 +142,20 @@ public class AuthController {
     @PostMapping("/find-id")
     public ResponseEntity<?> findId(@RequestBody FindIdRequest request) {
         Member member = "email".equals(request.method())
-                ? memberRepository.findByNameAndEmailAndActiveTrue(request.name(), request.email()).orElse(null)
-                : memberRepository.findByNameAndPhoneAndActiveTrue(request.name(), request.phone()).orElse(null);
+                ? memberRepository
+                        .findByNameAndEmailAndAuthProviderAndActiveTrue(
+                                request.name(),
+                                request.email(),
+                                Member.PROVIDER_LOCAL
+                        )
+                        .orElse(null)
+                : memberRepository
+                        .findByNameAndPhoneAndAuthProviderAndActiveTrue(
+                                request.name(),
+                                request.phone(),
+                                Member.PROVIDER_LOCAL
+                        )
+                        .orElse(null);
 
         if (member == null) {
             return ResponseEntity.ok(Map.of("maskedUserId", ""));
@@ -191,7 +209,10 @@ public class AuthController {
     public record LoginRequest(String userId, String password) {
     }
 
-    public record WithdrawRequest(String password) {
+    public record WithdrawRequest(
+            String password,
+            String credential
+    ) {
     }
 
     public record FindIdRequest(String method, String name, String phone, String email) {
