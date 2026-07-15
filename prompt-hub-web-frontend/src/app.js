@@ -232,19 +232,9 @@ const demoCommentTextOverrides = {
 
 const promptTemplates = [
   {
-    id: "coding",
-    label: "코딩 질문",
-    prompt: "목적: 코딩 문제를 해결하고 싶습니다.\n사용 언어/프레임워크:\n현재 상황:\n문제 증상:\n시도해본 방법:\n에러 메시지/로그:\n원하는 결과:",
-  },
-  {
-    id: "email",
-    label: "이메일",
-    prompt: "목적: 이메일을 작성하고 싶습니다.\n받는 사람:\n상황:\n전달할 핵심 내용:\n원하는 톤:\n반드시 포함할 내용:\n원하는 결과:",
-  },
-  {
-    id: "blog",
-    label: "블로그",
-    prompt: "목적: 블로그 글을 작성하고 싶습니다.\n주제:\n타겟 독자:\n핵심 키워드:\n글의 톤:\n포함할 소제목/구성:\n원하는 분량:",
+    id: "writing",
+    label: "글쓰기",
+    prompt: "목적: 글을 더 명확하고 설득력 있게 작성하고 싶습니다.\n글의 주제:\n읽는 사람:\n핵심 메시지:\n원하는 톤:\n반드시 포함할 내용:\n출력 형식:",
   },
   {
     id: "summary",
@@ -252,9 +242,39 @@ const promptTemplates = [
     prompt: "목적: 내용을 요약하고 싶습니다.\n요약할 원문/자료:\n요약 대상 독자:\n원하는 요약 길이:\n반드시 남길 핵심:\n제외할 내용:\n출력 형식:",
   },
   {
+    id: "analysis",
+    label: "분석",
+    prompt: "목적: 자료나 상황을 분석하고 싶습니다.\n분석 대상:\n현재 상황:\n확인하고 싶은 관점:\n중요한 기준:\n이미 알고 있는 정보:\n원하는 결과 형식:",
+  },
+  {
+    id: "planning",
+    label: "기획",
+    prompt: "목적: 실행 가능한 기획안을 만들고 싶습니다.\n기획 주제:\n목표:\n대상 사용자/고객:\n제약 조건:\n필요한 구성 요소:\n원하는 결과 형식:",
+  },
+  {
+    id: "coding",
+    label: "코딩",
+    prompt: "목적: 개발 문제를 더 정확하게 질문하고 싶습니다.\n사용 언어/프레임워크:\n현재 상황:\n문제 증상:\n시도해본 방법:\n에러 메시지/로그:\n원하는 결과:",
+  },
+  {
     id: "marketing",
     label: "마케팅",
-    prompt: "목적: 마케팅 문구를 만들고 싶습니다.\n제품/서비스:\n타겟 고객:\n핵심 장점:\n고객의 고민:\n원하는 톤:\nCTA:\n사용 채널:",
+    prompt: "목적: 마케팅 전략이나 문구를 만들고 싶습니다.\n제품/서비스:\n타겟 고객:\n핵심 장점:\n고객의 고민:\n사용 채널:\n원하는 톤:\nCTA:",
+  },
+  {
+    id: "support",
+    label: "고객 응대",
+    prompt: "목적: 고객에게 답변할 내용을 만들고 싶습니다.\n고객 문의 내용:\n현재 상황:\n전달해야 할 사실:\n피해야 할 표현:\n원하는 톤:\n후속 안내:",
+  },
+  {
+    id: "learning",
+    label: "학습/설명",
+    prompt: "목적: 개념을 쉽게 설명하거나 학습 자료를 만들고 싶습니다.\n설명할 주제:\n대상 수준:\n이미 알고 있는 내용:\n어려워하는 부분:\n원하는 예시:\n출력 형식:",
+  },
+  {
+    id: "custom",
+    label: "직접 입력",
+    prompt: "",
   },
 ];
 
@@ -3166,6 +3186,16 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
+    const textarea = form.querySelector('textarea[name="message"]');
+    textarea?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      }
+    });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
@@ -4272,7 +4302,7 @@ async function hydratePromptComments(promptId, options = {}) {
   if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return false;
 
   try {
-    const comments = await api.getPromptComments(promptId, state.authToken || state.token || undefined);
+    const comments = await api.getPromptComments(promptId, getAuthToken() || undefined);
     if (Array.isArray(comments)) {
       commentsByPrompt[promptId] = comments;
       syncPromptCommentCount(promptId);
@@ -4642,7 +4672,7 @@ async function runConfirmedAction() {
     }
     try {
       if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
-      const result = await api.withdrawAccount({ password: action.password || "" }, state.authToken || state.token);
+      const result = await api.withdrawAccount({ password: action.password || "" }, getAuthToken());
       clearAuthenticatedSession();
       showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
     } catch (error) {
@@ -4878,7 +4908,7 @@ async function moveThreadToFolderOnBackend(thread, backendFolderId) {
     await api.moveMakeThread(
       backendThreadId,
       { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
-      state.authToken || state.token || undefined,
+      getAuthToken() || undefined,
     );
   } catch (error) {
     handleBackendAccessError(error, "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.");
@@ -5283,7 +5313,7 @@ async function publishSavedPrompt(promptId) {
   let backendPrompt = null;
   if (isBackendNumericId(promptId) && window.TTALKAK_API?.shareExistingPrompt) {
     try {
-      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, state.authToken || state.token || undefined);
+      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, getAuthToken() || undefined);
     } catch (error) {
       handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
       return;
@@ -5340,7 +5370,7 @@ async function updateOwnPrompt(promptId, formData) {
       backendPrompt = await window.TTALKAK_API.updatePrompt(
         promptId,
         { title, text, tags },
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
       );
     } catch (error) {
       handleBackendAccessError(error, "프롬프트 수정 요청에 실패했습니다.");
@@ -5626,7 +5656,7 @@ async function openAdminUserActivity(nickname, options = {}) {
   const memberId = String(options.memberId || "").trim();
   if (memberId && window.TTALKAK_API?.getAdminUserActivity) {
     try {
-      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, {}, state.authToken || state.token || undefined);
+      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, {}, getAuthToken() || undefined);
       state.backendAdminUserActivities = {
         ...state.backendAdminUserActivities,
         [normalizeAdminSearchText(resolvedNickname)]: {
@@ -5740,7 +5770,7 @@ async function sharePrompt(formData) {
           tags: prompt.tags,
           isShared: true,
         },
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
       );
       finalPrompt = {
         ...backendPrompt,
@@ -6330,7 +6360,7 @@ async function updateAdminTagDecision(tag, decision) {
   if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
     try {
       const backendDecision = decision;
-      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, backendDecision, state.authToken || state.token || undefined);
+      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, backendDecision, getAuthToken() || undefined);
       state.backendAdminTags = state.backendAdminTags.map((item) =>
         item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
       );
@@ -6359,7 +6389,7 @@ async function updateReportRecordStatus(key, status) {
       const updated = await window.TTALKAK_API.updateAdminReportStatus(
         record.backendId,
         mapFrontendReportStatus(status),
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
         `${getReportStatusLabel(status)} 처리`,
       );
       const backendStatus = mapBackendReportStatus(updated?.status || status);
@@ -6392,7 +6422,7 @@ async function requestPromptRevision(targetKey, reason) {
       backendRequest = await window.TTALKAK_API.requestPromptRevision(
         target.id,
         { reason: content, memo: content },
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
       );
     } catch (error) {
       handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다. 데모 상태로만 표시합니다.");
@@ -6488,7 +6518,7 @@ async function toggleAdminPromptHidden(promptId) {
   if (state.adminHiddenPromptIds.has(promptId)) {
     if (window.TTALKAK_API?.restoreAdminPrompt && isBackendNumericId(promptId)) {
       try {
-        await window.TTALKAK_API.restoreAdminPrompt(promptId, state.authToken || state.token || undefined);
+        await window.TTALKAK_API.restoreAdminPrompt(promptId, getAuthToken() || undefined);
       } catch (error) {
         handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
         console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
@@ -6499,7 +6529,7 @@ async function toggleAdminPromptHidden(promptId) {
   } else {
     if (window.TTALKAK_API?.hideAdminPrompt && isBackendNumericId(promptId)) {
       try {
-        await window.TTALKAK_API.hideAdminPrompt(promptId, state.authToken || state.token || undefined);
+        await window.TTALKAK_API.hideAdminPrompt(promptId, getAuthToken() || undefined);
       } catch (error) {
         handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
         console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
@@ -6644,7 +6674,13 @@ function getBackendErrorMessage(error) {
 }
 
 function getAuthToken() {
-  return String(state.authToken || state.token || "").trim();
+  let storedToken = "";
+  try {
+    storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  } catch (_error) {
+    storedToken = "";
+  }
+  return String(state.authToken || state.token || storedToken || "").trim();
 }
 
 function isDemoAuthToken(token = getAuthToken()) {
@@ -6656,12 +6692,18 @@ function hasBackendAuthToken() {
   return Boolean(token) && !isDemoAuthToken(token);
 }
 
-function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.") {
+function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.", options = {}) {
   const status = Number(error?.status || error?.payload?.status || 0);
   const backendMessage = getBackendErrorMessage(error);
+  const keepSession = Boolean(options.keepSession);
 
   if (status === 401) {
     const token = getAuthToken();
+    if (keepSession) {
+      showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
+      return true;
+    }
+
     if (!token || isDemoAuthToken(token)) {
       showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 데모 화면 상태는 유지합니다.");
       return true;
@@ -6720,7 +6762,7 @@ async function createBackendMakeFolder(payload) {
   if (!api?.createMakeFolder) return "";
 
   try {
-    const result = await api.createMakeFolder(payload, state.authToken || state.token || undefined);
+    const result = await api.createMakeFolder(payload, getAuthToken() || undefined);
     return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
   } catch (error) {
     handleBackendAccessError(error, "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.");
@@ -6760,11 +6802,11 @@ async function createBackendMakeThread(thread) {
 
     const result = await api.createMakeThread(
       payload,
-      state.authToken || state.token || undefined,
+      getAuthToken() || undefined,
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
   } catch (error) {
-    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.");
+    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.", { keepSession: true });
     console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
     return "";
   }
@@ -6802,7 +6844,7 @@ async function improvePromptWithBackend(prompt) {
   if (!api?.improvePrompt) return polishPrompt(prompt);
 
   try {
-    const improved = await api.improvePrompt({ prompt }, state.authToken || state.token || undefined);
+    const improved = await api.improvePrompt({ prompt }, getAuthToken() || undefined);
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
     const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || "").trim() : "";
@@ -6860,8 +6902,8 @@ async function hydrateBackendMakeDataIfNeeded() {
   state.makeBackendMessage = "Make API 연결 확인 중";
 
   const [threadsResult, foldersResult] = await Promise.allSettled([
-    api.getMakeThreads?.(state.authToken || state.token || undefined),
-    api.getMakeFolders?.(state.authToken || state.token || undefined),
+    api.getMakeThreads?.(getAuthToken() || undefined),
+    api.getMakeFolders?.(getAuthToken() || undefined),
   ]);
 
   let shouldRender = false;
@@ -6917,7 +6959,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
   if (!api?.getMyLibrary) return;
 
   state.myBackendStatus = "checking";
-  const token = state.authToken || state.token || undefined;
+  const token = getAuthToken() || undefined;
   const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = await Promise.allSettled([
     api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
     api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64 }, token),
@@ -7009,7 +7051,7 @@ async function hydrateBackendAdminDataIfNeeded() {
   }
 
   state.adminBackendStatus = "checking";
-  const token = state.authToken || state.token || undefined;
+  const token = getAuthToken() || undefined;
   const [reportsResult, tagsResult, promptsResult, revisionRequestsResult] = await Promise.allSettled([
     api.getAdminReports?.({}, token),
     api.getAdminTags?.({}, token),
