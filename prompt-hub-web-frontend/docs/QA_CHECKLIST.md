@@ -34,12 +34,17 @@
 
 ## Make
 
+- Make 전송 시 Spring Boot `POST /api/prompts/improve`만 호출되는지 확인합니다.
+- 브라우저 Network 탭에 FastAPI `/query`, 포트 `8000`, RAG 서버 URL, AI provider endpoint로 직접 나가는 요청이 없는지 확인합니다.
+- FastAPI `/query`, RAG, Vector DB, LLM 호출은 Spring Boot 뒤에 숨겨져 있어야 합니다.
 - Make 진입 시 `GET /api/make/threads`가 200으로 응답하는지 확인합니다.
 - Make 진입 시 `GET /api/make/folders`가 200으로 응답하는지 확인합니다.
 - 프롬프트 전송 시 `POST /api/prompts/improve`가 호출되는지 확인합니다.
 - RAG 응답이 `improvedPrompt`, `improved_prompt`, `answer`, `text`, `content` 중 어떤 필드로 와도 결과 카드가 비지 않는지 확인합니다.
 - RAG가 추가 질문 모드로 응답하면 질문 목록이 assistant 메시지로 보이는지 확인합니다.
-- 404, 429, 500, 503 상황에서 데모 첨삭 fallback 안내가 표시되는지 확인합니다.
+- 404는 요청한 리소스 없음으로 처리되고, RAG 근거 없음으로 표시되지 않는지 확인합니다.
+- RAG 근거 없음은 `200 OK` + `rag_status: "no_evidence"` 형태로 내려왔을 때 기본 첨삭 결과와 안내가 표시되는지 확인합니다.
+- 429, 500, 503, 504 상황에서 데모 첨삭 fallback 안내가 표시되는지 확인합니다.
 - 새 대화 저장 시 서버에서 받은 `id` 또는 `threadId`가 프론트 상태에 유지되는지 확인합니다.
 - 폴더 생성 직후 이동할 때 서버 folder id가 없으면 임시 `folder-...` id를 `PATCH /api/make/threads/:id/folder`에 보내지 않는지 확인합니다.
 - 폴더 이동 시 thread id가 서버 숫자 id인지 확인합니다.
@@ -76,9 +81,9 @@
 - 관리자 계정에서는 My page 메뉴가 숨겨지고, 개인 신고 내역 대신 Admin > 신고 관리에서 운영 신고를 처리하는지 확인합니다.
 - 신고 관리 / 프롬프트 관리 / 태그 관리가 사이드바 하위 메뉴로 표시되는지 확인합니다.
 - 관리자 원문 보기는 Execute, 좋아요, 저장, 공유, 일반 신고 같은 사용자 액션 없이 운영 액션만 보여야 합니다.
-- 신고 관리는 원문 보기, 수정 요청, 게시물 숨김, 검토 완료, 기각, 재처리, 대상 삭제 흐름을 확인합니다.
+- 신고 관리는 원문 보기, 수정 요청, 게시물 숨김/숨김 해제, 검토 완료, 기각, 재처리, 댓글 삭제 흐름을 확인합니다. 프롬프트 영구 삭제는 현재 백엔드 정책에 포함하지 않습니다.
 - 댓글 신고에서는 게시물 작성자와 댓글 작성자 맥락이 구분되어 보이는지 확인합니다.
-- 프롬프트 관리는 관리자가 직접 본문을 수정하지 않고 수정 요청, 숨김/해제, 삭제 중심으로 동작하는지 확인합니다.
+- 프롬프트 관리는 관리자가 직접 본문을 수정하지 않고 수정 요청, 숨김/해제 중심으로 동작하는지 확인합니다. 숨김은 복구 가능한 소프트 삭제입니다.
 - 태그 관리는 검색, 상태 필터, 사용량/최신 정렬, 검토 완료, 재검토, 추천 제외가 구분되는지 확인합니다.
 
 Additional admin check:
@@ -89,6 +94,6 @@ Additional admin check:
 
 - 일부 화면은 API 호출 후에도 optimistic local state를 먼저 갱신합니다. 실패 rollback은 다음 연동 단계에서 더 보강해야 합니다.
 - My page와 Admin의 전체 데이터는 백엔드 API 계약이 확정되면 서버 응답 기준 렌더링으로 교체해야 합니다.
-- Google OAuth2는 버튼과 화면 흐름 데모이며, 실제 OAuth redirect/token 교환은 아직 별도 확인이 필요합니다.
+- Google OAuth2는 백엔드 로컬 검증이 완료된 기능입니다. 운영 배포 전에는 Google Cloud Console의 실제 프론트 도메인 등록과 관련 환경변수 설정을 확인합니다.
 - Make thread delete는 현재 백엔드 계약에 없으므로 로컬 전용 동작입니다.
 - RAG의 최종 응답 스키마가 확정되면 `src/api.js`의 `normalizeImproveResult()`를 그 계약에 맞춰 더 좁게 정리할 수 있습니다.

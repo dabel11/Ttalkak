@@ -392,6 +392,7 @@ const state = {
   authDraft: {},
   authDuplicateChecks: {},
   authUserIdWarning: "",
+  authError: "",
   libraryDemoSeeded: false,
   userLibraryPromptIds: new Set(),
   searchTipShown: false,
@@ -410,6 +411,8 @@ const state = {
   backendMyPrompts: [],
   backendMyComments: [],
   backendMyReports: [],
+  backendLibraryPrompts: [],
+  backendLikedPrompts: [],
   backendLibraryPromptIds: new Set(),
   backendAdminReports: [],
   backendAdminTags: [],
@@ -766,7 +769,7 @@ function Page() {
 function HomePage() {
   const prompts = applyReportedVisibility(getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = state.backendPopularTags.length ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
+  const displayTags = state.backendStatus === "connected" ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const totalPages = getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
@@ -979,7 +982,7 @@ function PromptCard(prompt, options = {}) {
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const message = state.backendStatusMessage || "백엔드 연결 확인 중";
-  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "Demo data 표시 중" : "Backend 확인 중";
+  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "데모 데이터 표시 중" : "Backend 확인 중";
   return `
     <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
       <span class="backend-status-dot" aria-hidden="true"></span>
@@ -1035,8 +1038,8 @@ function PromptDetailModal() {
             ${
               revisionRequest
                 ? `<div class="revision-request-notice">
-                    <strong>수정 요청됨</strong>
-                    <p>${escapeHtml(revisionRequest.reason)}</p>
+                    <strong>수정 요청 사유</strong>
+                    <p>${escapeHtml(revisionRequest.reason || "수정 요청 사유가 입력되지 않았습니다.")}</p>
                   </div>`
                 : ""
             }
@@ -1088,10 +1091,9 @@ function PromptDetailModal() {
         <div class="modal-actions detail-actions">
           ${
             isAdminReview
-              ? `<div class="detail-action-group manage-actions">
+                 ? `<div class="detail-action-group manage-actions">
                    <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
                    <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
-                   <button class="secondary-button danger-button" type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
                  </div>
                  <div class="detail-action-group use-actions">
                    <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
@@ -1746,8 +1748,8 @@ function MyCommentsPanel() {
                         ${
                           revisionRequest
                             ? `<div class="revision-request-notice activity-revision-notice">
-                                <strong>수정 요청됨</strong>
-                                <p>${escapeHtml(revisionRequest.reason)}</p>
+                                <strong>수정 요청 사유</strong>
+                                <p>${escapeHtml(revisionRequest.reason || "수정 요청 사유가 입력되지 않았습니다.")}</p>
                               </div>`
                             : ""
                         }
@@ -1858,13 +1860,14 @@ function AdminPage() {
     </section>
   `;
   const adminTags = getAdminManagedTags();
-  const adminTagFilter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const adminTagFilter = ["all", "pending", "approved", "rejected", "disabled"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const adminTagSort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
   const adminTagFilters = [
     { id: "all", label: "전체" },
     { id: "pending", label: "검토 중" },
     { id: "approved", label: "검토 완료" },
-    { id: "rejected", label: "추천 제외" },
+    { id: "rejected", label: "반려" },
+    { id: "disabled", label: "추천 제외" },
   ];
   const adminTabs = getAdminTabs();
   const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
@@ -1903,9 +1906,7 @@ function AdminPage() {
                       ${
                         record.type === "comment"
                           ? `<button type="button" data-delete-comment="${record.targetId}">댓글 삭제</button>`
-                          : record.promptId
-                            ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>`
-                            : ""
+                          : ""
                       }
                     </div>
                   </article>
@@ -1919,7 +1920,7 @@ function AdminPage() {
   const promptsPanel = `
     <section class="admin-panel">
       <h2>프롬프트 관리</h2>
-      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청, 게시물 숨김, 삭제 같은 운영 조치만 수행합니다.</p>
+      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청과 게시물 숨김/해제 같은 운영 조치만 수행합니다.</p>
       <div class="admin-filter-list" aria-label="프롬프트 분류">
         ${adminPromptFilters
           .map(
@@ -1964,7 +1965,7 @@ function AdminPage() {
                     revisionRequest
                       ? `<div class="revision-request-notice admin-revision-summary">
                           <strong>수정 요청 사유</strong>
-                          <p>${escapeHtml(revisionRequest.reason)}</p>
+                          <p>${escapeHtml(revisionRequest.reason || "수정 요청 사유가 입력되지 않았습니다.")}</p>
                         </div>`
                       : ""
                   }
@@ -1973,7 +1974,6 @@ function AdminPage() {
                   <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
                   <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
                   <button type="button" data-admin-hide-prompt="${prompt.id}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
-                  <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
                 </div>
               </article>
             `;
@@ -1985,7 +1985,7 @@ function AdminPage() {
   const tagsPanel = `
     <section class="admin-panel">
       <h2>태그 관리</h2>
-      <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
+      <p class="admin-panel-note">태그는 검토 중, 검토 완료, 반려, 추천 제외 상태로 관리하며 승인 태그는 추천 제외하거나 다시 복구할 수 있습니다.</p>
       <div class="admin-filter-list" aria-label="태그 상태 분류">
         ${adminTagFilters
           .map(
@@ -2018,10 +2018,10 @@ function AdminPage() {
                     </div>
                     <div class="admin-actions">
                       <button type="button" data-admin-tag-prompts="${escapeHtml(tag.key)}">${isSelectedTag ? "사용 게시물 닫기" : "사용 게시물 보기"}</button>
-                      ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
-                      ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-                      ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">검토 완료 취소</button>` : ""}
-                      ${tag.status === "rejected" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
+                      ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
+                      ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">반려</button>` : ""}
+                      ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="disabled:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
+                      ${tag.status === "disabled" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">추천 복구</button>` : ""}
                     </div>
                   </article>
                   ${isSelectedTag ? AdminTagPromptUsagePanel(tag) : ""}
@@ -2049,7 +2049,7 @@ function AdminPage() {
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 숨김, 삭제, 검토 상태 변경만 수행합니다.</p>
+        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 게시물 숨김/해제, 댓글 삭제, 검토 상태 변경만 수행합니다.</p>
       </div>
       <div class="admin-workspace">
         <div class="admin-content-panel">
@@ -2263,6 +2263,7 @@ function AuthModal() {
   const isFindPassword = state.authView === "find-password";
   const isWithdraw = state.authView === "withdraw";
   const title = isFindId ? "아이디 찾기" : isFindPassword ? "비밀번호 찾기" : isWithdraw ? "회원탈퇴" : isSignup ? "회원가입" : "로그인";
+  const authError = escapeHtml(state.authError || "");
   const nicknameChecked = state.authDuplicateChecks.nickname && state.authDuplicateChecks.nickname === String(state.authDraft.nickname || "").trim();
   const userIdChecked = state.authDuplicateChecks.userId && state.authDuplicateChecks.userId === String(state.authDraft.userId || "").trim();
 
@@ -2280,6 +2281,7 @@ function AuthModal() {
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
           <p class="auth-helper">회원탈퇴를 진행하면 계정이 비활성화되고 기존 토큰으로 다시 사용할 수 없습니다. 본인 확인을 위해 비밀번호를 입력해주세요.</p>
+          ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
           <label class="password-field">
             <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />
             <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
@@ -2301,6 +2303,7 @@ function AuthModal() {
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
           <p class="auth-helper">${isFindId ? "이름과 이메일로 아이디 찾기 데모를 진행합니다. 전화번호는 선택 보조 정보입니다." : "아이디와 이메일로 비밀번호 재설정 데모를 진행합니다. 전화번호는 선택 보조 정보입니다."}</p>
+          ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
           ${
             isFindId
               ? `<input name="name" placeholder="이름" autocomplete="name" />`
@@ -2326,8 +2329,10 @@ function AuthModal() {
           <h2 id="auth-title">${title}</h2>
           <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
         </div>
-        <button class="google-auth-button" type="button" data-google-auth><span>G</span>${isSignup ? "Google로 회원가입" : "Google로 로그인"}</button>
+        <button class="google-auth-button" type="button" data-google-auth><span>G</span>${window.TTALKAK_GOOGLE_CREDENTIAL ? (isSignup ? "Google로 회원가입" : "Google로 로그인") : (isSignup ? "Google 회원가입 데모" : "Google 로그인 데모")}</button>
+        ${!window.TTALKAK_GOOGLE_CREDENTIAL ? `<p class="auth-helper compact">실제 Google OAuth는 Google Client ID와 credential 설정 후 연결됩니다.</p>` : ""}
         <div class="auth-divider"><span>또는</span></div>
+        ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
         ${
           isSignup
             ? `<div class="auth-check-row">
@@ -2400,6 +2405,34 @@ function saveAuthDraftFromForm() {
   };
 }
 
+function clearAuthFormError() {
+  state.authError = "";
+  const errorElement = document.querySelector("[data-auth-error]");
+  if (errorElement) {
+    errorElement.textContent = "";
+    errorElement.hidden = true;
+  }
+}
+
+function setAuthFormError(message) {
+  const text = String(message || "요청을 처리하지 못했습니다.").trim();
+  state.authError = text;
+  const form = document.querySelector("[data-auth-form]");
+  let errorElement = form?.querySelector("[data-auth-error]");
+  if (!errorElement && form) {
+    errorElement = document.createElement("p");
+    errorElement.className = "auth-form-error";
+    errorElement.setAttribute("role", "alert");
+    errorElement.dataset.authError = "";
+    const anchor = form.querySelector(".auth-divider") || form.querySelector(".auth-helper") || form.querySelector(".modal-head");
+    anchor?.insertAdjacentElement("afterend", errorElement);
+  }
+  if (errorElement) {
+    errorElement.textContent = text;
+    errorElement.hidden = false;
+  }
+}
+
 function isDuplicateAuthValue(field, value) {
   const normalized = normalizeSearchText(value);
   if (!normalized) return false;
@@ -2458,7 +2491,12 @@ function applyAuthenticatedUser(authResult) {
 }
 
 function isAdminDemoCredential(userId, password) {
-  return String(userId || "").trim().toLowerCase() === "admin" && String(password || "") === "Admin1234!";
+  const credential = window.TTALKAK_ADMIN_DEMO_CREDENTIAL;
+  if (!credential?.enabled) return false;
+  return (
+    String(userId || "").trim().toLowerCase() === String(credential.userId || "").trim().toLowerCase() &&
+    String(password || "") === String(credential.password || "")
+  );
 }
 
 function isBackendConnectionError(error) {
@@ -2485,6 +2523,7 @@ function applyAdminDemoFallback() {
   state.authDraft = {};
   state.authDuplicateChecks = {};
   state.authUserIdWarning = "";
+  state.authError = "";
   showNotice("백엔드 로그인 연결 실패로 관리자 데모 세션을 사용합니다.");
   render();
 }
@@ -2498,12 +2537,15 @@ function clearAuthenticatedSession({ keepRoute = false } = {}) {
   state.token = "";
   state.adminMode = false;
   state.authView = null;
+  state.authError = "";
   state.myBackendStatus = "idle";
   state.adminBackendStatus = "idle";
   state.makeBackendStatus = "idle";
   state.backendMyPrompts = [];
   state.backendMyComments = [];
   state.backendMyReports = [];
+  state.backendLibraryPrompts = [];
+  state.backendLikedPrompts = [];
   state.backendLibraryPromptIds = new Set();
   state.backendAdminReports = [];
   state.backendAdminTags = [];
@@ -2610,6 +2652,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.authView = button.dataset.openAuth;
       state.authUserIdWarning = "";
+      state.authError = "";
       render();
     });
   });
@@ -2698,7 +2741,33 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-google-auth]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+      const credential = String(button.dataset.googleCredential || window.TTALKAK_GOOGLE_CREDENTIAL || "").trim();
+      const api = window.TTALKAK_API;
+
+      if (credential && api?.googleLogin) {
+        try {
+          button.disabled = true;
+          const authResponse = await api.googleLogin(credential);
+          const authResult = normalizeAuthResult(authResponse, "google");
+          if (!authResult.token) {
+            throw new Error("Google 로그인 응답에 accessToken이 없습니다.");
+          }
+          applyAuthenticatedUser(authResult);
+          state.authView = null;
+          state.authError = "";
+          showNotice("Google 계정으로 로그인했습니다.");
+          render();
+          return;
+        } catch (error) {
+          setAuthFormError(error?.message || "Google 로그인에 실패했습니다.");
+        } finally {
+          button.disabled = false;
+        }
+      } else {
+        showNotice("Google OAuth credential이 없어 데모 Google 계정으로 전환합니다. 실제 연동은 Google Client ID 설정 후 확인하세요.");
+      }
+
       applyAuthenticatedUser({
         token: DEMO_AUTH_TOKEN,
         user: {
@@ -2709,7 +2778,7 @@ function bindEvents() {
         },
       });
       state.authView = null;
-      showNotice("Google 계정으로 로그인했습니다.");
+      state.authError = "";
       render();
     });
   });
@@ -2723,13 +2792,13 @@ function bindEvents() {
       const value = String(input?.value || "").trim();
       saveAuthDraftFromForm();
       if (!value) {
-        window.alert("중복 확인할 값을 입력해주세요.");
+        setAuthFormError("중복 확인할 값을 입력해주세요.");
         return;
       }
       if (field === "userId") {
         const warning = updateUserIdWarning(input);
         if (warning) {
-          window.alert(warning);
+          setAuthFormError(warning);
           return;
         }
       }
@@ -2748,7 +2817,7 @@ function bindEvents() {
       }
       if (isDuplicate) {
         delete state.authDuplicateChecks[field];
-        window.alert(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
+        setAuthFormError(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
         render();
         return;
       }
@@ -2760,6 +2829,7 @@ function bindEvents() {
   document.querySelectorAll("[data-close-auth]").forEach((button) => {
     button.addEventListener("click", () => {
       state.authView = null;
+      state.authError = "";
       render();
     });
   });
@@ -3114,19 +3184,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-delete-prompt]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openConfirmAction({
-        type: "delete-prompt",
-        targetId: button.dataset.adminDeletePrompt,
-        title: "관리자 삭제",
-        message: "관리자 권한으로 이 프롬프트를 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-
   document.querySelectorAll("[data-admin-prompt-search]").forEach((input) => {
     input.addEventListener("compositionstart", () => {
       state.isComposingAdminPromptSearch = true;
@@ -3189,13 +3246,13 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
       if (!tag) return;
-      if (decision === "rejected") {
+      if (decision === "disabled") {
         openConfirmAction({
           type: "admin-tag-status",
           targetId: tag,
           value: decision,
           title: "태그 추천 제외",
-          message: "이 태그를 추천 태그 목록에서 제외할까요? 제외 후에도 태그 관리에서 재검토할 수 있습니다.",
+          message: "이 태그를 추천 태그 목록에서 제외할까요? 필요하면 태그 관리에서 추천 복구할 수 있습니다.",
           confirmLabel: "추천 제외",
           danger: true,
         });
@@ -3457,6 +3514,7 @@ function bindEvents() {
     authForm.addEventListener("input", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLInputElement)) return;
+      clearAuthFormError();
 
       if (target.name === "userId") {
         normalizeUserIdInput(target);
@@ -3496,7 +3554,7 @@ function bindEvents() {
 
       if (isWithdraw) {
         if (!password) {
-          window.alert("회원탈퇴를 위해 비밀번호를 입력해주세요.");
+          setAuthFormError("회원탈퇴를 위해 비밀번호를 입력해주세요.");
           return;
         }
         openConfirmAction({
@@ -3515,15 +3573,15 @@ function bindEvents() {
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
         if (!name || !email) {
-          window.alert("이름과 이메일을 입력해주세요.");
+          setAuthFormError("이름과 이메일을 입력해주세요.");
           return;
         }
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
         try {
@@ -3533,7 +3591,7 @@ function bindEvents() {
           showNotice(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
         } catch (error) {
           const backendMessage = error?.payload?.message || error?.message || "";
-          window.alert(backendMessage || "아이디 찾기 요청에 실패했습니다.");
+          setAuthFormError(backendMessage || "아이디 찾기 요청에 실패했습니다.");
           return;
         }
         state.authView = "login";
@@ -3544,19 +3602,19 @@ function bindEvents() {
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
         if (!userId || !email) {
-          window.alert("아이디와 이메일을 입력해주세요.");
+          setAuthFormError("아이디와 이메일을 입력해주세요.");
           return;
         }
         if (userIdWarning) {
-          window.alert(userIdWarning);
+          setAuthFormError(userIdWarning);
           return;
         }
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
         try {
@@ -3565,7 +3623,7 @@ function bindEvents() {
           showNotice("비밀번호 재설정 요청을 보냈습니다.");
         } catch (error) {
           const backendMessage = error?.payload?.message || error?.message || "";
-          window.alert(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
+          setAuthFormError(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
           return;
         }
         state.authView = "login";
@@ -3587,66 +3645,66 @@ function bindEvents() {
           .map(([, label]) => label);
 
         if (missingFields.length > 0) {
-          window.alert(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
+          setAuthFormError(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
           return;
         }
         if (userIdWarning) {
-          window.alert(userIdWarning);
+          setAuthFormError(userIdWarning);
           return;
         }
         const email = String(formData.get("email") || "").trim();
         const phone = String(formData.get("phone") || "").trim();
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
 
         if (isDuplicateAuthValue("nickname", nickname)) {
-          window.alert("이미 사용 중인 닉네임입니다.");
+          setAuthFormError("이미 사용 중인 닉네임입니다.");
           return;
         }
         if (isDuplicateAuthValue("userId", userId)) {
-          window.alert("이미 사용 중인 아이디입니다.");
+          setAuthFormError("이미 사용 중인 아이디입니다.");
           return;
         }
         if (state.authDuplicateChecks.nickname !== nickname || state.authDuplicateChecks.userId !== userId) {
-          window.alert("닉네임과 아이디 중복 확인을 완료해주세요.");
+          setAuthFormError("닉네임과 아이디 중복 확인을 완료해주세요.");
           return;
         }
 
         const birth = String(formData.get("birth") || "").trim();
         if (isFutureDate(birth)) {
-          window.alert("생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
+          setAuthFormError("생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
           return;
         }
         if (password.length < 8) {
-          window.alert("비밀번호는 8자 이상 입력해주세요.");
+          setAuthFormError("비밀번호는 8자 이상 입력해주세요.");
           return;
         }
         if (formData.get("terms") !== "on" || formData.get("privacy") !== "on") {
-          window.alert("사이트 이용 약관과 개인정보 수집 및 이용에 동의해주세요.");
+          setAuthFormError("사이트 이용 약관과 개인정보 수집 및 이용에 동의해주세요.");
           return;
         }
       } else if (!userId || !password) {
-        window.alert("아이디와 비밀번호를 모두 입력해주세요.");
+        setAuthFormError("아이디와 비밀번호를 모두 입력해주세요.");
         return;
       } else if (userIdWarning) {
-        window.alert(userIdWarning);
+        setAuthFormError(userIdWarning);
         return;
       }
 
       if (isSignup && formData.get("password") !== formData.get("passwordConfirm")) {
-        window.alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
+        setAuthFormError("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
         return;
       }
 
       const api = window.TTALKAK_API;
       if (!api?.login) {
-        window.alert("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
+        setAuthFormError("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
         return;
       }
 
@@ -3669,7 +3727,7 @@ function bindEvents() {
         const authResult = normalizeAuthResult(authResponse, userId);
 
         if (!authResult.token) {
-          window.alert("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
+          setAuthFormError("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
           return;
         }
 
@@ -3678,6 +3736,7 @@ function bindEvents() {
         state.authDraft = {};
         state.authDuplicateChecks = {};
         state.authUserIdWarning = "";
+        state.authError = "";
         showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
         await loadMakeBackendData({ shouldRender: false });
         render();
@@ -3688,7 +3747,7 @@ function bindEvents() {
         }
 
         const backendMessage = error?.payload?.message || error?.message || "";
-        window.alert(backendMessage || "로그인 요청에 실패했습니다.");
+        setAuthFormError(backendMessage || "로그인 요청에 실패했습니다.");
       }
     });
   }
@@ -3856,6 +3915,10 @@ function toggleSavedPrompt(promptId) {
     if (!isSavedByMe || wasHiddenDemoPrompt) {
       savedPrompt.savedByMe = true;
       state.userLibraryPromptIds.add(promptId);
+      state.backendLibraryPromptIds.add(promptId);
+      if (state.myBackendStatus === "connected") {
+        upsertPrompt(state.backendLibraryPrompts, { ...savedPrompt, savedByMe: true });
+      }
       state.pendingUnsaveIds.delete(promptId);
       updatePromptField(promptId, "saves", 1);
       if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId).then(refreshMyPageDataAfterMutation);
@@ -3868,6 +3931,7 @@ function toggleSavedPrompt(promptId) {
       state.pendingUnsaveIds.delete(promptId);
       state.userLibraryPromptIds.delete(promptId);
       state.backendLibraryPromptIds.delete(promptId);
+      state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
       updatePromptField(promptId, "saves", -1);
       callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
       showNotice("저장을 취소했습니다.");
@@ -3896,6 +3960,8 @@ function toggleSavedPrompt(promptId) {
       savedPrompts.splice(savedIndex, 1);
     }
     state.userLibraryPromptIds.delete(promptId);
+    state.backendLibraryPromptIds.delete(promptId);
+    state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
     updatePromptField(promptId, "saves", -1);
     if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
@@ -3924,6 +3990,14 @@ function toggleSavedPrompt(promptId) {
     savedByMe: true,
   });
   state.userLibraryPromptIds.add(promptId);
+  state.backendLibraryPromptIds.add(promptId);
+  if (state.myBackendStatus === "connected") {
+    upsertPrompt(state.backendLibraryPrompts, {
+      ...updatedPrompt,
+      source: prompt.source === "mine" ? "mine" : "community",
+      savedByMe: true,
+    });
+  }
   if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId).then(refreshMyPageDataAfterMutation);
 
   showNotice("저장했습니다.");
@@ -3941,10 +4015,15 @@ function toggleLikePrompt(promptId) {
   const isLiked = state.likedPromptIds.has(promptId);
   if (isLiked) {
     state.likedPromptIds.delete(promptId);
+    state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
     updatePromptField(promptId, "likes", -1);
     if (isBackendNumericId(promptId)) callBackendApi("unlikePrompt", promptId).then(refreshMyPageDataAfterMutation);
   } else {
     state.likedPromptIds.add(promptId);
+    const prompt = findPromptById(promptId);
+    if (prompt && state.myBackendStatus === "connected") {
+      upsertPrompt(state.backendLikedPrompts, { ...prompt, likedByMe: true });
+    }
     updatePromptField(promptId, "likes", 1);
     if (isBackendNumericId(promptId)) callBackendApi("likePrompt", promptId).then(refreshMyPageDataAfterMutation);
   }
@@ -5298,6 +5377,8 @@ function performDeletePrompt(promptId) {
   removePromptById(savedPrompts, promptId);
   state.userLibraryPromptIds.delete(promptId);
   state.backendLibraryPromptIds.delete(promptId);
+  state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
+  state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
   state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
   normalizeSavedPage();
   showNotice("프롬프트를 삭제했습니다.");
@@ -5367,10 +5448,7 @@ function restoreSearchFocus() {
 
 function getSavedPagePrompts() {
   if (state.myBackendStatus === "connected") {
-    return savedPrompts.filter((prompt) => {
-      if (!state.backendLibraryPromptIds.has(prompt.id)) return false;
-      return prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id);
-    });
+    return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts]);
   }
 
   const merged = savedPrompts.filter(
@@ -5686,6 +5764,9 @@ async function sharePrompt(formData) {
   upsertPrompt(savedPrompts, finalPrompt);
   state.userLibraryPromptIds.add(finalPrompt.id);
   state.backendLibraryPromptIds.add(finalPrompt.id);
+  if (state.myBackendStatus === "connected") {
+    upsertPrompt(state.backendLibraryPrompts, finalPrompt);
+  }
   if (!commentsByPrompt[finalPrompt.id]) {
     commentsByPrompt[finalPrompt.id] = [];
   }
@@ -5805,7 +5886,7 @@ function getKnownTags() {
 function getAdminManagedTags() {
   const stats = getTagStats();
   const query = normalizeTag(state.adminTagQuery || "");
-  const filter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const filter = ["all", "pending", "approved", "rejected", "disabled"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const sort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
 
   const backendTags = (state.backendAdminTags || []).map((tag) => ({
@@ -6218,35 +6299,37 @@ function normalizeAdminSearchText(value) {
 
 function getAdminTagStatus(tag) {
   const decision = state.adminTagDecisions[normalizeTag(tag)];
-  if (decision === "approved" || decision === "rejected") return decision;
+  if (["approved", "rejected", "disabled"].includes(decision)) return decision;
   return "pending";
 }
 
 function getAdminTagStatusLabel(status) {
   if (status === "approved") return "검토 완료";
-  if (status === "rejected") return "추천 제외";
+  if (status === "disabled") return "추천 제외";
+  if (status === "rejected") return "반려";
   return "검토 중";
 }
 
 function getAdminTagStatusClass(status) {
   if (status === "approved") return "public";
-  if (status === "rejected") return "private";
+  if (["rejected", "disabled"].includes(status)) return "private";
   return "pending-unsave";
 }
 
 function getAdminTagStatusOrder(status) {
   if (status === "pending") return 0;
   if (status === "approved") return 1;
-  return 2;
+  if (status === "disabled") return 2;
+  return 3;
 }
 
 async function updateAdminTagDecision(tag, decision) {
-  if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
+  if (!tag || !["pending", "approved", "rejected", "disabled"].includes(decision)) return;
 
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
   if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
     try {
-      const backendDecision = decision === "rejected" ? "disabled" : decision;
+      const backendDecision = decision;
       const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, backendDecision, state.authToken || state.token || undefined);
       state.backendAdminTags = state.backendAdminTags.map((item) =>
         item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
@@ -6720,19 +6803,35 @@ async function improvePromptWithBackend(prompt) {
 
   try {
     const improved = await api.improvePrompt({ prompt }, state.authToken || state.token || undefined);
-    state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
-    return improved || polishPrompt(prompt);
+    const improvedText = typeof improved === "string" ? improved : improved?.text || "";
+    const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
+    const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || "").trim() : "";
+    if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
+      state.makeBackendMessage =
+        ragMessage || "Make API 연결됨: 관련 프롬프팅 기법 근거가 없어 기본 첨삭 결과를 반영했습니다.";
+    } else {
+      state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
+    }
+    return improvedText || polishPrompt(prompt);
   } catch (error) {
     const status = Number(error?.status || error?.payload?.status || 0);
+    const code = String(error?.payload?.code || error?.code || "").toUpperCase();
     let fallbackMessage = "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.";
     if (status === 404) {
-      fallbackMessage = "관련 프롬프트 기법을 찾지 못해 데모 첨삭을 표시합니다.";
+      fallbackMessage = "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다.";
     } else if (status === 429) {
-      fallbackMessage = "요청이 많아 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
-    } else if (status === 500 || status === 503) {
-      fallbackMessage = "RAG 또는 백엔드 응답 지연으로 데모 첨삭을 표시합니다.";
+      fallbackMessage =
+        code === "TRIAL_LIMIT_EXCEEDED"
+          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다."
+          : "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+    } else if (status === 500) {
+      fallbackMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+    } else if (status === 503) {
+      fallbackMessage = "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+    } else if (status === 504) {
+      fallbackMessage = "응답 시간이 초과되었습니다. 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
     }
-    state.makeBackendMessage = `Make demo data 표시 중: ${fallbackMessage}`;
+    state.makeBackendMessage = `Make 데모 데이터 표시 중: ${fallbackMessage}`;
     handleBackendAccessError(error, fallbackMessage);
     console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
     return polishPrompt(prompt);
@@ -6819,8 +6918,9 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
 
   state.myBackendStatus = "checking";
   const token = state.authToken || state.token || undefined;
-  const [libraryResult, promptsResult, commentsResult, reportsResult] = await Promise.allSettled([
+  const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = await Promise.allSettled([
     api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
+    api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64 }, token),
     api.getMyPrompts?.({ page: 1, pageSize: 64 }, token),
     api.getMyComments?.({ page: 1, pageSize: 64 }, token),
     api.getMyReports?.({ page: 1, pageSize: 64 }, token),
@@ -6829,7 +6929,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
   let shouldRender = false;
   if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
     state.backendLibraryPromptIds = new Set();
-    libraryResult.value.items.forEach((prompt) => {
+    state.backendLibraryPrompts = libraryResult.value.items.map((prompt) => {
       const normalized = {
         ...prompt,
         source: prompt.source || (prompt.isMine ? "mine" : "community"),
@@ -6839,10 +6939,28 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
       if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
       state.userLibraryPromptIds.add(normalized.id);
       state.backendLibraryPromptIds.add(normalized.id);
+      return normalized;
     });
     shouldRender = true;
   } else if (libraryResult.status === "rejected") {
     console.warn("[TTALKAK] /api/me/library 연동에 실패해 데모 보관함을 유지합니다.", libraryResult.reason);
+  }
+
+  if (likedLibraryResult.status === "fulfilled" && Array.isArray(likedLibraryResult.value?.items)) {
+    state.backendLikedPrompts = likedLibraryResult.value.items.map((prompt) => {
+      const normalized = {
+        ...prompt,
+        source: prompt.source || (prompt.isMine ? "mine" : "community"),
+        likedByMe: true,
+      };
+      upsertPrompt(savedPrompts, normalized);
+      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+      state.likedPromptIds.add(normalized.id);
+      return normalized;
+    });
+    shouldRender = true;
+  } else if (likedLibraryResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패해 좋아요 보관함을 유지합니다.", likedLibraryResult.reason);
   }
 
   if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
@@ -7064,7 +7182,7 @@ function loadPersistedState() {
       ? savedState.adminPromptFilter
       : "all";
     state.adminTagQuery = savedState.adminTagQuery || "";
-    state.adminTagFilter = ["all", "pending", "approved", "rejected"].includes(savedState.adminTagFilter)
+    state.adminTagFilter = ["all", "pending", "approved", "rejected", "disabled"].includes(savedState.adminTagFilter)
       ? savedState.adminTagFilter
       : "all";
     state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";

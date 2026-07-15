@@ -9,19 +9,19 @@ The frontend first attempts the following backend endpoints for Admin features. 
 | Report list | `GET /api/admin/reports?status=pending` | none | Should return report target context, reporter, author/comment author, status, memo, reviewedAt |
 | Report status update | `PATCH /api/admin/reports/{id}/status` | `{ status, memo? }` | `status`: `pending`, `reviewed`, `resolved`, `dismissed` |
 | Admin prompt list | `GET /api/admin/prompts?page=1&pageSize=64&status=...` | none | Used by prompt management and user activity fallback |
-| Hide prompt | `PATCH /api/admin/prompts/{id}/hide` | none or `{ memo? }` | Admin moderation action |
-| Restore prompt | `PATCH /api/admin/prompts/{id}/restore` | none or `{ memo? }` | Admin moderation action |
+| Hide prompt | `PATCH /api/admin/prompts/{id}/hide` | none or `{ memo? }` | Admin moderation action. Current backend policy treats this as hide/soft-delete, not permanent deletion. |
+| Restore prompt | `PATCH /api/admin/prompts/{id}/restore` | none or `{ memo? }` | Restores a hidden/soft-deleted prompt. |
 | Prompt revision request | `POST /api/prompts/{promptId}/revision-requests` | `{ reason, memo? }` | Admin asks author to revise; admin should not directly edit user text |
 | Admin revision requests | `GET /api/admin/revision-requests?page=1&pageSize=64&status=...` | none | Used to show revision-requested state in Admin/My page |
-| Revision request status | `PATCH /api/admin/revision-requests/{requestId}/status` | `{ status, memo? }` | Same status family as reports where possible |
+| Revision request status | `PATCH /api/admin/revision-requests/{requestId}/status` | `{ status, memo? }` | `status`: `pending`, `approved`, `rejected` |
 | Hide comment | `PATCH /api/admin/comments/{commentId}/hide` | none or `{ memo? }` | Admin moderation action |
 | Unhide comment | `PATCH /api/admin/comments/{commentId}/unhide` | none or `{ memo? }` | Admin moderation action |
 | Delete comment | `DELETE /api/admin/comments/{commentId}` | none or `{ memo? }` | Admin moderation action |
-| Admin tags | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `disabled` supported by frontend |
-| Tag status update | `PATCH /api/admin/tags/{id}/status` | `{ status }` | Frontend maps recommendation-excluded UI to `disabled` |
+| Admin tags | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected`, `disabled` supported by frontend |
+| Tag status update | `PATCH /api/admin/tags/{id}/status` | `{ status }` | `pending`, `approved`, `rejected`, `disabled`; recommendation-excluded UI sends `disabled` |
 | User activity | `GET /api/admin/users/{memberId}/activities?limit=20` | none | Admin-only lookup for authored prompts, comments, replies, reports made, reports received |
 
-Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked.
+Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked. Admin credentials are provided by backend `.env` / `ADMIN_*` seed settings, not a fixed default password. `admin / Admin1234!` should be treated only as an example if the backend seed is configured that way.
 
 프론트엔드 프로토타입 기준의 백엔드 API 초안입니다. 실제 경로와 응답 형태는 Spring Boot 구현 방식에 맞춰 조정해도 됩니다.
 
@@ -63,11 +63,11 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
 | 프롬프트 공유 | `POST /api/prompts` | `{ title, text, tags }` | 내 프롬프트를 공유 상태로 생성 |
-| 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자만 가능. 관리자는 사용자 작성 프롬프트를 직접 수정하지 않고 수정 요청/숨김/삭제로 처리 |
+| 프롬프트 수정 | `PATCH /api/prompts/:id` | `{ title, text, tags }` | 소유자만 가능. 관리자는 사용자 작성 프롬프트를 직접 수정하지 않고 수정 요청/숨김/복구로 처리 |
 | 공유 취소 | `PATCH /api/prompts/:id/visibility` | `{ isShared: false }` | Home에서 제거, My page에는 내 프롬프트로 유지 |
 | 비공개 프롬프트 공유 | `PATCH /api/prompts/:id/visibility` | `{ isShared: true }` | My page의 내 프롬프트를 Home에 노출 |
 | 프롬프트 삭제 | `DELETE /api/prompts/:id` | none | 소유자만 가능 |
-| 관리자 프롬프트 수정 요청/삭제 | `POST /api/prompts/:id/revision-requests`, `DELETE /api/prompts/:id` | varies | 관리자는 사용자 콘텐츠를 직접 수정하지 않고 수정 요청 또는 운영 조치만 수행 |
+| 관리자 프롬프트 수정 요청/숨김 | `POST /api/prompts/:id/revision-requests`, `PATCH /api/admin/prompts/:id/hide`, `PATCH /api/admin/prompts/:id/restore` | varies | 관리자는 사용자 콘텐츠를 직접 수정하지 않고 수정 요청 또는 숨김/복구 운영 조치만 수행. 현재 영구 삭제 API는 없음 |
 | 저장 | `POST /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 저장 취소 | `DELETE /api/prompts/:id/save` | none | 저장 수와 `isSaved` 반환 |
 | 좋아요 | `POST /api/prompts/:id/like` | none | 좋아요 수와 `isLiked` 반환 |
@@ -78,8 +78,7 @@ Home에는 공유된 프롬프트만 반환합니다. 검색은 쉼표로 구분
 
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |
-| Google OAuth2 시작 | `GET /api/auth/google` | none | OAuth provider redirect |
-| Google OAuth2 callback | `GET /api/auth/google/callback` | provider params | session/token 발급 |
+| Google OAuth2 로그인 | `POST /api/auth/google` | `{ credential }` | Google credential 검증 후 자체 JWT 발급. 운영 배포 전 Google Cloud Console 도메인 등록과 환경변수 설정 필요 |
 | 닉네임 중복 확인 | `GET /api/auth/check-nickname?nickname=...` | none | 사용 가능 여부 반환 |
 | 아이디 중복 확인 | `GET /api/auth/check-user-id?userId=...` | none | 사용 가능 여부 반환 |
 | 로그아웃 | `POST /api/auth/logout` | none | 세션/token 종료 |
@@ -106,9 +105,9 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 | 신고 검토 완료 | `PATCH /api/admin/reports/:id/status` | `{ status: "reviewed", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
 | 신고 기각 | `PATCH /api/admin/reports/:id/status` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
 | 신고 재처리 | `PATCH /api/admin/reports/:id/status` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |
-| 신고 대상 삭제 | `DELETE /api/admin/reports/:id/target` | `{ memo? }` | 대상이 프롬프트/댓글/대댓글인지에 따라 삭제 |
+| 신고 대상 운영 조치 | report status + hide/comment delete APIs | `{ memo? }` | 프롬프트는 숨김/복구 정책을 따르고, 댓글은 관리자 댓글 삭제 API를 사용 |
 | 프롬프트 수정 요청 | `POST /api/prompts/:id/revision-requests` | `{ reason, memo? }` | 작성자에게 수정 요청을 전달, 관리자와 요청 시각 감사 로그 필요 |
-| 전체 프롬프트 삭제 | `DELETE /api/admin/prompts/:id` | `{ memo? }` | 삭제 사유와 관리자 감사 로그 필요 |
+| 전체 프롬프트 숨김/복구 | `PATCH /api/admin/prompts/:id/hide`, `PATCH /api/admin/prompts/:id/restore` | `{ memo? }` | 숨김은 복구 가능한 소프트 삭제 정책. 영구 삭제가 필요하면 별도 정책/API 결정 필요 |
 | 태그 관리 | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected` 상태와 사용 횟수 반환 |
 | 태그 상태 변경 | `PATCH /api/admin/tags/:id/status` | `{ status: "pending" \| "approved" \| "disabled", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
 
@@ -185,6 +184,14 @@ Make thread identity policy:
 
 ## Prompt Improve / RAG Response Contract
 
+프론트엔드 호출 경계:
+
+- 프론트엔드는 Spring Boot의 `POST /api/prompts/improve`만 호출합니다.
+- 프론트엔드는 FastAPI `/query`를 직접 호출하지 않습니다.
+- 프론트엔드는 FastAPI 서버 주소, RAG 서버 주소, Vector DB 주소, LLM API Key, AI provider key를 저장하거나 사용하지 않습니다.
+- 확정된 호출 흐름은 `Frontend -> Spring Boot /api/prompts/improve -> FastAPI /query -> RAG / Vector DB / LLM -> Spring Boot -> Frontend`입니다.
+- Spring Boot가 FastAPI 요청/응답 DTO, timeout 정책, 검색 결과 없음 정책, 프론트 응답 형태 변환을 담당합니다.
+
 `POST /api/prompts/improve`는 Make 화면의 핵심 연동 지점입니다. 프론트는 현재 여러 응답 필드를 방어적으로 받을 수 있지만, 백엔드/RAG 계약은 아래 형태 중 하나로 통일하는 것을 권장합니다.
 
 ### Request
@@ -235,9 +242,13 @@ Make thread identity policy:
 | --- | --- | --- |
 | `401` | 로그인 필요 또는 토큰 만료 | 로그인 팝업 표시 |
 | `403` | 권한 없음 | 권한 없음 안내 |
-| `404` | 관련 기법 또는 RAG 근거 없음 | 데모 첨삭 fallback, 관련 기법 없음 안내 |
-| `429` | 요청 과다 | 잠시 후 재시도 안내 |
-| `500` / `503` | 백엔드 또는 RAG 서버 오류 | 데모 첨삭 fallback, RAG 장애 안내 |
+| `404` | 요청한 프롬프트, 게시물, 댓글 등 리소스 없음 | 리소스 없음 안내 또는 데모 첨삭 fallback |
+| `429` | 요청 과다 또는 비로그인 체험 횟수 초과 | 잠시 후 재시도 또는 로그인 안내 |
+| `500` | 백엔드 내부 오류 | 서버 오류 안내, 데모 첨삭 fallback |
+| `503` | AI 서버 또는 외부 LLM 서비스 이용 불가 | AI 첨삭 서비스 장애 안내, 데모 첨삭 fallback |
+| `504` | AI 응답 시간 초과 | 응답 시간 초과 안내, 데모 첨삭 fallback |
+
+RAG 검색 근거가 없는 경우는 HTTP `404`가 아니라 정상 응답 `200 OK`로 처리하는 것을 권장합니다. 이때 Spring Boot는 예를 들어 `{ "rag_status": "no_evidence", "improved_prompt": "..." }`처럼 기본 첨삭 결과와 상태값을 함께 내려줍니다.
 
 ## Suggested Prompt Response
 

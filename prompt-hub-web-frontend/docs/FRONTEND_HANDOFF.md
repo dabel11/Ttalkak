@@ -153,7 +153,7 @@ Backend integration should treat `My page` as the current user activity area. Th
 
 - Prompt preview cards use a `...` menu for owner-only management actions such as edit, share/unshare, and delete.
 - Prompt detail modals separate owner/admin management actions from usage actions to prevent dense icon rows.
-- Admin review detail is read-only for normal user actions. Admin mode should show only close, revision request, hide/unhide, and delete style moderation actions.
+- Admin review detail is read-only for normal user actions. Admin mode should show only close, revision request, hide/unhide, and comment delete moderation actions. Prompt hide is a restorable soft-delete policy; permanent prompt deletion is not part of the current backend contract.
 
 ## My Page Demo Data
 

@@ -11,7 +11,7 @@ The frontend now attempts real Admin API calls before local demo fallback.
 - Tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
 - User activity: `GET /api/admin/users/{memberId}/activities`
 
-The frontend maps report statuses as `pending`, `reviewed`, `resolved`, `dismissed`, and maps tag recommendation exclusion to backend `disabled`. Admin accounts are treated as operation-only accounts: normal user actions are hidden/blocked in the UI, and the backend should enforce the same policy server-side.
+The frontend maps report statuses as `pending`, `reviewed`, `resolved`, `dismissed`; tag statuses as `pending`, `approved`, `rejected`, `disabled`; and revision request statuses as `pending`, `approved`, `rejected`. Tag recommendation exclusion sends backend `disabled`. Admin accounts are treated as operation-only accounts: normal user actions are hidden/blocked in the UI, and the backend should enforce the same policy server-side. Admin credentials should come from backend `.env` / `ADMIN_*` seed settings, not a fixed default password. `admin / Admin1234!` is only an example if the backend seed is configured that way.
 
 TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
@@ -145,7 +145,7 @@ Production transition cleanup:
 - Replace localStorage demo state with server state.
 - Replace admin demo toggle with real `ADMIN` role checks.
 - Keep new user My page empty by default; sample activity is QA/demo-only.
-- Treat Google OAuth buttons as demo flow until backend OAuth is connected.
+- Google OAuth buttons call the backend OAuth endpoint when a frontend credential is available. Backend local OAuth validation is complete; production still requires Google Cloud Console domain registration and environment variables.
 - Keep token handling aligned with the final auth scheme, then add API error rollback and response contract validation before release.
 
 ## Make Smoke Integration Addendum

@@ -189,12 +189,12 @@
   function normalizeAdminTag(item, index = 0) {
     const label = normalizePopularTag(item) || `tag-${index}`;
     const rawStatus = String(item?.status || "pending").toLowerCase();
-    const status = rawStatus === "disabled" ? "rejected" : rawStatus;
+    const status = ["approved", "rejected", "pending", "disabled"].includes(rawStatus) ? rawStatus : "pending";
     return {
       id: String(item?.id || item?.tagId || label),
       key: label.replace(/^#+/, "").trim().toLowerCase(),
       label,
-      status: ["approved", "rejected", "pending"].includes(status) ? status : "pending",
+      status,
       count: toNumber(item?.useCount, item?.count, item?.usageCount),
       recentAt: toTimestamp(item?.createdAt, item?.updatedAt),
       raw: item,
@@ -319,33 +319,58 @@
   }
 
   function normalizeImproveResult(payload, fallbackPrompt = "") {
-    if (typeof payload === "string") return payload;
+    if (typeof payload === "string") {
+      return { text: payload, ragStatus: "", ragMessage: "" };
+    }
 
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
     const result = data?.result && typeof data.result === "object" ? data.result : data;
     const questions = result?.questions || result?.followUpQuestions || result?.additionalQuestions;
+    const ragStatus = String(
+      result?.rag_status ||
+        result?.ragStatus ||
+        result?.rag?.status ||
+        result?.evidenceStatus ||
+        "",
+    ).trim();
+    const ragMessage = String(
+      result?.rag_message ||
+        result?.ragMessage ||
+        result?.message ||
+        result?.fallbackReason ||
+        "",
+    ).trim();
 
     if (String(result?.mode || result?.type || "").toLowerCase() === "question" && Array.isArray(questions) && questions.length) {
-      return [
-        "더 정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
-        "",
-        ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
-      ].join("\n");
+      return {
+        text: [
+          "더 정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
+          "",
+          ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
+        ].join("\n"),
+        mode: "question",
+        ragStatus,
+        ragMessage,
+      };
     }
 
-    return String(
-      result?.improvedPrompt ||
-        result?.improved_prompt ||
-        result?.finalPrompt ||
-        result?.final_prompt ||
-        result?.answer ||
-        result?.markdown ||
-        result?.text ||
-        result?.content ||
-        result?.prompt ||
-        (typeof result?.result === "string" ? result.result : "") ||
-        fallbackPrompt,
-    );
+    return {
+      text: String(
+        result?.improvedPrompt ||
+          result?.improved_prompt ||
+          result?.finalPrompt ||
+          result?.final_prompt ||
+          result?.answer ||
+          result?.markdown ||
+          result?.text ||
+          result?.content ||
+          result?.prompt ||
+          (typeof result?.result === "string" ? result.result : "") ||
+          fallbackPrompt,
+      ),
+      ragStatus,
+      ragMessage,
+    };
   }
 
   async function getCommunityPosts({ page = 1, size = 16, sort = "popular" } = {}) {
@@ -370,6 +395,12 @@
       return request("/api/auth/signup", {
         method: "POST",
         body: JSON.stringify(payload),
+      });
+    },
+    googleLogin(credential) {
+      return request("/api/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ credential }),
       });
     },
     findId(payload) {

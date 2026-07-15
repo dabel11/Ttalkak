@@ -24,14 +24,15 @@ Connected or attempted endpoints:
 Frontend status mapping:
 
 - Report status: `pending`, `reviewed`, `resolved`, `dismissed`
-- Tag status: `pending`, `approved`, `disabled`; `disabled` is displayed as recommendation-excluded/rejected in the UI.
-- Revision request status: `pending`, `reviewed`, `resolved`, `dismissed` where supported.
+- Tag status: `pending`, `approved`, `rejected`, `disabled`; recommendation-excluded UI sends `disabled`.
+- Revision request status: `pending`, `approved`, `rejected`.
 
 Admin account policy:
 
 - Admin users are operation-only accounts.
 - Admin users may review Home content but cannot perform normal user actions such as Make submit, Share submit, save, like, report, comment, or personal My page actions.
 - Backend should enforce the same policy with server-side authorization. Frontend hiding/disable logic is only UX protection.
+- Admin credentials are configured by backend `.env` / `ADMIN_*` seed settings. The frontend no longer assumes a fixed admin account. `admin / Admin1234!` is only an example when the backend seed is configured with those values.
 
 이 문서는 `jaewon7025/web-demo-preview` 브랜치의 프론트엔드가 현재 백엔드와 어디까지 연결되어 있고, 어떤 부분이 아직 데모/optimistic 상태인지 정리합니다.
 
@@ -63,7 +64,7 @@ Admin account policy:
 - Make thread delete is local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
 - If folder creation does not return a server folder id, the frontend skips the immediate move API to avoid sending temporary `folder-...` ids.
 - Admin screens call real admin endpoints when an authenticated backend token is available. Real service must enforce ADMIN authorization and audit logging server-side; local fallback exists only for frontend QA.
-- Google OAuth buttons are demo flows until OAuth redirect/token exchange is finalized.
+- Google OAuth buttons call the real backend Google auth flow when a frontend credential is available. Backend local OAuth validation is complete; production still needs Google Cloud Console domain registration and environment variables. Without a configured credential, the frontend shows the button as a demo preview.
 - Admin demo fallback uses the local `demo-token` only after a timeout for the known QA credential. Real admin login must return a backend token and role from `/api/auth/login`.
 
 ## Admin Account Policy
@@ -79,11 +80,16 @@ Admin account policy:
 ## Prompt Improve / RAG Frontend Handling
 
 - Make submit calls `POST /api/prompts/improve`.
+- The frontend must not call FastAPI `/query` directly.
+- The frontend must not store or use the FastAPI server URL, RAG server URL, vector DB URL, LLM API key, or AI provider key.
+- Confirmed request path: `Frontend -> Spring Boot POST /api/prompts/improve -> FastAPI POST /query -> RAG / Vector DB / LLM -> Spring Boot -> Frontend`.
+- Spring Boot owns the FastAPI `/query` request/response DTO, timeout handling, no-result handling, and final frontend response mapping.
 - `src/api.js` currently accepts several response field names for compatibility: `improved_prompt`, `improvedPrompt`, `final_prompt`, `finalPrompt`, `answer`, `text`, `content`, and `prompt`.
 - Recommended final field name: `improved_prompt`.
 - If the response is `{ mode: "question", questions: [...] }`, the frontend renders the questions as an assistant message.
-- If the backend returns `404`, the frontend treats it as no related prompt technique found and falls back to demo polishing.
-- If the backend returns `429`, `500`, or `503`, the frontend shows a retry/RAG failure notice and falls back to demo polishing.
+- `404` means a requested resource does not exist. It is not used for "no RAG evidence".
+- If RAG finds no related evidence, Spring Boot should return `200 OK` with a field such as `rag_status: "no_evidence"` and an improved prompt based on default polishing.
+- If the backend returns `429`, `500`, `503`, or `504`, the frontend shows a retry/server/AI failure notice and falls back to demo polishing.
 - The prompt copied/executed from Make should remain the final improved prompt, not a long explanation of the applied techniques.
 
 ## Local State

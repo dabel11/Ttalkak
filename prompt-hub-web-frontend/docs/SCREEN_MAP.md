@@ -98,8 +98,8 @@ Additional My page tabs:
 
 - 신고된 프롬프트, 댓글, 대댓글 목록 확인
 - 신고 사유, 신고 대상, 처리 상태 확인
-- 신고 검토 완료, 신고 기각, 신고 대상 삭제
-- 모든 프롬프트 수정 요청, 숨김, 삭제
+- 신고 검토 완료, 신고 기각, 재처리, 게시물 숨김/숨김 해제, 댓글 삭제
+- 모든 프롬프트 수정 요청, 숨김/숨김 해제
 - 내 프롬프트 공개/비공개 상태 전환
 - 태그 사용량 확인과 향후 태그 승인/병합/추천 승격 관리
 
@@ -107,9 +107,9 @@ Additional My page tabs:
 
 - `GET /api/admin/reports`
 - `PATCH /api/admin/reports/:id/status`
-- `DELETE /api/admin/reports/:id/target`
-- `PATCH /api/admin/prompts/:id`
-- `DELETE /api/admin/prompts/:id`
+- `PATCH /api/admin/reports/:id/status`
+- `PATCH /api/admin/prompts/:id/hide`
+- `PATCH /api/admin/prompts/:id/restore`
 - `GET/PATCH /api/admin/tags`
 - 관리자 권한 검증 및 감사 로그
 

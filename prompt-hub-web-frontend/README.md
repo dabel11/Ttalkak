@@ -16,7 +16,7 @@ Recommended review order:
 Key limitations:
 
 - Several screens still use optimistic local state after firing API requests.
-- Google OAuth is a demo flow until the final OAuth redirect/token exchange is connected.
+- Google OAuth calls `POST /api/auth/google` only when a Google credential is available. Backend local OAuth validation is complete; production still requires Google Cloud Console domain registration and environment variables. Without a configured frontend credential, the button clearly falls back to demo preview mode.
 - Admin screens call backend admin APIs when available. Real service must still rely on server-side ADMIN authorization and audit logging.
 - Admin demo fallback is only for frontend QA when the backend login/admin APIs are unavailable. It is not real authentication and should not be treated as a backend contract.
 - RAG response handling is defensive and accepts multiple temporary field names. The preferred final field is `improved_prompt`.
@@ -26,7 +26,7 @@ Key limitations:
 The frontend now attempts real Admin API integration before using local demo fallback.
 
 - Report list/status: `GET /api/admin/reports`, `PATCH /api/admin/reports/{id}/status`
-- Prompt management: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`, `DELETE /api/prompts/{id}`
+- Prompt management: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`. These are hide/soft-delete and restore operations; there is no permanent delete API in the current backend policy.
 - Revision requests: `POST /api/prompts/{promptId}/revision-requests`, `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
 - Comment moderation: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
 - Tag moderation: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
@@ -35,8 +35,10 @@ The frontend now attempts real Admin API integration before using local demo fal
 Status mapping used by the frontend:
 
 - Reports: `pending`, `reviewed`, `resolved`, `dismissed`
-- Tags: `pending`, `approved`, `disabled` (shown as recommendation excluded/rejected in the UI)
-- Revision requests: `pending`, `reviewed`, `resolved`, `dismissed` where supported by the backend
+- Tags: `pending`, `approved`, `rejected`, `disabled`
+- Revision requests: `pending`, `approved`, `rejected`
+
+Admin accounts are not fixed frontend credentials. Admin login depends on the backend `.env` / `ADMIN_*` seed settings and returned role. Any `admin / Admin1234!` account is only an example when the backend seed is configured that way.
 
 Admin accounts are operation-only in this prototype. Home is read/review-oriented, while Make, Share, and My page are hidden for admin users.
 
@@ -174,6 +176,8 @@ Currently connected to the backend:
 - Make first entry calls `GET http://localhost:8080/api/make/threads`.
 - Make first entry calls `GET http://localhost:8080/api/make/folders`.
 - Make prompt submit calls `POST http://localhost:8080/api/prompts/improve` and falls back to local demo polishing if it fails.
+- The frontend calls only Spring Boot for prompt improvement. It must not call FastAPI `/query` directly and must not manage the FastAPI/RAG server URL or AI API keys.
+- RAG flow is owned behind Spring Boot: `Frontend -> Spring Boot /api/prompts/improve -> FastAPI /query -> RAG / Vector DB / LLM -> Spring Boot -> Frontend`.
 - Login/signup store the backend `accessToken` in `ttalkak_access_token`, and protected API calls send `Authorization: Bearer ...`.
 - Account withdrawal calls `DELETE http://localhost:8080/api/auth/withdraw` with `{ password }`; on success the frontend clears auth state and server-data caches.
 
@@ -206,7 +210,7 @@ If requests fail with `Failed to fetch`, check backend CORS for both `http://127
 ## Handoff Policy Notes
 
 - Make 최근 대화는 `threadId` 기준으로 별도 저장합니다. 같은 첫 입력을 다시 보내도 기존 대화를 덮어쓰거나 삭제하지 않습니다.
-- 관리자 모드는 일반 사용자 행동을 제한하고 운영 조치만 제공합니다. 관리자는 사용자 작성 콘텐츠를 직접 수정하지 않고 수정 요청, 숨김, 삭제, 검토 상태 변경으로 처리합니다.
+- 관리자 모드는 일반 사용자 행동을 제한하고 운영 조치만 제공합니다. 관리자는 사용자 작성 콘텐츠를 직접 수정하지 않고 수정 요청, 게시물 숨김/숨김 해제, 댓글 삭제, 검토 상태 변경으로 처리합니다. 프롬프트 관리는 영구 삭제가 아니라 백엔드의 숨김/소프트 삭제 정책을 따릅니다.
 - 실서비스의 신규 사용자 My page는 기본적으로 비어 있어야 합니다. 현재 샘플 보관함/댓글/신고 데이터는 데모 데이터 토글로만 확인하는 QA용 예시입니다.
 - 프롬프트 카드에서는 수정/공유/삭제 같은 소유자 관리 기능을 `...` 메뉴에 묶고, 상세 모달에서는 관리 액션과 사용 액션을 분리합니다.
 - 본인 댓글/대댓글은 수정/삭제만 가능하고, 다른 사용자 댓글/대댓글은 좋아요/신고가 가능합니다.
