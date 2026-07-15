@@ -21,7 +21,7 @@ The frontend first attempts the following backend endpoints for Admin features. 
 | Tag status update | `PATCH /api/admin/tags/{id}/status` | `{ status }` | `pending`, `approved`, `rejected`, `disabled`; recommendation-excluded UI sends `disabled` |
 | User activity | `GET /api/admin/users/{memberId}/activities?limit=20` | none | Admin-only lookup for authored prompts, comments, replies, reports made, reports received |
 
-Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked. Admin credentials are provided by backend `.env` / `ADMIN_*` seed settings, not a fixed default password. `admin / Admin1234!` should be treated only as an example if the backend seed is configured that way.
+Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked. Admin credentials are provided by backend `.env` / `ADMIN_*` seed settings, not a fixed default password. Team test credentials should follow the backend password policy, including the 12-character minimum for seeded admin passwords.
 
 프론트엔드 프로토타입 기준의 백엔드 API 초안입니다. 실제 경로와 응답 형태는 Spring Boot 구현 방식에 맞춰 조정해도 됩니다.
 

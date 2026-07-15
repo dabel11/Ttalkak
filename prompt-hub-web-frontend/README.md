@@ -38,7 +38,7 @@ Status mapping used by the frontend:
 - Tags: `pending`, `approved`, `rejected`, `disabled`
 - Revision requests: `pending`, `approved`, `rejected`
 
-Admin accounts are not fixed frontend credentials. Admin login depends on the backend `.env` / `ADMIN_*` seed settings and returned role. Any `admin / Admin1234!` account is only an example when the backend seed is configured that way.
+Admin accounts are not fixed frontend credentials. Admin login depends on the backend `.env` / `ADMIN_*` seed settings and returned role. Team test credentials should follow the backend password policy, including the 12-character minimum for seeded admin passwords.
 
 Admin accounts are operation-only in this prototype. Home is read/review-oriented, while Make, Share, and My page are hidden for admin users.
 

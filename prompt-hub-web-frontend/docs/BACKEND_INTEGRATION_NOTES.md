@@ -32,7 +32,7 @@ Admin account policy:
 - Admin users are operation-only accounts.
 - Admin users may review Home content but cannot perform normal user actions such as Make submit, Share submit, save, like, report, comment, or personal My page actions.
 - Backend should enforce the same policy with server-side authorization. Frontend hiding/disable logic is only UX protection.
-- Admin credentials are configured by backend `.env` / `ADMIN_*` seed settings. The frontend no longer assumes a fixed admin account. `admin / Admin1234!` is only an example when the backend seed is configured with those values.
+- Admin credentials are configured by backend `.env` / `ADMIN_*` seed settings. The frontend no longer assumes a fixed admin account. Team test credentials should follow the backend password policy, including the 12-character minimum for seeded admin passwords.
 
 이 문서는 `jaewon7025/web-demo-preview` 브랜치의 프론트엔드가 현재 백엔드와 어디까지 연결되어 있고, 어떤 부분이 아직 데모/optimistic 상태인지 정리합니다.
 

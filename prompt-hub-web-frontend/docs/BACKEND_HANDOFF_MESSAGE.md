@@ -11,7 +11,7 @@ The frontend now attempts real Admin API calls before local demo fallback.
 - Tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
 - User activity: `GET /api/admin/users/{memberId}/activities`
 
-The frontend maps report statuses as `pending`, `reviewed`, `resolved`, `dismissed`; tag statuses as `pending`, `approved`, `rejected`, `disabled`; and revision request statuses as `pending`, `approved`, `rejected`. Tag recommendation exclusion sends backend `disabled`. Admin accounts are treated as operation-only accounts: normal user actions are hidden/blocked in the UI, and the backend should enforce the same policy server-side. Admin credentials should come from backend `.env` / `ADMIN_*` seed settings, not a fixed default password. `admin / Admin1234!` is only an example if the backend seed is configured that way.
+The frontend maps report statuses as `pending`, `reviewed`, `resolved`, `dismissed`; tag statuses as `pending`, `approved`, `rejected`, `disabled`; and revision request statuses as `pending`, `approved`, `rejected`. Tag recommendation exclusion sends backend `disabled`. Admin accounts are treated as operation-only accounts: normal user actions are hidden/blocked in the UI, and the backend should enforce the same policy server-side. Admin credentials should come from backend `.env` / `ADMIN_*` seed settings, not a fixed default password. Team test credentials should follow the backend password policy, including the 12-character minimum for seeded admin passwords.
 
 TTALKAK 웹 프론트엔드 프로토타입 전달드립니다.
 
