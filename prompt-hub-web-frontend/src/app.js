@@ -282,6 +282,7 @@ const FREE_MAKE_LIMIT = 3;
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const AUTH_TOKEN_KEY = "ttalkak_access_token";
 const DEMO_AUTH_TOKEN = "demo-token";
+const WITHDRAWN_AUTHOR_LABEL = "탈퇴한 사용자";
 const PROTECTED_BACKEND_ACTIONS = new Set([
   "addComment",
   "addReply",
@@ -993,7 +994,7 @@ function PromptCard(prompt, options = {}) {
       </div>
       <footer class="card-meta">
         <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
-        <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
+        ${renderAuthorSearchControl(prompt)}
       </footer>
     </article>
   `;
@@ -1066,11 +1067,7 @@ function PromptDetailModal() {
             <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
               <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
-              ${
-                isAdminReview
-                  ? `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
-                  : `<button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
-              }
+              ${renderAuthorSearchControl(prompt, { admin: isAdminReview })}
               <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
             </footer>
           </section>
@@ -1971,7 +1968,7 @@ function AdminPage() {
                     <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
                     <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
                     <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
-                    <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
+                    <span>작성자 ${renderAdminInlineAuthorControl(prompt)}</span>
                     <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
                   </div>
                   <div class="tag-row admin-prompt-tags">${(prompt.tags || []).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}</div>
@@ -2106,7 +2103,7 @@ function AdminTagPromptUsagePanel(tag) {
                       <strong>${escapeHtml(prompt.title)}</strong>
                       <p>${escapeHtml(makePreview(prompt.text))}</p>
                       <div class="admin-prompt-meta">
-                        <span>작성자 <button class="admin-inline-author-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button></span>
+                        <span>작성자 ${renderAdminInlineAuthorControl(prompt)}</span>
                         <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
                         <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
                         ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
@@ -2719,7 +2716,9 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      searchByAuthor(button.dataset.searchAuthor);
+      const author = button.dataset.searchAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      searchByAuthor(author);
     });
   });
 
@@ -2727,7 +2726,9 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openAdminUserActivity(button.dataset.adminUserAuthor, { memberId: button.dataset.adminUserId });
+      const author = button.dataset.adminUserAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      openAdminUserActivity(author, { memberId: button.dataset.adminUserId });
     });
   });
 
@@ -4439,9 +4440,17 @@ function getPromptCommentCount(prompt) {
   return threadCount || Number(prompt.comments || prompt.commentCount || 0);
 }
 
+function normalizeAuthorName(value) {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return String(value.nickname || value.name || value.userId || value.username || "").trim();
+  }
+  return String(value).trim();
+}
+
 function getDisplayPromptAuthor(prompt) {
-  const author = String(prompt?.author || prompt?.owner || "").trim();
-  const owner = String(prompt?.owner || prompt?.author || "").trim();
+  const author = normalizeAuthorName(prompt?.author || prompt?.authorNickname || prompt?.nickname || prompt?.raw?.author);
+  const owner = normalizeAuthorName(prompt?.owner || prompt?.ownerNickname || prompt?.raw?.owner);
   const currentUser = String(state.currentUser || "").trim();
 
   if (state.isLoggedIn && currentUser && (owner === currentUser || author === currentUser || author === "나")) {
@@ -4453,8 +4462,35 @@ function getDisplayPromptAuthor(prompt) {
   return "익명 사용자";
 }
 
+function isWithdrawnAuthorName(value) {
+  return String(value || "").trim() === WITHDRAWN_AUTHOR_LABEL;
+}
+
+function renderAuthorSearchControl(prompt, options = {}) {
+  const author = getDisplayPromptAuthor(prompt);
+  const safeAuthor = escapeHtml(author);
+  if (isWithdrawnAuthorName(author)) {
+    return `<span class="author-search-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
+  }
+
+  if (options.admin) {
+    return `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${safeAuthor}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${safeAuthor}</button>`;
+  }
+
+  return `<button class="author-search-button" type="button" data-search-author="${safeAuthor}">${safeAuthor}</button>`;
+}
+
+function renderAdminInlineAuthorControl(prompt) {
+  const author = getDisplayPromptAuthor(prompt);
+  const safeAuthor = escapeHtml(author);
+  if (isWithdrawnAuthorName(author)) {
+    return `<span class="admin-inline-author-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
+  }
+  return `<button class="admin-inline-author-button" type="button" data-admin-user-author="${safeAuthor}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${safeAuthor}</button>`;
+}
+
 function getPromptAuthorId(prompt) {
-  return String(prompt?.authorId || prompt?.raw?.author?.id || prompt?.raw?.authorId || prompt?.raw?.memberId || "");
+  return String(prompt?.authorId || prompt?.author?.id || prompt?.raw?.author?.id || prompt?.raw?.authorId || prompt?.raw?.memberId || "");
 }
 
 function stampCurrentUserOwnedPrompts() {
@@ -6738,13 +6774,41 @@ function showNotice(message) {
 
 function getBackendErrorMessage(error) {
   const payload = error?.payload;
+  const codeMessage = getBackendErrorCodeMessage(getBackendErrorCode(error));
   return String(
     payload?.message ||
+      codeMessage ||
       payload?.error ||
       payload?.code ||
       error?.message ||
       "",
   ).trim();
+}
+
+function getBackendErrorCode(error) {
+  return String(error?.payload?.code || error?.code || "").trim().toUpperCase();
+}
+
+function getBackendErrorCodeMessage(code) {
+  switch (code) {
+    case "AUTHENTICATION_REQUIRED":
+      return "로그인이 필요하거나 인증이 만료되었습니다.";
+    case "ACCESS_DENIED":
+      return "이 작업을 수행할 권한이 없습니다.";
+    case "RESOURCE_NOT_FOUND":
+      return "요청한 대상을 찾을 수 없습니다.";
+    case "VALIDATION_FAILED":
+    case "INVALID_REQUEST":
+      return "입력값을 확인해주세요.";
+    case "CONFLICT":
+      return "이미 처리되었거나 중복된 요청입니다.";
+    case "INVALID_STATE":
+      return "현재 상태에서는 처리할 수 없습니다.";
+    case "INTERNAL_SERVER_ERROR":
+      return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+    default:
+      return "";
+  }
 }
 
 function getAuthToken() {
@@ -6768,10 +6832,11 @@ function hasBackendAuthToken() {
 
 function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.", options = {}) {
   const status = Number(error?.status || error?.payload?.status || 0);
+  const code = getBackendErrorCode(error);
   const backendMessage = getBackendErrorMessage(error);
   const keepSession = Boolean(options.keepSession);
 
-  if (status === 401) {
+  if (status === 401 || code === "AUTHENTICATION_REQUIRED") {
     const token = getAuthToken();
     if (keepSession) {
       showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
@@ -6789,8 +6854,28 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
-  if (status === 403) {
+  if (status === 403 || code === "ACCESS_DENIED") {
     showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
+    return true;
+  }
+
+  if (status === 404 || code === "RESOURCE_NOT_FOUND") {
+    showNotice(backendMessage || "요청한 대상을 찾을 수 없습니다.");
+    return true;
+  }
+
+  if (status === 400 || code === "VALIDATION_FAILED" || code === "INVALID_REQUEST") {
+    showNotice(backendMessage || "입력값을 확인해주세요.");
+    return true;
+  }
+
+  if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
+    showNotice(backendMessage || "현재 상태에서는 처리할 수 없습니다.");
+    return true;
+  }
+
+  if (status >= 500 || code === "INTERNAL_SERVER_ERROR") {
+    showNotice(backendMessage || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     return true;
   }
 

@@ -1164,6 +1164,15 @@ h1 {
   transform: translateY(-1px);
 }
 
+.author-search-button.disabled-author,
+.admin-inline-author-button.disabled-author {
+  color: var(--muted);
+  cursor: default;
+  pointer-events: none;
+  transform: none;
+  text-decoration: none;
+}
+
 .admin-subnav {
   display: grid;
   gap: 8px;
@@ -5251,6 +5260,15 @@ input[type="checkbox"] {
 .admin-inline-author-button:hover,
 .admin-inline-author-button:focus-visible {
   text-decoration: underline;
+}
+
+.admin-inline-author-button.disabled-author,
+.admin-inline-author-button.disabled-author:hover,
+.admin-inline-author-button.disabled-author:focus-visible {
+  color: var(--muted);
+  cursor: default;
+  pointer-events: none;
+  text-decoration: none;
 }
 
 .admin-prompt-meta svg {
