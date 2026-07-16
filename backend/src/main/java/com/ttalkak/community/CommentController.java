@@ -1,6 +1,7 @@
 package com.ttalkak.community;
 
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
 import org.springframework.http.HttpStatus;
@@ -86,9 +87,15 @@ public class CommentController {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         requireViewablePrompt(comment.getPromptId(), authorization);
+        
         if (!canManage(comment, authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "댓글 수정 권한이 없습니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "댓글 작성자만 수정할 수 있습니다."
+            );
         }
+
         if (comment.isDeleted()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "삭제된 댓글은 수정할 수 없습니다.");
         }
@@ -204,7 +211,11 @@ public class CommentController {
         requireViewablePrompt(comment.getPromptId(), authorization);
 
         if (!canManage(comment, authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "댓글 삭제 권한이 없습니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "댓글 작성자만 삭제할 수 있습니다."
+            );
         }
 
         return deleteCommentEntity(comment);
@@ -239,7 +250,7 @@ public class CommentController {
     private ResponseEntity<?> deleteCommentEntity(Comment comment) {
         Long commentId = comment.getId();
         Long parentId = comment.getParentId();
-        boolean shouldDecreaseCount = !comment.isDeleted() && !comment.isHidden();
+        boolean shouldDecreaseCount = isCountedComment(comment);
 
         if (commentRepository.countByParentId(commentId) > 0) {
             comment.softDelete();
@@ -268,6 +279,10 @@ public class CommentController {
                 "deleted", true,
                 "id", commentId
         ));
+    }
+
+    private boolean isCountedComment(Comment comment) {
+        return !comment.isDeleted() && !comment.isHidden();
     }
 
     @PostMapping("/api/comments/{commentId}/like")
@@ -387,9 +402,15 @@ public class CommentController {
 
     private Long requireMemberId(String authorization) {
         Long memberId = authService.currentMemberIdOrNull(authorization);
+
         if (memberId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 필요합니다."
+            );
         }
+
         return memberId;
     }
 

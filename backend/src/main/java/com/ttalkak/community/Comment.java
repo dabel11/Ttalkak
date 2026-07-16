@@ -99,6 +99,10 @@ public class Comment {
         this.edited = true;
         this.updatedAt = LocalDateTime.now();
     }
+    
+    public void anonymizeAuthor() {
+        this.authorNickname = "탈퇴한 사용자";
+    }
 
     public void softDelete() {
         this.deleted = true;

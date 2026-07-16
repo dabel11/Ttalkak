@@ -5,6 +5,7 @@ import com.ttalkak.member.MemberRepository;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
 import org.springframework.stereotype.Component;
+import com.ttalkak.common.response.MemberSummaryResponse;
 
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -46,8 +47,7 @@ public class ReportResponseMapper {
         body.put("id", report.getId());
         body.put("targetType", report.getTargetType());
         body.put("targetId", report.getTargetId());
-        body.put("reporterId", report.getReporterId());
-        body.put("reporterNickname", reporter == null ? null : reporter.getNickname());
+        body.put("reporter", MemberSummaryResponse.of(report.getReporterId(), reporter == null ? null : reporter.getNickname()));
         body.put("reason", report.getReason());
         body.put("status", report.getStatus());
         body.put("memo", report.getMemo());
@@ -74,13 +74,13 @@ public class ReportResponseMapper {
         body.put("targetDeleted", null);
         body.put("targetHidden", null);
         body.put("targetPreview", null);
-        body.put("targetAuthorId", null);
-        body.put("targetAuthorNickname", null);
+        body.put("author", null);
         body.put("promptId", null);
         body.put("promptTitle", null);
-        body.put("promptAuthorId", null);
-        body.put("promptAuthorNickname", null);
+        body.put("promptAuthor", null);
         body.put("parentId", null);
+        body.put("promptContent", null);
+        body.put("commentContent", null);
     }
 
     private void putPromptContext(Map<String, Object> body, Long promptId) {
@@ -94,12 +94,12 @@ public class ReportResponseMapper {
         body.put("targetExists", true);
         body.put("targetDeleted", prompt.isDeleted());
         body.put("targetPreview", preview(prompt.getText()));
-        body.put("targetAuthorId", prompt.getAuthorId());
-        body.put("targetAuthorNickname", prompt.getAuthorNickname());
+        body.put("author", MemberSummaryResponse.of(prompt.getAuthorId(), prompt.getAuthorNickname()));
         body.put("promptId", prompt.getId());
         body.put("promptTitle", prompt.getTitle());
-        body.put("promptAuthorId", prompt.getAuthorId());
-        body.put("promptAuthorNickname", prompt.getAuthorNickname());
+        body.put("promptContent", prompt.getText());
+        body.put("promptContent", prompt.getText());
+        body.put("promptAuthor", MemberSummaryResponse.of(prompt.getAuthorId(), prompt.getAuthorNickname()));
     }
 
     private void putCommentContext(
@@ -122,8 +122,8 @@ public class ReportResponseMapper {
         body.put("targetDeleted", comment.isDeleted());
         body.put("targetHidden", comment.isHidden());
         body.put("targetPreview", preview(targetText));
-        body.put("targetAuthorId", comment.getAuthorId());
-        body.put("targetAuthorNickname", comment.getAuthorNickname());
+        body.put("commentContent", targetText);
+        body.put("author", MemberSummaryResponse.of(comment.getAuthorId(), comment.getAuthorNickname()));
         body.put("promptId", comment.getPromptId());
         body.put("parentId", comment.getParentId());
 
@@ -135,8 +135,7 @@ public class ReportResponseMapper {
         }
 
         body.put("promptTitle", prompt.getTitle());
-        body.put("promptAuthorId", prompt.getAuthorId());
-        body.put("promptAuthorNickname", prompt.getAuthorNickname());
+        body.put("promptAuthor", MemberSummaryResponse.of(prompt.getAuthorId(), prompt.getAuthorNickname()));
     }
 
     private String preview(String text) {

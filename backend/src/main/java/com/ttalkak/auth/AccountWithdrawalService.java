@@ -3,6 +3,8 @@ package com.ttalkak.auth;
 import com.ttalkak.auth.GoogleIdTokenVerifier.GoogleIdentity;
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.community.CommentRepository;
+import com.ttalkak.prompt.PromptRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,15 +19,21 @@ public class AccountWithdrawalService {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
+    private final PromptRepository promptRepository;
+    private final CommentRepository commentRepository;
 
     public AccountWithdrawalService(
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
-            GoogleIdTokenVerifier googleIdTokenVerifier
+            GoogleIdTokenVerifier googleIdTokenVerifier,
+            PromptRepository promptRepository,
+            CommentRepository commentRepository
     ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.googleIdTokenVerifier = googleIdTokenVerifier;
+        this.promptRepository = promptRepository;
+        this.commentRepository = commentRepository;
     }
 
     @Transactional
@@ -54,8 +62,22 @@ public class AccountWithdrawalService {
             );
         }
 
-        member.withdraw();
-        memberRepository.save(member);
+    Long memberId = member.getId();
+
+    var prompts =
+            promptRepository.findByAuthorIdOrderByUpdatedAtDesc(memberId);
+
+    prompts.forEach(prompt -> prompt.anonymizeAuthor());
+    promptRepository.saveAll(prompts);
+
+    var comments =
+            commentRepository.findByAuthorIdOrderByCreatedAtDesc(memberId);
+
+    comments.forEach(comment -> comment.anonymizeAuthor());
+    commentRepository.saveAll(comments);
+
+    member.withdraw();
+    memberRepository.save(member);
     }
 
     private void verifyLocalPassword(
