@@ -69,6 +69,17 @@ public class Member {
 
     private LocalDateTime withdrawnAt;
 
+    @Column(
+            nullable = false,
+            columnDefinition = "boolean default false"
+    )
+    private boolean blocked = false;
+
+    private LocalDateTime blockedAt;
+
+    @Column(length = 500)
+    private String blockReason;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -224,6 +235,18 @@ public class Member {
         return withdrawnAt;
     }
 
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public LocalDateTime getBlockedAt() {
+        return blockedAt;
+    }
+
+    public String getBlockReason() {
+        return blockReason;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -234,6 +257,18 @@ public class Member {
 
     public boolean isGoogleAccount() {
         return PROVIDER_GOOGLE.equalsIgnoreCase(authProvider);
+    }
+
+    public void block(String reason) {
+        this.blocked = true;
+        this.blockedAt = LocalDateTime.now();
+        this.blockReason = reason;
+    }
+
+    public void unblock() {
+        this.blocked = false;
+        this.blockedAt = null;
+        this.blockReason = null;
     }
 
     public void withdraw() {

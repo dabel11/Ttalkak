@@ -3,6 +3,7 @@ package com.ttalkak.auth;
 import com.ttalkak.auth.GoogleIdTokenVerifier.GoogleIdentity;
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -55,6 +56,18 @@ public class GoogleAuthService {
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN,
                         "탈퇴한 Google 계정입니다."
+                );
+            }
+
+            if (existing.isBlocked()) {
+                throw new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "ACCOUNT_BLOCKED",
+                        existing.getBlockReason() == null
+                                || existing.getBlockReason().isBlank()
+                                ? "관리자에 의해 이용이 제한된 계정입니다."
+                                : "관리자에 의해 이용이 제한된 계정입니다. 사유: "
+                                + existing.getBlockReason()
                 );
             }
 

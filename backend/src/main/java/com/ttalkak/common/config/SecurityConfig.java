@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 SessionCreationPolicy.STATELESS
                         )
                 )
+
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(
                                 (request, response, exception) ->
@@ -53,21 +54,36 @@ public class SecurityConfig {
                                                 request,
                                                 response,
                                                 HttpStatus.UNAUTHORIZED,
-                                                "AUTHENTICATION_REQUIRED",
+                                                "LOGIN_REQUIRED",
                                                 "로그인이 필요합니다."
                                         )
                         )
                         .accessDeniedHandler(
-                                (request, response, exception) ->
-                                        apiErrorWriter.write(
-                                                request,
-                                                response,
-                                                HttpStatus.FORBIDDEN,
-                                                "ACCESS_DENIED",
-                                                "접근 권한이 없습니다."
-                                        )
+                                (request, response, exception) -> {
+                                String requestUri =
+                                        request.getRequestURI();
+
+                                boolean adminRequest =
+                                        requestUri.equals("/api/admin")
+                                                || requestUri.startsWith(
+                                                        "/api/admin/"
+                                                );
+
+                                apiErrorWriter.write(
+                                        request,
+                                        response,
+                                        HttpStatus.FORBIDDEN,
+                                        adminRequest
+                                                ? "ADMIN_ONLY"
+                                                : "ACCESS_DENIED",
+                                        adminRequest
+                                                ? "관리자 권한이 필요합니다."
+                                                : "접근 권한이 없습니다."
+                                );
+                                }
                         )
                 )
+
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 HttpMethod.OPTIONS,

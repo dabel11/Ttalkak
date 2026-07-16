@@ -2,6 +2,7 @@ package com.ttalkak.auth;
 
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -98,6 +99,18 @@ public class AuthController {
 
         if (member == null || !passwordEncoder.matches(request.password(), member.getPassword())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
+        }
+
+        if (member.isBlocked()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ACCOUNT_BLOCKED",
+                    member.getBlockReason() == null
+                            || member.getBlockReason().isBlank()
+                            ? "관리자에 의해 이용이 제한된 계정입니다."
+                            : "관리자에 의해 이용이 제한된 계정입니다. 사유: "
+                            + member.getBlockReason()
+            );
         }
 
         return ResponseEntity.ok(authResponse(member));

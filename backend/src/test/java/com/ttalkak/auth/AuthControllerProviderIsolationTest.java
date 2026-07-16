@@ -1,7 +1,8 @@
-package com.ttalkak.auth;
+﻿package com.ttalkak.auth;
 
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -78,6 +79,44 @@ class AuthControllerProviderIsolationTest {
                         Member.PROVIDER_LOCAL
                 );
     }
+
+    @Test
+    void rejectsBlockedLocalMember() {
+        Member member = localMember();
+        member.block("諛섎났?곸씤 ?댁슜?쎄? ?꾨컲");
+
+        when(memberRepository
+                .findByUserIdAndAuthProviderAndActiveTrue(
+                        "local-user",
+                        Member.PROVIDER_LOCAL
+                ))
+                .thenReturn(Optional.of(member));
+
+                when(passwordEncoder.matches(
+                        "password",
+                        "encoded-password"
+                )).thenReturn(true);
+
+                ApiException exception = assertThrows(
+                        ApiException.class,
+                        () -> controller.login(
+                                new AuthController.LoginRequest(
+                                        "local-user",
+                                        "password"
+                                )
+                        )
+                );
+
+                assertEquals(
+                        HttpStatus.FORBIDDEN,
+                        exception.getStatusCode()
+                );
+
+                assertEquals(
+                        "ACCOUNT_BLOCKED",
+                        exception.getCode()
+                );
+        }
 
     @Test
     void rejectsUserIdThatIsNotLocalAccount() {

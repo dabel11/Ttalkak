@@ -18,6 +18,7 @@ import com.ttalkak.prompt.PromptRepository;
 import com.ttalkak.prompt.Tag;
 import com.ttalkak.prompt.TagRepository;
 import com.ttalkak.prompt.TagStatus;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -62,6 +63,79 @@ public class AdminController {
         this.commentRepository = commentRepository;
         this.makeThreadRepository = makeThreadRepository;
         this.makeFolderRepository = makeFolderRepository;
+    }
+
+    @PatchMapping("/users/{memberId}/block")
+    public Map<String, Object> blockUser(
+            @PathVariable Long memberId,
+            @RequestBody BlockUserRequest request
+    ) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "회원을 찾을 수 없습니다."
+                ));
+
+        if (!member.isActive()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "ACCOUNT_WITHDRAWN",
+                    "탈퇴한 회원은 차단할 수 없습니다."
+            );
+        }
+
+        if ("ADMIN".equalsIgnoreCase(member.getRole())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_ACCOUNT_PROTECTED",
+                    "관리자 계정은 차단할 수 없습니다."
+            );
+        }
+
+        String reason = request == null
+                ? null
+                : request.reason();
+
+        if (reason == null || reason.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "BLOCK_REASON_REQUIRED",
+                    "차단 사유를 입력해야 합니다."
+            );
+        }
+
+        member.block(reason.trim());
+        memberRepository.save(member);
+
+        return memberActivityMap(member);
+    }
+
+    @PatchMapping("/users/{memberId}/unblock")
+    public Map<String, Object> unblockUser(
+            @PathVariable Long memberId
+    ) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "회원을 찾을 수 없습니다."
+                ));
+
+        if (!member.isActive()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "ACCOUNT_WITHDRAWN",
+                    "탈퇴한 회원은 차단 해제할 수 없습니다."
+            );
+        }
+
+        if (!member.isBlocked()) {
+            return memberActivityMap(member);
+        }
+
+        member.unblock();
+        memberRepository.save(member);
+
+        return memberActivityMap(member);
     }
 
     @GetMapping("/users/{memberId}/activities")
@@ -420,6 +494,9 @@ public class AdminController {
         body.put("active", member.isActive());
         body.put("createdAt", formatDateTime(member.getCreatedAt()));
         body.put("withdrawnAt", formatDateTime(member.getWithdrawnAt()));
+        body.put("blocked", member.isBlocked());
+        body.put("blockedAt", formatDateTime(member.getBlockedAt()));
+        body.put("blockReason", member.getBlockReason());
         return body;
     }
 
@@ -753,4 +830,10 @@ public class AdminController {
 
     public record StatusRequest(String status, String memo) {
     }
+
+    public record BlockUserRequest(
+        String reason
+    ) {
+    }
+
 }

@@ -3,6 +3,7 @@ package com.ttalkak.auth;
 import com.ttalkak.auth.GoogleIdTokenVerifier.GoogleIdentity;
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -150,6 +151,47 @@ class GoogleAuthServiceTest {
                 HttpStatus.FORBIDDEN,
                 exception.getStatusCode()
         );
+    }
+
+    @Test
+    void rejectsBlockedGoogleMember() {
+    GoogleIdentity identity = identity();
+
+    Member blocked = Member.createGoogle(
+            "google_blocked",
+            "encoded-password",
+            "차단회원",
+            "차단 사용자",
+            identity.email(),
+            identity.subject()
+   );
+
+    blocked.block("반복적인 이용약관 위반");
+
+    when(verifier.verify("credential"))
+            .thenReturn(identity);
+
+    when(memberRepository
+            .findByAuthProviderAndProviderSubject(
+                    Member.PROVIDER_GOOGLE,
+                    identity.subject()
+            ))
+            .thenReturn(Optional.of(blocked));
+
+    ApiException exception = assertThrows(
+            ApiException.class,
+            () -> googleAuthService.login("credential")
+    );
+
+    assertEquals(
+            HttpStatus.FORBIDDEN,
+            exception.getStatusCode()
+    );
+
+    assertEquals(
+            "ACCOUNT_BLOCKED",
+            exception.getCode()
+    );
     }
 
     private GoogleIdentity identity() {

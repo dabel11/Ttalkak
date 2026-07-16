@@ -2,6 +2,8 @@ package com.ttalkak.auth;
 
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -26,12 +28,28 @@ public class AuthService {
         return jwtTokenService.issueToken(member);
     }
 
+
     public Optional<Member> getMemberFromAuthorization(
             String authorizationHeader
     ) {
         return extractBearerToken(authorizationHeader)
                 .flatMap(jwtTokenService::parseMemberId)
-                .flatMap(memberRepository::findByIdAndActiveTrue);
+                .flatMap(memberRepository::findByIdAndActiveTrue)
+                .map(member -> {
+                    if (member.isBlocked()) {
+                        throw new ApiException(
+                                HttpStatus.FORBIDDEN,
+                                "ACCOUNT_BLOCKED",
+                                member.getBlockReason() == null
+                                        || member.getBlockReason().isBlank()
+                                        ? "관리자에 의해 이용이 제한된 계정입니다."
+                                        : "관리자에 의해 이용이 제한된 계정입니다. 사유: "
+                                        + member.getBlockReason()
+                        );
+                    }
+
+                    return member;
+                });
     }
 
     public String currentNickname(String authorizationHeader) {
