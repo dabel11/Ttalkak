@@ -812,7 +812,7 @@ function HomePage() {
         <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="${searchPlaceholder}" aria-label="프롬프트 검색" />
         <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
           <span>${icons.bulb}</span>
-          <small role="tooltip">검색어는 쉼표로 구분해 여러 개를 함께 검색할 수 있습니다. 전체 검색에서는 태그, 키워드, 작성자를 함께 찾습니다.</small>
+          <small role="tooltip">쉼표로 여러 검색어를 입력할 수 있습니다. 전체 검색은 태그, 키워드, 작성자를 함께 찾습니다.</small>
         </button>
       </label>
       <div class="popular-tags" aria-label="인기 태그">
@@ -992,7 +992,7 @@ function PromptCard(prompt, options = {}) {
         ${previewTags.hiddenCount > 0 ? `<span class="tag-more">+${previewTags.hiddenCount}</span>` : ""}
       </div>
       <footer class="card-meta">
-        <span>${icons.eye}${formatNumber(prompt.views)}</span>
+        <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
         <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
       </footer>
     </article>
@@ -1065,7 +1065,7 @@ function PromptDetailModal() {
             }
             <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
-              <span>${icons.eye}${formatNumber(prompt.views)}</span>
+              <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
               ${
                 isAdminReview
                   ? `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${escapeHtml(getDisplayPromptAuthor(prompt))}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>`
@@ -1967,7 +1967,7 @@ function AdminPage() {
                   <strong>${escapeHtml(prompt.title)}</strong>
                   <p class="admin-prompt-preview">${escapeHtml(makePreview(prompt.text))}</p>
                   <div class="admin-prompt-meta">
-                    <span>${icons.eye}${formatNumber(prompt.views || 0)}</span>
+                    <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
                     <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
                     <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
                     <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
@@ -4351,7 +4351,7 @@ function incrementPromptViews(promptId) {
   for (const list of [popularPrompts, savedPrompts]) {
     const prompt = list.find((item) => item.id === promptId);
     if (!prompt || updated.has(prompt)) continue;
-    prompt.views += 1;
+    prompt.views = getPromptViewCount(prompt) + 1;
     updated.add(prompt);
   }
 }
@@ -4998,11 +4998,7 @@ async function copyMakeMessage(messageId) {
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
 
-  try {
-    await navigator.clipboard.writeText(finalPrompt);
-  } catch (_error) {
-    fallbackCopyText(finalPrompt);
-  }
+  await copyTextToClipboard(finalPrompt);
 
   state.copiedMessageId = messageId;
   showNotice("프롬프트를 복사했습니다.");
@@ -5094,7 +5090,7 @@ function openShareFromMakeMessage(messageId) {
     promptId: `make-share-${message.id}`,
     title: makePromptTitle(message.sourcePrompt || finalPrompt),
     text: finalPrompt,
-    tags: ["내프롬프트", "Make", "첨삭"],
+    tags: [],
   };
   state.shareError = "";
   state.route = "share";
@@ -5122,17 +5118,18 @@ async function executeMakeMessage(messageId, targetId) {
   if (!finalPrompt) return;
   const target = getExecuteTarget(targetId);
   if (!target) return;
-  window.open(target.url, "_blank", "noopener,noreferrer");
-
-  try {
-    await navigator.clipboard.writeText(finalPrompt);
-  } catch (_error) {
-    fallbackCopyText(finalPrompt);
-  }
+  const copied = await copyTextToClipboard(finalPrompt);
+  const opened = window.open(target.url, "_blank", "noopener,noreferrer");
 
   state.executeMessageId = null;
   state.executePromptId = null;
-  showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
+  if (!opened) {
+    showNotice(`${target.name} 팝업이 차단되었습니다. 프롬프트는 복사했으니 새 탭에서 직접 열어 붙여넣어 주세요.`);
+  } else if (copied) {
+    showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
+  } else {
+    showNotice(`${target.name}로 이동합니다. 복사가 제한되면 Make의 Copy 버튼으로 다시 복사해주세요.`);
+  }
   render();
 }
 
@@ -5222,6 +5219,15 @@ function applyTemplate(templateId) {
   }, 0);
 }
 
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_error) {
+    return fallbackCopyText(text);
+  }
+}
+
 function fallbackCopyText(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -5230,8 +5236,9 @@ function fallbackCopyText(text) {
   textarea.style.left = "-9999px";
   document.body.appendChild(textarea);
   textarea.select();
-  document.execCommand("copy");
+  const copied = document.execCommand("copy");
   textarea.remove();
+  return copied;
 }
 
 function makePromptTitle(text) {
@@ -5541,7 +5548,7 @@ function showSearchTipOnce() {
   searchTipTimer = window.setTimeout(() => {
     state.searchTipVisible = false;
     document.querySelector("[data-search-help]")?.classList.remove("show-tip");
-  }, 2200);
+  }, 2000);
 }
 
 function scheduleSearchCommit(value) {
@@ -6513,23 +6520,34 @@ function findCommentContextById(commentId) {
 }
 
 function sortPopularPrompts(prompts) {
+  const byViews = (a, b) => getPromptViewCount(b) - getPromptViewCount(a);
+  const bySaves = (a, b) => getPromptSaveCount(b) - getPromptSaveCount(a);
+  const byComments = (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a);
+  const byLikes = (a, b) => getPromptLikes(b) - getPromptLikes(a);
   const sorters = {
-    popular: (a, b) => b.views - a.views || b.comments - a.comments || b.saves - a.saves,
-    saves: (a, b) => b.saves - a.saves || b.views - a.views || b.comments - a.comments,
-    comments: (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a) || b.views - a.views || b.saves - a.saves,
-    likes: (a, b) => getPromptLikes(b) - getPromptLikes(a) || b.views - a.views || b.saves - a.saves,
-    latest: (a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a) || b.views - a.views,
+    popular: (a, b) => byViews(a, b) || byComments(a, b) || bySaves(a, b),
+    saves: (a, b) => bySaves(a, b) || byViews(a, b) || byComments(a, b),
+    comments: (a, b) => byComments(a, b) || byViews(a, b) || bySaves(a, b),
+    likes: (a, b) => byLikes(a, b) || byViews(a, b) || bySaves(a, b),
+    latest: (a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a) || byViews(a, b),
   };
 
   return [...prompts].sort(sorters[state.popularSort] || sorters.popular);
 }
 
 function getPromptLikes(prompt) {
-  return prompt.likes ?? Math.round(getPromptSaveCount(prompt) / 3);
+  const likes = Number(prompt?.likes);
+  return Number.isFinite(likes) ? likes : Math.round(getPromptSaveCount(prompt) / 3);
+}
+
+function getPromptViewCount(prompt) {
+  const views = Number(prompt?.views);
+  return Number.isFinite(views) ? views : 0;
 }
 
 function getPromptCreatedAt(prompt) {
-  if (Number.isFinite(prompt.createdAt)) return prompt.createdAt;
+  const createdAt = parseTimestamp(prompt?.createdAt || prompt?.updatedAt || prompt?.publishedAt);
+  if (createdAt) return createdAt;
   const sharedTimestamp = String(prompt.id || "").match(/^shared-(\d+)$/)?.[1];
   if (sharedTimestamp) return Number(sharedTimestamp);
   const demoIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
@@ -6683,11 +6701,12 @@ function getFinalPromptText(message) {
 }
 
 function formatNumber(value) {
-  return new Intl.NumberFormat("ko-KR").format(value);
+  const number = Number(value);
+  return new Intl.NumberFormat("ko-KR").format(Number.isFinite(number) ? number : 0);
 }
 
 function formatShortDate(value) {
-  const time = Number(value || 0);
+  const time = parseTimestamp(value);
   if (!time) return "방금 생성";
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -6696,6 +6715,15 @@ function formatShortDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(time));
+}
+
+function parseTimestamp(value) {
+  if (!value) return 0;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue) && numericValue > 0) return numericValue;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function showNotice(message) {

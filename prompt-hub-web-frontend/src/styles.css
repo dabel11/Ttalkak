@@ -525,11 +525,12 @@ svg {
 
 .search-help small {
   position: absolute;
-  top: calc(100% + 12px);
+  top: auto;
+  bottom: calc(100% + 12px);
   right: -6px;
   z-index: 5;
   width: max-content;
-  max-width: min(320px, calc(100vw - 48px));
+  max-width: min(280px, calc(100vw - 48px));
   padding: 10px 13px;
   border-radius: 12px;
   color: #fff;
@@ -540,14 +541,15 @@ svg {
   line-height: 1.45;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
+  transform: translateY(4px);
   transition: opacity 0.16s, transform 0.16s;
 }
 
 .search-help small::before {
   content: "";
   position: absolute;
-  top: -5px;
+  top: auto;
+  bottom: -5px;
   right: 14px;
   width: 10px;
   height: 10px;
@@ -4632,13 +4634,21 @@ input[type="checkbox"] {
   }
 
   .search-help small {
-    right: 0;
-    max-width: calc(100vw - 40px);
+    right: 50%;
+    max-width: min(280px, calc(100vw - 40px));
     white-space: normal;
+    transform: translate(50%, 4px);
   }
 
   .search-help small::before {
-    right: 10px;
+    right: 50%;
+    transform: translateX(50%) rotate(45deg);
+  }
+
+  .search-help:hover small,
+  .search-help:focus-visible small,
+  .search-help.show-tip small {
+    transform: translate(50%, 0);
   }
 
   .section-title {
