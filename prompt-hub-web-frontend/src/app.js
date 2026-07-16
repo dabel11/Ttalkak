@@ -1616,8 +1616,8 @@ function DemoLibraryPrompt() {
     return `
       <div class="demo-library-prompt">
         <div>
-          <strong>현재: 서버 보관함 기준</strong>
-          <p>내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역은 백엔드 API 응답을 우선 반영합니다.</p>
+          <strong>현재: 서버 응답 우선 + 최근 활동 즉시 반영</strong>
+          <p>백엔드 API 응답을 우선 반영하고, 방금 저장·댓글·신고한 활동은 즉시 함께 표시합니다.</p>
         </div>
       </div>
     `;
@@ -2207,7 +2207,7 @@ function SharePage() {
           <span>${icons.share}</span>
           <h1 id="share-title">프롬프트 공유하기</h1>
         </div>
-        <p class="share-policy">공유되는 내용은 제목, 최종 프롬프트, 해시태그입니다. Make에서 작성한 개인 대화 기록은 공유되지 않습니다.</p>
+        <p class="share-policy">공유되는 내용은 제목과 최종 프롬프트입니다. 해시태그는 선택 사항이며, 추가하면 검색에 더 잘 노출됩니다.</p>
         <form class="share-form">
           <label>
             <span>제목</span>
@@ -2219,7 +2219,7 @@ function SharePage() {
           </label>
           <label>
             <span>해시태그</span>
-            <input name="tagSearch" type="text" value="${escapeHtml(state.shareTagQuery)}" placeholder="기존 태그를 검색해 선택하거나 새 태그를 입력하세요" autocomplete="off" />
+            <input name="tagSearch" type="text" value="${escapeHtml(state.shareTagQuery)}" placeholder="선택 사항: 기존 태그를 검색하거나 새 태그를 입력하세요" autocomplete="off" />
             <input name="tags" type="hidden" value="${escapeHtml(draftTags)}" />
             <div class="share-tag-suggestions" aria-label="해시태그 검색 결과">
               ${
@@ -2227,7 +2227,7 @@ function SharePage() {
                   ? suggestedTags.map((tag) => `<button type="button" data-add-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`).join("")
                   : state.shareTagQuery.trim()
                     ? `<button type="button" data-add-share-tag="${escapeHtml(state.shareTagQuery.trim())}">새 태그로 추가: #${escapeHtml(state.shareTagQuery.trim())}</button>`
-                    : `<span>기존 해시태그를 검색해 선택할 수 있습니다.</span>`
+                    : `<span>해시태그 없이도 공유할 수 있습니다.</span>`
               }
             </div>
             <div class="tag-chip-list" data-share-tag-chips>
@@ -2236,10 +2236,10 @@ function SharePage() {
                   ? selectedTags
                       .map((tag) => `<button class="tag-chip" type="button" data-remove-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)} <span aria-hidden="true">×</span></button>`)
                       .join("")
-                  : `<span class="tag-chip-empty">선택한 해시태그가 없습니다.</span>`
+                  : `<span class="tag-chip-empty">태그 없이 공유됩니다.</span>`
               }
             </div>
-            <p class="field-hint">검색 결과가 없으면 입력한 값을 새 태그로 추가할 수 있습니다.</p>
+            <p class="field-hint">해시태그를 추가하면 검색과 추천에서 더 쉽게 발견됩니다. 검색 결과가 없으면 입력한 값을 새 태그로 추가할 수 있습니다.</p>
           </label>
           <div class="share-helper">
             <span>${state.shareError || "공유 후 Home으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다."}</span>
@@ -2256,7 +2256,6 @@ function SharePage() {
 
 function SharePreview(draft, draftTags) {
   const tags = parseSharedTags(draftTags || "").slice(0, 4);
-  const previewTags = tags.length ? tags : ["미리보기", "공유", "프롬프트"];
 
   return `
     <aside class="share-preview" aria-label="공유 미리보기">
@@ -2270,7 +2269,7 @@ function SharePreview(draft, draftTags) {
         </div>
         <p data-share-preview-text>${escapeHtml(draft.text || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.")}</p>
         <div class="tag-row" data-share-preview-tags>
-          ${previewTags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}
+          ${tags.length ? tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("") : `<span class="tag-chip-empty">태그 없음</span>`}
         </div>
       </article>
     </aside>
@@ -4253,7 +4252,6 @@ function updateSharePreview(formData) {
   const title = String(formData.get("title") || "").trim() || "프롬프트 제목 미리보기";
   const text = String(formData.get("prompt") || "").trim() || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.";
   const tags = parseSharedTags(String(formData.get("tags") || "")).slice(0, 4);
-  const previewTags = tags.length ? tags : ["미리보기", "공유", "프롬프트"];
   const previewTitle = document.querySelector("[data-share-preview-title]");
   const previewText = document.querySelector("[data-share-preview-text]");
   const previewTagRow = document.querySelector("[data-share-preview-tags]");
@@ -4261,7 +4259,9 @@ function updateSharePreview(formData) {
   if (previewTitle) previewTitle.textContent = title;
   if (previewText) previewText.textContent = text;
   if (previewTagRow) {
-    previewTagRow.innerHTML = previewTags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("");
+    previewTagRow.innerHTML = tags.length
+      ? tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")
+      : `<span class="tag-chip-empty">태그 없음</span>`;
   }
 }
 
@@ -5311,7 +5311,7 @@ async function publishSavedPrompt(promptId) {
   }
 
   let backendPrompt = null;
-  if (isBackendNumericId(promptId) && window.TTALKAK_API?.shareExistingPrompt) {
+  if (isBackendNumericId(promptId) && hasBackendAuthToken() && window.TTALKAK_API?.shareExistingPrompt) {
     try {
       backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, getAuthToken() || undefined);
     } catch (error) {
@@ -5359,8 +5359,8 @@ async function updateOwnPrompt(promptId, formData) {
   const text = String(formData.get("text") || "").trim();
   const tags = parseSharedTags(String(formData.get("tags") || ""));
 
-  if (!title || !text || tags.length === 0) {
-    window.alert("제목, 프롬프트, 해시태그를 모두 입력해주세요.");
+  if (!title || !text) {
+    window.alert("제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.");
     return;
   }
 
@@ -5477,10 +5477,15 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
+  const localSavedPrompts = getLocalSavedPagePrompts();
   if (state.myBackendStatus === "connected") {
-    return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts]);
+    return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts, ...localSavedPrompts]);
   }
 
+  return localSavedPrompts;
+}
+
+function getLocalSavedPagePrompts() {
   const merged = savedPrompts.filter(
     (prompt) =>
       !isHiddenDemoLibraryPrompt(prompt) &&
@@ -5730,8 +5735,8 @@ async function sharePrompt(formData) {
   const text = formData.get("prompt").trim();
   const tags = parseSharedTags(formData.get("tags"));
 
-  if (!title || !text || tags.length === 0) {
-    state.shareError = "제목, 프롬프트, 해시태그를 모두 입력해주세요.";
+  if (!title || !text) {
+    state.shareError = "제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.";
     render();
     return;
   }
@@ -5761,7 +5766,7 @@ async function sharePrompt(formData) {
 
   let finalPrompt = prompt;
   const api = window.TTALKAK_API;
-  if (api?.sharePrompt) {
+  if (api?.sharePrompt && hasBackendAuthToken()) {
     try {
       const backendPrompt = await api.sharePrompt(
         {
@@ -5796,6 +5801,7 @@ async function sharePrompt(formData) {
   state.backendLibraryPromptIds.add(finalPrompt.id);
   if (state.myBackendStatus === "connected") {
     upsertPrompt(state.backendLibraryPrompts, finalPrompt);
+    upsertPrompt(state.backendMyPrompts, finalPrompt);
   }
   if (!commentsByPrompt[finalPrompt.id]) {
     commentsByPrompt[finalPrompt.id] = [];
@@ -5987,14 +5993,16 @@ function getTagStats() {
 
 function getMyPrompts() {
   if (state.myBackendStatus === "connected") {
-    return getUniquePrompts(state.backendMyPrompts);
+    const localMinePrompts = savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt));
+    return getUniquePrompts([...state.backendMyPrompts, ...localMinePrompts]);
   }
   return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt)));
 }
 
 function getMyComments() {
+  const localComments = getLocalMyCommentItems();
   if (state.myBackendStatus === "connected") {
-    return state.backendMyComments.map((comment) => ({
+    const backendComments = state.backendMyComments.map((comment) => ({
       promptId: String(comment.promptId || ""),
       prompt: comment.prompt || findPromptById(String(comment.promptId || "")) || {
         id: String(comment.promptId || ""),
@@ -6004,8 +6012,13 @@ function getMyComments() {
       },
       comment,
     }));
+    return getUniqueMyCommentItems([...backendComments, ...localComments]);
   }
 
+  return localComments;
+}
+
+function getLocalMyCommentItems() {
   const owner = state.currentUser || "나";
   const items = [];
 
@@ -6014,6 +6027,17 @@ function getMyComments() {
   });
 
   return items;
+}
+
+function getUniqueMyCommentItems(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const comment = item.comment || {};
+    const key = String(comment.id || `${item.promptId}:${comment.text || ""}:${comment.createdAt || ""}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function collectOwnedComments(items, promptId, comments, owner) {
@@ -6037,10 +6061,14 @@ function getMyReports() {
     status: mapBackendReportStatus(report.status),
     requestedAt: report.createdAt,
   }));
-  if (state.myBackendStatus === "connected") {
-    return backendReports.sort((a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0));
-  }
+  const localReports = getLocalMyReportItems();
+  const reports = state.myBackendStatus === "connected"
+    ? getUniqueMyReports([...backendReports, ...localReports])
+    : getUniqueMyReports([...localReports, ...backendReports]);
+  return reports.sort((a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0));
+}
 
+function getLocalMyReportItems() {
   const promptReports = [...state.reportedPromptIds].map((promptId) => {
     const prompt = findPromptById(promptId);
     const record = getReportRecord(`prompt:${promptId}`);
@@ -6049,7 +6077,11 @@ function getMyReports() {
       title: "프롬프트 신고",
       id: promptId,
       label: prompt?.title || "삭제된 프롬프트",
+      reason: record.reason || "",
+      memo: record.memo || "",
+      reviewedAt: record.reviewedAt || 0,
       status: record.status,
+      requestedAt: record.createdAt,
     };
   });
   const commentReports = [...state.reportedCommentIds].map((commentId) => {
@@ -6060,7 +6092,11 @@ function getMyReports() {
       title: "댓글 신고",
       id: commentId,
       label: comment?.text || "삭제된 댓글",
+      reason: record.reason || "",
+      memo: record.memo || "",
+      reviewedAt: record.reviewedAt || 0,
       status: record.status,
+      requestedAt: record.createdAt,
     };
   });
 
@@ -6080,9 +6116,19 @@ function getMyReports() {
     })
     .filter(Boolean);
 
-  return [...revisionRequests, ...backendReports, ...promptReports, ...commentReports].sort(
+  return [...revisionRequests, ...promptReports, ...commentReports].sort(
     (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
   );
+}
+
+function getUniqueMyReports(reports) {
+  const seen = new Set();
+  return reports.filter((report) => {
+    const key = `${report.title || report.status || "report"}:${report.type}:${report.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function getAdminUserActivity(nickname) {
