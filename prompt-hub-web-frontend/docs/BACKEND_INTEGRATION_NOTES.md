@@ -49,7 +49,7 @@ Admin account policy:
 - 401 responses clear the stored token and open the login modal.
 - 403 responses show a permission notice.
 - Account withdrawal calls `DELETE http://localhost:8080/api/auth/withdraw` and clears frontend auth/local session state on success.
-- Admin QA fallback: when backend login or admin APIs are unavailable, the frontend can use a demo admin session so reviewers can inspect Admin UI. This does not represent production authentication and should not be used as a backend contract.
+- Admin QA mode is separated from backend login failures. Backend login timeout no longer creates an admin demo session automatically; any demo admin behavior must be enabled explicitly for frontend QA and must not be used as a backend contract.
 
 ## Backend Status Badge
 
@@ -63,9 +63,9 @@ Admin account policy:
 - Make threads/folders emit backend calls, but the UI still updates optimistically first.
 - Make thread delete is local-only because the current backend contract does not list `DELETE /api/make/threads/:id`.
 - If folder creation does not return a server folder id, the frontend skips the immediate move API to avoid sending temporary `folder-...` ids.
-- Admin screens call real admin endpoints when an authenticated backend token is available. Real service must enforce ADMIN authorization and audit logging server-side; local fallback exists only for frontend QA.
+- Admin screens call real admin endpoints when an authenticated backend token is available. Real service must enforce ADMIN authorization and audit logging server-side; local demo behavior exists only for explicit frontend QA.
 - Google OAuth buttons call the real backend Google auth flow when a frontend credential is available. Backend local OAuth validation is complete; production still needs Google Cloud Console domain registration and environment variables. Without a configured credential, the frontend shows the button as a demo preview.
-- Admin demo fallback uses the local `demo-token` only after a timeout for the known QA credential. Real admin login must return a backend token and role from `/api/auth/login`.
+- Real admin login must return a backend token and `user.role: "admin"` from `/api/auth/login`. The frontend no longer treats backend timeout as a signal to enter an admin demo session.
 
 ## Admin Account Policy
 

@@ -97,7 +97,7 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 
 ## Admin
 
-관리자 화면은 신고 관리, 전체 프롬프트 관리, 태그 관리를 담당합니다. 프론트엔드 데모에서는 `관리자 데모` 토글로 노출하지만, 실제 서비스에서는 서버 권한 검증이 필요합니다.
+관리자 화면은 신고 관리, 전체 프롬프트 관리, 태그 관리를 담당합니다. 실제 서비스에서는 `/api/auth/login` 응답의 `user.role: "admin"`과 서버 권한 검증을 기준으로 노출합니다.
 
 | 기능 | Method + path | Request body | Response notes |
 | --- | --- | --- | --- |

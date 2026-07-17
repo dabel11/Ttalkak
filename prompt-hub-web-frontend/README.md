@@ -18,12 +18,12 @@ Key limitations:
 - Several screens still use optimistic local state after firing API requests.
 - Google OAuth calls `POST /api/auth/google` only when a Google credential is available. Backend local OAuth validation is complete; production still requires Google Cloud Console domain registration and environment variables. Without a configured frontend credential, the button clearly falls back to demo preview mode.
 - Admin screens call backend admin APIs when available. Real service must still rely on server-side ADMIN authorization and audit logging.
-- Admin demo fallback is only for frontend QA when the backend login/admin APIs are unavailable. It is not real authentication and should not be treated as a backend contract.
+- Admin demo mode is only for explicit frontend QA configuration. Backend login timeout no longer opens an admin demo session automatically, and demo auth must not be treated as a backend contract.
 - RAG response handling is defensive and accepts multiple temporary field names. The preferred final field is `improved_prompt`.
 
 ## Admin Integration Update
 
-The frontend now attempts real Admin API integration before using local demo fallback.
+The frontend now attempts real Admin API integration and only uses local demo behavior when the reviewer explicitly enables a frontend QA setup.
 
 - Report list/status: `GET /api/admin/reports`, `PATCH /api/admin/reports/{id}/status`
 - Prompt management: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`. These are hide/soft-delete and restore operations; there is no permanent delete API in the current backend policy.
@@ -60,7 +60,7 @@ See `docs/QA_CHECKLIST.md`, `docs/API_SPEC.md`, and `docs/BACKEND_INTEGRATION_NO
 2. `Make`: 프롬프트 첨삭 채팅, 최근 대화, 폴더, 저장/공유/Execute 흐름 확인
 3. `My page`: 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역, 데모 데이터 토글 확인
 4. `Share`: 로그인 기반 프롬프트 공유, 태그 검색/선택, 카드 미리보기 확인
-5. `Admin`: 로그인 후 상단 `관리자 데모` 버튼을 켜고 신고 관리, 프롬프트 관리, 태그 관리 확인
+5. `Admin`: 관리자 권한 계정으로 로그인한 뒤 상단 `관리자 화면` 버튼으로 신고 관리, 프롬프트 관리, 태그 관리 확인
 
 ## 데모 한계
 
@@ -149,7 +149,7 @@ Start-Process -FilePath "node.exe" -ArgumentList "preview-server.cjs" -WorkingDi
 - `src/api.js`와 `docs/API_SPEC.md`는 백엔드 연동 계약 초안입니다. Home/Make/Auth/일부 커뮤니티 액션은 API 요청을 발생시키지만, 화면 상태는 아직 optimistic local state를 함께 사용합니다.
 - 사이드바의 `My page` 화면 안에 내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역 탭이 함께 들어 있습니다. 내부 route 이름은 기존 구현 호환을 위해 `saved`를 유지하지만, 사용자-facing 명칭은 `My page`입니다.
 - Admin 화면은 프론트엔드 데모 토글로 노출되지만, 실제 서비스에서는 반드시 백엔드의 관리자 권한 검증과 감사 로그가 필요합니다.
-- 관리자 데모가 켜진 상태에서는 일반 사용자 메뉴를 숨기고 `Admin`만 노출합니다. 관리자는 커뮤니티 사용자 행동보다 신고/콘텐츠/태그 관리에 집중하는 역할로 가정합니다.
+- 관리자 권한 계정에서는 일반 사용자 메뉴를 숨기고 `Admin`과 Home 읽기 화면만 노출합니다. 관리자는 커뮤니티 사용자 행동보다 신고/콘텐츠/태그 관리에 집중하는 역할로 가정합니다.
 
 ## 참고 정책
 

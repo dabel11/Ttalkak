@@ -224,6 +224,8 @@
     const member = data.member || data.user || {};
     const activities = unwrapItems(data.activities || data.items || data.content);
     const nickname = normalizeAuthor(member, data.nickname || data.memberNickname || "사용자");
+    const memberId = member.id || member.memberId || data.memberId || data.userId || data.id || "";
+    const blocked = Boolean(member.blocked ?? member.isBlocked ?? data.blocked ?? data.isBlocked ?? false);
     const groups = { prompts: [], comments: [], replies: [], reportsMade: [], reportsReceived: [] };
 
     activities.forEach((activity) => {
@@ -246,10 +248,26 @@
 
     return {
       nickname,
-      memberId: member.id || data.memberId || data.userId || "",
+      memberId: String(memberId || ""),
+      blocked,
+      blockReason: String(member.blockReason || data.blockReason || data.reason || ""),
       summary: data.summary || {},
       ...groups,
       raw: data,
+    };
+  }
+
+  function normalizeAdminAuditLog(item, index = 0) {
+    const actor = item?.actor || item?.admin || item?.member || {};
+    return {
+      id: String(item?.id || item?.auditLogId || `audit-${index}`),
+      action: String(item?.action || item?.event || item?.type || ""),
+      targetType: String(item?.targetType || item?.resourceType || item?.domain || ""),
+      targetId: String(item?.targetId || item?.resourceId || item?.promptId || item?.commentId || item?.memberId || ""),
+      actor: normalizeAuthor(actor, item?.actorNickname || item?.adminNickname || item?.memberNickname || "관리자"),
+      memo: String(item?.memo || item?.reason || item?.message || item?.description || ""),
+      createdAt: toTimestamp(item?.createdAt, item?.loggedAt, item?.timestamp),
+      raw: item,
     };
   }
 
@@ -582,6 +600,16 @@
     getAdminUserActivity(memberId, { limit = 20 } = {}, token) {
       const query = new URLSearchParams({ limit });
       return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
+    },
+    blockAdminUser(memberId, payload = {}, token) {
+      return request(`/api/admin/users/${memberId}/block`, { method: "PATCH", token, body: JSON.stringify(payload) }).then(normalizeAdminUserActivity);
+    },
+    unblockAdminUser(memberId, token) {
+      return request(`/api/admin/users/${memberId}/unblock`, { method: "PATCH", token }).then(normalizeAdminUserActivity);
+    },
+    getAdminAuditLogs({ page = 1, pageSize = 64 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/audit-logs?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeAdminAuditLog));
     },
     getMyRevisionRequests({ status = "all" } = {}, token) {
       const query = new URLSearchParams();

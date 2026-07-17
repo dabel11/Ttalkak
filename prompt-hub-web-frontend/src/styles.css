@@ -5714,6 +5714,14 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-user-activity-title > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
@@ -5725,6 +5733,26 @@ input[type="checkbox"] {
 .admin-user-activity-title span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.admin-user-activity-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-user-activity-actions button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--soft-green);
+  color: var(--brand-green);
+  padding: 8px 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-audit-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
 }
 
 .admin-user-activity-grid {

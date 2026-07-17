@@ -440,6 +440,7 @@ const state = {
   backendAdminPrompts: [],
   backendAdminRevisionRequests: [],
   backendAdminUserActivities: {},
+  backendAdminAuditLogs: [],
   makeBackendStatus: "idle",
   makeBackendMessage: "",
   popularSort: "popular",
@@ -679,6 +680,7 @@ function Sidebar() {
     prompts: icons.edit,
     tags: icons.hash,
     users: icons.user,
+    audit: icons.shield,
   };
   const adminItem = (tab) => `
     <button class="nav-item admin-nav-item ${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
@@ -727,6 +729,7 @@ function getAdminTabs() {
     { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
     { id: "tags", label: "태그 관리", count: adminTags.length },
     { id: "users", label: "사용자 활동", count: 0, hideCount: true },
+    { id: "audit", label: "감사 로그", count: state.backendAdminAuditLogs.length },
   ];
 }
 
@@ -736,7 +739,7 @@ function Header() {
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
   const adminAccessButton = isAdminAccount()
-    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="${state.adminMode ? "일반 화면을 읽기 전용으로 확인합니다." : "관리자 운영 화면으로 이동합니다."}" aria-label="관리자 화면 전환">${state.adminMode ? "사용자 화면 보기" : "관리자 화면"}</button>`
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-view title="${state.adminMode ? "일반 화면을 읽기 전용으로 확인합니다." : "관리자 운영 화면으로 이동합니다."}" aria-label="관리자 화면 전환">${state.adminMode ? "사용자 화면 보기" : "관리자 화면"}</button>`
     : "";
   const authButton = state.isLoggedIn
     ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
@@ -1831,7 +1834,7 @@ function AdminPage() {
       <section class="admin-page">
         <div class="empty-state saved-empty">
           <span>${icons.shield}</span>
-          <p>${state.isLoggedIn ? "관리자 데모를 켜야 Admin 페이지를 볼 수 있습니다." : "관리자 데모는 로그인 후 사용할 수 있습니다."}</p>
+          <p>${state.isLoggedIn ? "관리자 권한 계정으로 로그인해야 Admin 페이지를 볼 수 있습니다." : "Admin 페이지는 로그인 후 사용할 수 있습니다."}</p>
         </div>
       </section>
     `;
@@ -2056,8 +2059,43 @@ function AdminPage() {
       ${adminUserPanel}
     </section>
   `;
+  const auditLogs = state.backendAdminAuditLogs || [];
+  const auditPanel = `
+    <section class="admin-panel">
+      <h2>감사 로그</h2>
+      <p class="admin-panel-note">관리자 운영 액션이 서버 감사 로그에 남는지 확인합니다.</p>
+      ${
+        auditLogs.length
+          ? auditLogs
+              .slice(0, 40)
+              .map(
+                (log) => `
+                  <article class="admin-row admin-audit-row">
+                    <div>
+                      <strong>${escapeHtml(getAdminAuditActionLabel(log.action))}</strong>
+                      <p>${escapeHtml(getAdminAuditTargetLabel(log))}</p>
+                      ${log.memo ? `<p class="admin-report-target">${escapeHtml(log.memo)}</p>` : ""}
+                      <span class="status-badge private">처리자 ${escapeHtml(log.actor || "관리자")}</span>
+                      <span class="status-badge pending-unsave">${escapeHtml(formatShortDate(log.createdAt))}</span>
+                    </div>
+                  </article>
+                `,
+              )
+              .join("")
+          : `<p class="admin-empty">아직 표시할 감사 로그가 없습니다.</p>`
+      }
+    </section>
+  `;
   const activePanel =
-    activeAdminTab === "prompts" ? promptsPanel : activeAdminTab === "tags" ? tagsPanel : activeAdminTab === "users" ? usersPanel : reportsPanel;
+    activeAdminTab === "prompts"
+      ? promptsPanel
+      : activeAdminTab === "tags"
+        ? tagsPanel
+        : activeAdminTab === "users"
+          ? usersPanel
+          : activeAdminTab === "audit"
+            ? auditPanel
+            : reportsPanel;
 
   return `
     <section class="admin-page" aria-labelledby="admin-heading">
@@ -2123,7 +2161,53 @@ function AdminTagPromptUsagePanel(tag) {
   `;
 }
 
+function getAdminAuditActionLabel(action) {
+  const normalized = String(action || "").trim().toLowerCase();
+  const labels = {
+    block_user: "회원 차단",
+    user_blocked: "회원 차단",
+    member_blocked: "회원 차단",
+    block_member: "회원 차단",
+    unblock_user: "회원 차단 해제",
+    user_unblocked: "회원 차단 해제",
+    member_unblocked: "회원 차단 해제",
+    unblock_member: "회원 차단 해제",
+    report_status: "신고 상태 변경",
+    report_status_changed: "신고 상태 변경",
+    report_status_update: "신고 상태 변경",
+    update_report_status: "신고 상태 변경",
+    prompt_hide: "게시물 숨김",
+    hide_prompt: "게시물 숨김",
+    prompt_hidden: "게시물 숨김",
+    prompt_restore: "게시물 숨김 해제",
+    restore_prompt: "게시물 숨김 해제",
+    prompt_restored: "게시물 숨김 해제",
+    hide_comment: "댓글 숨김",
+    comment_hidden: "댓글 숨김",
+    unhide_comment: "댓글 숨김 해제",
+    comment_unhidden: "댓글 숨김 해제",
+    delete_comment: "댓글 삭제",
+    comment_deleted: "댓글 삭제",
+    tag_status: "태그 상태 변경",
+    tag_status_changed: "태그 상태 변경",
+    tag_status_change: "태그 상태 변경",
+    revision_request: "수정 요청",
+  };
+  return labels[normalized] || action || "관리자 작업";
+}
+
+function getAdminAuditTargetLabel(log) {
+  const targetType = String(log?.targetType || "").trim();
+  const targetId = String(log?.targetId || "").trim();
+  if (!targetType && !targetId) return "대상 정보 없음";
+  if (!targetId) return targetType;
+  if (!targetType) return `대상 ${targetId}`;
+  return `${targetType} #${targetId}`;
+}
+
 function AdminUserActivitySummary(activity) {
+  const memberId = String(activity.memberId || "").trim();
+  const isBlocked = Boolean(activity.blocked);
   const groups = [
     { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
     { id: "comments", title: "작성한 댓글", items: activity.comments, empty: "작성한 댓글이 없습니다." },
@@ -2135,8 +2219,22 @@ function AdminUserActivitySummary(activity) {
   return `
     <div class="admin-user-activity-result">
       <div class="admin-user-activity-title">
-        <strong>${escapeHtml(activity.nickname)}</strong>
-        <span>프롬프트 ${formatNumber(activity.prompts.length)}개 · 댓글 ${formatNumber(activity.comments.length)}개 · 답글 ${formatNumber(activity.replies.length)}개</span>
+        <div>
+          <strong>${escapeHtml(activity.nickname)}</strong>
+          <span>프롬프트 ${formatNumber(activity.prompts.length)}개 · 댓글 ${formatNumber(activity.comments.length)}개 · 답글 ${formatNumber(activity.replies.length)}개</span>
+          ${isBlocked ? `<span class="status-badge private">차단됨</span>` : ""}
+        </div>
+        ${
+          memberId
+            ? `<div class="admin-user-activity-actions">
+                ${
+                  isBlocked
+                    ? `<button type="button" data-admin-user-unblock="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단 해제</button>`
+                    : `<button type="button" data-admin-user-block="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단</button>`
+                }
+              </div>`
+            : ""
+        }
       </div>
       <div class="admin-user-activity-grid">
         ${groups
@@ -2506,44 +2604,6 @@ function applyAuthenticatedUser(authResult) {
   }
 }
 
-function isAdminDemoCredential(userId, password) {
-  const credential = window.TTALKAK_ADMIN_DEMO_CREDENTIAL;
-  if (!credential?.enabled) return false;
-  return (
-    String(userId || "").trim().toLowerCase() === String(credential.userId || "").trim().toLowerCase() &&
-    String(password || "") === String(credential.password || "")
-  );
-}
-
-function isBackendConnectionError(error) {
-  const message = String(error?.message || "");
-  return (
-    error?.code === "REQUEST_TIMEOUT" ||
-    error?.name === "AbortError" ||
-    error instanceof TypeError ||
-    /aborted|timeout|시간이 초과|failed to fetch|network/i.test(message)
-  );
-}
-
-function applyAdminDemoFallback() {
-  applyAuthenticatedUser({
-    token: DEMO_AUTH_TOKEN,
-    user: {
-      id: "demo-admin-user",
-      userId: "admin",
-      nickname: "관리자",
-      role: "admin",
-    },
-  });
-  state.authView = null;
-  state.authDraft = {};
-  state.authDuplicateChecks = {};
-  state.authUserIdWarning = "";
-  state.authError = "";
-  showNotice("백엔드 로그인 연결 실패로 관리자 데모 세션을 사용합니다.");
-  render();
-}
-
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
   state.isLoggedIn = false;
   state.currentUser = null;
@@ -2684,12 +2744,12 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-toggle-admin-demo]").forEach((button) => {
+  document.querySelectorAll("[data-toggle-admin-view]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!state.isLoggedIn) {
         state.adminMode = false;
         state.route = state.route === "admin" ? "home" : state.route;
-        showNotice("관리자 데모는 로그인 후 사용할 수 있습니다.");
+        showNotice("Admin 페이지는 로그인 후 사용할 수 있습니다.");
         return;
       }
       state.adminMode = !state.adminMode;
@@ -3272,6 +3332,18 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-user-block]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateAdminUserBlockState(button.dataset.adminUserBlock, true, button.dataset.adminUserName);
+    });
+  });
+
+  document.querySelectorAll("[data-admin-user-unblock]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateAdminUserBlockState(button.dataset.adminUserUnblock, false, button.dataset.adminUserName);
+    });
+  });
+
   document.querySelectorAll("[data-admin-tag-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
@@ -3771,11 +3843,6 @@ function bindEvents() {
         await loadMakeBackendData({ shouldRender: false });
         render();
       } catch (error) {
-        if (!isSignup && isAdminDemoCredential(userId, password) && isBackendConnectionError(error)) {
-          applyAdminDemoFallback();
-          return;
-        }
-
         const backendMessage = error?.payload?.message || error?.message || "";
         setAuthFormError(backendMessage || "로그인 요청에 실패했습니다.");
       }
@@ -4695,7 +4762,7 @@ async function runConfirmedAction() {
     stampCurrentUserOwnedPrompts();
     const wasAdminMode = state.adminMode;
     clearAuthenticatedSession();
-    showNotice(wasAdminMode ? "로그아웃하여 관리자 데모를 종료했습니다." : "로그아웃했습니다.");
+    showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {
@@ -5720,6 +5787,56 @@ async function openAdminUserActivity(nickname, options = {}) {
   }
 }
 
+async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
+  const cleanMemberId = String(memberId || "").trim();
+  if (!cleanMemberId) {
+    showNotice("회원 ID가 없어 차단 상태를 변경할 수 없습니다.");
+    return;
+  }
+  const api = window.TTALKAK_API;
+  if (!api?.blockAdminUser || !api?.unblockAdminUser) {
+    showNotice("회원 차단 API가 아직 연결되지 않았습니다.");
+    return;
+  }
+
+  let reason = "";
+  if (shouldBlock) {
+    reason = String(window.prompt("회원 차단 사유를 입력해주세요.", "운영 정책 위반") || "").trim();
+    if (!reason) {
+      showNotice("차단 사유가 필요합니다.");
+      return;
+    }
+  }
+
+  try {
+    const token = getAuthToken() || undefined;
+    const activity = shouldBlock
+      ? await api.blockAdminUser(cleanMemberId, { reason }, token)
+      : await api.unblockAdminUser(cleanMemberId, token);
+    const displayNickname = String(activity?.nickname || nickname || state.adminUserActivityNickname || "사용자").trim();
+    const normalizedNickname = normalizeAdminSearchText(displayNickname);
+    const previousActivity = state.backendAdminUserActivities[normalizedNickname] || getAdminUserActivity(displayNickname);
+
+    state.backendAdminUserActivities = {
+      ...state.backendAdminUserActivities,
+      [normalizedNickname]: {
+        ...previousActivity,
+        ...activity,
+        nickname: displayNickname,
+        memberId: cleanMemberId,
+        blocked: shouldBlock,
+      },
+    };
+    state.adminUserActivityNickname = displayNickname;
+    state.adminUserQuery = displayNickname;
+    state.adminBackendStatus = "idle";
+    showNotice(shouldBlock ? "회원 차단을 처리했습니다." : "회원 차단을 해제했습니다.");
+    render();
+  } catch (error) {
+    handleBackendAccessError(error, shouldBlock ? "회원 차단 요청에 실패했습니다." : "회원 차단 해제 요청에 실패했습니다.");
+  }
+}
+
 function resolveAdminUserNickname(value) {
   const cleanValue = String(value || "").trim();
   const normalizedValue = normalizeAdminSearchText(cleanValue);
@@ -6445,6 +6562,7 @@ function getAdminTagStatusOrder(status) {
 async function updateAdminTagDecision(tag, decision) {
   if (!tag || !["pending", "approved", "rejected", "disabled"].includes(decision)) return;
 
+  let backendChanged = false;
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
   if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
     try {
@@ -6453,6 +6571,7 @@ async function updateAdminTagDecision(tag, decision) {
       state.backendAdminTags = state.backendAdminTags.map((item) =>
         item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
       );
+      backendChanged = true;
     } catch (error) {
       handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
       console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
@@ -6468,11 +6587,13 @@ async function updateAdminTagDecision(tag, decision) {
   }
 
   showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+  if (backendChanged) await refreshAdminAuditLogs();
 }
 
 async function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "reviewed", "dismissed", "resolved"].includes(status)) return;
   const record = getReportRecord(key);
+  let backendChanged = false;
   if (record.backendId && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminReportStatus) {
     try {
       const updated = await window.TTALKAK_API.updateAdminReportStatus(
@@ -6486,6 +6607,7 @@ async function updateReportRecordStatus(key, status) {
         report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
       );
       status = backendStatus;
+      backendChanged = true;
     } catch (error) {
       handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
       console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
@@ -6493,6 +6615,7 @@ async function updateReportRecordStatus(key, status) {
   }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
+  if (backendChanged) await refreshAdminAuditLogs();
 }
 
 async function requestPromptRevision(targetKey, reason) {
@@ -6506,6 +6629,7 @@ async function requestPromptRevision(targetKey, reason) {
   }
 
   let backendRequest = null;
+  let backendChanged = false;
   if (target.type === "prompt" && isBackendNumericId(target.id) && hasBackendAuthToken() && window.TTALKAK_API?.requestPromptRevision) {
     try {
       backendRequest = await window.TTALKAK_API.requestPromptRevision(
@@ -6513,6 +6637,7 @@ async function requestPromptRevision(targetKey, reason) {
         { reason: content, memo: content },
         getAuthToken() || undefined,
       );
+      backendChanged = true;
     } catch (error) {
       handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다. 데모 상태로만 표시합니다.");
       console.warn("[TTALKAK] /api/prompts/{id}/revision-requests 호출에 실패해 데모 상태만 변경합니다.", error);
@@ -6532,6 +6657,7 @@ async function requestPromptRevision(targetKey, reason) {
   };
   state.adminRequestTargetKey = null;
   showNotice("작성자에게 수정 요청을 보냈습니다.");
+  if (backendChanged) await refreshAdminAuditLogs();
 }
 
 function findPromptIdByCommentId(commentId) {
@@ -6615,29 +6741,48 @@ function canShowReportedState() {
 
 async function toggleAdminPromptHidden(promptId) {
   if (!promptId) return;
+  let backendChanged = false;
+  const canUseBackendPromptAction = hasBackendAuthToken() && isBackendNumericId(promptId);
+
+  if (!canUseBackendPromptAction) {
+    showNotice("서버 프롬프트 ID와 관리자 토큰이 있어야 게시물 숨김을 감사 로그에 남길 수 있습니다.");
+    return;
+  }
+
   if (state.adminHiddenPromptIds.has(promptId)) {
-    if (window.TTALKAK_API?.restoreAdminPrompt && isBackendNumericId(promptId)) {
+    if (window.TTALKAK_API?.restoreAdminPrompt) {
       try {
         await window.TTALKAK_API.restoreAdminPrompt(promptId, getAuthToken() || undefined);
+        backendChanged = true;
       } catch (error) {
         handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 숨김 해제를 중단합니다.", error);
+        return;
       }
+    } else {
+      showNotice("게시글 숨김 해제 API가 연결되어 있지 않습니다.");
+      return;
     }
     state.adminHiddenPromptIds.delete(promptId);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
-    if (window.TTALKAK_API?.hideAdminPrompt && isBackendNumericId(promptId)) {
+    if (window.TTALKAK_API?.hideAdminPrompt) {
       try {
         await window.TTALKAK_API.hideAdminPrompt(promptId, getAuthToken() || undefined);
+        backendChanged = true;
       } catch (error) {
         handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
+        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 숨김 처리를 중단합니다.", error);
+        return;
       }
+    } else {
+      showNotice("게시글 숨김 API가 연결되어 있지 않습니다.");
+      return;
     }
     state.adminHiddenPromptIds.add(promptId);
     showNotice("관리자 숨김 처리했습니다.");
   }
+  if (backendChanged) await refreshAdminAuditLogs();
 }
 
 function getPopularTotalPages(count) {
@@ -6792,9 +6937,22 @@ function getBackendErrorCode(error) {
 function getBackendErrorCodeMessage(code) {
   switch (code) {
     case "AUTHENTICATION_REQUIRED":
+    case "LOGIN_REQUIRED":
       return "로그인이 필요하거나 인증이 만료되었습니다.";
     case "ACCESS_DENIED":
       return "이 작업을 수행할 권한이 없습니다.";
+    case "OWNER_ONLY":
+      return "작성자만 수행할 수 있는 작업입니다.";
+    case "ADMIN_ONLY":
+      return "관리자 권한이 필요합니다.";
+    case "ACCOUNT_BLOCKED":
+      return "차단된 계정입니다. 관리자에게 문의해주세요.";
+    case "ACCOUNT_WITHDRAWN":
+      return "탈퇴한 계정입니다.";
+    case "ADMIN_ACCOUNT_PROTECTED":
+      return "관리자 계정에는 수행할 수 없는 작업입니다.";
+    case "BLOCK_REASON_REQUIRED":
+      return "차단 사유가 필요합니다.";
     case "RESOURCE_NOT_FOUND":
       return "요청한 대상을 찾을 수 없습니다.";
     case "VALIDATION_FAILED":
@@ -6836,7 +6994,14 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
   const backendMessage = getBackendErrorMessage(error);
   const keepSession = Boolean(options.keepSession);
 
-  if (status === 401 || code === "AUTHENTICATION_REQUIRED") {
+  if (code === "ACCOUNT_BLOCKED") {
+    clearAuthenticatedSession({ keepRoute: true });
+    state.authView = "login";
+    showNotice(backendMessage || "차단된 계정입니다. 관리자에게 문의해주세요.");
+    return true;
+  }
+
+  if (status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED") {
     const token = getAuthToken();
     if (keepSession) {
       showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
@@ -6854,7 +7019,7 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
-  if (status === 403 || code === "ACCESS_DENIED") {
+  if (status === 403 || code === "ACCESS_DENIED" || code === "OWNER_ONLY" || code === "ADMIN_ONLY" || code === "ADMIN_ACCOUNT_PROTECTED") {
     showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
     return true;
   }
@@ -6864,12 +7029,12 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
-  if (status === 400 || code === "VALIDATION_FAILED" || code === "INVALID_REQUEST") {
+  if (status === 400 || code === "VALIDATION_FAILED" || code === "INVALID_REQUEST" || code === "BLOCK_REASON_REQUIRED") {
     showNotice(backendMessage || "입력값을 확인해주세요.");
     return true;
   }
 
-  if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
+  if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE" || code === "ACCOUNT_WITHDRAWN") {
     showNotice(backendMessage || "현재 상태에서는 처리할 수 없습니다.");
     return true;
   }
@@ -7203,7 +7368,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
 async function hydrateBackendAdminDataIfNeeded() {
   if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
   const api = window.TTALKAK_API;
-  if (!api?.getAdminReports && !api?.getAdminTags && !api?.getAdminPrompts && !api?.getAdminRevisionRequests) return;
+  if (!api?.getAdminReports && !api?.getAdminTags && !api?.getAdminPrompts && !api?.getAdminRevisionRequests && !api?.getAdminAuditLogs) return;
   if (!hasBackendAuthToken()) {
     state.adminBackendStatus = "demo";
     return;
@@ -7211,11 +7376,12 @@ async function hydrateBackendAdminDataIfNeeded() {
 
   state.adminBackendStatus = "checking";
   const token = getAuthToken() || undefined;
-  const [reportsResult, tagsResult, promptsResult, revisionRequestsResult] = await Promise.allSettled([
+  const [reportsResult, tagsResult, promptsResult, revisionRequestsResult, auditLogsResult] = await Promise.allSettled([
     api.getAdminReports?.({}, token),
     api.getAdminTags?.({}, token),
     api.getAdminPrompts?.({}, token),
     api.getAdminRevisionRequests?.({}, token),
+    api.getAdminAuditLogs?.({}, token),
   ]);
 
   let shouldRender = false;
@@ -7276,8 +7442,29 @@ async function hydrateBackendAdminDataIfNeeded() {
     console.warn("[TTALKAK] /api/admin/revision-requests 연동에 실패해 데모 수정 요청 데이터를 유지합니다.", revisionRequestsResult.reason);
   }
 
+  if (auditLogsResult.status === "fulfilled" && Array.isArray(auditLogsResult.value)) {
+    state.backendAdminAuditLogs = auditLogsResult.value;
+    shouldRender = true;
+  } else if (auditLogsResult.status === "rejected") {
+    console.warn("[TTALKAK] /api/admin/audit-logs 연동에 실패해 감사 로그를 표시하지 못했습니다.", auditLogsResult.reason);
+  }
+
   state.adminBackendStatus = "connected";
   if (shouldRender) render();
+}
+
+async function refreshAdminAuditLogs({ shouldRender = true } = {}) {
+  const api = window.TTALKAK_API;
+  if (!state.adminMode || !hasBackendAuthToken() || !api?.getAdminAuditLogs) return;
+
+  try {
+    const logs = await api.getAdminAuditLogs({}, getAuthToken() || undefined);
+    if (!Array.isArray(logs)) return;
+    state.backendAdminAuditLogs = logs;
+    if (shouldRender) render();
+  } catch (error) {
+    console.warn("[TTALKAK] /api/admin/audit-logs 재조회에 실패했습니다.", error);
+  }
 }
 
 function persistState() {
@@ -7377,7 +7564,7 @@ function loadPersistedState() {
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
     state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
-    state.adminTab = ["reports", "prompts", "tags", "users"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
+    state.adminTab = ["reports", "prompts", "tags", "users", "audit"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
     state.adminPromptQuery = savedState.adminPromptQuery || "";
     state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
       ? savedState.adminPromptFilter
