@@ -171,6 +171,7 @@
       likes: toNumber(item?.likes, item?.likeCount),
       edited: Boolean(item?.edited || item?.isEdited),
       deleted: Boolean(item?.deleted || item?.isDeleted),
+      hidden: Boolean(item?.hidden || item?.isHidden),
       likedByMe: Boolean(item?.likedByMe || item?.isLiked),
       isReported: Boolean(item?.isReported || item?.reportedByMe),
       createdAt: toTimestamp(item?.createdAt, item?.createdDate),
@@ -265,7 +266,7 @@
       targetType: String(item?.targetType || item?.resourceType || item?.domain || ""),
       targetId: String(item?.targetId || item?.resourceId || item?.promptId || item?.commentId || item?.memberId || ""),
       actor: normalizeAuthor(actor, item?.actorNickname || item?.adminNickname || item?.memberNickname || "관리자"),
-      memo: String(item?.memo || item?.reason || item?.message || item?.description || ""),
+      memo: String(item?.detail || item?.memo || item?.reason || item?.message || item?.description || ""),
       createdAt: toTimestamp(item?.createdAt, item?.loggedAt, item?.timestamp),
       raw: item,
     };
@@ -276,6 +277,10 @@
     const prompt = item?.prompt && typeof item.prompt === "object" ? normalizePrompt(item.prompt) : null;
     const reporter = item?.reporter || item?.reporterNickname || item?.reporterName || "";
     const targetAuthor = item?.targetAuthor || item?.targetAuthorNickname || item?.commentAuthorNickname || item?.promptAuthorNickname || item?.author || "";
+    const commentAuthor =
+      targetType === "comment"
+        ? item?.commentAuthor || item?.commentAuthorNickname || item?.author || item?.authorNickname || targetAuthor
+        : item?.commentAuthor || item?.commentAuthorNickname || "";
     return {
       id: String(item?.id || item?.reportId || `backend-report-${index}`),
       key: `${targetType}:${item?.targetId || item?.promptId || item?.commentId || item?.id || index}`,
@@ -294,7 +299,7 @@
       reporter: normalizeAuthor(reporter, ""),
       targetAuthor: normalizeAuthor(targetAuthor, ""),
       promptAuthor: normalizeAuthor(item?.promptAuthor || item?.promptAuthorNickname || prompt?.author || "", ""),
-      commentAuthor: normalizeAuthor(item?.commentAuthor || item?.commentAuthorNickname || "", ""),
+      commentAuthor: normalizeAuthor(commentAuthor, ""),
       raw: item,
     };
   }
@@ -623,6 +628,9 @@
     },
     requestPromptRevision(promptId, payload, token) {
       return request(`/api/prompts/${promptId}/revision-requests`, { method: "POST", token, body: JSON.stringify(payload) }).then(normalizeRevisionRequest);
+    },
+    requestAuthorRevision(promptId, payload, token) {
+      return request(`/api/admin/prompts/${promptId}/author-revision-requests`, { method: "POST", token, body: JSON.stringify(payload) }).then(normalizeRevisionRequest);
     },
     updateAdminRevisionRequestStatus(requestId, status, token, memo = "") {
       return request(`/api/admin/revision-requests/${requestId}/status`, { method: "PATCH", token, body: JSON.stringify({ status, memo }) }).then(normalizeRevisionRequest);

@@ -296,6 +296,7 @@ const PROTECTED_BACKEND_ACTIONS = new Set([
   "likePrompt",
   "reportComment",
   "reportPrompt",
+  "requestAuthorRevision",
   "requestPromptRevision",
   "restoreAdminPrompt",
   "savePrompt",
@@ -390,6 +391,7 @@ const state = {
   adminHiddenPromptIds: new Set(),
   adminTagDecisions: {},
   adminTab: "reports",
+  adminReportFilter: "all",
   adminPromptQuery: "",
   adminPromptFilter: "all",
   adminTagQuery: "",
@@ -436,11 +438,13 @@ const state = {
   backendLikedPrompts: [],
   backendLibraryPromptIds: new Set(),
   backendAdminReports: [],
+  backendAdminReportsLoaded: false,
   backendAdminTags: [],
   backendAdminPrompts: [],
   backendAdminRevisionRequests: [],
   backendAdminUserActivities: {},
   backendAdminAuditLogs: [],
+  adminAuditSyncMessage: "",
   makeBackendStatus: "idle",
   makeBackendMessage: "",
   popularSort: "popular",
@@ -1112,7 +1116,7 @@ function PromptDetailModal() {
           ${
             isAdminReview
                  ? `<div class="detail-action-group manage-actions">
-                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
                    <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
                  </div>
                  <div class="detail-action-group use-actions">
@@ -1175,25 +1179,38 @@ function AdminRevisionRequestModal() {
   if (!target || !state.adminMode) return "";
 
   const existingRequest = state.adminPromptRevisionRequests[target.key];
+  const isExistingRequest = Boolean(existingRequest);
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="revision-request-title">
       <form class="modal prompt-edit-modal revision-request-modal" data-admin-revision-request-form="${target.key}">
         <div class="modal-head">
-          <h2 id="revision-request-title">수정 요청</h2>
+          <h2 id="revision-request-title">${isExistingRequest ? "수정 요청 사유 확인" : "수정 요청"}</h2>
           <button class="ghost-icon" type="button" data-close-revision-request aria-label="닫기">${icons.close}</button>
         </div>
         <div class="revision-request-target">
           <strong>${escapeHtml(target.title)}</strong>
           <p>${escapeHtml(truncateText(target.text, 120))}</p>
         </div>
+        ${
+          isExistingRequest
+            ? `<div class="revision-request-notice">
+                <strong>이미 처리 중인 수정 요청이 있습니다.</strong>
+                <p>현재는 기존 요청 사유를 확인할 수 있습니다. 사유 변경은 백엔드 수정 API가 준비되면 연결됩니다.</p>
+              </div>`
+            : ""
+        }
         <label>
           <span>작성자에게 전달할 요청 사유</span>
-          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요.">${escapeHtml(existingRequest?.reason || "")}</textarea>
+          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요." ${isExistingRequest ? "readonly" : ""}>${escapeHtml(existingRequest?.reason || "")}</textarea>
         </label>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-close-revision-request>취소</button>
-          <button class="primary-button" type="submit">요청 보내기</button>
+          ${
+            isExistingRequest
+              ? `<button class="primary-button" type="button" data-revision-update-unavailable>사유 수정</button>`
+              : `<button class="primary-button" type="submit">요청 보내기</button>`
+          }
         </div>
       </form>
     </div>
@@ -1202,6 +1219,7 @@ function AdminRevisionRequestModal() {
 
 function CommentItem(comment) {
   const isDeleted = Boolean(comment.deleted);
+  const isHidden = Boolean(comment.hidden || comment.isHidden);
   const canDelete = !isDeleted && canDeleteComment(comment);
   const isReported = canShowReportedState() && state.reportedCommentIds.has(comment.id);
   const isLiked = state.likedCommentIds.has(comment.id);
@@ -1214,9 +1232,14 @@ function CommentItem(comment) {
   return `
     <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
       <div class="comment-item-head">
-        <strong>${isDeleted ? "삭제된 댓글" : comment.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : comment.author}${isHidden ? `<span class="edited-mark">숨김</span>` : ""}</strong>
         ${
-          isAdminReview || isDeleted
+          isAdminReview && !isDeleted
+            ? `<div class="comment-actions">
+                <button class="comment-edit-button" type="button" data-admin-toggle-comment-hidden="${comment.id}:${isHidden ? "unhide" : "hide"}" title="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}" aria-label="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}">${isHidden ? icons.eye : icons.flag}</button>
+                <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>
+              </div>`
+            : isDeleted
             ? ""
             : `<div class="comment-actions">
                 ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
@@ -1842,6 +1865,13 @@ function AdminPage() {
 
   const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
   const reportRecords = getAdminReportRecords();
+  const adminReportFilter = ["all", "prompt", "comment"].includes(state.adminReportFilter) ? state.adminReportFilter : "all";
+  const filteredReportRecords = reportRecords.filter((record) => adminReportFilter === "all" || record.type === adminReportFilter);
+  const adminReportFilters = [
+    { id: "all", label: "전체", count: reportRecords.length },
+    { id: "prompt", label: "프롬프트", count: reportRecords.filter((record) => record.type === "prompt").length },
+    { id: "comment", label: "댓글", count: reportRecords.filter((record) => record.type === "comment").length },
+  ];
   const allPrompts = state.backendAdminPrompts.length
     ? getUniquePrompts(state.backendAdminPrompts)
     : getUniquePrompts([...popularPrompts, ...savedPrompts]);
@@ -1894,22 +1924,33 @@ function AdminPage() {
   const reportsPanel = `
     <section class="admin-panel">
       <h2>신고 관리</h2>
-      <p class="admin-panel-note">접수된 신고는 검토 완료 또는 기각할 수 있고, 완료/기각 후에도 다시 접수 상태로 재처리할 수 있습니다.</p>
+      <p class="admin-panel-note">신고된 프롬프트와 댓글을 게시물 맥락 안에서 검토합니다. 처리 완료/기각 상태는 최종 상태로 유지합니다.</p>
+      <div class="admin-filter-list" aria-label="신고 유형 분류">
+        ${adminReportFilters
+          .map(
+            (filter) =>
+              `<button class="${adminReportFilter === filter.id ? "active" : ""}" type="button" data-admin-report-filter="${filter.id}">${filter.label}<span>${formatNumber(filter.count)}</span></button>`,
+          )
+          .join("")}
+      </div>
       ${
-        reportRecords.length
-          ? reportRecords
+        filteredReportRecords.length
+          ? filteredReportRecords
               .map(
                 (record) => `
                   <article class="admin-row admin-report-row report-status-${record.status}">
                     <div>
-                      <strong>${escapeHtml(record.title)}</strong>
+                      <div class="status-row">
+                        <span class="status-badge ${record.type === "comment" ? "pending-unsave" : "public"}">${record.type === "comment" ? "댓글 신고" : "프롬프트 신고"}</span>
+                        <span class="status-badge ${record.status === "dismissed" ? "private" : ["reviewed", "resolved"].includes(record.status) ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
+                        ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
+                      </div>
+                      <strong>${escapeHtml(record.type === "comment" ? record.contextTitle || record.title : record.title)}</strong>
                       ${record.contextTitle ? `<p class="admin-report-context">게시물: ${escapeHtml(record.contextTitle)}</p>` : ""}
                       ${record.targetPreview ? `<p class="admin-report-target">${escapeHtml(record.targetPreview)}</p>` : ""}
                       <p>${escapeHtml(record.summary)}</p>
-                      <span class="status-badge ${record.status === "dismissed" ? "private" : ["reviewed", "resolved"].includes(record.status) ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
                       ${record.promptAuthor ? `<span class="status-badge private">게시물 작성자 ${escapeHtml(record.promptAuthor)}</span>` : ""}
                       ${record.commentAuthor ? `<span class="status-badge private">댓글 작성자 ${escapeHtml(record.commentAuthor)}</span>` : ""}
-                      ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
                     </div>
                     <div class="admin-actions">
                       ${
@@ -1917,12 +1958,14 @@ function AdminPage() {
                           ? `<button type="button" data-open-prompt="${record.promptId}" ${record.type === "comment" ? `data-highlight-comment="${record.targetId}"` : ""}>원문 보기</button>`
                           : ""
                       }
-                      <button type="button" data-admin-request-revision="${record.key}">수정 요청</button>
+                      <button type="button" data-admin-request-revision="${record.key}">${state.adminPromptRevisionRequests[record.key] ? "사유 확인" : "수정 요청"}</button>
                       ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "게시물 숨김 해제" : "게시물 숨김"}</button>` : ""}
-                      ${record.status !== "reviewed" ? `<button type="button" data-admin-report-status="${record.key}:reviewed">검토 완료</button>` : ""}
-                      ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
-                      ${["reviewed", "resolved"].includes(record.status) ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
-                      ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
+                      ${
+                        isFinalReportStatus(record.status)
+                          ? ""
+                          : `${record.status !== "reviewed" ? `<button type="button" data-admin-report-status="${record.key}:reviewed">검토 완료</button>` : ""}
+                             ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}`
+                      }
                       ${
                         record.type === "comment"
                           ? `<button type="button" data-delete-comment="${record.targetId}">댓글 삭제</button>`
@@ -1933,14 +1976,14 @@ function AdminPage() {
                 `,
               )
               .join("")
-          : `<p class="admin-empty">접수된 신고가 없습니다.</p>`
+          : `<p class="admin-empty">${reportRecords.length ? "선택한 유형의 신고가 없습니다." : "접수된 신고가 없습니다."}</p>`
       }
     </section>
   `;
   const promptsPanel = `
     <section class="admin-panel">
       <h2>프롬프트 관리</h2>
-      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청과 게시물 숨김/해제 같은 운영 조치만 수행합니다.</p>
+      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 원문 보기에서 댓글 맥락을 함께 확인한 뒤 수정 요청과 게시물 숨김/해제 같은 운영 조치만 수행합니다.</p>
       <div class="admin-filter-list" aria-label="프롬프트 분류">
         ${adminPromptFilters
           .map(
@@ -1992,7 +2035,7 @@ function AdminPage() {
                 </div>
                 <div class="admin-actions">
                   <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
-                  <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
+                  <button type="button" data-admin-request-revision="prompt:${prompt.id}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
                   <button type="button" data-admin-hide-prompt="${prompt.id}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
                 </div>
               </article>
@@ -2055,7 +2098,7 @@ function AdminPage() {
   const usersPanel = `
     <section class="admin-panel">
       <h2>사용자 활동</h2>
-      <p class="admin-panel-note">닉네임 기준으로 작성한 프롬프트, 댓글, 답글, 신고 맥락을 확인합니다.</p>
+      <p class="admin-panel-note">닉네임 기준으로 작성한 프롬프트, 댓글, 답글, 신고 맥락을 함께 확인합니다.</p>
       ${adminUserPanel}
     </section>
   `;
@@ -2063,7 +2106,10 @@ function AdminPage() {
   const auditPanel = `
     <section class="admin-panel">
       <h2>감사 로그</h2>
-      <p class="admin-panel-note">관리자 운영 액션이 서버 감사 로그에 남는지 확인합니다.</p>
+      <p class="admin-panel-note">
+        관리자 운영 액션이 서버 감사 로그에 남는지 확인합니다.
+        ${state.adminAuditSyncMessage ? `<br><span>${escapeHtml(state.adminAuditSyncMessage)}</span>` : ""}
+      </p>
       ${
         auditLogs.length
           ? auditLogs
@@ -2104,7 +2150,7 @@ function AdminPage() {
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 게시물 숨김/해제, 댓글 삭제, 검토 상태 변경만 수행합니다.</p>
+        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 댓글은 별도 메뉴로 분리하지 않고 신고 관리, 프롬프트 원문 보기, 사용자 활동 안에서 게시물 맥락과 함께 확인합니다.</p>
       </div>
       <div class="admin-workspace">
         <div class="admin-content-panel">
@@ -2165,15 +2211,20 @@ function getAdminAuditActionLabel(action) {
   const normalized = String(action || "").trim().toLowerCase();
   const labels = {
     block_user: "회원 차단",
+    user_block: "회원 차단",
+    member_block: "회원 차단",
     user_blocked: "회원 차단",
     member_blocked: "회원 차단",
     block_member: "회원 차단",
     unblock_user: "회원 차단 해제",
+    user_unblock: "회원 차단 해제",
+    member_unblock: "회원 차단 해제",
     user_unblocked: "회원 차단 해제",
     member_unblocked: "회원 차단 해제",
     unblock_member: "회원 차단 해제",
     report_status: "신고 상태 변경",
     report_status_changed: "신고 상태 변경",
+    report_status_change: "신고 상태 변경",
     report_status_update: "신고 상태 변경",
     update_report_status: "신고 상태 변경",
     prompt_hide: "게시물 숨김",
@@ -2183,15 +2234,21 @@ function getAdminAuditActionLabel(action) {
     restore_prompt: "게시물 숨김 해제",
     prompt_restored: "게시물 숨김 해제",
     hide_comment: "댓글 숨김",
+    comment_hide: "댓글 숨김",
     comment_hidden: "댓글 숨김",
     unhide_comment: "댓글 숨김 해제",
+    comment_unhide: "댓글 숨김 해제",
+    comment_restore: "댓글 숨김 해제",
     comment_unhidden: "댓글 숨김 해제",
     delete_comment: "댓글 삭제",
+    comment_delete: "댓글 삭제",
     comment_deleted: "댓글 삭제",
     tag_status: "태그 상태 변경",
     tag_status_changed: "태그 상태 변경",
     tag_status_change: "태그 상태 변경",
     revision_request: "수정 요청",
+    revision_request_create: "수정 요청 생성",
+    revision_request_status_change: "수정 요청 상태 변경",
   };
   return labels[normalized] || action || "관리자 작업";
 }
@@ -2206,7 +2263,7 @@ function getAdminAuditTargetLabel(log) {
 }
 
 function AdminUserActivitySummary(activity) {
-  const memberId = String(activity.memberId || "").trim();
+  const memberId = String(activity.memberId || getAdminKnownMemberId(activity.nickname) || "").trim();
   const isBlocked = Boolean(activity.blocked);
   const groups = [
     { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
@@ -2233,7 +2290,7 @@ function AdminUserActivitySummary(activity) {
                     : `<button type="button" data-admin-user-block="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단</button>`
                 }
               </div>`
-            : ""
+            : `<span class="status-badge pending-unsave">샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.</span>`
         }
       </div>
       <div class="admin-user-activity-grid">
@@ -2624,6 +2681,7 @@ function clearAuthenticatedSession({ keepRoute = false } = {}) {
   state.backendLikedPrompts = [];
   state.backendLibraryPromptIds = new Set();
   state.backendAdminReports = [];
+  state.backendAdminReportsLoaded = false;
   state.backendAdminTags = [];
   state.creatingFolder = false;
   state.editingFolderId = null;
@@ -3296,6 +3354,13 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-report-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminReportFilter = button.dataset.adminReportFilter || "all";
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-admin-tag-search]").forEach((input) => {
     input.addEventListener("compositionstart", () => {
       state.isComposingAdminTagSearch = true;
@@ -3919,6 +3984,12 @@ function bindEvents() {
     });
   }
 
+  document.querySelectorAll("[data-revision-update-unavailable]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showNotice("수정 요청 사유 변경 API가 준비되면 사용할 수 있습니다.");
+    });
+  });
+
   document.querySelectorAll("[data-comment-form]").forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -3963,6 +4034,18 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       deleteOwnComment(button.dataset.deleteComment);
+    });
+  });
+
+  document.querySelectorAll("[data-admin-toggle-comment-hidden]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = String(button.dataset.adminToggleCommentHidden || "");
+      const separatorIndex = value.lastIndexOf(":");
+      const commentId = value.slice(0, separatorIndex);
+      const mode = value.slice(separatorIndex + 1);
+      updateAdminCommentHiddenState(commentId, mode !== "unhide");
     });
   });
 
@@ -4173,11 +4256,26 @@ function submitReport(type, targetId, reason) {
   reportPrompt(targetId, reason);
 }
 
-function reportPrompt(promptId, reason) {
+async function reportPrompt(promptId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
     window.alert("신고 이유를 입력해주세요.");
     return;
+  }
+
+  if (isBackendNumericId(promptId) && state.backendStatus === "connected") {
+    const token = getAuthToken();
+    if (!token || isDemoAuthToken(token)) {
+      showNotice("실제 로그인 토큰이 있어야 신고를 접수할 수 있습니다.");
+      openAuth("login");
+      return;
+    }
+    try {
+      await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
+    } catch (error) {
+      handleBackendAccessError(error, "신고 접수에 실패했습니다.");
+      return;
+    }
   }
 
   state.reportedPromptIds.add(promptId);
@@ -4190,13 +4288,12 @@ function reportPrompt(promptId, reason) {
     createdAt: Date.now(),
   };
   state.reportPromptId = null;
-  if (isBackendNumericId(promptId)) {
-    callBackendApi("reportPrompt", promptId, { reason: content });
-  }
   showNotice("신고가 접수되었습니다.");
+  refreshMyPageDataAfterMutation();
+  render();
 }
 
-function reportComment(commentId, reason) {
+async function reportComment(commentId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
     window.alert("신고 이유를 입력해주세요.");
@@ -4204,6 +4301,21 @@ function reportComment(commentId, reason) {
   }
 
   const context = findCommentContextById(commentId);
+  if (isBackendNumericId(commentId) && state.backendStatus === "connected") {
+    const token = getAuthToken();
+    if (!token || isDemoAuthToken(token)) {
+      showNotice("실제 로그인 토큰이 있어야 댓글 신고를 접수할 수 있습니다.");
+      openAuth("login");
+      return;
+    }
+    try {
+      await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
+    } catch (error) {
+      handleBackendAccessError(error, "댓글 신고 접수에 실패했습니다.");
+      return;
+    }
+  }
+
   state.reportedCommentIds.add(commentId);
   state.reportRecords[`comment:${commentId}`] = {
     type: "comment",
@@ -4217,10 +4329,9 @@ function reportComment(commentId, reason) {
     createdAt: Date.now(),
   };
   state.reportCommentId = null;
-  if (isBackendNumericId(commentId)) {
-    callBackendApi("reportComment", commentId, { reason: content });
-  }
   showNotice("댓글 신고가 접수되었습니다.");
+  refreshMyPageDataAfterMutation();
+  render();
 }
 
 function openShareFromSaved(promptId) {
@@ -4715,6 +4826,35 @@ function deleteOwnComment(commentId) {
   }
 }
 
+async function updateAdminCommentHiddenState(commentId, shouldHide) {
+  if (!state.adminMode || !commentId) return;
+  const context = findCommentContextById(commentId);
+  const comment = context?.comment;
+  if (!comment || comment.deleted) return;
+
+  const apiName = shouldHide ? "hideAdminComment" : "unhideAdminComment";
+  if (!isBackendNumericId(commentId) || !hasBackendAuthToken() || !window.TTALKAK_API?.[apiName]) {
+    comment.hidden = shouldHide;
+    showNotice(shouldHide ? "댓글을 숨김 처리했습니다." : "댓글 숨김을 해제했습니다.");
+    render();
+    return;
+  }
+
+  try {
+    const updated = await window.TTALKAK_API[apiName](commentId, getAuthToken() || undefined);
+    comment.hidden = Boolean(updated?.hidden || updated?.isHidden || shouldHide);
+    if (!shouldHide) comment.hidden = false;
+    if (updated?.text || updated?.content) comment.text = updated.text || updated.content;
+    showNotice(shouldHide ? "댓글을 숨김 처리했습니다." : "댓글 숨김을 해제했습니다.");
+    if (context.promptId) await hydratePromptComments(context.promptId);
+    await refreshAdminAuditLogs({ reason: shouldHide ? "댓글 숨김 후" : "댓글 숨김 해제 후" });
+  } catch (error) {
+    handleBackendAccessError(error, shouldHide ? "댓글 숨김 요청에 실패했습니다." : "댓글 숨김 해제 요청에 실패했습니다.");
+  }
+
+  render();
+}
+
 function canDeleteComment(comment) {
   if (!comment) return false;
   if (state.adminMode) return true;
@@ -4802,6 +4942,7 @@ function performDeleteComment(commentId) {
       const apiName = state.adminMode && window.TTALKAK_API?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
       callBackendApi(apiName, commentId).then(() => {
         if (hasBackendAuthToken()) hydratePromptComments(promptId);
+        if (state.adminMode) refreshAdminAuditLogs({ reason: "댓글 삭제 후" });
       });
     }
     decrementPromptComments(promptId);
@@ -5768,7 +5909,7 @@ async function openAdminUserActivity(nickname, options = {}) {
   showNotice(`${resolvedNickname}님의 활동을 조회합니다.`);
   render();
 
-  const memberId = String(options.memberId || "").trim();
+  const memberId = String(options.memberId || getAdminKnownMemberId(resolvedNickname) || "").trim();
   if (memberId && window.TTALKAK_API?.getAdminUserActivity) {
     try {
       const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, {}, getAuthToken() || undefined);
@@ -5790,7 +5931,7 @@ async function openAdminUserActivity(nickname, options = {}) {
 async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
   const cleanMemberId = String(memberId || "").trim();
   if (!cleanMemberId) {
-    showNotice("회원 ID가 없어 차단 상태를 변경할 수 없습니다.");
+    showNotice("샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.");
     return;
   }
   const api = window.TTALKAK_API;
@@ -5876,6 +6017,41 @@ function getAdminKnownNicknames() {
   });
 
   return Array.from(nicknameMap.values()).sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+function getAdminKnownMemberId(nickname) {
+  const normalizedNickname = normalizeAdminSearchText(nickname);
+  if (!normalizedNickname || normalizedNickname === normalizeAdminSearchText("탈퇴한 사용자")) return "";
+
+  const fromActivity = state.backendAdminUserActivities[normalizedNickname]?.memberId;
+  if (fromActivity) return String(fromActivity);
+
+  for (const prompt of getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts])) {
+    if (normalizeAdminSearchText(getDisplayPromptAuthor(prompt)) === normalizedNickname) {
+      const authorId = getPromptAuthorId(prompt);
+      if (authorId) return authorId;
+    }
+    for (const comment of getSortedPromptComments(prompt.id)) {
+      if (normalizeAdminSearchText(comment.author || comment.owner) === normalizedNickname) {
+        const commentAuthorId = comment.authorId || comment.memberId || comment.raw?.author?.id || comment.raw?.authorId || comment.raw?.memberId;
+        if (commentAuthorId) return String(commentAuthorId);
+      }
+      for (const reply of comment.replies || []) {
+        if (normalizeAdminSearchText(reply.author || reply.owner) === normalizedNickname) {
+          const replyAuthorId = reply.authorId || reply.memberId || reply.raw?.author?.id || reply.raw?.authorId || reply.raw?.memberId;
+          if (replyAuthorId) return String(replyAuthorId);
+        }
+      }
+    }
+  }
+
+  for (const record of getAdminReportRecords()) {
+    if (normalizeAdminSearchText(record.promptAuthor) === normalizedNickname && record.promptAuthorId) return String(record.promptAuthorId);
+    if (normalizeAdminSearchText(record.commentAuthor) === normalizedNickname && record.commentAuthorId) return String(record.commentAuthorId);
+    if (normalizeAdminSearchText(record.reporter) === normalizedNickname && record.reporterId) return String(record.reporterId);
+  }
+
+  return "";
 }
 
 function findPromptById(promptId) {
@@ -6426,7 +6602,7 @@ function isRevisionTargetOwnedByCurrentUser(target) {
 }
 
 function getAdminReportRecords() {
-  if (state.backendAdminReports.length) {
+  if (state.backendAdminReportsLoaded) {
     return state.backendAdminReports.map((report) => {
       const prompt = report.promptId ? findPromptById(report.promptId) : report.type === "prompt" ? findPromptById(report.targetId) : null;
       const record = getReportRecord(report.key);
@@ -6496,6 +6672,10 @@ function getReportStatusLabel(status) {
   return "접수";
 }
 
+function isFinalReportStatus(status) {
+  return ["resolved", "dismissed"].includes(String(status || "").toLowerCase());
+}
+
 function matchesAdminPromptQuery(prompt, query) {
   const normalizedQuery = normalizeAdminSearchText(query);
   if (!normalizedQuery) return true;
@@ -6559,11 +6739,23 @@ function getAdminTagStatusOrder(status) {
   return 3;
 }
 
+function canTransitionAdminTagStatus(currentStatus, nextStatus) {
+  if (currentStatus === "pending") return ["approved", "rejected"].includes(nextStatus);
+  if (currentStatus === "approved") return nextStatus === "disabled";
+  if (currentStatus === "disabled") return nextStatus === "approved";
+  return false;
+}
+
 async function updateAdminTagDecision(tag, decision) {
   if (!tag || !["pending", "approved", "rejected", "disabled"].includes(decision)) return;
 
   let backendChanged = false;
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
+  const currentStatus = backendTag?.status || state.adminTagDecisions[tag] || "pending";
+  if (!canTransitionAdminTagStatus(currentStatus, decision)) {
+    showNotice("현재 태그 상태에서는 이 변경을 할 수 없습니다.");
+    return;
+  }
   if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
     try {
       const backendDecision = decision;
@@ -6578,21 +6770,23 @@ async function updateAdminTagDecision(tag, decision) {
     }
   }
 
-  if (decision === "pending") {
-    const nextDecisions = { ...state.adminTagDecisions };
-    delete nextDecisions[tag];
-    state.adminTagDecisions = nextDecisions;
-  } else {
-    state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
-  }
+  state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
 
   showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
-  if (backendChanged) await refreshAdminAuditLogs();
+  if (backendChanged) await refreshAdminAuditLogs({ reason: "태그 상태 변경 후" });
 }
 
 async function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "reviewed", "dismissed", "resolved"].includes(status)) return;
   const record = getReportRecord(key);
+  if (isFinalReportStatus(record.status) && status !== record.status) {
+    showNotice("처리 완료 또는 기각된 신고는 상태를 다시 변경할 수 없습니다.");
+    return;
+  }
+  if (status === "pending" && ["reviewed", "resolved", "dismissed"].includes(record.status)) {
+    showNotice("완료 또는 기각된 신고는 다시 접수 상태로 되돌릴 수 없습니다.");
+    return;
+  }
   let backendChanged = false;
   if (record.backendId && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminReportStatus) {
     try {
@@ -6615,7 +6809,7 @@ async function updateReportRecordStatus(key, status) {
   }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
-  if (backendChanged) await refreshAdminAuditLogs();
+  if (backendChanged) await refreshAdminAuditLogs({ reason: "신고 상태 변경 후" });
 }
 
 async function requestPromptRevision(targetKey, reason) {
@@ -6630,17 +6824,30 @@ async function requestPromptRevision(targetKey, reason) {
 
   let backendRequest = null;
   let backendChanged = false;
-  if (target.type === "prompt" && isBackendNumericId(target.id) && hasBackendAuthToken() && window.TTALKAK_API?.requestPromptRevision) {
+  const shouldUseBackendRevisionRequest = target.type === "prompt" && isBackendNumericId(target.id) && state.backendStatus === "connected";
+  if (shouldUseBackendRevisionRequest && (!hasBackendAuthToken() || !window.TTALKAK_API?.requestAuthorRevision)) {
+    showNotice("실제 관리자 토큰과 수정 요청 API가 필요합니다.");
+    return;
+  }
+
+  if (shouldUseBackendRevisionRequest) {
     try {
-      backendRequest = await window.TTALKAK_API.requestPromptRevision(
+      backendRequest = await window.TTALKAK_API.requestAuthorRevision(
         target.id,
-        { reason: content, memo: content },
+        { message: content, reason: content, memo: content },
         getAuthToken() || undefined,
       );
       backendChanged = true;
     } catch (error) {
-      handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다. 데모 상태로만 표시합니다.");
-      console.warn("[TTALKAK] /api/prompts/{id}/revision-requests 호출에 실패해 데모 상태만 변경합니다.", error);
+      const status = Number(error?.status || error?.payload?.status || 0);
+      const code = getBackendErrorCode(error);
+      if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
+        showNotice("이미 처리 중인 수정 요청이 있습니다. 기존 요청 사유는 백엔드 API가 추가되면 수정할 수 있습니다.");
+      } else {
+        handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다.");
+      }
+      console.warn("[TTALKAK] /api/admin/prompts/{id}/author-revision-requests 호출에 실패했습니다.", error);
+      return;
     }
   }
 
@@ -6657,7 +6864,7 @@ async function requestPromptRevision(targetKey, reason) {
   };
   state.adminRequestTargetKey = null;
   showNotice("작성자에게 수정 요청을 보냈습니다.");
-  if (backendChanged) await refreshAdminAuditLogs();
+  if (backendChanged) await refreshAdminAuditLogs({ reason: "수정 요청 후" });
 }
 
 function findPromptIdByCommentId(commentId) {
@@ -6782,7 +6989,7 @@ async function toggleAdminPromptHidden(promptId) {
     state.adminHiddenPromptIds.add(promptId);
     showNotice("관리자 숨김 처리했습니다.");
   }
-  if (backendChanged) await refreshAdminAuditLogs();
+  if (backendChanged) await refreshAdminAuditLogs({ reason: "게시물 숨김/해제 후" });
 }
 
 function getPopularTotalPages(count) {
@@ -7387,6 +7594,7 @@ async function hydrateBackendAdminDataIfNeeded() {
   let shouldRender = false;
   if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
     state.backendAdminReports = reportsResult.value;
+    state.backendAdminReportsLoaded = true;
     reportsResult.value.forEach((report) => {
       state.reportRecords[report.key] = {
         ...getReportRecord(report.key),
@@ -7400,6 +7608,7 @@ async function hydrateBackendAdminDataIfNeeded() {
     });
     shouldRender = true;
   } else if (reportsResult.status === "rejected") {
+    state.backendAdminReportsLoaded = false;
     console.warn("[TTALKAK] /api/admin/reports 연동에 실패해 데모 신고 데이터를 유지합니다.", reportsResult.reason);
   }
 
@@ -7453,17 +7662,30 @@ async function hydrateBackendAdminDataIfNeeded() {
   if (shouldRender) render();
 }
 
-async function refreshAdminAuditLogs({ shouldRender = true } = {}) {
+async function refreshAdminAuditLogs({ shouldRender = true, reason = "" } = {}) {
   const api = window.TTALKAK_API;
-  if (!state.adminMode || !hasBackendAuthToken() || !api?.getAdminAuditLogs) return;
+  if (!state.adminMode || !hasBackendAuthToken() || !api?.getAdminAuditLogs) {
+    state.adminAuditSyncMessage = "관리자 토큰 또는 감사 로그 API가 없어 서버 감사 로그를 확인하지 못했습니다.";
+    if (shouldRender) render();
+    return false;
+  }
 
   try {
     const logs = await api.getAdminAuditLogs({}, getAuthToken() || undefined);
-    if (!Array.isArray(logs)) return;
+    if (!Array.isArray(logs)) {
+      state.adminAuditSyncMessage = "감사 로그 응답 형식이 예상과 달라 목록을 갱신하지 못했습니다.";
+      if (shouldRender) render();
+      return false;
+    }
     state.backendAdminAuditLogs = logs;
+    state.adminAuditSyncMessage = `${reason || "감사 로그"} 서버 재조회 완료 · ${formatShortDate(Date.now())}`;
     if (shouldRender) render();
+    return true;
   } catch (error) {
+    state.adminAuditSyncMessage = "감사 로그 재조회에 실패했습니다. Network 탭의 /api/admin/audit-logs 응답을 확인해주세요.";
     console.warn("[TTALKAK] /api/admin/audit-logs 재조회에 실패했습니다.", error);
+    if (shouldRender) render();
+    return false;
   }
 }
 
@@ -7506,6 +7728,7 @@ function persistState() {
           adminUserQuery: state.adminUserQuery,
           adminUserActivityNickname: state.adminUserActivityNickname,
           adminPromptRevisionRequests: state.adminPromptRevisionRequests,
+          adminReportFilter: state.adminReportFilter,
           reportRecords: state.reportRecords,
           searchScope: state.searchScope,
           popularSort: state.popularSort,
@@ -7581,6 +7804,9 @@ function loadPersistedState() {
       savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
         ? savedState.adminPromptRevisionRequests
         : {};
+    state.adminReportFilter = ["all", "prompt", "comment"].includes(savedState.adminReportFilter)
+      ? savedState.adminReportFilter
+      : "all";
     state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
     state.searchScope = getValidSearchScope(savedState.searchScope);
     state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(savedState.popularSort)

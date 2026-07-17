@@ -104,17 +104,16 @@ The current UI exposes this area as `My page`. It groups saved prompts, owned pr
 | 신고 목록 | `GET /api/admin/reports?status=pending` | none | 프롬프트/댓글/대댓글 신고 사유, 대상, 게시물 작성자, 댓글 작성자, 처리 상태, 원문 강조용 target id |
 | 신고 검토 완료 | `PATCH /api/admin/reports/:id/status` | `{ status: "reviewed", memo? }` | 검토자와 검토 시각 감사 로그 필요 |
 | 신고 기각 | `PATCH /api/admin/reports/:id/status` | `{ status: "dismissed", memo? }` | 대상의 신고 표시 해제 가능 |
-| 신고 재처리 | `PATCH /api/admin/reports/:id/status` | `{ status: "pending", memo? }` | 검토 완료/기각 상태를 다시 접수 상태로 되돌림 |
 | 신고 대상 운영 조치 | report status + hide/comment delete APIs | `{ memo? }` | 프롬프트는 숨김/복구 정책을 따르고, 댓글은 관리자 댓글 삭제 API를 사용 |
 | 프롬프트 수정 요청 | `POST /api/prompts/:id/revision-requests` | `{ reason, memo? }` | 작성자에게 수정 요청을 전달, 관리자와 요청 시각 감사 로그 필요 |
 | 전체 프롬프트 숨김/복구 | `PATCH /api/admin/prompts/:id/hide`, `PATCH /api/admin/prompts/:id/restore` | `{ memo? }` | 숨김은 복구 가능한 소프트 삭제 정책. 영구 삭제가 필요하면 별도 정책/API 결정 필요 |
 | 태그 관리 | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected` 상태와 사용 횟수 반환 |
-| 태그 상태 변경 | `PATCH /api/admin/tags/:id/status` | `{ status: "pending" \| "approved" \| "disabled", memo? }` | 검토 완료, 추천 제외, 재검토 상태 전환 |
+| 태그 상태 변경 | `PATCH /api/admin/tags/:id/status` | `{ status: "approved" \| "rejected" \| "disabled", memo? }` | 검토 완료, 반려, 추천 제외/복구 상태 전환 |
 
 Admin status model:
 
-- Report status: `pending` = 접수, `resolved` = 검토 완료, `dismissed` = 기각. 검토 완료/기각 상태는 `pending`으로 되돌려 재처리할 수 있어야 합니다.
-- Tag status: `pending` = 검토 중, `approved` = 검토 완료, `rejected` = 추천 제외. 승인/제외된 태그도 `pending`으로 되돌려 재검토할 수 있어야 합니다.
+- Report status: `pending` = 접수, `reviewed` = 검토 완료, `resolved` = 처리 완료, `dismissed` = 기각. `resolved`와 `dismissed`는 최종 상태이며 프론트에서 재처리 버튼을 제공하지 않습니다.
+- Tag status: `pending` = 검토 중, `approved` = 검토 완료, `rejected` = 반려, `disabled` = 추천 제외. `rejected`는 최종 상태이며, 승인된 태그는 `approved`와 `disabled` 사이에서만 전환합니다.
 
 회원가입 필수값은 `nickname`, `name`, `userId`, `password`, `passwordConfirm`, `agreeTerms`, `agreePrivacy`입니다. `birth`, `phone`, `email`은 선택값이며, 입력된 경우에만 형식 검증을 권장합니다. 이메일은 아이디 찾기 보조 수단으로 사용할 수 있으나, 이메일을 등록하지 않은 사용자는 이메일 방식 아이디 찾기를 사용할 수 없습니다. 커뮤니티 화면에는 실명 `name`이 아니라 `nickname`을 표시해야 합니다. 약관/개인정보 동의는 실제 서비스에서 동의 버전과 동의 시각 저장이 필요합니다.
 
