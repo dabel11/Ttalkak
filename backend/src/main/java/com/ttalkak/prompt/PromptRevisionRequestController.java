@@ -1,6 +1,7 @@
 package com.ttalkak.prompt;
 
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.exception.ApiException;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -324,8 +325,9 @@ public class PromptRevisionRequestController {
                 authService.currentMemberIdOrNull(authorization);
 
         if (memberId == null) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
                     "로그인이 필요합니다."
             );
         }

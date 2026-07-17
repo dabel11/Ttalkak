@@ -5,6 +5,7 @@ import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
 import com.ttalkak.community.CommentRepository;
 import com.ttalkak.prompt.PromptRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -43,8 +44,9 @@ public class AccountWithdrawalService {
             String googleCredential
     ) {
         if (member == null) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
                     "로그인이 필요합니다."
             );
         }

@@ -1,4 +1,4 @@
-﻿package com.ttalkak.auth;
+package com.ttalkak.auth;
 
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;

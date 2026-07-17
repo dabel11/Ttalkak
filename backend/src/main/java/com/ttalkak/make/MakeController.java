@@ -3,6 +3,7 @@ package com.ttalkak.make;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -225,7 +226,11 @@ public class MakeController {
     private Long requireMemberId(String authorization) {
         Long memberId = authService.currentMemberIdOrNull(authorization);
         if (memberId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 필요합니다."
+            );
         }
         return memberId;
     }

@@ -1,0 +1,714 @@
+# TTalkak Backend API Contract
+
+이 문서는 프론트엔드와 백엔드 사이에서 응답 구조, 권한 오류 코드, 관리자 기능 및 데이터 처리 정책을 일관되게 맞추기 위한 계약 문서입니다.
+
+최종 수정일: 2026-07-17
+
+---
+
+## 1. 공통 응답 규칙
+
+### 1.1 날짜 형식
+
+날짜 및 시각은 기본적으로 ISO 8601 문자열을 사용합니다.
+
+```json
+"2026-07-17T14:30:00"
+```
+
+값이 존재하지 않는 경우 `null`을 반환합니다.
+
+---
+
+### 1.2 회원 요약 구조
+
+게시물 작성자, 댓글 작성자, 신고자, 관리자 등 회원을 간단히 표시할 때 다음 구조를 사용합니다.
+
+```json
+{
+  "id": 10,
+  "nickname": "사용자닉네임"
+}
+```
+
+관련 회원 정보를 찾을 수 없거나 작성자 정보가 없는 경우 `null`이 반환될 수 있습니다.
+
+기존의 다음과 같은 분리 필드는 사용하지 않습니다.
+
+```text
+authorId
+authorNickname
+reporterId
+reporterNickname
+promptAuthorId
+promptAuthorNickname
+```
+
+대신 다음과 같이 객체 형태로 통일합니다.
+
+```json
+{
+  "author": {
+    "id": 10,
+    "nickname": "사용자닉네임"
+  }
+}
+```
+
+---
+
+## 2. 공통 오류 응답
+
+오류 응답은 다음 구조를 사용합니다.
+
+```json
+{
+  "timestamp": "2026-07-17T14:30:00+09:00",
+  "status": 403,
+  "error": "Forbidden",
+  "code": "OWNER_ONLY",
+  "message": "작성자만 수정할 수 있습니다.",
+  "path": "/api/prompts/10"
+}
+```
+
+### 주요 오류 코드
+
+| HTTP 상태 | code                      | 의미                  |
+| ------- | ------------------------- | ------------------- |
+| 401     | `LOGIN_REQUIRED`          | 로그인이 필요한 기능         |
+| 403     | `OWNER_ONLY`              | 작성자 또는 소유자만 가능한 기능  |
+| 403     | `ADMIN_ONLY`              | 관리자만 가능한 기능         |
+| 403     | `ACCOUNT_BLOCKED`         | 차단된 계정              |
+| 403     | `ACCESS_DENIED`           | 기타 접근 권한 부족         |
+| 403     | `ADMIN_ACCOUNT_PROTECTED` | 관리자 계정 차단 시도        |
+| 400     | `BLOCK_REASON_REQUIRED`   | 회원 차단 사유 누락         |
+| 409     | `ACCOUNT_WITHDRAWN`       | 이미 탈퇴한 계정 대상 작업     |
+| 400     | `INVALID_REQUEST`         | 잘못된 요청              |
+| 404     | `RESOURCE_NOT_FOUND`      | 대상 리소스를 찾을 수 없음     |
+| 409     | `CONFLICT`                | 현재 상태에서 처리할 수 없는 요청 |
+
+로그인 아이디·비밀번호 불일치, 잘못된 Google 인증 토큰 등은 단순히 로그인이 필요한 상황과 의미가 다르므로 별도의 인증 실패 응답으로 처리될 수 있습니다.
+
+---
+
+## 3. 프롬프트 권한 정책
+
+프롬프트 수정, 삭제 및 공유 상태 변경은 작성자만 수행할 수 있습니다.
+
+### 작성자 전용 API
+
+```text
+PATCH /api/prompts/{id}
+DELETE /api/prompts/{id}
+PATCH /api/prompts/{id}/visibility
+```
+
+작성자가 아닌 사용자가 요청하면 다음과 같이 반환합니다.
+
+```json
+{
+  "status": 403,
+  "code": "OWNER_ONLY",
+  "message": "작성자만 수정할 수 있습니다."
+}
+```
+
+각 API의 메시지는 작업에 따라 다를 수 있습니다.
+
+```text
+작성자만 수정할 수 있습니다.
+작성자만 삭제할 수 있습니다.
+작성자만 공유 상태를 변경할 수 있습니다.
+```
+
+---
+
+## 4. 마이페이지 댓글 조회
+
+### API
+
+```text
+GET /api/me/comments
+```
+
+### Query Parameters
+
+| 이름         | 필수  | 기본값  | 설명               |
+| ---------- | --- | ---- | ---------------- |
+| `page`     | 아니요 | `1`  | 페이지 번호           |
+| `size`     | 아니요 | `16` | 페이지 크기           |
+| `pageSize` | 아니요 | `16` | `size`가 없을 경우 사용 |
+
+### 응답 예시
+
+```json
+{
+  "items": [
+    {
+      "id": 31,
+      "promptId": 10,
+      "parentId": null,
+      "text": "작성한 댓글 내용",
+      "likes": 2,
+      "edited": false,
+      "deleted": false,
+      "hidden": false,
+      "hiddenAt": null,
+      "isMine": true,
+      "createdAt": "2026-07-17T14:30:00",
+      "promptTitle": "프롬프트 제목",
+      "prompt": {
+        "id": 10,
+        "title": "프롬프트 제목",
+        "text": "프롬프트 본문",
+        "author": {
+          "id": 5,
+          "nickname": "프롬프트작성자"
+        }
+      }
+    }
+  ],
+  "content": [
+    {
+      "id": 31
+    }
+  ],
+  "page": 1,
+  "size": 16,
+  "total": 1,
+  "totalPages": 1
+}
+```
+
+`items`와 `content`에는 동일한 데이터가 들어갑니다.
+
+대상 프롬프트가 삭제되었거나 존재하지 않는 경우 다음과 같이 반환될 수 있습니다.
+
+```json
+{
+  "promptTitle": null,
+  "prompt": null
+}
+```
+
+관리자에 의해 숨김 처리된 댓글은 실제 댓글 내용 대신 숨김 안내 문구가 반환됩니다.
+
+현재 미로그인 상태에서는 예외 대신 빈 목록이 반환됩니다.
+
+```json
+{
+  "items": [],
+  "content": [],
+  "page": 1,
+  "size": 16,
+  "total": 0,
+  "totalPages": 0
+}
+```
+
+---
+
+## 5. 댓글 수 집계 정책
+
+프롬프트의 댓글 수에는 다음 항목을 포함합니다.
+
+* 삭제되지 않은 일반 댓글
+* 삭제되지 않은 답글
+* 숨김 처리되지 않은 댓글 및 답글
+
+다음 항목은 댓글 수에서 제외합니다.
+
+* 작성자가 삭제한 댓글
+* 관리자가 숨김 처리한 댓글
+* 삭제된 부모 댓글을 표시하기 위한 안내용 자리 표시자
+
+부모 댓글이 삭제되었더라도 삭제되지 않은 답글은 각각 댓글 수에 포함됩니다.
+
+---
+
+## 6. 신고 응답 구조
+
+신고 응답은 신고 대상에 대한 문맥을 함께 반환합니다.
+
+### 공통 응답 예시
+
+```json
+{
+  "id": 7,
+  "targetType": "comment",
+  "targetId": 31,
+  "reporter": {
+    "id": 8,
+    "nickname": "신고자"
+  },
+  "reason": "부적절한 내용입니다.",
+  "status": "pending",
+  "memo": null,
+  "reviewedAt": null,
+  "createdAt": "2026-07-17T14:30:00",
+  "targetExists": true,
+  "targetDeleted": false,
+  "targetHidden": false,
+  "targetPreview": "신고 대상 내용 미리보기",
+  "author": {
+    "id": 12,
+    "nickname": "대상작성자"
+  },
+  "promptId": 10,
+  "promptTitle": "관련 프롬프트 제목",
+  "promptAuthor": {
+    "id": 5,
+    "nickname": "프롬프트작성자"
+  },
+  "parentId": null,
+  "promptContent": null,
+  "commentContent": "신고 대상 댓글 전체 내용"
+}
+```
+
+### targetType이 `prompt`인 경우
+
+다음 필드에 대상 프롬프트 정보가 포함됩니다.
+
+```json
+{
+  "targetType": "prompt",
+  "promptId": 10,
+  "promptTitle": "프롬프트 제목",
+  "promptContent": "프롬프트 전체 내용",
+  "author": {
+    "id": 5,
+    "nickname": "프롬프트작성자"
+  },
+  "promptAuthor": {
+    "id": 5,
+    "nickname": "프롬프트작성자"
+  }
+}
+```
+
+### targetType이 `comment`인 경우
+
+다음 필드에 대상 댓글과 원본 프롬프트 문맥이 포함됩니다.
+
+```json
+{
+  "targetType": "comment",
+  "commentContent": "댓글 전체 내용",
+  "promptId": 10,
+  "promptTitle": "관련 프롬프트 제목",
+  "parentId": null,
+  "author": {
+    "id": 12,
+    "nickname": "댓글작성자"
+  },
+  "promptAuthor": {
+    "id": 5,
+    "nickname": "프롬프트작성자"
+  }
+}
+```
+
+대상 게시물이나 댓글이 존재하지 않으면 다음과 같이 반환됩니다.
+
+```json
+{
+  "targetExists": false,
+  "targetDeleted": null,
+  "targetHidden": null,
+  "targetPreview": null,
+  "author": null
+}
+```
+
+---
+
+## 7. 관리자 신고 처리
+
+### 신고 목록 조회
+
+```text
+GET /api/admin/reports
+```
+
+### 신고 상태 및 관리자 메모 변경
+
+```text
+PATCH /api/admin/reports/{id}/status
+```
+
+요청 예시:
+
+```json
+{
+  "status": "reviewed",
+  "memo": "검토 후 게시물 숨김 처리"
+}
+```
+
+응답에는 변경된 신고의 상태와 관리자 메모가 포함됩니다.
+
+```json
+{
+  "status": "reviewed",
+  "memo": "검토 후 게시물 숨김 처리",
+  "reviewedAt": "2026-07-17T14:30:00"
+}
+```
+
+허용되지 않은 상태 전환은 `409 CONFLICT`로 처리됩니다.
+
+---
+
+## 8. 관리자 회원 활동 조회
+
+### API
+
+```text
+GET /api/admin/users/{memberId}/activities
+```
+
+회원 기본 정보에는 차단 상태가 포함됩니다.
+
+```json
+{
+  "id": 10,
+  "userId": "test-user",
+  "nickname": "test-nickname",
+  "name": "Test User",
+  "role": "USER",
+  "active": true,
+  "createdAt": "2026-07-01T12:00:00",
+  "withdrawnAt": null,
+  "blocked": true,
+  "blockedAt": "2026-07-17T14:30:00",
+  "blockReason": "반복적인 이용약관 위반"
+}
+```
+
+활동 내역에는 프롬프트, 댓글 등 회원이 작성한 데이터가 최신순으로 포함됩니다.
+
+---
+
+## 9. 관리자 회원 차단
+
+### 회원 차단
+
+```text
+PATCH /api/admin/users/{memberId}/block
+```
+
+요청:
+
+```json
+{
+  "reason": "반복적인 이용약관 위반"
+}
+```
+
+응답:
+
+```json
+{
+  "id": 10,
+  "userId": "test-user",
+  "nickname": "test-nickname",
+  "role": "USER",
+  "active": true,
+  "blocked": true,
+  "blockedAt": "2026-07-17T14:30:00",
+  "blockReason": "반복적인 이용약관 위반"
+}
+```
+
+차단 사유를 입력하지 않으면 다음 오류가 반환됩니다.
+
+```json
+{
+  "status": 400,
+  "code": "BLOCK_REASON_REQUIRED"
+}
+```
+
+탈퇴한 회원은 차단할 수 없습니다.
+
+```json
+{
+  "status": 409,
+  "code": "ACCOUNT_WITHDRAWN"
+}
+```
+
+관리자 계정은 차단할 수 없습니다.
+
+```json
+{
+  "status": 403,
+  "code": "ADMIN_ACCOUNT_PROTECTED"
+}
+```
+
+---
+
+### 회원 차단 해제
+
+```text
+PATCH /api/admin/users/{memberId}/unblock
+```
+
+별도의 요청 본문은 필요하지 않습니다.
+
+응답:
+
+```json
+{
+  "id": 10,
+  "blocked": false,
+  "blockedAt": null,
+  "blockReason": null
+}
+```
+
+이미 차단이 해제된 회원에게 요청하더라도 현재 회원 상태를 그대로 반환합니다.
+
+---
+
+## 10. 차단 계정 인증 정책
+
+차단된 계정은 다음 인증 방식 모두 사용할 수 없습니다.
+
+* 아이디·비밀번호 로그인
+* Google 로그인
+* 차단 이전에 발급받은 기존 JWT를 사용한 API 접근
+
+차단된 계정의 응답 예시:
+
+```json
+{
+  "status": 403,
+  "code": "ACCOUNT_BLOCKED",
+  "message": "차단된 계정입니다."
+}
+```
+
+차단 사유가 존재하는 경우 응답 메시지에 사유가 포함될 수 있습니다.
+
+---
+
+## 11. 관리자 게시물 처리
+
+### 게시물 목록 조회
+
+```text
+GET /api/admin/prompts
+```
+
+### 게시물 숨김
+
+```text
+PATCH /api/admin/prompts/{id}/hide
+```
+
+### 게시물 복구
+
+```text
+PATCH /api/admin/prompts/{id}/restore
+```
+
+숨김 또는 복구 후 변경된 게시물 정보가 반환됩니다.
+
+---
+
+## 12. 관리자 댓글 처리
+
+### 댓글 숨김
+
+```text
+PATCH /api/admin/comments/{commentId}/hide
+```
+
+### 댓글 숨김 해제
+
+```text
+PATCH /api/admin/comments/{commentId}/unhide
+```
+
+### 관리자 댓글 삭제
+
+```text
+DELETE /api/admin/comments/{commentId}
+```
+
+일반 사용자가 요청하면 다음 오류가 반환됩니다.
+
+```json
+{
+  "status": 403,
+  "code": "ADMIN_ONLY",
+  "message": "관리자 권한이 필요합니다."
+}
+```
+
+댓글 숨김 및 숨김 해제 시 프롬프트의 댓글 수도 정책에 따라 함께 변경됩니다.
+
+---
+
+## 13. 관리자 태그 처리
+
+### 태그 목록 조회
+
+```text
+GET /api/admin/tags
+```
+
+### 태그 상태 변경
+
+```text
+PATCH /api/admin/tags/{id}/status
+```
+
+요청 예시:
+
+```json
+{
+  "status": "disabled"
+}
+```
+
+응답에는 변경된 태그 정보가 반환됩니다.
+
+허용되지 않은 상태 전환은 `409 CONFLICT`로 처리됩니다.
+
+---
+
+## 14. 관리자 감사 로그
+
+관리자의 주요 데이터 변경 작업은 감사 로그로 저장됩니다.
+
+기록 대상은 다음과 같습니다.
+
+* 회원 차단
+* 회원 차단 해제
+* 신고 상태 및 관리자 메모 변경
+* 게시물 숨김
+* 게시물 복구
+* 태그 상태 변경
+
+### 감사 로그 조회
+
+```text
+GET /api/admin/audit-logs
+```
+
+### Query Parameters
+
+| 이름         | 필수  | 기본값    | 설명               |
+| ---------- | --- | ------ | ---------------- |
+| `page`     | 아니요 | `1`    | 페이지 번호           |
+| `size`     | 아니요 | 서버 기본값 | 페이지 크기           |
+| `pageSize` | 아니요 | 서버 기본값 | `size`가 없는 경우 사용 |
+
+### 응답 예시
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "admin": {
+        "id": 99,
+        "nickname": "admin-nickname"
+      },
+      "action": "USER_BLOCK",
+      "targetType": "USER",
+      "targetId": 10,
+      "detail": "차단 사유: 반복적인 이용약관 위반",
+      "createdAt": "2026-07-17T14:30:00"
+    }
+  ],
+  "content": [
+    {
+      "id": 1
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "total": 1,
+  "totalPages": 1
+}
+```
+
+### action 값
+
+| action                 | 의미             |
+| ---------------------- | -------------- |
+| `USER_BLOCK`           | 회원 차단          |
+| `USER_UNBLOCK`         | 회원 차단 해제       |
+| `REPORT_STATUS_CHANGE` | 신고 상태 또는 메모 변경 |
+| `PROMPT_HIDE`          | 게시물 숨김         |
+| `PROMPT_RESTORE`       | 게시물 복구         |
+| `TAG_STATUS_CHANGE`    | 태그 상태 변경       |
+
+### targetType 값
+
+```text
+USER
+REPORT
+PROMPT
+TAG
+```
+
+감사 로그와 실제 데이터 변경은 하나의 트랜잭션으로 처리됩니다. 따라서 실제 데이터 변경 또는 감사 로그 저장 중 하나라도 실패하면 전체 작업이 롤백됩니다.
+
+---
+
+## 15. 회원탈퇴 데이터 정책
+
+회원탈퇴 시 회원 계정은 비활성화 및 개인정보 비식별 처리를 합니다.
+
+기존 프롬프트와 댓글은 삭제하지 않고 유지합니다.
+
+작성자 닉네임은 다음 값으로 변경됩니다.
+
+```text
+탈퇴한 사용자
+```
+
+따라서 기존 게시물·댓글·답글 구조와 커뮤니티 기록은 유지되지만, 탈퇴한 회원의 기존 닉네임은 노출되지 않습니다.
+
+회원탈퇴 시 처리되는 주요 항목은 다음과 같습니다.
+
+* 회원 계정 비활성화
+* 회원 개인정보 비식별화
+* 기존 프롬프트 작성자 닉네임 익명화
+* 기존 댓글 및 답글 작성자 닉네임 익명화
+* 기존 게시물과 댓글 데이터 유지
+
+---
+
+## 16. 프론트엔드 처리 권장 사항
+
+프론트에서는 HTTP 상태만으로 처리하지 않고 `code`를 함께 확인하는 것을 권장합니다.
+
+예시:
+
+```javascript
+if (error.code === "LOGIN_REQUIRED") {
+  // 로그인 화면 또는 로그인 안내 표시
+}
+
+if (error.code === "OWNER_ONLY") {
+  // 작성자 전용 기능 안내
+}
+
+if (error.code === "ADMIN_ONLY") {
+  // 관리자 권한 필요 안내
+}
+
+if (error.code === "ACCOUNT_BLOCKED") {
+  // 차단 계정 안내 및 로그아웃 처리
+}
+```
+
+차단 계정의 기존 JWT 요청도 `ACCOUNT_BLOCKED`가 반환되므로, 해당 코드를 받으면 저장된 토큰을 삭제하고 로그인 화면으로 이동하는 처리를 권장합니다.

@@ -2,6 +2,7 @@ package com.ttalkak.prompt;
 
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.member.Member;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -102,7 +103,11 @@ public class PromptController {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "수정 권한이 없습니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 수정할 수 있습니다."
+            );
         }
         prompt.update(request.title(), request.text(), PromptMapper.joinTags(request.tags()));
         promptRepository.save(prompt);
@@ -117,7 +122,11 @@ public class PromptController {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "삭제 권한이 없습니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 삭제할 수 있습니다."
+            );
         }
         prompt.delete();
         promptRepository.save(prompt);
@@ -132,7 +141,11 @@ public class PromptController {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
         if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         if (!canManage(prompt, authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "공유 상태 변경 권한이 없습니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 공유 상태를 변경할 수 있습니다."
+            );
         }
         prompt.changeVisibility(Boolean.TRUE.equals(request.isShared()));
         promptRepository.save(prompt);
@@ -318,10 +331,17 @@ public class PromptController {
     }
 
     private Long requireMemberId(String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
+        Long memberId =
+                authService.currentMemberIdOrNull(authorization);
+
         if (memberId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 필요합니다."
+            );
         }
+
         return memberId;
     }
 

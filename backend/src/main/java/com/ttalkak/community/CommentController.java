@@ -117,7 +117,11 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_ONLY",
+                    "관리자 권한이 필요합니다."
+            );
         }
 
         Comment comment = commentRepository.findById(commentId)
@@ -160,7 +164,11 @@ public class CommentController {
         Long memberId = requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_ONLY",
+                    "관리자 권한이 필요합니다."
+            );
         }
 
         Comment comment = commentRepository.findById(commentId)
@@ -229,7 +237,11 @@ public class CommentController {
         requireMemberId(authorization);
 
         if (!isAdmin(authorization)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "ADMIN_ONLY",
+                    "관리자 권한이 필요합니다."
+            );
         }
 
         Comment comment = commentRepository.findById(commentId)

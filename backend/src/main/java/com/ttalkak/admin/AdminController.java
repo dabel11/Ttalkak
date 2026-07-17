@@ -19,10 +19,13 @@ import com.ttalkak.prompt.Tag;
 import com.ttalkak.prompt.TagRepository;
 import com.ttalkak.prompt.TagStatus;
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.common.response.MemberSummaryResponse;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -44,6 +47,7 @@ public class AdminController {
     private final CommentRepository commentRepository;
     private final MakeThreadRepository makeThreadRepository;
     private final MakeFolderRepository makeFolderRepository;
+    private final AdminAuditLogRepository adminAuditLogRepository;
 
     public AdminController(
             ReportRepository reportRepository,
@@ -53,7 +57,8 @@ public class AdminController {
             MemberRepository memberRepository,
             CommentRepository commentRepository,
             MakeThreadRepository makeThreadRepository,
-            MakeFolderRepository makeFolderRepository
+            MakeFolderRepository makeFolderRepository,
+            AdminAuditLogRepository adminAuditLogRepository
     ) {
         this.reportRepository = reportRepository;
         this.reportResponseMapper = reportResponseMapper;
@@ -63,12 +68,15 @@ public class AdminController {
         this.commentRepository = commentRepository;
         this.makeThreadRepository = makeThreadRepository;
         this.makeFolderRepository = makeFolderRepository;
+        this.adminAuditLogRepository = adminAuditLogRepository;
     }
 
+    @Transactional
     @PatchMapping("/users/{memberId}/block")
     public Map<String, Object> blockUser(
             @PathVariable Long memberId,
-            @RequestBody BlockUserRequest request
+            @RequestBody BlockUserRequest request,
+            @AuthenticationPrincipal Member admin
     ) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -107,12 +115,22 @@ public class AdminController {
         member.block(reason.trim());
         memberRepository.save(member);
 
+        recordAudit(
+                admin,
+                "USER_BLOCK",
+                "USER",
+                memberId,
+                "차단 사유: " + reason.trim()
+        );
+
         return memberActivityMap(member);
     }
 
+    @Transactional
     @PatchMapping("/users/{memberId}/unblock")
     public Map<String, Object> unblockUser(
-            @PathVariable Long memberId
+            @PathVariable Long memberId,
+            @AuthenticationPrincipal Member admin
     ) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -134,6 +152,14 @@ public class AdminController {
 
         member.unblock();
         memberRepository.save(member);
+
+        recordAudit(
+                admin,
+                "USER_UNBLOCK",
+                "USER",
+                memberId,
+                "회원 차단 해제"
+        );
 
         return memberActivityMap(member);
     }
@@ -228,6 +254,27 @@ public class AdminController {
         return body;
     }
 
+    @GetMapping("/audit-logs")
+    public Map<String, Object> auditLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        List<Map<String, Object>> items =
+                adminAuditLogRepository
+                        .findAllByOrderByCreatedAtDescIdDesc()
+                        .stream()
+                        .map(this::auditLogMap)
+                        .toList();
+
+        return pageResponse(
+                items,
+                page,
+                size,
+                pageSize
+        );
+    }
+
     @GetMapping("/reports")
     public Map<String, Object> reports(
             @RequestParam(required = false) String status,
@@ -262,10 +309,12 @@ public class AdminController {
         return pageResponse(items, page, size, pageSize);
     }
 
+    @Transactional
     @PatchMapping("/reports/{id}/status")
     public ResponseEntity<?> updateReportStatus(
             @PathVariable Long id,
-            @RequestBody StatusRequest request
+            @RequestBody StatusRequest request,
+            @AuthenticationPrincipal Member admin
     ) {
         Report report = reportRepository.findById(id).orElse(null);
 
@@ -292,6 +341,21 @@ public class AdminController {
         report.changeStatus(nextStatus, request.memo());
 
         reportRepository.save(report);
+
+        String auditDetail =
+                "신고 상태: " + report.getStatus()
+                        + (report.getMemo() == null
+                        ? ""
+                        : " / 관리자 메모: " + report.getMemo());
+
+        recordAudit(
+                admin,
+                "REPORT_STATUS_UPDATE",
+                "REPORT",
+                id,
+                auditDetail
+        );
+
         return ResponseEntity.ok(reportMap(report));
     }
 
@@ -352,8 +416,12 @@ public class AdminController {
         return body;
     }
 
+    @Transactional
     @PatchMapping("/prompts/{id}/hide")
-    public ResponseEntity<?> hidePrompt(@PathVariable Long id) {
+    public ResponseEntity<?> hidePrompt(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Member admin
+    ) {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
 
         if (prompt == null) {
@@ -363,11 +431,23 @@ public class AdminController {
         prompt.delete();
         promptRepository.save(prompt);
 
+        recordAudit(
+            admin,
+            "PROMPT_HIDE",
+            "PROMPT",
+            id,
+            "게시물 숨김 처리"
+        );
+
         return ResponseEntity.ok(adminPromptMap(prompt));
     }
 
+    @Transactional
     @PatchMapping("/prompts/{id}/restore")
-    public ResponseEntity<?> restorePrompt(@PathVariable Long id) {
+    public ResponseEntity<?> restorePrompt(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Member admin
+    ) {
         PromptPost prompt = promptRepository.findById(id).orElse(null);
 
         if (prompt == null) {
@@ -376,6 +456,14 @@ public class AdminController {
 
         prompt.restore();
         promptRepository.save(prompt);
+
+        recordAudit(
+                admin,
+                "PROMPT_RESTORE",
+                "PROMPT",
+                id,
+                "게시물 숨김 해제"
+        );
 
         return ResponseEntity.ok(adminPromptMap(prompt));
     }
@@ -412,16 +500,20 @@ public class AdminController {
         return pageResponse(items, page, size, pageSize);
     }
 
+    @Transactional
     @PatchMapping("/tags/{id}/status")
     public ResponseEntity<?> updateTagStatus(
             @PathVariable Long id,
-            @RequestBody StatusRequest request
+            @RequestBody StatusRequest request,
+            @AuthenticationPrincipal Member admin
     ) {
         Tag tag = tagRepository.findById(id).orElse(null);
 
         if (tag == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
         }
+
+        String previousStatus = tag.getStatus();
 
         TagStatus nextStatus = normalizeTagStatus(
                 request.status(),
@@ -442,7 +534,80 @@ public class AdminController {
         tag.changeStatus(nextStatus);
         tagRepository.save(tag);
 
+        recordAudit(
+                admin,
+                "TAG_STATUS_CHANGE",
+                "TAG",
+                id,
+                "상태: "
+                        + previousStatus
+                        + " -> "
+                        + tag.getStatus()
+        );
+
         return ResponseEntity.ok(tagMap(tag));
+
+    }
+
+    private Map<String, Object> auditLogMap(
+            AdminAuditLog auditLog
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+
+        body.put("id", auditLog.getId());
+
+        body.put(
+                "admin",
+                new MemberSummaryResponse(
+                        auditLog.getAdminId(),
+                        auditLog.getAdminNickname()
+                )
+        );
+
+        body.put("action", auditLog.getAction());
+        body.put("targetType", auditLog.getTargetType());
+        body.put("targetId", auditLog.getTargetId());
+        body.put("detail", auditLog.getDetail());
+
+        body.put(
+                "createdAt",
+                formatDateTime(auditLog.getCreatedAt())
+        );
+
+        return body;
+    }
+
+    private void recordAudit(
+            Member admin,
+            String action,
+            String targetType,
+            Long targetId,
+            String detail
+    ) {
+        if (admin == null || admin.getId() == null) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "관리자 로그인이 필요합니다."
+            );
+        }
+
+        String adminNickname =
+                admin.getNickname() == null
+                        || admin.getNickname().isBlank()
+                        ? "관리자"
+                        : admin.getNickname();
+
+        AdminAuditLog auditLog = new AdminAuditLog(
+                admin.getId(),
+                adminNickname,
+                action,
+                targetType,
+                targetId,
+                detail
+        );
+
+        adminAuditLogRepository.save(auditLog);
     }
 
     private Map<String, Object> pageResponse(

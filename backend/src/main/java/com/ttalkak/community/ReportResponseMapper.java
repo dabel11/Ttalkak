@@ -98,7 +98,6 @@ public class ReportResponseMapper {
         body.put("promptId", prompt.getId());
         body.put("promptTitle", prompt.getTitle());
         body.put("promptContent", prompt.getText());
-        body.put("promptContent", prompt.getText());
         body.put("promptAuthor", MemberSummaryResponse.of(prompt.getAuthorId(), prompt.getAuthorNickname()));
     }
 
