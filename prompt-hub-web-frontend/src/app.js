@@ -479,6 +479,8 @@ const state = {
   copiedMessageId: "",
 };
 
+let templateToggleTimer = null;
+
 let searchCommitTimer = null;
 let adminPromptSearchCommitTimer = null;
 let adminTagSearchCommitTimer = null;
@@ -819,9 +821,9 @@ function HomePage() {
           </select>
         </span>
         <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="${searchPlaceholder}" aria-label="프롬프트 검색" />
-        <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
+        <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
           <span>${icons.bulb}</span>
-          <small role="tooltip">쉼표로 여러 검색어를 입력할 수 있습니다. 전체 검색은 태그, 키워드, 작성자를 함께 찾습니다.</small>
+          <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
         </button>
       </label>
       <div class="popular-tags" aria-label="인기 태그">
@@ -1408,7 +1410,7 @@ function MakePage() {
       ${MakeSidePanel()}
       <div class="chat-feed">
         <div class="make-template-bar ${state.templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-          <button class="template-toggle" type="button" data-toggle-templates aria-label="${state.templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}">${state.templateCollapsed ? "&gt;" : "&lt;"}</button>
+          <button class="template-toggle" type="button" data-toggle-templates aria-label="${state.templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${state.templateCollapsed ? "false" : "true"}">${state.templateCollapsed ? "&gt;" : "&lt;"}</button>
           ${
             state.templateCollapsed
               ? ""
@@ -2360,7 +2362,6 @@ function SharePage() {
           <span>${icons.share}</span>
           <h1 id="share-title">프롬프트 공유하기</h1>
         </div>
-        <p class="share-policy">공유되는 내용은 제목과 최종 프롬프트입니다. 해시태그는 선택 사항이며, 추가하면 검색에 더 잘 노출됩니다.</p>
         <form class="share-form">
           <label>
             <span>제목</span>
@@ -2370,9 +2371,17 @@ function SharePage() {
           <span>프롬프트</span>
           <textarea name="prompt" rows="8" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요...">${escapeHtml(draft.text || "")}</textarea>
           </label>
-          <label>
-            <span>해시태그</span>
-            <input name="tagSearch" type="text" value="${escapeHtml(state.shareTagQuery)}" placeholder="선택 사항: 기존 태그를 검색하거나 새 태그를 입력하세요" autocomplete="off" />
+          <div class="share-field-block">
+            <div class="share-label-with-help">
+              <label for="share-tag-search">해시태그</label>
+              <span class="share-field-help-wrap">
+                <button class="search-help share-help share-field-help" type="button" aria-label="해시태그 도움말">
+                  <span>${icons.bulb}</span>
+                  <span class="help-text">태그를 추가하면 검색에 더 잘 노출됩니다.</span>
+                </button>
+              </span>
+            </div>
+            <input id="share-tag-search" name="tagSearch" type="text" value="${escapeHtml(state.shareTagQuery)}" placeholder="선택 사항: 기존 태그를 검색하거나 새 태그를 입력하세요" autocomplete="off" />
             <input name="tags" type="hidden" value="${escapeHtml(draftTags)}" />
             <div class="share-tag-suggestions" aria-label="해시태그 검색 결과">
               ${
@@ -2392,8 +2401,7 @@ function SharePage() {
                   : `<span class="tag-chip-empty">태그 없이 공유됩니다.</span>`
               }
             </div>
-            <p class="field-hint">해시태그를 추가하면 검색과 추천에서 더 쉽게 발견됩니다. 검색 결과가 없으면 입력한 값을 새 태그로 추가할 수 있습니다.</p>
-          </label>
+          </div>
           <div class="share-helper">
             <span>${state.shareError || "공유 후 Home으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다."}</span>
           </div>
@@ -3323,8 +3331,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.templateCollapsed = !state.templateCollapsed;
-      render();
+      toggleTemplateBar(button);
     });
   });
 
@@ -5510,6 +5517,32 @@ function applyTemplate(templateId) {
     textarea.setSelectionRange(cursorPosition, cursorPosition);
     autosizeTextarea(textarea);
   }, 0);
+}
+
+function toggleTemplateBar(button) {
+  window.clearTimeout(templateToggleTimer);
+
+  if (state.templateCollapsed) {
+    state.templateCollapsed = false;
+    render();
+    return;
+  }
+
+  const templateBar = button.closest(".make-template-bar");
+  if (!templateBar) {
+    state.templateCollapsed = true;
+    render();
+    return;
+  }
+
+  templateBar.classList.add("collapsing");
+  button.setAttribute("aria-label", "분야 버튼 펼치기");
+  button.setAttribute("aria-expanded", "false");
+  button.innerHTML = "&gt;";
+  templateToggleTimer = window.setTimeout(() => {
+    state.templateCollapsed = true;
+    render();
+  }, 190);
 }
 
 async function copyTextToClipboard(text) {
