@@ -350,7 +350,7 @@ public class AdminController {
 
         recordAudit(
                 admin,
-                "REPORT_STATUS_UPDATE",
+                "REPORT_STATUS_CHANGE",
                 "REPORT",
                 id,
                 auditDetail

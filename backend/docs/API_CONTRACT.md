@@ -593,6 +593,9 @@ PATCH /api/admin/tags/{id}/status
 * 신고 상태 및 관리자 메모 변경
 * 게시물 숨김
 * 게시물 복구
+* 댓글 숨김
+* 댓글 숨김 해제
+* 관리자 댓글 삭제
 * 태그 상태 변경
 
 ### 감사 로그 조회
@@ -648,6 +651,9 @@ GET /api/admin/audit-logs
 | `REPORT_STATUS_CHANGE` | 신고 상태 또는 메모 변경 |
 | `PROMPT_HIDE`          | 게시물 숨김         |
 | `PROMPT_RESTORE`       | 게시물 복구         |
+| `COMMENT_HIDE`         | 댓글 숨김           |
+| `COMMENT_RESTORE`      | 댓글 숨김 해제       |
+| `COMMENT_DELETE`       | 관리자 댓글 삭제     |
 | `TAG_STATUS_CHANGE`    | 태그 상태 변경       |
 
 ### targetType 값
@@ -656,6 +662,7 @@ GET /api/admin/audit-logs
 USER
 REPORT
 PROMPT
+COMMENT
 TAG
 ```
 

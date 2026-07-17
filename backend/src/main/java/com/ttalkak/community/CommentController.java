@@ -1,11 +1,15 @@
 package com.ttalkak.community;
 
+import com.ttalkak.admin.AdminAuditLog;
+import com.ttalkak.admin.AdminAuditLogRepository;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.member.Member;
 import com.ttalkak.prompt.PromptPost;
 import com.ttalkak.prompt.PromptRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,15 +25,18 @@ public class CommentController {
     private final CommentLikeRepository commentLikeRepository;
     private final PromptRepository promptRepository;
     private final AuthService authService;
+    private final AdminAuditLogRepository adminAuditLogRepository;
 
     public CommentController(CommentRepository commentRepository,
                              CommentLikeRepository commentLikeRepository,
                              PromptRepository promptRepository,
-                             AuthService authService) {
+                             AuthService authService,
+                             AdminAuditLogRepository adminAuditLogRepository) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.promptRepository = promptRepository;
         this.authService = authService;
+        this.adminAuditLogRepository = adminAuditLogRepository;
     }
 
     @GetMapping("/api/prompts/{promptId}/comments")
@@ -109,12 +116,16 @@ public class CommentController {
         return ResponseEntity.ok(toResponse(comment, memberId, comment.getParentId() == null, isAdmin(authorization)));
     }
 
+    @Transactional
     @PatchMapping("/api/admin/comments/{commentId}/hide")
     public ResponseEntity<?> hideComment(
             @PathVariable Long commentId,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         Long memberId = requireMemberId(authorization);
+        Member admin = authService
+                .getMemberFromAuthorization(authorization)
+                .orElseThrow();
 
         if (!isAdmin(authorization)) {
             throw new ApiException(
@@ -146,6 +157,13 @@ public class CommentController {
             commentRepository.save(comment);
             prompt.decreaseComments();
             promptRepository.save(prompt);
+            recordAudit(
+                    admin,
+                    "COMMENT_HIDE",
+                    "COMMENT",
+                    commentId,
+                    "댓글 숨김 처리"
+            );
         }
 
         Map<String, Object> body = new LinkedHashMap<>(
@@ -156,12 +174,16 @@ public class CommentController {
         return ResponseEntity.ok(body);
     }
 
+    @Transactional
     @PatchMapping("/api/admin/comments/{commentId}/unhide")
     public ResponseEntity<?> unhideComment(
             @PathVariable Long commentId,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         Long memberId = requireMemberId(authorization);
+        Member admin = authService
+                .getMemberFromAuthorization(authorization)
+                .orElseThrow();
 
         if (!isAdmin(authorization)) {
             throw new ApiException(
@@ -193,6 +215,13 @@ public class CommentController {
             commentRepository.save(comment);
             prompt.increaseComments();
             promptRepository.save(prompt);
+            recordAudit(
+                    admin,
+                    "COMMENT_RESTORE",
+                    "COMMENT",
+                    commentId,
+                    "댓글 숨김 해제"
+            );
         }
 
         Map<String, Object> body = new LinkedHashMap<>(
@@ -229,12 +258,16 @@ public class CommentController {
         return deleteCommentEntity(comment);
     }
 
+    @Transactional
     @DeleteMapping("/api/admin/comments/{commentId}")
     public ResponseEntity<?> adminDeleteComment(
             @PathVariable Long commentId,
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         requireMemberId(authorization);
+        Member admin = authService
+                .getMemberFromAuthorization(authorization)
+                .orElseThrow();
 
         if (!isAdmin(authorization)) {
             throw new ApiException(
@@ -256,7 +289,17 @@ public class CommentController {
                         "프롬프트를 찾을 수 없습니다."
                 ));
 
-        return deleteCommentEntity(comment);
+        ResponseEntity<?> response = deleteCommentEntity(comment);
+
+        recordAudit(
+                admin,
+                "COMMENT_DELETE",
+                "COMMENT",
+                commentId,
+                "댓글 삭제 처리"
+        );
+
+        return response;
     }
 
     private ResponseEntity<?> deleteCommentEntity(Comment comment) {
@@ -410,6 +453,31 @@ public class CommentController {
         }
 
         return prompt;
+    }
+
+    private void recordAudit(
+            Member admin,
+            String action,
+            String targetType,
+            Long targetId,
+            String detail
+    ) {
+        String adminNickname =
+                admin.getNickname() == null
+                        || admin.getNickname().isBlank()
+                        ? "관리자"
+                        : admin.getNickname();
+
+        AdminAuditLog auditLog = new AdminAuditLog(
+                admin.getId(),
+                adminNickname,
+                action,
+                targetType,
+                targetId,
+                detail
+        );
+
+        adminAuditLogRepository.save(auditLog);
     }
 
     private Long requireMemberId(String authorization) {
