@@ -113,9 +113,43 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/tags/**"
                         ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/prompts",
+                                "/api/prompts/*/save",
+                                "/api/prompts/*/like",
+                                "/api/prompts/*/comments",
+                                "/api/prompts/*/revision-requests",
+                                "/api/comments/*/replies",
+                                "/api/comments/*/like",
+                                "/api/reports/**",
+                                "/api/make/**"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/prompts/*",
+                                "/api/prompts/*/visibility",
+                                "/api/comments/*",
+                                "/api/me/author-revision-requests/*/status",
+                                "/api/make/**"
+                        ).hasRole("USER")
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/prompts/*",
+                                "/api/prompts/*/save",
+                                "/api/prompts/*/like",
+                                "/api/comments/*",
+                                "/api/comments/*/like",
+                                "/api/make/**"
+                        ).hasRole("USER")
+
                         .requestMatchers(
                                 "/api/admin/**"
                         ).hasRole("ADMIN")
+
                         .anyRequest()
                         .authenticated()
                 )
