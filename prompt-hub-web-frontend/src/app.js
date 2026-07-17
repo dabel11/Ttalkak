@@ -408,6 +408,7 @@ const state = {
   currentUserRole: "user",
   authToken: "",
   token: "",
+  accountScopes: {},
   isComposingSearch: false,
   isComposingShareTag: false,
   isComposingAdminPromptSearch: false,
@@ -761,8 +762,8 @@ function Header() {
         ${
           showPromptTools
             ? `<div class="topbar-tools">
-                <button class="topbar-tool ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고 숨김 해제" : "신고 숨김"}</button>
-                <button class="topbar-tool" type="button" data-reset-demo>데모 초기화</button>
+                <button class="topbar-tool ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported title="내가 신고한 게시물만 Home에서 숨깁니다." ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고 숨김 해제" : "신고 숨김"}</button>
+                <button class="topbar-tool" type="button" data-reset-demo title="브라우저에 저장된 화면 상태만 지우며, 서버 DB 데이터는 삭제하지 않습니다.">데모 초기화</button>
               </div>`
             : ""
         }
@@ -2642,7 +2643,51 @@ function normalizeAuthResult(payload, fallbackUserId = "") {
   };
 }
 
+function getCurrentAccountScopeKey() {
+  if (!state.isLoggedIn) return "guest";
+  const id = state.currentUserId || "";
+  const role = String(state.currentUserRole || "user").toLowerCase();
+  const nickname = String(state.currentUser || "").trim();
+  return `${role}:${id || nickname || "unknown"}`;
+}
+
+function snapshotCurrentAccountScope() {
+  return {
+    userLibraryPromptIds: [...state.userLibraryPromptIds],
+    likedPromptIds: [...state.likedPromptIds],
+    likedCommentIds: [...state.likedCommentIds],
+    reportedPromptIds: [...state.reportedPromptIds],
+    reportedCommentIds: [...state.reportedCommentIds],
+    hideReportedPrompts: state.hideReportedPrompts,
+  };
+}
+
+function saveCurrentAccountScope() {
+  const key = getCurrentAccountScopeKey();
+  if (!key) return;
+  state.accountScopes = {
+    ...(state.accountScopes || {}),
+    [key]: snapshotCurrentAccountScope(),
+  };
+}
+
+function applyAccountScope(scope = {}) {
+  state.userLibraryPromptIds = new Set(Array.isArray(scope.userLibraryPromptIds) ? scope.userLibraryPromptIds : []);
+  state.likedPromptIds = new Set(Array.isArray(scope.likedPromptIds) ? scope.likedPromptIds : []);
+  state.likedCommentIds = new Set(Array.isArray(scope.likedCommentIds) ? scope.likedCommentIds : []);
+  state.reportedPromptIds = new Set(Array.isArray(scope.reportedPromptIds) ? scope.reportedPromptIds : []);
+  state.reportedCommentIds = new Set(Array.isArray(scope.reportedCommentIds) ? scope.reportedCommentIds : []);
+  state.hideReportedPrompts = Boolean(scope.hideReportedPrompts);
+  normalizePersistedLikeCounts();
+}
+
+function restoreCurrentAccountScope() {
+  const scopes = state.accountScopes && typeof state.accountScopes === "object" ? state.accountScopes : {};
+  applyAccountScope(scopes[getCurrentAccountScopeKey()] || {});
+}
+
 function applyAuthenticatedUser(authResult) {
+  saveCurrentAccountScope();
   state.isLoggedIn = true;
   state.currentUser = authResult.user.nickname;
   state.currentUserId = authResult.user.id;
@@ -2654,6 +2699,7 @@ function applyAuthenticatedUser(authResult) {
   state.myBackendStatus = "idle";
   state.adminBackendStatus = "idle";
   state.makeBackendStatus = "idle";
+  restoreCurrentAccountScope();
   try {
     localStorage.setItem(AUTH_TOKEN_KEY, authResult.token);
   } catch (_error) {
@@ -2662,12 +2708,14 @@ function applyAuthenticatedUser(authResult) {
 }
 
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
+  saveCurrentAccountScope();
   state.isLoggedIn = false;
   state.currentUser = null;
   state.currentUserId = null;
   state.currentUserRole = "user";
   state.authToken = "";
   state.token = "";
+  restoreCurrentAccountScope();
   state.adminMode = false;
   state.authView = null;
   state.authError = "";
@@ -2769,7 +2817,7 @@ function bindEvents() {
       openConfirmAction({
         type: "reset-demo",
         title: "데모 초기화",
-        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 데모 상태를 모두 초기화할까요?",
+        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 화면 상태를 모두 초기화할까요? 서버 DB 데이터는 삭제하지 않습니다.",
         confirmLabel: "초기화",
         danger: true,
       });
@@ -5202,6 +5250,7 @@ function removeCommentFromList(comments, commentId) {
 function resetDemoState() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
   } catch (_error) {
     // Ignore storage failures in preview mode.
   }
@@ -7691,6 +7740,7 @@ async function refreshAdminAuditLogs({ shouldRender = true, reason = "" } = {}) 
 
 function persistState() {
   try {
+    saveCurrentAccountScope();
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -7708,6 +7758,7 @@ function persistState() {
           currentUserRole: state.currentUserRole,
           authToken: state.authToken,
           token: state.token,
+          accountScopes: state.accountScopes,
           libraryDemoSeeded: state.libraryDemoSeeded,
           userLibraryPromptIds: [...state.userLibraryPromptIds],
           likedPromptIds: [...state.likedPromptIds],
@@ -7776,6 +7827,7 @@ function loadPersistedState() {
     state.currentUserRole = state.isLoggedIn ? savedState.currentUserRole || "user" : "user";
     state.authToken = state.isLoggedIn ? restoredToken : "";
     state.token = state.isLoggedIn ? restoredToken : "";
+    state.accountScopes = savedState.accountScopes && typeof savedState.accountScopes === "object" ? savedState.accountScopes : {};
     state.libraryDemoSeeded = Boolean(savedState.libraryDemoSeeded);
     state.userLibraryPromptIds = new Set(Array.isArray(savedState.userLibraryPromptIds) ? savedState.userLibraryPromptIds : []);
     state.likedPromptIds = new Set(Array.isArray(savedState.likedPromptIds) ? savedState.likedPromptIds : []);
@@ -7783,6 +7835,9 @@ function loadPersistedState() {
     state.reportedPromptIds = new Set(Array.isArray(savedState.reportedPromptIds) ? savedState.reportedPromptIds : []);
     state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
     state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
+    if (state.accountScopes[getCurrentAccountScopeKey()]) {
+      restoreCurrentAccountScope();
+    }
     state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && savedState.adminMode);
     if (state.adminMode) state.route = "admin";
     state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
