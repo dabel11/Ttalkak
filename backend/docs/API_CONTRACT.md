@@ -1042,3 +1042,92 @@ if (error.code === "ACCOUNT_BLOCKED") {
 ```
 
 차단 계정의 기존 JWT 요청도 `ACCOUNT_BLOCKED`가 반환되므로, 해당 코드를 받으면 저장된 토큰을 삭제하고 로그인 화면으로 이동하는 처리를 권장합니다.
+
+---
+
+## 17. 관리자 태그별 프롬프트 조회
+
+관리자 태그 관리 화면에서 특정 태그가 실제로 사용된 프롬프트를 조회하기 위한 API입니다.
+
+관리자 전용 API이며 비로그인 사용자와 일반 사용자는 접근할 수 없습니다.
+
+```text
+GET /api/admin/tags/{tagId}/prompts
+```
+
+### Path Parameters
+
+| 이름 | 필수 | 설명 |
+| --- | --- | --- |
+| `tagId` | 예 | 조회할 태그 ID |
+
+### Query Parameters
+
+| 이름 | 필수 | 기본값 | 설명 |
+| --- | --- | --- | --- |
+| `page` | 아니요 | `1` | 페이지 번호. 1부터 시작 |
+| `size` | 아니요 | 서버 기본값 | 페이지 크기. 최대 100 |
+| `pageSize` | 아니요 | 서버 기본값 | `size`가 없을 경우 사용 |
+
+요청 예시:
+
+```text
+GET /api/admin/tags/7/prompts?page=1&size=5
+```
+
+응답 예시:
+
+```json
+{
+  "items": [
+    {
+      "id": 10,
+      "title": "글쓰기 첨삭 프롬프트",
+      "text": "본문 미리보기용 내용",
+      "preview": "본문 미리보기용 내용",
+      "author": {
+        "id": 2,
+        "nickname": "카피메이커"
+      },
+      "createdAt": "2026-07-14T12:00:00",
+      "isShared": true,
+      "isHidden": false,
+      "status": "active"
+    }
+  ],
+  "content": [
+    {
+      "id": 10,
+      "title": "글쓰기 첨삭 프롬프트"
+    }
+  ],
+  "page": 1,
+  "size": 5,
+  "total": 12,
+  "totalPages": 3
+}
+```
+
+`items`와 `content`에는 동일한 프롬프트 목록이 포함됩니다.
+
+조회 결과에는 공개·비공개·삭제된 프롬프트가 모두 포함될 수 있습니다. 관리자가 태그의 실제 사용 현황을 검토하기 위한 API이기 때문입니다.
+
+`status` 값은 다음과 같습니다.
+
+```text
+active
+private
+deleted
+```
+
+현재 프롬프트에는 별도의 관리자 숨김 필드가 없으므로 `isHidden`은 삭제 상태를 기준으로 반환합니다.
+
+```text
+isHidden = deleted
+```
+
+존재하지 않는 태그 ID를 요청하면 다음 오류를 반환합니다.
+
+```text
+404 Not Found
+```

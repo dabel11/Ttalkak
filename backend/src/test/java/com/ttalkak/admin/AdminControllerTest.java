@@ -13,6 +13,9 @@ import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.community.Comment;
 import com.ttalkak.community.Report;
 import com.ttalkak.prompt.PromptPost;
+import com.ttalkak.prompt.Tag;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,13 +47,13 @@ class AdminControllerTest {
 	private ReportRepository reportRepository;
 	private PromptRepository promptRepository;
 	private CommentRepository commentRepository;
+	private TagRepository tagRepository;
 
     @BeforeEach
 	void setUp() {
 		reportRepository = mock(ReportRepository.class);
 		promptRepository = mock(PromptRepository.class);
-		TagRepository tagRepository =
-				mock(TagRepository.class);
+		tagRepository = mock(TagRepository.class);
 		memberRepository = mock(MemberRepository.class);
 		commentRepository = mock(CommentRepository.class);
 
@@ -817,6 +820,117 @@ class AdminControllerTest {
 						null
 				)
 		);
+	}
+
+	@Test
+	void returnsPromptsForTagInPagedResponse() {
+		Tag tag = new Tag("개발");
+		ReflectionTestUtils.setField(tag, "id", 7L);
+
+		PromptPost prompt = new PromptPost(
+			2L,
+			"카피메이커",
+			"글쓰기 첨삭 프롬프트",
+			"본문 미리보기용 내용",
+			"개발,글쓰기",
+			true
+		);
+
+		ReflectionTestUtils.setField(prompt, "id", 10L);
+		ReflectionTestUtils.setField(
+			prompt,
+			"createdAt",
+			LocalDateTime.of(2026, 7, 14, 12, 0)
+		);
+
+		PageRequest pageable = PageRequest.of(0, 5);
+
+		when(tagRepository.findById(7L))
+			.thenReturn(Optional.of(tag));
+
+		when(promptRepository.findAllByExactTag("개발", pageable))
+			.thenReturn(
+				new PageImpl<>(
+					List.of(prompt),
+					pageable,
+					12
+				)
+			);
+
+		Map<String, Object> response =
+			controller.tagPrompts(
+				7L,
+				1,
+				5,
+				null
+			);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(5, response.get("size"));
+		assertEquals(12L, response.get("total"));
+		assertEquals(3, response.get("totalPages"));
+
+		List items = (List) response.get("items");
+		assertEquals(items, response.get("content"));
+		assertEquals(1, items.size());
+
+		Map item = (Map) items.get(0);
+		Map author = (Map) item.get("author");
+
+		assertEquals(10L, item.get("id"));
+		assertEquals(
+			"글쓰기 첨삭 프롬프트",
+			item.get("title")
+		);
+		assertEquals(
+			"본문 미리보기용 내용",
+			item.get("text")
+		);
+		assertEquals(
+			"본문 미리보기용 내용",
+			item.get("preview")
+		);
+		assertEquals(
+			"2026-07-14T12:00:00",
+			item.get("createdAt")
+		);
+		assertEquals(true, item.get("isShared"));
+		assertEquals(false, item.get("isHidden"));
+		assertEquals("active", item.get("status"));
+
+		assertEquals(2L, author.get("id"));
+		assertEquals(
+			"카피메이커",
+			author.get("nickname")
+		);
+
+		verify(tagRepository).findById(7L);
+		verify(promptRepository)
+			.findAllByExactTag("개발", pageable);
+	}
+
+	@Test
+	void rejectsTagPromptLookupForMissingTag() {
+		when(tagRepository.findById(999L))
+			.thenReturn(Optional.empty());
+
+		ResponseStatusException exception =
+			assertThrows(
+				ResponseStatusException.class,
+				() -> controller.tagPrompts(
+					999L,
+					1,
+					5,
+					null
+				)
+			);
+
+		assertEquals(
+			HttpStatus.NOT_FOUND,
+			exception.getStatusCode()
+		);
+
+		verify(tagRepository).findById(999L);
 	}
 
     private Member localMember() {

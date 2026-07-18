@@ -26,6 +26,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -739,6 +741,43 @@ public class AdminController {
         return pageResponse(items, page, size, pageSize);
     }
 
+	@GetMapping("/tags/{id}/prompts")
+	public Map<String, Object> tagPrompts(
+		@PathVariable Long id,
+		@RequestParam(defaultValue = "1") int page,
+		@RequestParam(required = false) Integer size,
+		@RequestParam(required = false) Integer pageSize
+	) {
+		Tag tag = tagRepository.findById(id)
+			.orElseThrow(() -> new ResponseStatusException(
+				HttpStatus.NOT_FOUND,
+				"태그를 찾을 수 없습니다."
+			));
+
+		int resolvedSize = resolvePageSize(size, pageSize);
+		int safePage = Math.max(page, 1);
+		int safeSize = Math.min(Math.max(resolvedSize, 1), 100);
+
+		Page<PromptPost> promptPage = promptRepository.findAllByExactTag(
+			tag.getName(),
+			PageRequest.of(safePage - 1, safeSize)
+		);
+
+		List<Map<String, Object>> items = promptPage.getContent().stream()
+			.map(this::tagPromptMap)
+			.toList();
+
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("items", items);
+		body.put("content", items);
+		body.put("page", safePage);
+		body.put("size", safeSize);
+		body.put("total", promptPage.getTotalElements());
+		body.put("totalPages", promptPage.getTotalPages());
+
+		return body;
+	}
+
     @Transactional
     @PatchMapping("/tags/{id}/status")
     public ResponseEntity<?> updateTagStatus(
@@ -1143,6 +1182,32 @@ public class AdminController {
 
         return body;
     }
+
+	private Map<String, Object> tagPromptMap(PromptPost prompt) {
+		String textPreview = preview(prompt.getText());
+
+		Map<String, Object> author = new LinkedHashMap<>();
+		author.put("id", prompt.getAuthorId());
+		author.put("nickname", prompt.getAuthorNickname());
+
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("id", prompt.getId());
+		body.put("title", prompt.getTitle());
+		body.put("text", textPreview);
+		body.put("preview", textPreview);
+		body.put("author", author);
+		body.put("createdAt", formatDateTime(prompt.getCreatedAt()));
+		body.put("isShared", prompt.isShared());
+		body.put("isHidden", prompt.isDeleted());
+		body.put(
+			"status",
+			prompt.isDeleted()
+				? "deleted"
+				: (prompt.isShared() ? "active" : "private")
+		);
+
+		return body;
+	}
 
     private Map<String, Object> reportMap(Report report) {
         return reportResponseMapper.toResponse(report, true);
