@@ -87,6 +87,84 @@ class AdminControllerTest {
     }
 
 	@Test
+	void returnsUserPromptsInPagedResponse() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
+
+		PromptPost prompt = new PromptPost(
+				1L,
+				"test-nickname",
+				"테스트 프롬프트",
+				"프롬프트 본문",
+				"개발,테스트",
+				true
+		);
+		ReflectionTestUtils.setField(prompt, "id", 10L);
+
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
+
+		when(promptRepository
+				.findByAuthorIdOrderByUpdatedAtDesc(1L))
+				.thenReturn(List.of(prompt));
+
+		Map<String, Object> response =
+				controller.userPrompts(
+						1L,
+						1,
+						20,
+						null
+				);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(20, response.get("size"));
+		assertEquals(1, response.get("total"));
+
+		List<?> items = (List<?>) response.get("items");
+
+		assertEquals(1, items.size());
+
+		Map<?, ?> item = (Map<?, ?>) items.get(0);
+		Map<?, ?> author = (Map<?, ?>) item.get("author");
+
+		assertEquals(10L, item.get("id"));
+		assertEquals("테스트 프롬프트", item.get("title"));
+		assertEquals("프롬프트 본문", item.get("text"));
+		assertEquals("active", item.get("status"));
+		assertEquals(false, item.get("deleted"));
+
+		assertEquals(1L, author.get("id"));
+		assertEquals(
+				"test-nickname",
+				author.get("nickname")
+		);
+
+		verify(promptRepository)
+				.findByAuthorIdOrderByUpdatedAtDesc(1L);
+	}
+
+	@Test
+	void rejectsUserPromptLookupForMissingUser() {
+		when(memberRepository.findById(999L))
+				.thenReturn(Optional.empty());
+
+		ResponseStatusException exception = assertThrows(
+				ResponseStatusException.class,
+				() -> controller.userPrompts(
+						999L,
+						1,
+						20,
+						null
+				)
+		);
+
+		assertEquals(
+				HttpStatus.NOT_FOUND,
+				exception.getStatusCode()
+		);
+	}
+
+	@Test
 	void returnsUserActivitySummary() {
 		Member member = localMember();
 		ReflectionTestUtils.setField(member, "id", 1L);

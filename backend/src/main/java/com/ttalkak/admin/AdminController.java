@@ -193,6 +193,28 @@ public class AdminController {
         return memberActivityMap(member);
     }
 
+	@GetMapping("/users/{memberId}/prompts")
+	public Map<String, Object> userPrompts(
+			@PathVariable Long memberId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		memberRepository.findById(memberId)
+				.orElseThrow(() -> new ResponseStatusException(
+						HttpStatus.NOT_FOUND,
+						"회원을 찾을 수 없습니다."
+				));
+
+		List<Map<String, Object>> items = promptRepository
+				.findByAuthorIdOrderByUpdatedAtDesc(memberId)
+				.stream()
+				.map(this::adminPromptMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
 	@GetMapping("/users/{memberId}/activity")
 	public Map<String, Object> userActivitySummary(
 			@PathVariable Long memberId
