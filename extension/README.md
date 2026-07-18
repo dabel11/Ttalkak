@@ -61,4 +61,4 @@ The extension calls:
 POST /api/prompts/improve
 ```
 
-The previous direct RAG URL `http://localhost:8000/query` is no longer the intended frontend path.
+The previous direct RAG URL setting is no longer the intended frontend path.

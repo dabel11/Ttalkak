@@ -372,8 +372,7 @@ function App() {
 
     if (executeTarget === "claude") {
       await copyText(prompt);
-      showNotice("프롬프트를 복사했습니다.");
-      window.alert("Claude는 현재 자동 입력 대신 클립보드 복사 방식으로 동작합니다. Claude 입력창에 붙여넣어 주세요.");
+      showNotice("Claude는 자동 입력 대신 복사 방식으로 동작합니다. 입력창에 붙여넣어 주세요.");
       return;
     }
 
@@ -386,16 +385,14 @@ function App() {
             return;
           }
           await copyText(prompt);
-          showNotice("프롬프트를 복사했습니다.");
-          window.alert(`${targetLabel} 자동 입력에 실패했습니다. 프롬프트는 복사되었으니 AI 사이트 입력창에 붙여넣어 주세요.`);
+          showNotice(`${targetLabel} 자동 입력에 실패했습니다. 복사된 프롬프트를 입력창에 붙여넣어 주세요.`);
         }
       );
       return;
     }
 
     await copyText(prompt);
-    showNotice("프롬프트를 복사했습니다.");
-    window.alert("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 프롬프트가 복사되었으니 원하는 AI 사이트에 붙여넣어 주세요.");
+    showNotice("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 복사된 프롬프트를 붙여넣어 주세요.");
   }
 
   async function submitPrompt() {

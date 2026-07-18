@@ -4319,7 +4319,7 @@ function submitReport(type, targetId, reason) {
 async function reportPrompt(promptId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    window.alert("신고 이유를 입력해주세요.");
+    showNotice("신고 이유를 입력해주세요.");
     return;
   }
 
@@ -4356,7 +4356,7 @@ async function reportPrompt(promptId, reason) {
 async function reportComment(commentId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    window.alert("신고 이유를 입력해주세요.");
+    showNotice("신고 이유를 입력해주세요.");
     return;
   }
 
@@ -5040,7 +5040,7 @@ async function createMakeFolder(folderName) {
   }
 
   if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
     state.creatingFolder = false;
     render();
     return;
@@ -5048,13 +5048,13 @@ async function createMakeFolder(folderName) {
 
   const cleanName = String(folderName || "").trim();
   if (!cleanName) {
-    window.alert("폴더 이름을 입력해주세요.");
+    showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
   const exists = state.makeFolders.some((folder) => folder.name === cleanName);
   if (exists) {
-    window.alert("이미 같은 이름의 폴더가 있습니다.");
+    showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
@@ -5086,7 +5086,7 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
   if (!thread) return;
 
   if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
     state.creatingThreadFolderId = null;
     render();
     return;
@@ -5094,13 +5094,13 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
 
   const cleanName = String(folderName || "").trim();
   if (!cleanName) {
-    window.alert("폴더 이름을 입력해주세요.");
+    showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
   const exists = state.makeFolders.some((folder) => folder.name === cleanName);
   if (exists) {
-    window.alert("이미 같은 이름의 폴더가 있습니다.");
+    showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
@@ -5698,7 +5698,7 @@ async function updateOwnPrompt(promptId, formData) {
   const tags = parseSharedTags(String(formData.get("tags") || ""));
 
   if (!title || !text) {
-    window.alert("제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.");
+    showNotice("제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.");
     return;
   }
 
@@ -6755,7 +6755,7 @@ function getReportStatusLabel(status) {
   if (status === "revision-requested") return "수정 요청됨";
   if (status === "dismissed") return "기각";
   if (status === "reviewed") return "검토 완료";
-  if (status === "resolved") return "검토 완료";
+  if (status === "resolved") return "처리 완료";
   return "접수";
 }
 
@@ -6912,7 +6912,7 @@ async function requestPromptRevision(targetKey, reason) {
 
   if (!target || !state.adminMode) return;
   if (!content) {
-    window.alert("작성자에게 전달할 수정 요청 사유를 입력해주세요.");
+    showNotice("작성자에게 전달할 수정 요청 사유를 입력해주세요.");
     return;
   }
 
