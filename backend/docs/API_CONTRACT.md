@@ -2,7 +2,7 @@
 
 이 문서는 프론트엔드와 백엔드 사이에서 응답 구조, 권한 오류 코드, 관리자 기능 및 데이터 처리 정책을 일관되게 맞추기 위한 계약 문서입니다.
 
-최종 수정일: 2026-07-17
+최종 수정일: 2026-07-18
 
 ---
 
@@ -76,6 +76,7 @@ promptAuthorNickname
 
 | HTTP 상태 | code                      | 의미                  |
 | ------- | ------------------------- | ------------------- |
+| 400     | `NICKNAME_REQUIRED`       | 관리자 회원 검색 시 닉네임 누락 |
 | 401     | `LOGIN_REQUIRED`          | 로그인이 필요한 기능         |
 | 403     | `OWNER_ONLY`              | 작성자 또는 소유자만 가능한 기능  |
 | 403     | `ADMIN_ONLY`              | 관리자만 가능한 기능         |
@@ -361,33 +362,297 @@ PATCH /api/admin/reports/{id}/status
 
 ---
 
-## 8. 관리자 회원 활동 조회
+## 8. 관리자 회원 검색 및 활동 조회
 
-### API
+이 절의 API는 모두 관리자 전용입니다.
+
+* 비로그인 요청: `401 Unauthorized`
+* 일반 사용자 요청: `403 Forbidden`
+* 존재하지 않는 회원: `404 Not Found`
+
+페이지 번호는 `1`부터 시작합니다.
+
+### 8.1 닉네임 검색
+
+```text
+GET /api/admin/users
+```
+
+#### Query Parameters
+
+| 이름         | 필수  | 기본값    | 설명                |
+| ---------- | --- | ------ | ----------------- |
+| `nickname` | 예   | 없음     | 검색할 닉네임. 일부 일치 검색 |
+| `page`     | 아니요 | `1`    | 페이지 번호            |
+| `size`     | 아니요 | 서버 기본값 | 페이지 크기            |
+| `pageSize` | 아니요 | 서버 기본값 | `size`가 없을 경우 사용  |
+
+닉네임 앞뒤 공백은 제거한 후 검색합니다. 영문 닉네임은 대소문자를 구분하지 않고 검색합니다.
+
+요청 예시:
+
+```text
+GET /api/admin/users?nickname=카피&page=1&size=20
+```
+
+응답 예시:
+
+```json
+{
+  "items": [
+    {
+      "id": 2,
+      "nickname": "카피메이커",
+      "active": true,
+      "blocked": false
+    }
+  ],
+  "content": [
+    {
+      "id": 2,
+      "nickname": "카피메이커",
+      "active": true,
+      "blocked": false
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "total": 1,
+  "totalPages": 1
+}
+```
+
+`items`와 `content`에는 동일한 데이터가 포함됩니다.
+
+검색할 닉네임을 입력하지 않거나 공백만 전달하면 다음 오류를 반환합니다.
+
+```json
+{
+  "status": 400,
+  "code": "NICKNAME_REQUIRED",
+  "message": "검색할 닉네임을 입력해야 합니다."
+}
+```
+
+---
+
+### 8.2 사용자 활동 요약 조회
+
+```text
+GET /api/admin/users/{memberId}/activity
+```
+
+응답 예시:
+
+```json
+{
+  "user": {
+    "id": 2,
+    "nickname": "카피메이커",
+    "active": true,
+    "blocked": false
+  },
+  "counts": {
+    "prompts": 3,
+    "comments": 4,
+    "replies": 2,
+    "submittedReports": 1,
+    "receivedReports": 2
+  }
+}
+```
+
+활동 개수의 의미는 다음과 같습니다.
+
+| 필드                 | 의미                      |
+| ------------------ | ----------------------- |
+| `prompts`          | 사용자가 작성한 프롬프트 수         |
+| `comments`         | `parentId`가 없는 일반 댓글 수  |
+| `replies`          | `parentId`가 존재하는 답글 수   |
+| `submittedReports` | 사용자가 신고한 내역 수           |
+| `receivedReports`  | 사용자의 프롬프트·댓글·답글이 신고된 횟수 |
+
+---
+
+### 8.3 작성한 프롬프트 조회
+
+```text
+GET /api/admin/users/{memberId}/prompts
+```
+
+#### Query Parameters
+
+| 이름         | 필수  | 기본값    | 설명               |
+| ---------- | --- | ------ | ---------------- |
+| `page`     | 아니요 | `1`    | 페이지 번호           |
+| `size`     | 아니요 | 서버 기본값 | 페이지 크기           |
+| `pageSize` | 아니요 | 서버 기본값 | `size`가 없을 경우 사용 |
+
+응답은 관리자 프롬프트 목록과 동일한 프롬프트 구조를 사용하며, 작성자 정보는 다음 형태로 포함됩니다.
+
+```json
+{
+  "author": {
+    "id": 2,
+    "nickname": "카피메이커"
+  }
+}
+```
+
+삭제·숨김 여부와 현재 상태도 함께 반환됩니다.
+
+---
+
+### 8.4 작성한 댓글 조회
+
+```text
+GET /api/admin/users/{memberId}/comments
+```
+
+`parentId`가 `null`인 일반 댓글만 반환합니다.
+
+응답 항목 예시:
+
+```json
+{
+  "id": 21,
+  "promptId": 10,
+  "parentId": null,
+  "text": "작성한 댓글 내용",
+  "preview": "작성한 댓글 내용",
+  "likes": 0,
+  "edited": false,
+  "deleted": false,
+  "hidden": false,
+  "status": "active",
+  "author": {
+    "id": 2,
+    "nickname": "카피메이커"
+  },
+  "createdAt": "2026-07-18T12:10:00"
+}
+```
+
+---
+
+### 8.5 작성한 답글 조회
+
+```text
+GET /api/admin/users/{memberId}/replies
+```
+
+`parentId`가 존재하는 답글만 반환합니다.
+
+응답 항목 예시:
+
+```json
+{
+  "id": 22,
+  "promptId": 10,
+  "parentId": 21,
+  "text": "작성한 답글 내용",
+  "preview": "작성한 답글 내용",
+  "likes": 0,
+  "edited": false,
+  "deleted": false,
+  "hidden": false,
+  "status": "active",
+  "author": {
+    "id": 2,
+    "nickname": "카피메이커"
+  },
+  "createdAt": "2026-07-18T12:20:00"
+}
+```
+
+댓글과 답글의 `status` 값은 다음과 같습니다.
+
+```text
+active
+hidden
+deleted
+```
+
+---
+
+### 8.6 사용자가 신고한 내역 조회
+
+```text
+GET /api/admin/users/{memberId}/reports/submitted
+```
+
+해당 회원이 신고자로 기록된 신고 내역을 최신순으로 반환합니다.
+
+응답 항목은 `6. 신고 응답 구조`와 동일한 형태를 사용합니다.
+
+```json
+{
+  "id": 31,
+  "targetType": "prompt",
+  "targetId": 10,
+  "reporter": {
+    "id": 2,
+    "nickname": "카피메이커"
+  },
+  "reason": "신고 사유",
+  "status": "pending",
+  "memo": null,
+  "reviewedAt": null,
+  "createdAt": "2026-07-18T12:30:00"
+}
+```
+
+---
+
+### 8.7 사용자가 신고당한 내역 조회
+
+```text
+GET /api/admin/users/{memberId}/reports/received
+```
+
+해당 회원이 작성한 다음 대상에 접수된 신고를 반환합니다.
+
+* 프롬프트
+* 댓글
+* 답글
+
+프롬프트 신고와 댓글·답글 신고를 합친 뒤 신고 생성 시각 기준 최신순으로 반환합니다.
+
+응답 항목은 `6. 신고 응답 구조`와 동일합니다.
+
+---
+
+### 8.8 기존 통합 활동 조회
 
 ```text
 GET /api/admin/users/{memberId}/activities
 ```
 
-회원 기본 정보에는 차단 상태가 포함됩니다.
+기존 호환성을 위해 유지하는 API입니다.
+
+회원의 프롬프트, 댓글, 신고, Make 대화, 폴더 활동 등을 하나의 최신순 목록으로 반환합니다. 프론트의 사용자 활동 탭에서는 활동 유형별 페이지네이션이 가능한 `activity`, `prompts`, `comments`, `replies`, `reports` API 사용을 권장합니다.
+
+---
+
+### 8.9 프론트엔드 작성자 클릭 처리
+
+프롬프트·댓글·답글의 작성자 정보는 다음 객체 형태를 사용합니다.
 
 ```json
 {
-  "id": 10,
-  "userId": "test-user",
-  "nickname": "test-nickname",
-  "name": "Test User",
-  "role": "USER",
-  "active": true,
-  "createdAt": "2026-07-01T12:00:00",
-  "withdrawnAt": null,
-  "blocked": true,
-  "blockedAt": "2026-07-17T14:30:00",
-  "blockReason": "반복적인 이용약관 위반"
+  "author": {
+    "id": 2,
+    "nickname": "카피메이커"
+  }
 }
 ```
 
-활동 내역에는 프롬프트, 댓글 등 회원이 작성한 데이터가 최신순으로 포함됩니다.
+작성자 닉네임 클릭 후 사용자 활동 화면으로 이동할 때는 변경될 수 있는 `nickname`이 아니라 `author.id`를 사용합니다.
+
+```text
+GET /api/admin/users/{author.id}/activity
+```
+
 
 ---
 
