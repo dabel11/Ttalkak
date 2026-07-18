@@ -146,13 +146,18 @@ public class AdminController {
         member.block(reason.trim());
         memberRepository.save(member);
 
-        recordAudit(
-                admin,
-                "USER_BLOCK",
-                "USER",
-                memberId,
-                "차단 사유: " + reason.trim()
-        );
+		recordAudit(
+			admin,
+			"USER_BLOCK",
+			"USER",
+			memberId,
+			"대상 사용자: "
+				+ displayValue(member.getNickname(), "알 수 없음")
+				+ " (memberId: "
+				+ memberId
+				+ "), 차단 사유: "
+				+ reason.trim()
+		);
 
         return memberActivityMap(member);
     }
@@ -181,16 +186,24 @@ public class AdminController {
             return memberActivityMap(member);
         }
 
+        String previousBlockReason = member.getBlockReason();
         member.unblock();
         memberRepository.save(member);
 
-        recordAudit(
-                admin,
-                "USER_UNBLOCK",
-                "USER",
-                memberId,
-                "회원 차단 해제"
-        );
+		recordAudit(
+			admin,
+			"USER_UNBLOCK",
+			"USER",
+			memberId,
+			"대상 사용자: "
+				+ displayValue(member.getNickname(), "알 수 없음")
+				+ " (memberId: "
+				+ memberId
+				+ "), 차단 해제"
+				+ (previousBlockReason == null
+					? ""
+					: ", 기존 차단 사유: " + previousBlockReason)
+		);
 
         return memberActivityMap(member);
     }
@@ -579,15 +592,25 @@ public class AdminController {
             );
         }
 
+        String previousStatus = report.getStatus();
         report.changeStatus(nextStatus, request.memo());
 
         reportRepository.save(report);
 
-        String auditDetail =
-                "신고 상태: " + report.getStatus()
-                        + (report.getMemo() == null
-                        ? ""
-                        : " / 관리자 메모: " + report.getMemo());
+		String auditDetail =
+			"신고 대상: "
+				+ report.getTargetType()
+				+ "#"
+				+ report.getTargetId()
+				+ ", 신고 사유: "
+				+ displayValue(preview(report.getReason()), "없음")
+				+ ", 상태: "
+				+ previousStatus
+				+ " -> "
+				+ report.getStatus()
+				+ (report.getMemo() == null
+					? ""
+					: ", 관리자 메모: " + preview(report.getMemo()));
 
         recordAudit(
                 admin,
@@ -672,13 +695,17 @@ public class AdminController {
         prompt.delete();
         promptRepository.save(prompt);
 
-        recordAudit(
-            admin,
-            "PROMPT_HIDE",
-            "PROMPT",
-            id,
-            "게시물 숨김 처리"
-        );
+	recordAudit(
+		admin,
+		"PROMPT_HIDE",
+		"PROMPT",
+		id,
+		"게시물 제목: "
+			+ displayValue(prompt.getTitle(), "제목 없음")
+			+ ", 작성자: "
+			+ displayValue(prompt.getAuthorNickname(), "알 수 없음")
+			+ ", 숨김 처리"
+	);
 
         return ResponseEntity.ok(adminPromptMap(prompt));
     }
@@ -698,13 +725,17 @@ public class AdminController {
         prompt.restore();
         promptRepository.save(prompt);
 
-        recordAudit(
-                admin,
-                "PROMPT_RESTORE",
-                "PROMPT",
-                id,
-                "게시물 숨김 해제"
-        );
+		recordAudit(
+			admin,
+			"PROMPT_RESTORE",
+			"PROMPT",
+			id,
+			"게시물 제목: "
+				+ displayValue(prompt.getTitle(), "제목 없음")
+				+ ", 작성자: "
+				+ displayValue(prompt.getAuthorNickname(), "알 수 없음")
+				+ ", 숨김 해제"
+		);
 
         return ResponseEntity.ok(adminPromptMap(prompt));
     }
@@ -812,16 +843,18 @@ public class AdminController {
         tag.changeStatus(nextStatus);
         tagRepository.save(tag);
 
-        recordAudit(
-                admin,
-                "TAG_STATUS_CHANGE",
-                "TAG",
-                id,
-                "상태: "
-                        + previousStatus
-                        + " -> "
-                        + tag.getStatus()
-        );
+		recordAudit(
+				admin,
+				"TAG_STATUS_CHANGE",
+				"TAG",
+				id,
+				"태그명: "
+						+ displayValue(tag.getName(), "알 수 없음")
+						+ ", 상태: "
+						+ previousStatus
+						+ " -> "
+						+ tag.getStatus()
+		);
 
         return ResponseEntity.ok(tagMap(tag));
 
@@ -1083,6 +1116,17 @@ public class AdminController {
         body.put("occurredAt", formatDateTime(folder.getCreatedAt()));
 
         return new ActivityItem(folder.getCreatedAt(), body);
+    }
+
+    private String displayValue(
+            String value,
+            String fallback
+    ) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+
+        return value.trim();
     }
 
     private String preview(String text) {

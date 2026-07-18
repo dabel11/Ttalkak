@@ -157,13 +157,22 @@ public class CommentController {
             commentRepository.save(comment);
             prompt.decreaseComments();
             promptRepository.save(prompt);
-            recordAudit(
-                    admin,
-                    "COMMENT_HIDE",
-                    "COMMENT",
-                    commentId,
-                    "댓글 숨김 처리"
-            );
+			recordAudit(
+					admin,
+					"COMMENT_HIDE",
+					"COMMENT",
+					commentId,
+					"게시물 ID: "
+							+ comment.getPromptId()
+							+ ", 작성자: "
+							+ auditValue(
+									comment.getAuthorNickname(),
+									"알 수 없음"
+							)
+							+ ", 댓글 내용: "
+							+ auditPreview(comment.getText())
+							+ ", 숨김 처리"
+			);
         }
 
         Map<String, Object> body = new LinkedHashMap<>(
@@ -215,13 +224,22 @@ public class CommentController {
             commentRepository.save(comment);
             prompt.increaseComments();
             promptRepository.save(prompt);
-            recordAudit(
-                    admin,
-                    "COMMENT_RESTORE",
-                    "COMMENT",
-                    commentId,
-                    "댓글 숨김 해제"
-            );
+			recordAudit(
+					admin,
+					"COMMENT_RESTORE",
+					"COMMENT",
+					commentId,
+					"게시물 ID: "
+							+ comment.getPromptId()
+							+ ", 작성자: "
+							+ auditValue(
+									comment.getAuthorNickname(),
+									"알 수 없음"
+							)
+							+ ", 댓글 내용: "
+							+ auditPreview(comment.getText())
+							+ ", 숨김 해제"
+			);
         }
 
         Map<String, Object> body = new LinkedHashMap<>(
@@ -289,15 +307,32 @@ public class CommentController {
                         "프롬프트를 찾을 수 없습니다."
                 ));
 
-        ResponseEntity<?> response = deleteCommentEntity(comment);
+		Long auditPromptId = comment.getPromptId();
 
-        recordAudit(
-                admin,
-                "COMMENT_DELETE",
-                "COMMENT",
-                commentId,
-                "댓글 삭제 처리"
-        );
+		String auditAuthorNickname = auditValue(
+				comment.getAuthorNickname(),
+				"알 수 없음"
+		);
+
+		String auditCommentPreview = auditPreview(
+				comment.getText()
+		);
+
+		ResponseEntity<?> response = deleteCommentEntity(comment);
+
+		recordAudit(
+				admin,
+				"COMMENT_DELETE",
+				"COMMENT",
+				commentId,
+				"게시물 ID: "
+						+ auditPromptId
+						+ ", 작성자: "
+						+ auditAuthorNickname
+						+ ", 댓글 내용: "
+						+ auditCommentPreview
+						+ ", 삭제 처리"
+		);
 
         return response;
     }
@@ -520,6 +555,31 @@ public class CommentController {
         if (request.content() != null) return request.content();
         return "";
     }
+
+	private String auditValue(
+			String value,
+			String fallback
+	) {
+		if (value == null || value.isBlank()) {
+			return fallback;
+		}
+
+		return value.trim();
+	}
+
+	private String auditPreview(String value) {
+		if (value == null || value.isBlank()) {
+			return "내용 없음";
+		}
+
+		String normalized = value.trim();
+
+		if (normalized.length() <= 120) {
+			return normalized;
+		}
+
+		return normalized.substring(0, 120) + "...";
+	}
 
     public record CommentRequest(String text, String content) {}
 }

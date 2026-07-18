@@ -916,6 +916,7 @@ PATCH /api/admin/author-revision-requests/{requestId}
 * 관리자 댓글 삭제
 * 관리자 수정 요청 생성
 * 관리자 수정 요청 내용 변경
+* 사용자 제출 수정 요청 승인·거절
 * 태그 상태 변경
 
 ### 감사 로그 조회
@@ -976,6 +977,7 @@ GET /api/admin/audit-logs
 | `COMMENT_DELETE`                       | 관리자 댓글 삭제           |
 | `AUTHOR_REVISION_REQUEST_CREATE`       | 관리자 수정 요청 생성      |
 | `AUTHOR_REVISION_REQUEST_UPDATE`       | 관리자 수정 요청 내용 변경 |
+| `REVISION_REQUEST_STATUS_CHANGE`       | 사용자 제출 수정 요청 상태 변경 |
 | `TAG_STATUS_CHANGE`    | 태그 상태 변경       |
 
 ### targetType 값
@@ -986,8 +988,22 @@ REPORT
 PROMPT
 COMMENT
 AUTHOR_REVISION_REQUEST
+REVISION_REQUEST
 TAG
 ```
+
+### detail 기록 기준
+
+`detail`에는 관리자가 로그만 확인해도 작업 대상을 식별할 수 있도록 다음과 같은 맥락 정보를 함께 기록합니다.
+
+* 회원 차단·해제: 대상 닉네임, 회원 ID, 차단 사유
+* 신고 처리: 신고 대상 종류와 ID, 신고 사유 미리보기, 상태 변경 전후, 관리자 메모
+* 게시물 숨김·복구: 게시물 제목, 작성자 닉네임
+* 댓글 숨김·복구·삭제: 게시물 ID, 댓글 작성자 닉네임, 댓글 내용 미리보기
+* 태그 상태 변경: 태그명, 상태 변경 전후
+* 사용자 제출 수정 요청 처리: 수정 요청 ID, 게시물 ID와 제목, 요청자 닉네임, 상태 변경 전후, 관리자 메모
+
+긴 댓글·신고 사유·관리자 메모는 전체 원문 대신 제한된 길이의 미리보기로 기록하며, 감사 목적에 불필요한 개인정보는 추가로 저장하지 않습니다.
 
 감사 로그와 실제 데이터 변경은 하나의 트랜잭션으로 처리됩니다. 따라서 실제 데이터 변경 또는 감사 로그 저장 중 하나라도 실패하면 전체 작업이 롤백됩니다.
 

@@ -85,6 +85,83 @@ class AdminControllerTest {
 	}
 
 	@Test
+	void changesReportStatusWithContextInAuditLog() {
+		Report report = new Report(
+				"prompt",
+				10L,
+				1L,
+				"부적절한 프롬프트입니다."
+		);
+
+		ReflectionTestUtils.setField(
+				report,
+				"id",
+				30L
+		);
+
+		when(reportRepository.findById(30L))
+				.thenReturn(Optional.of(report));
+
+		controller.updateReportStatus(
+				30L,
+				new AdminController.StatusRequest(
+						"resolved",
+						"게시물을 확인하고 조치했습니다."
+				),
+				adminMember()
+		);
+
+		verify(reportRepository).save(report);
+
+		ArgumentCaptor<AdminAuditLog> auditCaptor =
+				ArgumentCaptor.forClass(AdminAuditLog.class);
+
+		verify(adminAuditLogRepository)
+				.save(auditCaptor.capture());
+
+		AdminAuditLog auditLog = auditCaptor.getValue();
+
+		assertEquals(
+				"REPORT_STATUS_CHANGE",
+				auditLog.getAction()
+		);
+
+		assertEquals(
+				"REPORT",
+				auditLog.getTargetType()
+		);
+
+		assertEquals(
+				30L,
+				auditLog.getTargetId()
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"신고 대상: prompt#10"
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"신고 사유: 부적절한 프롬프트입니다."
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"상태: pending -> resolved"
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"관리자 메모: 게시물을 확인하고 조치했습니다."
+				)
+		);
+	}
+
+	@Test
 	void returnsSubmittedReportsInPagedResponse() {
 		Member member = localMember();
 		ReflectionTestUtils.setField(member, "id", 1L);
@@ -653,6 +730,26 @@ class AdminControllerTest {
 
         AdminAuditLog auditLog = auditCaptor.getValue();
 
+		assertNotNull(auditLog.getDetail());
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"대상 사용자: test-nickname"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"memberId: 1"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"차단 사유: 반복적인 이용약관 위반"
+			)
+		);
+
         assertEquals(99L, auditLog.getAdminId());
         assertEquals(
                 "admin-nickname",
@@ -703,8 +800,53 @@ class AdminControllerTest {
         assertNull(response.get("blockedAt"));
 
         verify(memberRepository).save(member);
-        verify(adminAuditLogRepository)
-        .save(any(AdminAuditLog.class));
+
+		ArgumentCaptor<AdminAuditLog> auditCaptor =
+			ArgumentCaptor.forClass(AdminAuditLog.class);
+
+		verify(adminAuditLogRepository)
+			.save(auditCaptor.capture());
+
+		AdminAuditLog auditLog = auditCaptor.getValue();
+
+		assertEquals(
+			"USER_UNBLOCK",
+			auditLog.getAction()
+		);
+
+		assertEquals(
+			"USER",
+			auditLog.getTargetType()
+		);
+
+		assertEquals(
+			1L,
+			auditLog.getTargetId()
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"대상 사용자: test-nickname"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"memberId: 1"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"차단 해제"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"기존 차단 사유: 반복적인 이용약관 위반"
+			)
+		);
     }
 
     @Test
@@ -823,6 +965,72 @@ class AdminControllerTest {
 	}
 
 	@Test
+	void changesTagStatusWithContextInAuditLog() {
+		Tag tag = new Tag("개발");
+
+		ReflectionTestUtils.setField(
+				tag,
+				"id",
+				7L
+		);
+
+		when(tagRepository.findById(7L))
+				.thenReturn(Optional.of(tag));
+
+		controller.updateTagStatus(
+				7L,
+				new AdminController.StatusRequest(
+						"disabled",
+						null
+				),
+				adminMember()
+		);
+
+		assertEquals(
+				"disabled",
+				tag.getStatus()
+		);
+
+		verify(tagRepository).save(tag);
+
+		ArgumentCaptor<AdminAuditLog> auditCaptor =
+				ArgumentCaptor.forClass(AdminAuditLog.class);
+
+		verify(adminAuditLogRepository)
+				.save(auditCaptor.capture());
+
+		AdminAuditLog auditLog =
+				auditCaptor.getValue();
+
+		assertEquals(
+				"TAG_STATUS_CHANGE",
+				auditLog.getAction()
+		);
+
+		assertEquals(
+				"TAG",
+				auditLog.getTargetType()
+		);
+
+		assertEquals(
+				7L,
+				auditLog.getTargetId()
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"태그명: 개발"
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"상태: approved -> disabled"
+				)
+		);
+	}
+
+	@Test
 	void returnsPromptsForTagInPagedResponse() {
 		Tag tag = new Tag("개발");
 		ReflectionTestUtils.setField(tag, "id", 7L);
@@ -931,6 +1139,155 @@ class AdminControllerTest {
 		);
 
 		verify(tagRepository).findById(999L);
+	}
+
+	@Test
+	void hidesPromptWithContextInAuditLog() {
+		PromptPost prompt = new PromptPost(
+			1L,
+			"카피메이커",
+			"글쓰기 첨삭 프롬프트",
+			"프롬프트 본문",
+			"글쓰기",
+			true
+		);
+
+		ReflectionTestUtils.setField(
+			prompt,
+			"id",
+			10L
+		);
+
+		when(promptRepository.findById(10L))
+			.thenReturn(Optional.of(prompt));
+
+		controller.hidePrompt(
+			10L,
+			adminMember()
+		);
+
+		assertTrue(prompt.isDeleted());
+
+		verify(promptRepository).save(prompt);
+
+		ArgumentCaptor<AdminAuditLog> auditCaptor =
+			ArgumentCaptor.forClass(AdminAuditLog.class);
+
+		verify(adminAuditLogRepository)
+			.save(auditCaptor.capture());
+
+		AdminAuditLog auditLog =
+			auditCaptor.getValue();
+
+		assertEquals(
+			"PROMPT_HIDE",
+			auditLog.getAction()
+		);
+
+		assertEquals(
+			"PROMPT",
+			auditLog.getTargetType()
+		);
+
+		assertEquals(
+			10L,
+			auditLog.getTargetId()
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"게시물 제목: 글쓰기 첨삭 프롬프트"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"작성자: 카피메이커"
+			)
+		);
+
+		assertTrue(
+			auditLog.getDetail().contains(
+				"숨김 처리"
+			)
+		);
+	}
+
+	@Test
+	void restoresPromptWithContextInAuditLog() {
+		PromptPost prompt = new PromptPost(
+				1L,
+				"카피메이커",
+				"글쓰기 첨삭 프롬프트",
+				"프롬프트 본문",
+				"글쓰기",
+				true
+		);
+
+		ReflectionTestUtils.setField(
+				prompt,
+				"id",
+				10L
+		);
+
+		// 복원할 수 있도록 먼저 숨김 상태로 만든다.
+		prompt.delete();
+
+		when(promptRepository.findById(10L))
+				.thenReturn(Optional.of(prompt));
+
+		controller.restorePrompt(
+				10L,
+				adminMember()
+		);
+
+		assertFalse(prompt.isDeleted());
+
+		verify(promptRepository).save(prompt);
+
+		ArgumentCaptor<AdminAuditLog> auditCaptor =
+				ArgumentCaptor.forClass(
+						AdminAuditLog.class
+				);
+
+		verify(adminAuditLogRepository)
+				.save(auditCaptor.capture());
+
+		AdminAuditLog auditLog =
+				auditCaptor.getValue();
+
+		assertEquals(
+				"PROMPT_RESTORE",
+				auditLog.getAction()
+		);
+
+		assertEquals(
+				"PROMPT",
+				auditLog.getTargetType()
+		);
+
+		assertEquals(
+				10L,
+				auditLog.getTargetId()
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"게시물 제목: 글쓰기 첨삭 프롬프트"
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"작성자: 카피메이커"
+				)
+		);
+
+		assertTrue(
+				auditLog.getDetail().contains(
+						"숨김 해제"
+				)
+		);
 	}
 
     private Member localMember() {

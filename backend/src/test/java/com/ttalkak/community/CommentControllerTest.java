@@ -196,7 +196,21 @@ class CommentControllerTest {
                 auditLog.getTargetType()
         );
         assertEquals(targetId, auditLog.getTargetId());
-        assertTrue(auditLog.getDetail() != null);
+        String detail = auditLog.getDetail();
+
+        assertTrue(detail != null);
+
+        assertTrue(
+                detail.contains("게시물 ID: 5")
+        );
+
+        assertTrue(
+                detail.contains("작성자: comment-author")
+        );
+
+        assertTrue(
+                detail.contains("댓글 내용: comment text")
+        );
     }
 
     private Comment comment(Long id) {

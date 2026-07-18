@@ -2,6 +2,8 @@ package com.ttalkak.prompt;
 
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.admin.AdminAuditLog;
+import com.ttalkak.admin.AdminAuditLogRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,16 +24,19 @@ public class PromptRevisionRequestController {
     private final PromptRevisionRequestRepository revisionRequestRepository;
     private final PromptRepository promptRepository;
     private final AuthService authService;
+    private final AdminAuditLogRepository adminAuditLogRepository;
 
-    public PromptRevisionRequestController(
-            PromptRevisionRequestRepository revisionRequestRepository,
-            PromptRepository promptRepository,
-            AuthService authService
-    ) {
-        this.revisionRequestRepository = revisionRequestRepository;
-        this.promptRepository = promptRepository;
-        this.authService = authService;
-    }
+	public PromptRevisionRequestController(
+		PromptRevisionRequestRepository revisionRequestRepository,
+		PromptRepository promptRepository,
+		AuthService authService,
+		AdminAuditLogRepository adminAuditLogRepository
+	) {
+		this.revisionRequestRepository = revisionRequestRepository;
+		this.promptRepository = promptRepository;
+		this.authService = authService;
+		this.adminAuditLogRepository = adminAuditLogRepository;
+	}
 
     @PostMapping("/api/prompts/{promptId}/revision-requests")
     public ResponseEntity<?> createRevisionRequest(
@@ -191,20 +196,26 @@ public class PromptRevisionRequestController {
                     required = false
             ) String authorization
     ) {
-        Long reviewerId = requireMemberId(authorization);
+	Long reviewerId = requireMemberId(authorization);
 
-        PromptRevisionRequest revision =
-                revisionRequestRepository.findById(requestId)
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "수정 요청을 찾을 수 없습니다."
-                        ));
+	String reviewerNickname = normalizeNickname(
+		authService.currentNickname(authorization),
+		"관리자"
+	);
 
-        if (!revision.isPending()) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "이미 처리된 수정 요청입니다."
-            );
+	PromptRevisionRequest revision = revisionRequestRepository.findById(requestId)
+		.orElseThrow(() -> new ResponseStatusException(
+			HttpStatus.NOT_FOUND,
+			"수정 요청을 찾을 수 없습니다."
+		));
+
+	String previousStatus = revision.getStatus();
+
+	if (!revision.isPending()) {
+		throw new ResponseStatusException(
+			HttpStatus.CONFLICT,
+			"이미 처리된 수정 요청입니다."
+		);
         }
 
         String status = normalizeReviewStatus(request.status());
@@ -238,10 +249,71 @@ public class PromptRevisionRequestController {
             revision.reject(reviewerId, memo);
         }
 
-        revisionRequestRepository.save(revision);
+		revisionRequestRepository.save(revision);
 
-        return ResponseEntity.ok(toResponse(revision));
+		recordStatusChangeAudit(
+			reviewerId,
+			reviewerNickname,
+			revision,
+			previousStatus,
+			status,
+			memo
+		);
+
+		return ResponseEntity.ok(toResponse(revision));
     }
+
+	private void recordStatusChangeAudit(
+		Long adminId,
+		String adminNickname,
+		PromptRevisionRequest revision,
+		String previousStatus,
+		String newStatus,
+		String memo
+	) {
+		String detail = String.format(
+			"수정 요청 ID: %d, 게시물 ID: %d, 게시물 제목: %s, 요청자: %s, 상태: %s -> %s%s",
+			revision.getId(),
+			revision.getPromptId(),
+			revision.getOriginalTitle(),
+			normalizeNickname(revision.getRequesterNickname(), "사용자"),
+			previousStatus,
+			newStatus,
+			memo == null
+				? ""
+				: ", 관리자 메모: " + truncate(memo, 120)
+		);
+
+		adminAuditLogRepository.save(
+			new AdminAuditLog(
+				adminId,
+				adminNickname,
+				"REVISION_REQUEST_STATUS_CHANGE",
+				"REVISION_REQUEST",
+				revision.getId(),
+				detail
+			)
+		);
+	}
+
+	private String normalizeNickname(
+		String nickname,
+		String fallback
+	) {
+		if (nickname == null || nickname.isBlank()) {
+			return fallback;
+		}
+
+		return nickname.trim();
+	}
+
+	private String truncate(String value, int maxLength) {
+		if (value == null || value.length() <= maxLength) {
+			return value;
+		}
+
+		return value.substring(0, maxLength) + "...";
+	}
 
     private Map<String, Object> toResponse(
             PromptRevisionRequest revision
