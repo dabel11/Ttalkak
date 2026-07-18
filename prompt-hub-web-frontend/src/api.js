@@ -258,6 +258,82 @@
     };
   }
 
+  function normalizeAdminUser(item, index = 0) {
+    const data = item?.data && typeof item.data === "object" ? item.data : item || {};
+    return {
+      id: String(data.id || data.memberId || data.userId || `admin-user-${index}`),
+      nickname: normalizeAuthor(data, data.nickname || data.memberNickname || data.name || "사용자"),
+      active: Boolean(data.active ?? data.enabled ?? !data.withdrawn),
+      blocked: Boolean(data.blocked ?? data.isBlocked ?? false),
+      raw: data,
+    };
+  }
+
+  function normalizeAdminUserActivitySummary(payload) {
+    const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+    const user = normalizeAdminUser(data.user || data.member || data);
+    const counts = data.counts || data.summary || {};
+    return {
+      nickname: user.nickname,
+      memberId: user.id,
+      blocked: user.blocked,
+      active: user.active,
+      summary: counts,
+      prompts: [],
+      comments: [],
+      replies: [],
+      reportsMade: [],
+      reportsReceived: [],
+      raw: data,
+    };
+  }
+
+  function normalizeAdminUserPromptActivity(item, index = 0) {
+    const prompt = normalizePrompt(item, index);
+    return {
+      title: prompt.title,
+      preview: String(item?.preview || makePreviewText(prompt.text)),
+      promptId: prompt.id,
+      commentId: "",
+      occurredAt: prompt.createdAt,
+      raw: item,
+    };
+  }
+
+  function normalizeAdminUserCommentActivity(item, index = 0) {
+    const comment = normalizeComment(item, index);
+    return {
+      title: String(item?.promptTitle || item?.prompt?.title || comment.promptTitle || "댓글"),
+      preview: comment.deleted ? "삭제된 댓글입니다." : makePreviewText(comment.text),
+      promptId: String(item?.promptId || item?.prompt?.id || comment.promptId || ""),
+      commentId: comment.id,
+      occurredAt: comment.createdAt,
+      raw: item,
+    };
+  }
+
+  function normalizeAdminUserReportActivity(item, index = 0) {
+    const report = normalizeReport(item, index);
+    return {
+      title: report.type === "comment" ? `댓글 신고 · ${report.contextTitle || report.title || "게시물 확인 필요"}` : report.title || "프롬프트 신고",
+      preview: String(report.reason || report.targetPreview || report.summary || "신고 내용 확인 필요"),
+      promptId: report.promptId,
+      commentId: report.type === "comment" ? report.targetId : "",
+      occurredAt: report.createdAt,
+      raw: item,
+    };
+  }
+
+  function makePreviewText(value, maxLength = 80) {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength).trim()}...`;
+  }
+
+  function getPageItems(payload) {
+    return unwrapItems(payload);
+  }
+
   function normalizeAdminAuditLog(item, index = 0) {
     const actor = item?.actor || item?.admin || item?.member || {};
     return {
@@ -602,9 +678,56 @@
       if (status) query.set("status", status);
       return request(`/api/admin/prompts?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizePrompt));
     },
-    getAdminUserActivity(memberId, { limit = 20 } = {}, token) {
-      const query = new URLSearchParams({ limit });
-      return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
+    searchAdminUsers({ nickname = "", page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ nickname, page, pageSize });
+      return request(`/api/admin/users?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUser));
+    },
+    getAdminUserActivitySummary(memberId, token) {
+      return request(`/api/admin/users/${memberId}/activity`, { token }).then(normalizeAdminUserActivitySummary);
+    },
+    getAdminUserPrompts(memberId, { page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/users/${memberId}/prompts?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUserPromptActivity));
+    },
+    getAdminUserComments(memberId, { page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/users/${memberId}/comments?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUserCommentActivity));
+    },
+    getAdminUserReplies(memberId, { page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/users/${memberId}/replies?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUserCommentActivity));
+    },
+    getAdminUserSubmittedReports(memberId, { page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/users/${memberId}/reports/submitted?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUserReportActivity));
+    },
+    getAdminUserReceivedReports(memberId, { page = 1, pageSize = 20 } = {}, token) {
+      const query = new URLSearchParams({ page, pageSize });
+      return request(`/api/admin/users/${memberId}/reports/received?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUserReportActivity));
+    },
+    async getAdminUserActivity(memberId, { page = 1, pageSize = 20, limit = 20 } = {}, token) {
+      try {
+        const [summary, prompts, comments, replies, reportsMade, reportsReceived] = await Promise.all([
+          this.getAdminUserActivitySummary(memberId, token),
+          this.getAdminUserPrompts(memberId, { page, pageSize }, token),
+          this.getAdminUserComments(memberId, { page, pageSize }, token),
+          this.getAdminUserReplies(memberId, { page, pageSize }, token),
+          this.getAdminUserSubmittedReports(memberId, { page, pageSize }, token),
+          this.getAdminUserReceivedReports(memberId, { page, pageSize }, token),
+        ]);
+        return {
+          ...summary,
+          prompts,
+          comments,
+          replies,
+          reportsMade,
+          reportsReceived,
+        };
+      } catch (error) {
+        if (![404, 501].includes(Number(error?.status))) throw error;
+        const query = new URLSearchParams({ limit });
+        return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
+      }
     },
     blockAdminUser(memberId, payload = {}, token) {
       return request(`/api/admin/users/${memberId}/block`, { method: "PATCH", token, body: JSON.stringify(payload) }).then(normalizeAdminUserActivity);

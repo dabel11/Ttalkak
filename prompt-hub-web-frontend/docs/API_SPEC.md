@@ -21,7 +21,13 @@ The frontend first attempts the following backend endpoints for Admin features. 
 | Delete comment | `DELETE /api/admin/comments/{commentId}` | none or `{ memo? }` | Admin moderation action |
 | Admin tags | `GET /api/admin/tags?status=all` | none | `pending`, `approved`, `rejected`, `disabled` supported by frontend |
 | Tag status update | `PATCH /api/admin/tags/{id}/status` | `{ status }` | `pending`, `approved`, `rejected`, `disabled`; recommendation-excluded UI sends `disabled` |
-| User activity | `GET /api/admin/users/{memberId}/activities?limit=20` | none | Admin-only lookup for authored prompts, comments, replies, reports made, reports received |
+| User search | `GET /api/admin/users?nickname={nickname}&page=1&pageSize=20` | none | Admin-only partial nickname search. Author clicks should use `author.id` when available. |
+| User activity summary | `GET /api/admin/users/{memberId}/activity` | none | Counts and user status for prompts, comments, replies, submitted reports, and received reports. |
+| User prompts | `GET /api/admin/users/{memberId}/prompts?page=1&pageSize=20` | none | Prompts authored by the user. |
+| User comments | `GET /api/admin/users/{memberId}/comments?page=1&pageSize=20` | none | Top-level comments authored by the user. |
+| User replies | `GET /api/admin/users/{memberId}/replies?page=1&pageSize=20` | none | Replies authored by the user. |
+| User submitted reports | `GET /api/admin/users/{memberId}/reports/submitted?page=1&pageSize=20` | none | Reports submitted by the user. |
+| User received reports | `GET /api/admin/users/{memberId}/reports/received?page=1&pageSize=20` | none | Reports received on prompts/comments/replies authored by the user. |
 
 Admin accounts are operation-only accounts in the frontend. Admin users can inspect Home and Admin screens, but normal user actions such as Make submit, Share submit, save, like, report, comment, and personal My page actions are hidden or blocked. Admin credentials are provided by backend `.env` / `ADMIN_*` seed settings, not a fixed default password. Team test credentials should follow the backend password policy, including the 12-character minimum for seeded admin passwords.
 

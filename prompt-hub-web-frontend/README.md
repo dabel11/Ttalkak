@@ -30,7 +30,7 @@
 - Revision review: `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
 - Comments: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
 - Tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
-- User activity: `GET /api/admin/users/{memberId}/activities`
+- User activity: `GET /api/admin/users?nickname=...`, `GET /api/admin/users/{memberId}/activity`, `GET /api/admin/users/{memberId}/prompts`, `GET /api/admin/users/{memberId}/comments`, `GET /api/admin/users/{memberId}/replies`, `GET /api/admin/users/{memberId}/reports/submitted`, `GET /api/admin/users/{memberId}/reports/received`
 - Audit logs: `GET /api/admin/audit-logs`
 
 Admin prompt removal is implemented as hide/restore, not permanent deletion.

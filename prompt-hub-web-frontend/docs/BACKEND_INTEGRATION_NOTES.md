@@ -21,7 +21,13 @@ Connected or attempted endpoints:
 - `DELETE /api/admin/comments/{commentId}`
 - `GET /api/admin/tags`
 - `PATCH /api/admin/tags/{id}/status`
-- `GET /api/admin/users/{memberId}/activities`
+- `GET /api/admin/users?nickname=...`
+- `GET /api/admin/users/{memberId}/activity`
+- `GET /api/admin/users/{memberId}/prompts`
+- `GET /api/admin/users/{memberId}/comments`
+- `GET /api/admin/users/{memberId}/replies`
+- `GET /api/admin/users/{memberId}/reports/submitted`
+- `GET /api/admin/users/{memberId}/reports/received`
 
 Frontend status mapping:
 
@@ -78,7 +84,7 @@ Admin account policy:
 - The admin can switch to the user-facing Home screen for read/review only. Make, Share, and My page are hidden for admin accounts because they are personal/community user features.
 - If an admin tries to access Make, Share, or My page directly, the frontend returns to Home and shows: `관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.`
 - Backend should mirror this policy with authorization checks. Admin APIs should allow operational actions, while community action APIs should reject admin-as-user behavior when that is the agreed service policy.
-- Admin prompt review now has a frontend-only user activity lookup. Final backend support should provide admin-only endpoints for nickname lookup and user activity: authored prompts, comments, replies, reports made, and reports received.
+- Admin user activity lookup now uses backend member IDs when available. Nickname search is backed by `GET /api/admin/users`, and activity cards use the split member activity APIs for authored prompts, comments, replies, submitted reports, and received reports.
 
 ## Prompt Improve / RAG Frontend Handling
 

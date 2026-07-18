@@ -383,6 +383,7 @@ const state = {
   reportCommentId: null,
   editingPromptId: null,
   adminRequestTargetKey: null,
+  adminBlockTarget: null,
   editingMessageId: null,
   executeMessageId: null,
   executePromptId: null,
@@ -532,6 +533,7 @@ function render() {
       ${state.reportPromptId || state.reportCommentId ? ReportModal() : ""}
       ${state.executeMessageId || state.executePromptId ? ExecuteModal() : ""}
       ${state.confirmAction ? ConfirmModal() : ""}
+      ${state.adminBlockTarget ? AdminUserBlockModal() : ""}
       ${state.notice ? `<div class="toast" role="status">${state.notice}</div>` : ""}
     </div>
   `;
@@ -641,6 +643,8 @@ function resetHomeView() {
 function closeTopModal() {
   if (state.confirmAction) {
     state.confirmAction = null;
+  } else if (state.adminBlockTarget) {
+    state.adminBlockTarget = null;
   } else if (state.executeMessageId) {
     state.executeMessageId = null;
   } else if (state.executePromptId) {
@@ -1378,6 +1382,31 @@ function ConfirmModal() {
           <button class="primary-button ${action.danger ? "danger-primary" : ""}" type="button" data-confirm-action>${escapeHtml(action.confirmLabel || "확인")}</button>
         </div>
       </article>
+    </div>
+  `;
+}
+
+function AdminUserBlockModal() {
+  const target = state.adminBlockTarget;
+  if (!target?.memberId) return "";
+
+  const nickname = String(target.nickname || "사용자").trim();
+
+  return `
+    <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-user-block-title">
+      <form class="modal confirm-modal" data-admin-user-block-form="${escapeHtml(target.memberId)}" data-admin-user-name="${escapeHtml(nickname)}">
+        <div class="modal-head">
+          <h2 id="admin-user-block-title">회원 차단</h2>
+          <button class="ghost-icon" type="button" data-close-admin-user-block aria-label="닫기">${icons.close}</button>
+        </div>
+        <p class="confirm-message">${escapeHtml(nickname)} 계정을 차단할 사유를 입력해주세요.</p>
+        <label class="field-label" for="admin-user-block-reason">차단 사유</label>
+        <textarea id="admin-user-block-reason" name="reason" rows="4" placeholder="예: 반복적인 운영 정책 위반">운영 정책 위반</textarea>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-close-admin-user-block>취소</button>
+          <button class="primary-button danger-primary" type="submit">차단</button>
+        </div>
+      </form>
     </div>
   `;
 }
@@ -3039,6 +3068,13 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-close-admin-user-block]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminBlockTarget = null;
+      render();
+    });
+  });
+
   document.querySelectorAll(".modal-backdrop.visible").forEach((backdrop) => {
     backdrop.addEventListener("mousedown", (event) => {
       if (event.target !== backdrop) return;
@@ -3465,7 +3501,11 @@ function bindEvents() {
 
   document.querySelectorAll("[data-admin-user-block]").forEach((button) => {
     button.addEventListener("click", () => {
-      updateAdminUserBlockState(button.dataset.adminUserBlock, true, button.dataset.adminUserName);
+      state.adminBlockTarget = {
+        memberId: button.dataset.adminUserBlock,
+        nickname: button.dataset.adminUserName || state.adminUserActivityNickname || "사용자",
+      };
+      render();
     });
   });
 
@@ -4031,6 +4071,20 @@ function bindEvents() {
     reportForm.addEventListener("submit", (event) => {
       event.preventDefault();
       submitReport(reportForm.dataset.reportType, reportForm.dataset.reportForm, new FormData(reportForm).get("reason"));
+    });
+  }
+
+  const adminUserBlockForm = document.querySelector("[data-admin-user-block-form]");
+  if (adminUserBlockForm) {
+    adminUserBlockForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const formData = new FormData(adminUserBlockForm);
+      updateAdminUserBlockState(
+        adminUserBlockForm.dataset.adminUserBlockForm,
+        true,
+        adminUserBlockForm.dataset.adminUserName,
+        formData.get("reason")
+      );
     });
   }
 
@@ -5985,7 +6039,7 @@ function searchByAuthor(author) {
 async function openAdminUserActivity(nickname, options = {}) {
   const cleanNickname = String(nickname || "").trim();
   if (!cleanNickname) return;
-  const resolvedNickname = resolveAdminUserNickname(cleanNickname);
+  let resolvedNickname = resolveAdminUserNickname(cleanNickname);
 
   state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
   state.adminUserActivityNickname = resolvedNickname;
@@ -5996,26 +6050,51 @@ async function openAdminUserActivity(nickname, options = {}) {
   showNotice(`${resolvedNickname}님의 활동을 조회합니다.`);
   render();
 
-  const memberId = String(options.memberId || getAdminKnownMemberId(resolvedNickname) || "").trim();
+  const api = window.TTALKAK_API;
+  const token = getAuthToken() || undefined;
+  let memberId = String(options.memberId || getAdminKnownMemberId(resolvedNickname) || "").trim();
+  if (!memberId && api?.searchAdminUsers && hasBackendAuthToken()) {
+    try {
+      const users = await api.searchAdminUsers({ nickname: cleanNickname, page: 1, pageSize: 10 }, token);
+      const normalizedQuery = normalizeAdminSearchText(cleanNickname);
+      const selectedUser =
+        users.find((user) => normalizeAdminSearchText(user.nickname) === normalizedQuery) ||
+        users.find((user) => normalizeAdminSearchText(user.nickname).includes(normalizedQuery)) ||
+        users[0];
+      if (selectedUser?.id) {
+        memberId = String(selectedUser.id);
+        resolvedNickname = selectedUser.nickname || resolvedNickname;
+        state.adminUserActivityNickname = resolvedNickname;
+        state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
+      } else {
+        showNotice("일치하는 사용자를 찾지 못했습니다.");
+      }
+    } catch (error) {
+      handleBackendAccessError(error, "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다.");
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패해 로컬 후보를 유지합니다.", error);
+    }
+  }
+
   if (memberId && window.TTALKAK_API?.getAdminUserActivity) {
     try {
-      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, {}, getAuthToken() || undefined);
+      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, { page: 1, pageSize: 20 }, token);
       state.backendAdminUserActivities = {
         ...state.backendAdminUserActivities,
         [normalizeAdminSearchText(resolvedNickname)]: {
           ...activity,
           nickname: activity.nickname || resolvedNickname,
+          memberId: activity.memberId || memberId,
         },
       };
       render();
     } catch (error) {
       handleBackendAccessError(error, "사용자 활동 API 조회에 실패했습니다. 데모 데이터로 표시합니다.");
-      console.warn("[TTALKAK] /api/admin/users/{memberId}/activities 호출에 실패해 데모 활동을 유지합니다.", error);
+      console.warn("[TTALKAK] /api/admin/users/{memberId}/activity 계열 호출에 실패해 데모 활동을 유지합니다.", error);
     }
   }
 }
 
-async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
+async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "", blockReason = "") {
   const cleanMemberId = String(memberId || "").trim();
   if (!cleanMemberId) {
     showNotice("샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.");
@@ -6029,7 +6108,7 @@ async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
 
   let reason = "";
   if (shouldBlock) {
-    reason = String(window.prompt("회원 차단 사유를 입력해주세요.", "운영 정책 위반") || "").trim();
+    reason = String(blockReason || "").trim();
     if (!reason) {
       showNotice("차단 사유가 필요합니다.");
       return;
@@ -6050,6 +6129,11 @@ async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
       [normalizedNickname]: {
         ...previousActivity,
         ...activity,
+        prompts: previousActivity.prompts || activity.prompts || [],
+        comments: previousActivity.comments || activity.comments || [],
+        replies: previousActivity.replies || activity.replies || [],
+        reportsMade: previousActivity.reportsMade || activity.reportsMade || [],
+        reportsReceived: previousActivity.reportsReceived || activity.reportsReceived || [],
         nickname: displayNickname,
         memberId: cleanMemberId,
         blocked: shouldBlock,
@@ -6057,9 +6141,34 @@ async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "") {
     };
     state.adminUserActivityNickname = displayNickname;
     state.adminUserQuery = displayNickname;
+    state.adminBlockTarget = null;
     state.adminBackendStatus = "idle";
     showNotice(shouldBlock ? "회원 차단을 처리했습니다." : "회원 차단을 해제했습니다.");
     render();
+
+    if (api.getAdminUserActivity) {
+      api
+        .getAdminUserActivity(cleanMemberId, { page: 1, pageSize: 20 }, token)
+        .then((refreshedActivity) => {
+          const currentActivity = state.backendAdminUserActivities[normalizedNickname] || {};
+          state.backendAdminUserActivities = {
+            ...state.backendAdminUserActivities,
+            [normalizedNickname]: {
+              ...currentActivity,
+              ...refreshedActivity,
+              nickname: displayNickname,
+              memberId: cleanMemberId,
+              blocked: shouldBlock,
+            },
+          };
+          if (normalizeAdminSearchText(state.adminUserActivityNickname) === normalizedNickname) {
+            render();
+          }
+        })
+        .catch((refreshError) => {
+          console.warn("[TTALKAK] 회원 차단 상태 변경 후 사용자 활동 재조회에 실패했습니다.", refreshError);
+        });
+    }
   } catch (error) {
     handleBackendAccessError(error, shouldBlock ? "회원 차단 요청에 실패했습니다." : "회원 차단 해제 요청에 실패했습니다.");
   }

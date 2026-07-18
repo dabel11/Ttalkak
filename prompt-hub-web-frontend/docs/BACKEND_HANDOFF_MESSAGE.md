@@ -17,7 +17,7 @@
 - Admin revision review: `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
 - Admin comments: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
 - Admin tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
-- Admin user activity: `GET /api/admin/users/{memberId}/activities`
+- Admin user search/activity: `GET /api/admin/users?nickname=...`, `GET /api/admin/users/{memberId}/activity`, `GET /api/admin/users/{memberId}/prompts`, `GET /api/admin/users/{memberId}/comments`, `GET /api/admin/users/{memberId}/replies`, `GET /api/admin/users/{memberId}/reports/submitted`, `GET /api/admin/users/{memberId}/reports/received`
 - Admin audit logs: `GET /api/admin/audit-logs`
 
 ## Important Frontend Assumptions
