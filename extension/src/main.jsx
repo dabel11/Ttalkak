@@ -22,11 +22,12 @@ import "./styles.css";
 const STORAGE = {
   SAVED: "pp_saved_prompts",
   RECENTS: "pp_recent_threads",
-  CONFIG: "pp_rag_config",
+  CONFIG: "pp_backend_config",
+  LEGACY_CONFIG: "pp_rag_config",
 };
 
 const DEFAULT_RAG_CONFIG = {
-  serverUrl: "http://localhost:8000",
+  backendApiUrl: "http://localhost:8080",
   collectionName: "prompt_techniques",
   topK: 5,
   model: "gemini-2.0-flash",
@@ -114,9 +115,24 @@ function saveStorage(key, value) {
   } catch {}
 }
 
+function normalizeBackendConfig(config = {}) {
+  const legacyUrl = config.serverUrl && !String(config.serverUrl).includes(":8000") ? config.serverUrl : "";
+  return {
+    ...DEFAULT_RAG_CONFIG,
+    ...config,
+    backendApiUrl: config.backendApiUrl || legacyUrl || DEFAULT_RAG_CONFIG.backendApiUrl,
+  };
+}
+
+function loadBackendConfig() {
+  const stored = loadStorage(STORAGE.CONFIG, null);
+  const legacy = stored ? null : loadStorage(STORAGE.LEGACY_CONFIG, null);
+  return normalizeBackendConfig(stored || legacy || DEFAULT_RAG_CONFIG);
+}
+
 function makeTitle(text = "") {
   const t = text.replace(/\s+/g, " ").trim();
-  if (!t) return "???꾨＼?꾪듃";
+  if (!t) return "새 프롬프트";
   return t.length > 20 ? `${t.slice(0, 20)}...` : t;
 }
 
@@ -131,6 +147,57 @@ function promptMatches(item, query) {
   return `${item.title} ${item.preview} ${item.content || ""} ${(item.tags || []).join(" ")}`
     .toLowerCase()
     .includes(q);
+}
+
+async function requestPromptImprove(config, payload) {
+  const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
+  const res = await fetch(`${baseUrl}/api/prompts/improve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const responseBody = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const error = new Error(getApiErrorMessage(res.status, responseBody));
+    error.status = res.status;
+    error.code = responseBody?.code || "";
+    throw error;
+  }
+
+  return normalizeImproveResult(responseBody, payload.prompt);
+}
+
+function normalizeImproveResult(payload, fallbackPrompt = "") {
+  const result = payload?.result || payload?.data || payload || {};
+  const improvedText =
+    result.improvedPrompt ||
+    result.improved_prompt ||
+    result.answer ||
+    result.text ||
+    result.content ||
+    fallbackPrompt;
+
+  return {
+    answer: result.answer || result.explanation || "프롬프트를 개선했습니다.",
+    improvedPrompt: improvedText,
+    sources: result.sources || result.references || result.documents || [],
+    ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(),
+    ragMessage: result.ragMessage || result.rag_message || result.message || "",
+  };
+}
+
+function getApiErrorMessage(status, body) {
+  const code = body?.code || "";
+  if (status === 400) return body?.message || "요청 내용을 확인해주세요.";
+  if (status === 401 || code === "LOGIN_REQUIRED") return "로그인이 필요하거나 세션이 만료되었습니다.";
+  if (status === 403) return "이 작업을 수행할 권한이 없습니다.";
+  if (status === 404) return "요청한 데이터를 찾을 수 없습니다.";
+  if (status === 409) return body?.message || "이미 처리 중인 요청이 있습니다.";
+  if (status === 429) return body?.message || "요청이 많습니다. 잠시 후 다시 시도해주세요.";
+  if (status === 503) return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+  if (status >= 500) return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+  return body?.message || `요청 처리 중 오류가 발생했습니다. (${status})`;
 }
 
 async function copyText(text) {
@@ -164,7 +231,7 @@ function App() {
   const [confirmAction, setConfirmAction] = useState(null);
   const activeThreadId = useRef(null);
 
-  const [ragConfig, setRagConfig] = useState(() => loadStorage(STORAGE.CONFIG, DEFAULT_RAG_CONFIG));
+  const [ragConfig, setRagConfig] = useState(loadBackendConfig);
   const [savedItems, setSavedItems] = useState(() => loadStorage(STORAGE.SAVED, []));
   const [recentThreads, setRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
 
@@ -215,7 +282,7 @@ function App() {
     activeThreadId.current = null;
     setComposerValue(item.sourcePrompt || item.content || item.prompt || item.title);
     setMessages([]);
-    showNotice("?꾨＼?꾪듃媛 ?낅젰李쎌뿉 以鍮꾨릺?덉뒿?덈떎.");
+    showNotice("프롬프트가 입력창에 준비되었습니다.");
   }
 
   function openRecentThread(thread) {
@@ -235,10 +302,10 @@ function App() {
     setSavedItems((items) => {
       const alreadySaved = items.some((saved) => saved.id === id || saved.id === item.id || saved.content === item.content);
       if (alreadySaved) {
-        showNotice("??μ쓣 ?댁젣?덉뒿?덈떎.");
+        showNotice("저장을 해제했습니다.");
         return items.filter((saved) => saved.id !== id && saved.id !== item.id && saved.content !== item.content);
       }
-      showNotice("Saved????ν뻽?듬땲??");
+      showNotice("Saved에 저장했습니다.");
       return [
         {
           id,
@@ -252,8 +319,6 @@ function App() {
         ...items,
       ];
     });
-    return;
-    showNotice("Saved????ν뻽?듬땲??");
   }
 
   function isSaved(item) {
@@ -263,7 +328,7 @@ function App() {
   async function copyMessage(message) {
     await copyText(message.executablePrompt || message.content);
     setCopiedId(message.id);
-    showNotice("?꾨＼?꾪듃瑜?蹂듭궗?덉뒿?덈떎.");
+    showNotice("프롬프트를 복사했습니다.");
     window.setTimeout(() => setCopiedId(""), 1100);
   }
 
@@ -289,26 +354,26 @@ function App() {
                 executablePrompt: message.executablePrompt,
                 sourcePrompt: message.sourcePrompt || message.content,
                 messages,
-                tags: ["泥⑥궘"],
+                tags: ["첨삭"],
               },
               ...items,
             ]
       );
-      showNotice("Saved????ν뻽?듬땲??");
+      showNotice("Saved에 저장했습니다.");
     } else {
       setSavedItems((items) => items.filter((i) => i.id !== messageId));
-      showNotice("??μ쓣 ?댁젣?덉뒿?덈떎.");
+      showNotice("저장을 해제했습니다.");
     }
   }
 
   async function executeMessage(message) {
     const prompt = message.executablePrompt || message.content;
-    const targetLabel = executeTarget === "claude" ? "Claude" : executeTarget === "gemini" ? "Gemini" : "selected AI site";
+    const targetLabel = executeTarget === "claude" ? "Claude" : executeTarget === "gemini" ? "Gemini" : "선택한 AI 사이트";
 
     if (executeTarget === "claude") {
       await copyText(prompt);
-      showNotice("Prompt copied.");
-      window.alert("The final prompt was copied to the clipboard. Open Claude and paste it into the input field.");
+      showNotice("프롬프트를 복사했습니다.");
+      window.alert("Claude는 현재 자동 입력 대신 클립보드 복사 방식으로 동작합니다. Claude 입력창에 붙여넣어 주세요.");
       return;
     }
 
@@ -317,20 +382,20 @@ function App() {
         { type: "EXECUTE_PROMPT", prompt, target: executeTarget },
         async (response) => {
           if (response?.ok) {
-            showNotice(`Prompt inserted into ${targetLabel}.`);
+            showNotice(`${targetLabel}에 프롬프트를 입력했습니다.`);
             return;
           }
           await copyText(prompt);
-          showNotice("Prompt copied.");
-          window.alert(`Automatic insertion into ${targetLabel} failed. The final prompt was copied, so paste it into the AI site's input field.`);
+          showNotice("프롬프트를 복사했습니다.");
+          window.alert(`${targetLabel} 자동 입력에 실패했습니다. 프롬프트는 복사되었으니 AI 사이트 입력창에 붙여넣어 주세요.`);
         }
       );
       return;
     }
 
     await copyText(prompt);
-    showNotice("Prompt copied.");
-    window.alert("Automatic insertion is unavailable in preview mode. The final prompt was copied, so paste it into the AI site you want to use.");
+    showNotice("프롬프트를 복사했습니다.");
+    window.alert("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 프롬프트가 복사되었으니 원하는 AI 사이트에 붙여넣어 주세요.");
   }
 
   async function submitPrompt() {
@@ -348,21 +413,16 @@ function App() {
     setRagStatus("checking");
 
     try {
-      const res = await fetch(`${ragConfig.serverUrl}/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: prompt,
-          collection_name: ragConfig.collectionName,
-          top_k: ragConfig.topK,
-          model: ragConfig.model,
-          history,
-        }),
+      const data = await requestPromptImprove(ragConfig, {
+        prompt,
+        history,
+        collectionName: ragConfig.collectionName,
+        topK: ragConfig.topK,
+        model: ragConfig.model,
       });
-
       setRagStatus("connected");
 
-      if (res.status === 404) {
+      if (data.ragStatus === "no_evidence") {
         const meta = MODE_META[ragMode];
         const examples = meta.examples.map((example) => `- ${example}`).join("\n");
         setMessages((prev) => [
@@ -370,10 +430,10 @@ function App() {
           {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: `"${prompt}"? 愿?⑤맂 ?댁슜??李얠? 紐삵뻽?듬땲??\n\n?꾩옱 紐⑤뱶: ${meta.label}\n\n?대윴 吏덈Ц???낅젰?대낫?몄슂:\n${examples}`,
-            executablePrompt: null,
+            content: data.ragMessage || `"${prompt}"와 관련된 기법을 찾지 못했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
+            executablePrompt: data.improvedPrompt || null,
             sourcePrompt: prompt,
-            sources: [],
+            sources: data.sources || [],
             saved: false,
             excludeFromHistory: true,
           },
@@ -381,22 +441,11 @@ function App() {
         return;
       }
 
-      if (res.status === 503) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || "Gemini API ?ъ슜?됱씠 珥덇낵?섏뿀?듬땲??");
-      }
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText);
-        throw new Error(`?쒕쾭 ?ㅻ쪟 (${res.status}): ${errText}`);
-      }
-
-      const data = await res.json();
       const assistantMsg = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: data.answer,
-        executablePrompt: data.improved_prompt || null,
+        content: data.answer || data.improvedPrompt,
+        executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
         sources: data.sources || [],
         saved: false,
@@ -410,7 +459,7 @@ function App() {
         const updatedThread = {
           id: threadId,
           title: makeTitle(prompt),
-          time: "諛⑷툑",
+          time: "방금",
           messages: nextMessages,
         };
         return [updatedThread, ...prev.filter((t) => t.id !== threadId)].slice(0, 30);
@@ -424,8 +473,8 @@ function App() {
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: isNetwork
-            ? `RAG ?쒕쾭???곌껐?????놁뒿?덈떎.\n\n?꾩옱 ?ㅼ젙???쒕쾭: ${ragConfig.serverUrl}\n\n?곕え ?붾㈃? 怨꾩냽 ?ъ슜?????덉?留??ㅼ젣 泥⑥궘??諛쏆쑝?ㅻ㈃ RAG ?쒕쾭瑜??ㅽ뻾?섍굅???곷떒??RAG ?ㅼ젙?먯꽌 ?쒕쾭 二쇱냼瑜??뺤씤?댁＜?몄슂.`
-            : `?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.\n\n${err.message}`,
+            ? `백엔드 API에 연결할 수 없습니다.\n\n현재 설정된 주소: ${ragConfig.backendApiUrl}\n\nSpring Boot 서버가 실행 중인지 확인하거나, 설정에서 Backend API URL을 확인해주세요.`
+            : `오류가 발생했습니다.\n\n${err.message}`,
           executablePrompt: null,
           sourcePrompt: prompt,
           sources: [],
@@ -440,24 +489,24 @@ function App() {
 
   function requestDeleteRecentThread(id) {
     setConfirmAction({
-      title: "理쒓렐 ?????젣",
-      message: "??理쒓렐 ??붾? ??젣?좉퉴??",
-      confirmLabel: "??젣",
+      title: "최근 대화 삭제",
+      message: "이 최근 대화를 삭제할까요?",
+      confirmLabel: "삭제",
       onConfirm: () => setRecentThreads((prev) => prev.filter((t) => t.id !== id)),
     });
   }
 
   function requestDeleteSavedItem(id) {
     setConfirmAction({
-      title: "??λ맂 ?꾨＼?꾪듃 ??젣",
-      message: "????λ맂 ?꾨＼?꾪듃瑜???젣?좉퉴??",
-      confirmLabel: "??젣",
+      title: "저장한 프롬프트 삭제",
+      message: "이 저장한 프롬프트를 삭제할까요?",
+      confirmLabel: "삭제",
       onConfirm: () => setSavedItems((prev) => prev.filter((i) => i.id !== id)),
     });
   }
 
   return (
-    <main className="extension-frame" aria-label="AI ?꾨＼?꾪듃 泥⑥궘 ?щ＼ ?뺤옣 ?꾨줈洹몃옩">
+    <main className="extension-frame" aria-label="TTALKAK Chrome extension">
       <section className="extension-shell">
         <Sidebar
           activeTab={activeTab}
@@ -476,7 +525,7 @@ function App() {
           onDeleteSaved={requestDeleteSavedItem}
           onDeleteRecent={requestDeleteRecentThread}
         />
-        <section className="work-area" aria-label="?꾨＼?꾪듃 泥⑥궘 ?곸뿭">
+        <section className="work-area" aria-label="프롬프트 첨삭 영역">
           <Header
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
@@ -595,7 +644,7 @@ function Sidebar({
         {activeTab === "search" && (
           <PromptList
             items={searchItems}
-            emptyText="寃?됲븷 ???덈뒗 ?꾨＼?꾪듃媛 ?놁뒿?덈떎."
+            emptyText="검색할 수 있는 프롬프트가 없습니다."
             mode="search"
             isSaved={isSaved}
             onOpenPrompt={onOpenPrompt}
@@ -605,7 +654,7 @@ function Sidebar({
         {activeTab === "saved" && (
           <PromptList
             items={savedItems}
-            emptyText="??λ맂 ?꾨＼?꾪듃媛 ?놁뒿?덈떎."
+            emptyText="저장한 프롬프트가 없습니다."
             mode="saved"
             onOpenPrompt={onOpenPrompt}
             onDelete={onDeleteSaved}
@@ -630,7 +679,7 @@ function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePromp
   if (items.length === 0) return <p className="empty-list">{emptyText}</p>;
 
   return (
-    <div className="prompt-list" aria-label={mode === "search" ? "?꾩껜 ?꾨＼?꾪듃 寃??寃곌낵" : "??λ맂 ?꾨＼?꾪듃 紐⑸줉"}>
+    <div className="prompt-list" aria-label={mode === "search" ? "전체 프롬프트 검색 결과" : "저장한 프롬프트 목록"}>
       {items.map((item) => {
         const saved = isSaved?.(item);
         return (
@@ -674,8 +723,8 @@ function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePromp
                   e.stopPropagation();
                   onDelete(item.id);
                 }}
-                aria-label="??젣"
-                title="??젣"
+                aria-label="삭제"
+                title="삭제"
               >
                 <X size={11} />
               </button>
@@ -688,10 +737,10 @@ function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePromp
 }
 
 function RecentList({ items, onOpenThread, onDelete }) {
-  if (items.length === 0) return <p className="empty-list">理쒓렐 ??붽? ?놁뒿?덈떎.</p>;
+  if (items.length === 0) return <p className="empty-list">최근 대화가 없습니다.</p>;
 
   return (
-    <div className="recent-list" aria-label="理쒓렐 ???紐⑸줉">
+    <div className="recent-list" aria-label="최근 대화 목록">
       {items.map((item) => (
         <div className="saved-item-wrap" key={item.id}>
           <button className="recent-item" type="button" onClick={() => onOpenThread(item)}>
@@ -705,8 +754,8 @@ function RecentList({ items, onOpenThread, onDelete }) {
               e.stopPropagation();
               onDelete(item.id);
             }}
-            aria-label="??젣"
-            title="??젣"
+            aria-label="삭제"
+            title="삭제"
           >
             <X size={11} />
           </button>
@@ -728,9 +777,9 @@ function Header({ currentUser, onLogin, onLogout, onToggleRagSettings, ragMode, 
         <button className={`rag-mode-toggle ${ragMode}`} type="button" onClick={onToggleRagMode} title={`Current: ${meta.label}`}>
           {meta.label === "기법 모드" ? "기법" : "논문"}
         </button>
-        <button className="rag-settings-button" type="button" onClick={onToggleRagSettings} title="RAG settings">
+        <button className="rag-settings-button" type="button" onClick={onToggleRagSettings} title="Backend API settings">
           <Settings size={15} />
-          <span>RAG</span>
+          <span>API</span>
         </button>
         <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
         {currentUser ? (
@@ -744,10 +793,10 @@ function Header({ currentUser, onLogin, onLogout, onToggleRagSettings, ragMode, 
 }
 
 function getRagStatusText(status) {
-  if (status === "connected") return "Connected";
-  if (status === "checking") return "Checking";
-  if (status === "error") return "Error";
-  return "Not connected";
+  if (status === "connected") return "Backend connected";
+  if (status === "checking") return "Checking backend";
+  if (status === "error") return "Backend error";
+  return "Backend idle";
 }
 
 function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ragMode }) {
@@ -761,7 +810,7 @@ function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ra
   }, [messages, isLoading, isEmpty]);
 
   return (
-    <section ref={scrollRef} className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="梨꾪똿 硫붿떆吏">
+    <section ref={scrollRef} className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="채팅 메시지">
       {isEmpty ? (
         <Intro ragMode={ragMode} />
       ) : (
@@ -818,16 +867,16 @@ function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
         {hasSources && (
           <div className="sources-section">
             <button className="sources-toggle" type="button" onClick={() => setShowSources((v) => !v)}>
-              李멸퀬 臾몄꽌 {message.sources.length}嫄?{showSources ? "?묎린" : "蹂닿린"}
+              참고 자료 {message.sources.length}건 {showSources ? "접기" : "보기"}
             </button>
             {showSources && (
               <ul className="sources-list">
                 {message.sources.map((source, idx) => (
                   <li key={idx} className="source-item">
                     <span className="source-meta">
-                      [{idx + 1}] {source.metadata?.source || source.metadata?.technique || "?????놁쓬"}
+                      [{idx + 1}] {source.metadata?.source || source.metadata?.technique || "출처 없음"}
                       {source.metadata?.category ? ` (${source.metadata.category})` : ""}
-                      {typeof source.score === "number" ? ` ?좎궗??${(source.score * 100).toFixed(1)}%` : ""}
+                      {typeof source.score === "number" ? ` 유사도 ${(source.score * 100).toFixed(1)}%` : ""}
                     </span>
                     <p className="source-text">{source.text}</p>
                   </li>
@@ -905,26 +954,28 @@ function RagSettingsPanel({ config, status, onChange, onClose }) {
 
   function apply(e) {
     e.preventDefault();
-    onChange({ ...local, topK: Number(local.topK) });
+    const { serverUrl: _legacyServerUrl, ...nextConfig } = local;
+    onChange(normalizeBackendConfig({ ...nextConfig, topK: Number(local.topK) }));
     onClose();
   }
 
   return (
-    <div className="rag-settings-panel" role="dialog" aria-label="RAG ?쒕쾭 ?ㅼ젙">
+    <div className="rag-settings-panel" role="dialog" aria-label="Backend API settings">
       <div className="rag-settings-header">
-        <span>RAG ?쒕쾭 ?ㅼ젙</span>
+        <span>Backend API settings</span>
         <span className={`rag-status ${status}`}>{getRagStatusText(status)}</span>
-        <button type="button" onClick={onClose} aria-label="?リ린"><X size={15} /></button>
+        <button type="button" onClick={onClose} aria-label="Close"><X size={15} /></button>
       </div>
       <form className="rag-settings-form" onSubmit={apply}>
         <label>
-          ?쒕쾭 URL
-          <input value={local.serverUrl} onChange={(e) => update("serverUrl", e.target.value)} placeholder="http://localhost:8000" />
+          Backend API URL
+          <input value={local.backendApiUrl} onChange={(e) => update("backendApiUrl", e.target.value)} placeholder="http://localhost:8080" />
         </label>
         <label>
-          而щ젆??          <select value={local.collectionName} onChange={(e) => update("collectionName", e.target.value)}>
-            <option value="prompt_techniques">湲곕쾿 紐⑤뱶</option>
-            <option value="papers">?쇰Ц 紐⑤뱶</option>
+          Knowledge mode
+          <select value={local.collectionName} onChange={(e) => update("collectionName", e.target.value)}>
+            <option value="prompt_techniques">기법 모드</option>
+            <option value="papers">논문 모드</option>
           </select>
         </label>
         <div className="rag-settings-row">
@@ -933,7 +984,7 @@ function RagSettingsPanel({ config, status, onChange, onClose }) {
             <input type="number" min={1} max={20} value={local.topK} onChange={(e) => update("topK", e.target.value)} />
           </label>
           <label>
-            紐⑤뜽
+            Model hint
             <select value={local.model} onChange={(e) => update("model", e.target.value)}>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
               <option value="gemini-1.5-flash">gemini-1.5-flash</option>
@@ -941,7 +992,7 @@ function RagSettingsPanel({ config, status, onChange, onClose }) {
             </select>
           </label>
         </div>
-        <button className="rag-settings-apply" type="submit">?곸슜</button>
+        <button className="rag-settings-apply" type="submit">Apply</button>
       </form>
     </div>
   );
@@ -1052,7 +1103,7 @@ function ConfirmModal({ title, message, confirmLabel, onCancel, onConfirm }) {
         <h2>{title}</h2>
         <p>{message}</p>
         <div className="confirm-actions">
-          <button className="confirm-cancel" type="button" onClick={onCancel}>痍⑥냼</button>
+          <button className="confirm-cancel" type="button" onClick={onCancel}>취소</button>
           <button className="confirm-danger" type="button" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </section>
