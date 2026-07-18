@@ -1153,6 +1153,7 @@ function PromptDetailModal() {
 function PromptEditModal() {
   const prompt = findPromptById(state.editingPromptId);
   if (!prompt || prompt.source !== "mine") return "";
+  const revisionRequest = getPromptRevisionRequest(prompt.id);
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title">
@@ -1161,6 +1162,14 @@ function PromptEditModal() {
           <h2 id="prompt-edit-title">프롬프트 수정</h2>
           <button class="ghost-icon" type="button" data-close-prompt-edit aria-label="닫기">${icons.close}</button>
         </div>
+        ${
+          revisionRequest
+            ? `<div class="revision-request-notice">
+                <strong>관리자 수정 요청 사유</strong>
+                <p>${escapeHtml(revisionRequest.reason || "수정 요청 사유가 입력되지 않았습니다.")}</p>
+              </div>`
+            : ""
+        }
         <label>
           <span>제목</span>
           <input name="title" type="text" value="${escapeHtml(prompt.title)}" />
@@ -1873,13 +1882,22 @@ function MyReportsPanel() {
                   (report) => `
                     <article class="activity-item reported-activity">
                       <div>
-                        <strong>${escapeHtml(report.title)}</strong>
+                        <div class="my-report-heading">
+                          <strong>${escapeHtml(report.title)}</strong>
+                          <span class="status-badge ${["reviewed", "resolved"].includes(report.status) ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
+                        </div>
                         <p>${escapeHtml(report.label)}</p>
                         ${report.reason ? `<p class="activity-reason">${escapeHtml(report.reason)}</p>` : ""}
                         ${report.memo ? `<p class="activity-reason">처리 메모: ${escapeHtml(report.memo)}</p>` : ""}
                         ${report.reviewedAt ? `<small class="activity-meta">처리 일시 ${formatShortDate(report.reviewedAt)}</small>` : ""}
+                        ${
+                          report.status === "revision-requested" && report.editPromptId
+                            ? `<div class="activity-actions">
+                                <button type="button" data-edit-prompt="${escapeHtml(report.editPromptId)}">수정하기</button>
+                              </div>`
+                            : ""
+                        }
                       </div>
-                      <span class="status-badge ${["reviewed", "resolved"].includes(report.status) ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
                     </article>
                   `,
                 )
@@ -5788,6 +5806,7 @@ async function updateOwnPrompt(promptId, formData) {
 
   state.editingPromptId = null;
   showNotice("프롬프트를 수정했습니다.");
+  await refreshMyPageDataAfterMutation();
   render();
 }
 
@@ -6251,7 +6270,14 @@ function getAdminKnownMemberId(nickname) {
 }
 
 function findPromptById(promptId) {
-  return savedPrompts.find((item) => item.id === promptId) || popularPrompts.find((item) => item.id === promptId);
+  return getUniquePrompts([
+    ...state.backendMyPrompts,
+    ...state.backendLibraryPrompts,
+    ...state.backendLikedPrompts,
+    ...state.backendAdminPrompts,
+    ...savedPrompts,
+    ...popularPrompts,
+  ]).find((item) => item.id === promptId);
 }
 
 async function sharePrompt(formData) {
@@ -6640,6 +6666,7 @@ function getLocalMyReportItems() {
         type: target.type,
         title: `${target.type === "prompt" ? "프롬프트" : "댓글"} 수정 요청`,
         id: target.id,
+        editPromptId: target.type === "prompt" ? target.id : "",
         label: target.type === "comment" ? target.text : target.title,
         reason: request.reason,
         status: "revision-requested",

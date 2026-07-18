@@ -5350,6 +5350,24 @@ input[type="checkbox"] {
   padding: 16px;
 }
 
+.reported-activity {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.my-report-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.reported-activity .activity-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
 .admin-report-row {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
