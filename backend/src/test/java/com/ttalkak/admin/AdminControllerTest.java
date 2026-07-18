@@ -10,10 +10,15 @@ import com.ttalkak.member.MemberRepository;
 import com.ttalkak.prompt.PromptRepository;
 import com.ttalkak.prompt.TagRepository;
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.community.Comment;
+import com.ttalkak.community.Report;
+import com.ttalkak.prompt.PromptPost;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.Optional;
@@ -35,16 +40,19 @@ class AdminControllerTest {
     private MemberRepository memberRepository;
     private AdminController controller;
     private AdminAuditLogRepository adminAuditLogRepository;
+	private ReportRepository reportRepository;
+	private PromptRepository promptRepository;
+	private CommentRepository commentRepository;
 
     @BeforeEach
     void setUp() {
-        ReportRepository reportRepository =
+        reportRepository =
                 mock(ReportRepository.class);
 
         ReportResponseMapper reportResponseMapper =
                 mock(ReportResponseMapper.class);
 
-        PromptRepository promptRepository =
+        promptRepository =
                 mock(PromptRepository.class);
 
         TagRepository tagRepository =
@@ -53,7 +61,7 @@ class AdminControllerTest {
         memberRepository =
                 mock(MemberRepository.class);
 
-        CommentRepository commentRepository =
+        commentRepository =
                 mock(CommentRepository.class);
 
         MakeThreadRepository makeThreadRepository =
@@ -77,6 +85,122 @@ class AdminControllerTest {
                 adminAuditLogRepository
         );
     }
+
+	@Test
+	void returnsUserActivitySummary() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
+
+		PromptPost prompt = new PromptPost(
+				1L,
+				"test-nickname",
+				"테스트 프롬프트",
+				"프롬프트 내용",
+				"테스트",
+				true
+		);
+		ReflectionTestUtils.setField(prompt, "id", 10L);
+
+		Comment comment = new Comment(
+				10L,
+				null,
+				1L,
+				"test-nickname",
+				"일반 댓글"
+		);
+		ReflectionTestUtils.setField(comment, "id", 20L);
+
+		Comment reply = new Comment(
+				10L,
+				20L,
+				1L,
+				"test-nickname",
+				"답글"
+		);
+		ReflectionTestUtils.setField(reply, "id", 21L);
+
+		Report submittedReport = new Report(
+				"prompt",
+				100L,
+				1L,
+				"신고 사유"
+		);
+
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
+
+		when(promptRepository
+				.findByAuthorIdOrderByUpdatedAtDesc(1L))
+				.thenReturn(List.of(prompt));
+
+		when(commentRepository
+				.findByAuthorIdOrderByCreatedAtDesc(1L))
+				.thenReturn(List.of(comment, reply));
+
+		when(reportRepository
+				.findByReporterIdOrderByCreatedAtDesc(1L))
+				.thenReturn(List.of(submittedReport));
+
+		when(reportRepository
+				.countByTargetTypeAndTargetIdIn(
+						"prompt",
+						List.of(10L)
+				))
+				.thenReturn(2L);
+
+		when(reportRepository
+				.countByTargetTypeAndTargetIdIn(
+						"comment",
+						List.of(20L, 21L)
+				))
+				.thenReturn(3L);
+
+		Map<String, Object> response =
+				controller.userActivitySummary(1L);
+
+		Map<?, ?> user =
+				(Map<?, ?>) response.get("user");
+
+		Map<?, ?> counts =
+				(Map<?, ?>) response.get("counts");
+
+		assertEquals(1L, user.get("id"));
+		assertEquals("test-nickname", user.get("nickname"));
+
+		assertEquals(1, counts.get("prompts"));
+		assertEquals(1L, counts.get("comments"));
+		assertEquals(1L, counts.get("replies"));
+		assertEquals(1, counts.get("submittedReports"));
+		assertEquals(5L, counts.get("receivedReports"));
+
+		verify(reportRepository)
+				.countByTargetTypeAndTargetIdIn(
+						"prompt",
+						List.of(10L)
+				);
+
+		verify(reportRepository)
+				.countByTargetTypeAndTargetIdIn(
+						"comment",
+						List.of(20L, 21L)
+				);
+	}
+
+	@Test
+	void rejectsActivitySummaryForMissingUser() {
+		when(memberRepository.findById(999L))
+				.thenReturn(Optional.empty());
+
+		ResponseStatusException exception = assertThrows(
+				ResponseStatusException.class,
+				() -> controller.userActivitySummary(999L)
+		);
+
+		assertEquals(
+				HttpStatus.NOT_FOUND,
+				exception.getStatusCode()
+		);
+	}
 
     @Test
     void blocksUserWithReason() {

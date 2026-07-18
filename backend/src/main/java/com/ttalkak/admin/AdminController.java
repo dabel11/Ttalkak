@@ -193,6 +193,78 @@ public class AdminController {
         return memberActivityMap(member);
     }
 
+	@GetMapping("/users/{memberId}/activity")
+	public Map<String, Object> userActivitySummary(
+			@PathVariable Long memberId
+	) {
+		Member member = memberRepository.findById(memberId)
+				.orElseThrow(() -> new ResponseStatusException(
+						HttpStatus.NOT_FOUND,
+						"회원을 찾을 수 없습니다."
+				));
+
+		List<PromptPost> prompts =
+				promptRepository.findByAuthorIdOrderByUpdatedAtDesc(
+						memberId
+				);
+
+		List<Comment> authoredComments =
+				commentRepository.findByAuthorIdOrderByCreatedAtDesc(
+						memberId
+				);
+
+		List<Report> submittedReports =
+				reportRepository.findByReporterIdOrderByCreatedAtDesc(
+						memberId
+				);
+
+		long commentCount = authoredComments.stream()
+				.filter(comment -> comment.getParentId() == null)
+				.count();
+
+		long replyCount = authoredComments.stream()
+				.filter(comment -> comment.getParentId() != null)
+				.count();
+
+		List<Long> promptIds = prompts.stream()
+				.map(PromptPost::getId)
+				.toList();
+
+		List<Long> commentIds = authoredComments.stream()
+				.map(Comment::getId)
+				.toList();
+
+		long receivedPromptReports = promptIds.isEmpty()
+				? 0
+				: reportRepository.countByTargetTypeAndTargetIdIn(
+						"prompt",
+						promptIds
+				);
+
+		long receivedCommentReports = commentIds.isEmpty()
+				? 0
+				: reportRepository.countByTargetTypeAndTargetIdIn(
+						"comment",
+						commentIds
+				);
+
+		Map<String, Object> counts = new LinkedHashMap<>();
+		counts.put("prompts", prompts.size());
+		counts.put("comments", commentCount);
+		counts.put("replies", replyCount);
+		counts.put("submittedReports", submittedReports.size());
+		counts.put(
+				"receivedReports",
+				receivedPromptReports + receivedCommentReports
+		);
+
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("user", memberSearchMap(member));
+		body.put("counts", counts);
+
+		return body;
+	}
+
     @GetMapping("/users/{memberId}/activities")
     public Map<String, Object> userActivities(
             @PathVariable Long memberId,
