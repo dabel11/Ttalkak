@@ -12,6 +12,8 @@ Connected or attempted endpoints:
 - `PATCH /api/admin/prompts/{id}/hide`
 - `PATCH /api/admin/prompts/{id}/restore`
 - `POST /api/prompts/{promptId}/revision-requests`
+- `POST /api/admin/prompts/{promptId}/author-revision-requests`
+- `PATCH /api/admin/author-revision-requests/{requestId}`
 - `GET /api/admin/revision-requests`
 - `PATCH /api/admin/revision-requests/{requestId}/status`
 - `PATCH /api/admin/comments/{commentId}/hide`
@@ -26,6 +28,7 @@ Frontend status mapping:
 - Report status: `pending`, `reviewed`, `resolved`, `dismissed`
 - Tag status: `pending`, `approved`, `rejected`, `disabled`; recommendation-excluded UI sends `disabled`.
 - Revision request status: `pending`, `approved`, `rejected`.
+- Author revision request message update: only `pending` requests can be edited. Frontend sends `{ message }`; `acknowledged`, `completed`, and `rejected` are treated as not editable.
 
 Admin account policy:
 

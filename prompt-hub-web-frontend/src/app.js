@@ -305,6 +305,7 @@ const PROTECTED_BACKEND_ACTIONS = new Set([
   "unhideAdminComment",
   "unsavePrompt",
   "unsharePrompt",
+  "updateAuthorRevisionRequest",
   "updateAdminReportStatus",
   "updateAdminRevisionRequestStatus",
   "updateAdminTagStatus",
@@ -1183,12 +1184,15 @@ function AdminRevisionRequestModal() {
 
   const existingRequest = state.adminPromptRevisionRequests[target.key];
   const isExistingRequest = Boolean(existingRequest);
+  const existingStatus = String(existingRequest?.status || "pending").toLowerCase();
+  const canEditExistingRequest = isExistingRequest && existingStatus === "pending" && existingRequest?.id;
+  const existingStatusLabel = getAuthorRevisionStatusLabel(existingStatus);
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="revision-request-title">
       <form class="modal prompt-edit-modal revision-request-modal" data-admin-revision-request-form="${target.key}">
         <div class="modal-head">
-          <h2 id="revision-request-title">${isExistingRequest ? "수정 요청 사유 확인" : "수정 요청"}</h2>
+          <h2 id="revision-request-title">${isExistingRequest ? "수정 요청 사유" : "수정 요청"}</h2>
           <button class="ghost-icon" type="button" data-close-revision-request aria-label="닫기">${icons.close}</button>
         </div>
         <div class="revision-request-target">
@@ -1199,19 +1203,23 @@ function AdminRevisionRequestModal() {
           isExistingRequest
             ? `<div class="revision-request-notice">
                 <strong>이미 처리 중인 수정 요청이 있습니다.</strong>
-                <p>현재는 기존 요청 사유를 확인할 수 있습니다. 사유 변경은 백엔드 수정 API가 준비되면 연결됩니다.</p>
+                <p>${
+                  canEditExistingRequest
+                    ? "작성자가 아직 확인하지 않은 pending 상태라 사유를 수정할 수 있습니다."
+                    : `${escapeHtml(existingStatusLabel)} 상태에서는 기존 요청 사유를 수정할 수 없습니다.`
+                }</p>
               </div>`
             : ""
         }
         <label>
           <span>작성자에게 전달할 요청 사유</span>
-          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요." ${isExistingRequest ? "readonly" : ""}>${escapeHtml(existingRequest?.reason || "")}</textarea>
+          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요." ${isExistingRequest && !canEditExistingRequest ? "readonly" : ""}>${escapeHtml(existingRequest?.reason || "")}</textarea>
         </label>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-close-revision-request>취소</button>
           ${
             isExistingRequest
-              ? `<button class="primary-button" type="button" data-revision-update-unavailable>사유 수정</button>`
+              ? `<button class="primary-button" type="submit" ${canEditExistingRequest ? "" : "disabled"}>${canEditExistingRequest ? "사유 수정" : "수정 불가"}</button>`
               : `<button class="primary-button" type="submit">요청 보내기</button>`
           }
         </div>
@@ -2252,6 +2260,9 @@ function getAdminAuditActionLabel(action) {
     revision_request: "수정 요청",
     revision_request_create: "수정 요청 생성",
     revision_request_status_change: "수정 요청 상태 변경",
+    author_revision_request_create: "작성자 수정 요청 생성",
+    author_revision_request_update: "작성자 수정 요청 사유 수정",
+    author_revision_request_status_change: "작성자 수정 요청 상태 변경",
   };
   return labels[normalized] || action || "관리자 작업";
 }
@@ -4038,12 +4049,6 @@ function bindEvents() {
       requestPromptRevision(adminRevisionRequestForm.dataset.adminRevisionRequestForm, new FormData(adminRevisionRequestForm).get("reason"));
     });
   }
-
-  document.querySelectorAll("[data-revision-update-unavailable]").forEach((button) => {
-    button.addEventListener("click", () => {
-      showNotice("수정 요청 사유 변경 API가 준비되면 사용할 수 있습니다.");
-    });
-  });
 
   document.querySelectorAll("[data-comment-form]").forEach((form) => {
     form.addEventListener("submit", (event) => {
@@ -6758,6 +6763,13 @@ function isFinalReportStatus(status) {
   return ["resolved", "dismissed"].includes(String(status || "").toLowerCase());
 }
 
+function getAuthorRevisionStatusLabel(status) {
+  if (status === "acknowledged") return "작성자 확인됨";
+  if (status === "completed") return "수정 완료";
+  if (status === "rejected") return "작성자 거절";
+  return "대기 중";
+}
+
 function matchesAdminPromptQuery(prompt, query) {
   const normalizedQuery = normalizeAdminSearchText(query);
   if (!normalizedQuery) return true;
@@ -6904,6 +6916,12 @@ async function requestPromptRevision(targetKey, reason) {
     return;
   }
 
+  const existingRequest = state.adminPromptRevisionRequests[target.key];
+  if (existingRequest) {
+    await updateAuthorRevisionRequest(target, existingRequest, content);
+    return;
+  }
+
   let backendRequest = null;
   let backendChanged = false;
   const shouldUseBackendRevisionRequest = target.type === "prompt" && isBackendNumericId(target.id) && state.backendStatus === "connected";
@@ -6923,8 +6941,10 @@ async function requestPromptRevision(targetKey, reason) {
     } catch (error) {
       const status = Number(error?.status || error?.payload?.status || 0);
       const code = getBackendErrorCode(error);
-      if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
-        showNotice("이미 처리 중인 수정 요청이 있습니다. 기존 요청 사유는 백엔드 API가 추가되면 수정할 수 있습니다.");
+      if (code === "AUTHOR_REVISION_REQUEST_ALREADY_ACTIVE") {
+        showNotice("이미 처리 중인 수정 요청이 있습니다. 기존 요청의 상태에 따라 사유를 수정할 수 있습니다.");
+      } else if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
+        showNotice("이미 처리 중인 수정 요청이 있습니다.");
       } else {
         handleBackendAccessError(error, "수정 요청 API 호출에 실패했습니다.");
       }
@@ -6939,7 +6959,7 @@ async function requestPromptRevision(targetKey, reason) {
       id: backendRequest?.id || "",
       type: target.type,
       targetId: target.id,
-      reason: backendRequest?.reason || content,
+      reason: backendRequest?.reason || backendRequest?.message || content,
       requestedAt: backendRequest?.requestedAt || Date.now(),
       status: backendRequest?.status || "pending",
     },
@@ -6947,6 +6967,75 @@ async function requestPromptRevision(targetKey, reason) {
   state.adminRequestTargetKey = null;
   showNotice("작성자에게 수정 요청을 보냈습니다.");
   if (backendChanged) await refreshAdminAuditLogs({ reason: "수정 요청 후" });
+  render();
+}
+
+async function updateAuthorRevisionRequest(target, existingRequest, reason) {
+  const status = String(existingRequest?.status || "pending").toLowerCase();
+
+  if (status !== "pending") {
+    showNotice(`${getAuthorRevisionStatusLabel(status)} 상태에서는 수정 요청 사유를 변경할 수 없습니다.`);
+    return;
+  }
+
+  if (!existingRequest?.id) {
+    showNotice("수정 요청 ID가 없어 사유를 변경할 수 없습니다.");
+    return;
+  }
+
+  if (String(existingRequest.reason || "").trim() === reason) {
+    showNotice("수정 요청 사유가 변경되지 않았습니다.");
+    return;
+  }
+
+  const shouldUseBackendRevisionRequest = target.type === "prompt" && isBackendNumericId(target.id) && state.backendStatus === "connected";
+  if (shouldUseBackendRevisionRequest && (!hasBackendAuthToken() || !window.TTALKAK_API?.updateAuthorRevisionRequest)) {
+    showNotice("실제 관리자 토큰과 수정 요청 사유 수정 API가 필요합니다.");
+    return;
+  }
+
+  let backendRequest = null;
+  let backendChanged = false;
+
+  if (shouldUseBackendRevisionRequest) {
+    try {
+      backendRequest = await window.TTALKAK_API.updateAuthorRevisionRequest(
+        existingRequest.id,
+        { message: reason },
+        getAuthToken() || undefined,
+      );
+      backendChanged = true;
+    } catch (error) {
+      const code = getBackendErrorCode(error);
+      if (code === "REVISION_REQUEST_NOT_EDITABLE") {
+        showNotice("작성자가 이미 확인했거나 처리가 끝난 수정 요청은 사유를 변경할 수 없습니다.");
+      } else if (Number(error?.status || error?.payload?.status || 0) === 409) {
+        showNotice("현재 상태에서는 수정 요청 사유를 변경할 수 없습니다.");
+      } else {
+        handleBackendAccessError(error, "수정 요청 사유 변경에 실패했습니다.");
+      }
+      console.warn("[TTALKAK] /api/admin/author-revision-requests/{id} 호출에 실패했습니다.", error);
+      return;
+    }
+  }
+
+  state.adminPromptRevisionRequests = {
+    ...state.adminPromptRevisionRequests,
+    [target.key]: {
+      ...existingRequest,
+      ...backendRequest,
+      id: backendRequest?.id || existingRequest.id,
+      type: target.type,
+      targetId: target.id,
+      reason: backendRequest?.reason || backendRequest?.message || reason,
+      requestedAt: backendRequest?.requestedAt || existingRequest.requestedAt || Date.now(),
+      status: backendRequest?.status || existingRequest.status || "pending",
+    },
+  };
+  state.adminRequestTargetKey = null;
+  showNotice("수정 요청 사유를 변경했습니다.");
+  if (backendChanged) await refreshAdminAuditLogs({ reason: "수정 요청 사유 변경 후" });
+  render();
 }
 
 function findPromptIdByCommentId(commentId) {

@@ -7,6 +7,7 @@ The frontend now attempts real Admin API calls before local demo fallback.
 - Reports: `GET /api/admin/reports`, `PATCH /api/admin/reports/{id}/status`
 - Prompts: `GET /api/admin/prompts`, `PATCH /api/admin/prompts/{id}/hide`, `PATCH /api/admin/prompts/{id}/restore`
 - Revision requests: `POST /api/prompts/{promptId}/revision-requests`, `GET /api/admin/revision-requests`, `PATCH /api/admin/revision-requests/{requestId}/status`
+- Author revision requests: `POST /api/admin/prompts/{promptId}/author-revision-requests`, `PATCH /api/admin/author-revision-requests/{requestId}`. The frontend sends `{ message }` and only edits `pending` requests.
 - Comments: `PATCH /api/admin/comments/{commentId}/hide`, `PATCH /api/admin/comments/{commentId}/unhide`, `DELETE /api/admin/comments/{commentId}`
 - Tags: `GET /api/admin/tags`, `PATCH /api/admin/tags/{id}/status`
 - User activity: `GET /api/admin/users/{memberId}/activities`

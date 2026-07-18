@@ -11,8 +11,10 @@ The frontend first attempts the following backend endpoints for Admin features. 
 | Admin prompt list | `GET /api/admin/prompts?page=1&pageSize=64&status=...` | none | Used by prompt management and user activity fallback |
 | Hide prompt | `PATCH /api/admin/prompts/{id}/hide` | none or `{ memo? }` | Admin moderation action. Current backend policy treats this as hide/soft-delete, not permanent deletion. |
 | Restore prompt | `PATCH /api/admin/prompts/{id}/restore` | none or `{ memo? }` | Restores a hidden/soft-deleted prompt. |
-| Prompt revision request | `POST /api/prompts/{promptId}/revision-requests` | `{ reason, memo? }` | Admin asks author to revise; admin should not directly edit user text |
-| Admin revision requests | `GET /api/admin/revision-requests?page=1&pageSize=64&status=...` | none | Used to show revision-requested state in Admin/My page |
+| Prompt revision request | `POST /api/prompts/{promptId}/revision-requests` | `{ reason, memo? }` | General prompt revision request flow |
+| Admin author revision request | `POST /api/admin/prompts/{promptId}/author-revision-requests` | `{ message }` | Admin asks the prompt author to revise; admin should not directly edit user text |
+| Admin author revision update | `PATCH /api/admin/author-revision-requests/{requestId}` | `{ message }` | Only `pending` author revision requests can be edited |
+| Admin revision requests | `GET /api/admin/revision-requests?page=1&pageSize=64&status=...` | none | Used for the general revision request review flow |
 | Revision request status | `PATCH /api/admin/revision-requests/{requestId}/status` | `{ status, memo? }` | `status`: `pending`, `approved`, `rejected` |
 | Hide comment | `PATCH /api/admin/comments/{commentId}/hide` | none or `{ memo? }` | Admin moderation action |
 | Unhide comment | `PATCH /api/admin/comments/{commentId}/unhide` | none or `{ memo? }` | Admin moderation action |

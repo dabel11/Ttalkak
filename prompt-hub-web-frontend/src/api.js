@@ -632,6 +632,9 @@
     requestAuthorRevision(promptId, payload, token) {
       return request(`/api/admin/prompts/${promptId}/author-revision-requests`, { method: "POST", token, body: JSON.stringify(payload) }).then(normalizeRevisionRequest);
     },
+    updateAuthorRevisionRequest(requestId, payload, token) {
+      return request(`/api/admin/author-revision-requests/${requestId}`, { method: "PATCH", token, body: JSON.stringify(payload) }).then(normalizeRevisionRequest);
+    },
     updateAdminRevisionRequestStatus(requestId, status, token, memo = "") {
       return request(`/api/admin/revision-requests/${requestId}/status`, { method: "PATCH", token, body: JSON.stringify({ status, memo }) }).then(normalizeRevisionRequest);
     },
