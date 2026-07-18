@@ -215,6 +215,46 @@ public class AdminController {
 		return pageResponse(items, page, size, pageSize);
 	}
 
+	@GetMapping("/users/{memberId}/comments")
+	public Map<String, Object> userComments(
+			@PathVariable Long memberId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		requireMember(memberId);
+
+		List<Map<String, Object>> items = commentRepository
+				.findByAuthorIdAndParentIdIsNullOrderByCreatedAtDesc(
+						memberId
+				)
+				.stream()
+				.map(this::adminUserCommentMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
+	@GetMapping("/users/{memberId}/replies")
+	public Map<String, Object> userReplies(
+			@PathVariable Long memberId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		requireMember(memberId);
+
+		List<Map<String, Object>> items = commentRepository
+				.findByAuthorIdAndParentIdIsNotNullOrderByCreatedAtDesc(
+						memberId
+				)
+				.stream()
+				.map(this::adminUserCommentMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
 	@GetMapping("/users/{memberId}/activity")
 	public Map<String, Object> userActivitySummary(
 			@PathVariable Long memberId
@@ -771,6 +811,51 @@ public class AdminController {
 
         return body;
     }
+
+	private Member requireMember(Long memberId) {
+		return memberRepository.findById(memberId)
+				.orElseThrow(() -> new ResponseStatusException(
+						HttpStatus.NOT_FOUND,
+						"회원을 찾을 수 없습니다."
+				));
+	}
+
+	private Map<String, Object> adminUserCommentMap(
+			Comment comment
+	) {
+		Map<String, Object> body = new LinkedHashMap<>();
+
+		body.put("id", comment.getId());
+		body.put("promptId", comment.getPromptId());
+		body.put("parentId", comment.getParentId());
+		body.put("text", comment.getText());
+		body.put("preview", preview(comment.getText()));
+		body.put("likes", comment.getLikes());
+		body.put("edited", comment.isEdited());
+		body.put("deleted", comment.isDeleted());
+		body.put("hidden", comment.isHidden());
+
+		body.put(
+				"status",
+				comment.isDeleted()
+						? "deleted"
+						: comment.isHidden()
+						? "hidden"
+						: "active"
+		);
+
+		Map<String, Object> author = new LinkedHashMap<>();
+		author.put("id", comment.getAuthorId());
+		author.put("nickname", comment.getAuthorNickname());
+
+		body.put("author", author);
+		body.put(
+				"createdAt",
+				formatDateTime(comment.getCreatedAt())
+		);
+
+		return body;
+	}
 
 	private Map<String, Object> memberSearchMap(Member member) {
 		Map<String, Object> body = new LinkedHashMap<>();

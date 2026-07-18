@@ -87,6 +87,122 @@ class AdminControllerTest {
     }
 
 	@Test
+	void returnsUserCommentsInPagedResponse() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
+
+		Comment comment = new Comment(
+				10L,
+				null,
+				1L,
+				"test-nickname",
+				"일반 댓글"
+		);
+		ReflectionTestUtils.setField(comment, "id", 20L);
+
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
+
+		when(commentRepository
+				.findByAuthorIdAndParentIdIsNullOrderByCreatedAtDesc(
+						1L
+				))
+				.thenReturn(List.of(comment));
+
+		Map<String, Object> response = controller.userComments(
+				1L,
+				1,
+				20,
+				null
+		);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(20, response.get("size"));
+		assertEquals(1, response.get("total"));
+
+		List<?> items = (List<?>) response.get("items");
+		assertEquals(1, items.size());
+
+		Map<?, ?> item = (Map<?, ?>) items.get(0);
+		Map<?, ?> author = (Map<?, ?>) item.get("author");
+
+		assertEquals(20L, item.get("id"));
+		assertEquals(10L, item.get("promptId"));
+		assertEquals(null, item.get("parentId"));
+		assertEquals("일반 댓글", item.get("text"));
+		assertEquals("active", item.get("status"));
+
+		assertEquals(1L, author.get("id"));
+		assertEquals(
+				"test-nickname",
+				author.get("nickname")
+		);
+
+		verify(commentRepository)
+				.findByAuthorIdAndParentIdIsNullOrderByCreatedAtDesc(
+						1L
+				);
+	}
+
+	@Test
+	void returnsUserRepliesInPagedResponse() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
+
+		Comment reply = new Comment(
+				10L,
+				20L,
+				1L,
+				"test-nickname",
+				"작성한 답글"
+		);
+		ReflectionTestUtils.setField(reply, "id", 21L);
+
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
+
+		when(commentRepository
+				.findByAuthorIdAndParentIdIsNotNullOrderByCreatedAtDesc(
+						1L
+				))
+				.thenReturn(List.of(reply));
+
+		Map<String, Object> response = controller.userReplies(
+				1L,
+				1,
+				20,
+				null
+		);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(20, response.get("size"));
+		assertEquals(1, response.get("total"));
+
+		List<?> items = (List<?>) response.get("items");
+		assertEquals(1, items.size());
+
+		Map<?, ?> item = (Map<?, ?>) items.get(0);
+		Map<?, ?> author = (Map<?, ?>) item.get("author");
+
+		assertEquals(21L, item.get("id"));
+		assertEquals(10L, item.get("promptId"));
+		assertEquals(20L, item.get("parentId"));
+		assertEquals("작성한 답글", item.get("text"));
+		assertEquals("active", item.get("status"));
+
+		assertEquals(1L, author.get("id"));
+		assertEquals(
+				"test-nickname",
+				author.get("nickname")
+		);
+
+		verify(commentRepository)
+				.findByAuthorIdAndParentIdIsNotNullOrderByCreatedAtDesc(
+						1L
+				);
+	}
+
+	@Test
 	void returnsUserPromptsInPagedResponse() {
 		Member member = localMember();
 		ReflectionTestUtils.setField(member, "id", 1L);
