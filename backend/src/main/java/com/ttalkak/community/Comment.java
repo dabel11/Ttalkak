@@ -94,6 +94,16 @@ public class Comment {
         return createdAt;
     }
 
+    public void linkAuthor(Long authorId, String authorNickname) {
+        if (authorId == null) {
+            throw new IllegalArgumentException("authorId is required.");
+        }
+        this.authorId = authorId;
+        if (authorNickname != null && !authorNickname.isBlank()) {
+            this.authorNickname = authorNickname.trim();
+        }
+    }
+
     public void updateText(String text) {
         this.text = text;
         this.edited = true;

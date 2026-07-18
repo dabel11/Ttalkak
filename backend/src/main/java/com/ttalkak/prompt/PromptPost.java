@@ -57,6 +57,16 @@ public class PromptPost {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
+    public void linkAuthor(Long authorId, String authorNickname) {
+        if (authorId == null) {
+            throw new IllegalArgumentException("authorId is required.");
+        }
+        this.authorId = authorId;
+        if (authorNickname != null && !authorNickname.isBlank()) {
+            this.authorNickname = authorNickname.trim();
+        }
+    }
+
     public void increaseViews() { this.views++; }
     public void increaseLikes() { this.likes++; }
     public void decreaseLikes() { if (this.likes > 0) this.likes--; }

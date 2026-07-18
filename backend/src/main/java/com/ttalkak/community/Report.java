@@ -85,6 +85,13 @@ public class Report {
         return createdAt;
     }
 
+    public void linkReporter(Long reporterId) {
+        if (reporterId == null) {
+            throw new IllegalArgumentException("reporterId is required.");
+        }
+        this.reporterId = reporterId;
+    }
+
     public boolean canTransitionTo(ReportStatus nextStatus) {
         return status.canTransitionTo(nextStatus);
     }
