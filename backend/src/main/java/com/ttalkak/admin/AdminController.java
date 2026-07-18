@@ -72,6 +72,35 @@ public class AdminController {
     }
 
     @Transactional
+	@GetMapping("/users")
+	public Map<String, Object> searchUsers(
+			@RequestParam(required = false) String nickname,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		String normalizedNickname =
+				nickname == null ? "" : nickname.trim();
+
+		if (normalizedNickname.isBlank()) {
+			throw new ApiException(
+					HttpStatus.BAD_REQUEST,
+					"NICKNAME_REQUIRED",
+					"검색할 닉네임을 입력해야 합니다."
+			);
+		}
+
+		List<Map<String, Object>> items = memberRepository
+				.findByNicknameContainingIgnoreCaseOrderByNicknameAsc(
+						normalizedNickname
+				)
+				.stream()
+				.map(this::memberSearchMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
     @PatchMapping("/users/{memberId}/block")
     public Map<String, Object> blockUser(
             @PathVariable Long memberId,
@@ -648,6 +677,15 @@ public class AdminController {
 
         return body;
     }
+
+	private Map<String, Object> memberSearchMap(Member member) {
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("id", member.getId());
+		body.put("nickname", member.getNickname());
+		body.put("active", member.isActive());
+		body.put("blocked", member.isBlocked());
+		return body;
+	}
 
     private Map<String, Object> memberActivityMap(Member member) {
         Map<String, Object> body = new LinkedHashMap<>();

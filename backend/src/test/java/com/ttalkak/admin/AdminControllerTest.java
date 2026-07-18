@@ -9,6 +9,7 @@ import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
 import com.ttalkak.prompt.PromptRepository;
 import com.ttalkak.prompt.TagRepository;
+import com.ttalkak.common.exception.ApiException;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -226,6 +228,68 @@ class AdminControllerTest {
         assertNotNull(item.get("admin"));
         assertNotNull(item.get("createdAt"));
     }
+
+	@Test
+	void searchesUsersByPartialNickname() {
+		Member member = new Member(
+				"copy-user",
+				"encoded-password",
+				"카피메이커",
+				"Copy User",
+				null,
+				"010-2222-2222",
+				"copy@example.com"
+		);
+
+		ReflectionTestUtils.setField(member, "id", 2L);
+
+		when(
+				memberRepository
+						.findByNicknameContainingIgnoreCaseOrderByNicknameAsc(
+								"카피"
+						)
+		).thenReturn(List.of(member));
+
+		Map<String, Object> response = controller.searchUsers(
+				" 카피 ",
+				1,
+				20,
+				null
+		);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(20, response.get("size"));
+		assertEquals(1, response.get("total"));
+
+		List<?> items = (List<?>) response.get("items");
+
+		assertEquals(1, items.size());
+
+		Map<?, ?> item = (Map<?, ?>) items.get(0);
+
+		assertEquals(2L, item.get("id"));
+		assertEquals("카피메이커", item.get("nickname"));
+		assertEquals(true, item.get("active"));
+		assertEquals(false, item.get("blocked"));
+
+		verify(memberRepository)
+				.findByNicknameContainingIgnoreCaseOrderByNicknameAsc(
+						"카피"
+				);
+	}
+
+	@Test
+	void rejectsBlankNicknameSearch() {
+		assertThrows(
+				ApiException.class,
+				() -> controller.searchUsers(
+						"   ",
+						1,
+						20,
+						null
+				)
+		);
+	}
 
     private Member localMember() {
         return new Member(
