@@ -129,6 +129,16 @@ public class PromptAuthorRevisionRequest {
                 || "rejected".equalsIgnoreCase(status);
     }
 
+    public void updateMessage(String message) {
+        if (!isPending()) {
+            throw new IllegalStateException(
+                    "\uB300\uAE30 \uC911\uC778 \uC218\uC815 \uC694\uCCAD\uB9CC \uB0B4\uC6A9\uC744 \uC218\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+            );
+        }
+
+        this.message = message;
+    }
+
     public void acknowledge() {
         if (!isPending()) {
             throw new IllegalStateException(

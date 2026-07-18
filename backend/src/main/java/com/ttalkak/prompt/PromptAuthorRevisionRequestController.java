@@ -112,6 +112,49 @@ public class PromptAuthorRevisionRequestController {
                 .body(toResponse(revisionRequest));
     }
 
+    @Transactional
+    @PatchMapping(
+            "/api/admin/author-revision-requests/{requestId}"
+    )
+    public Map<String, Object> updateRequestMessage(
+            @PathVariable Long requestId,
+            @RequestBody UpdateRequest request,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization
+    ) {
+        requireMemberId(authorization);
+
+        PromptAuthorRevisionRequest revisionRequest =
+                requestRepository.findById(requestId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "\uC218\uC815 \uC694\uCCAD\uC744 "
+                                                + "\uCC3E\uC744 \uC218 "
+                                                + "\uC5C6\uC2B5\uB2C8\uB2E4."
+                                )
+                        );
+
+        String message =
+                normalizeRequiredMessage(request.message());
+
+        try {
+            revisionRequest.updateMessage(message);
+        } catch (IllegalStateException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    exception.getMessage(),
+                    exception
+            );
+        }
+
+        requestRepository.save(revisionRequest);
+
+        return toResponse(revisionRequest);
+    }
+
     @GetMapping("/api/me/author-revision-requests")
     public Map<String, Object> myReceivedRequests(
             @RequestParam(required = false) String status,
@@ -399,6 +442,9 @@ public class PromptAuthorRevisionRequestController {
     }
 
     public record CreateRequest(String message) {
+    }
+
+    public record UpdateRequest(String message) {
     }
 
     public record StatusRequest(String status) {

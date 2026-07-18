@@ -67,6 +67,36 @@ class PromptAuthorRevisionRequestTest {
         assertNotNull(request.getResolvedAt());
     }
 
+
+    @Test
+    void canUpdateMessageWhilePending() {
+        PromptAuthorRevisionRequest request = createRequest();
+
+        request.updateMessage("updated message");
+
+        assertEquals("updated message", request.getMessage());
+        assertEquals("pending", request.getStatus());
+    }
+
+    @Test
+    void cannotUpdateMessageAfterAcknowledgement() {
+        PromptAuthorRevisionRequest request = createRequest();
+        request.acknowledge();
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> request.updateMessage("updated message")
+        );
+
+        assertEquals(
+                "\uB300\uAE30 \uC911\uC778 "
+                        + "\uC218\uC815 \uC694\uCCAD\uB9CC "
+                        + "\uB0B4\uC6A9\uC744 \uC218\uC815\uD560 "
+                        + "\uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+                exception.getMessage()
+        );
+    }
+
     private PromptAuthorRevisionRequest createRequest() {
         return new PromptAuthorRevisionRequest(
                 1L,
