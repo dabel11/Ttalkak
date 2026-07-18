@@ -7174,13 +7174,6 @@ async function updateAuthorRevisionRequest(target, existingRequest, reason) {
   render();
 }
 
-function findPromptIdByCommentId(commentId) {
-  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    if (findCommentInList(comments, commentId)) return promptId;
-  }
-  return "";
-}
-
 function findCommentContextById(commentId) {
   for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
     const comment = findCommentInList(comments, commentId);
