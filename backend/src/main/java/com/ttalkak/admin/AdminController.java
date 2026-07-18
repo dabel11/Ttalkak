@@ -255,6 +255,82 @@ public class AdminController {
 		return pageResponse(items, page, size, pageSize);
 	}
 
+	@GetMapping("/users/{memberId}/reports/submitted")
+	public Map<String, Object> userSubmittedReports(
+			@PathVariable Long memberId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		requireMember(memberId);
+
+		List<Map<String, Object>> items = reportRepository
+				.findByReporterIdOrderByCreatedAtDesc(memberId)
+				.stream()
+				.map(this::reportMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
+	@GetMapping("/users/{memberId}/reports/received")
+	public Map<String, Object> userReceivedReports(
+			@PathVariable Long memberId,
+			@RequestParam(defaultValue = "1") int page,
+			@RequestParam(required = false) Integer size,
+			@RequestParam(required = false) Integer pageSize
+	) {
+		requireMember(memberId);
+
+		List<Long> promptIds = promptRepository
+				.findByAuthorIdOrderByUpdatedAtDesc(memberId)
+				.stream()
+				.map(PromptPost::getId)
+				.toList();
+
+		List<Long> commentIds = commentRepository
+				.findByAuthorIdOrderByCreatedAtDesc(memberId)
+				.stream()
+				.map(Comment::getId)
+				.toList();
+
+		List<Report> receivedReports = new ArrayList<>();
+
+		if (!promptIds.isEmpty()) {
+			receivedReports.addAll(
+					reportRepository
+							.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+									"prompt",
+									promptIds
+							)
+			);
+		}
+
+		if (!commentIds.isEmpty()) {
+			receivedReports.addAll(
+					reportRepository
+							.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+									"comment",
+									commentIds
+							)
+			);
+		}
+
+		List<Map<String, Object>> items = receivedReports.stream()
+				.sorted(
+						Comparator.comparing(Report::getCreatedAt)
+								.reversed()
+								.thenComparing(
+										Report::getId,
+										Comparator.reverseOrder()
+								)
+				)
+				.map(this::reportMap)
+				.toList();
+
+		return pageResponse(items, page, size, pageSize);
+	}
+
 	@GetMapping("/users/{memberId}/activity")
 	public Map<String, Object> userActivitySummary(
 			@PathVariable Long memberId

@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.List;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,46 +46,255 @@ class AdminControllerTest {
 	private CommentRepository commentRepository;
 
     @BeforeEach
-    void setUp() {
-        reportRepository =
-                mock(ReportRepository.class);
+	void setUp() {
+		reportRepository = mock(ReportRepository.class);
+		promptRepository = mock(PromptRepository.class);
+		TagRepository tagRepository =
+				mock(TagRepository.class);
+		memberRepository = mock(MemberRepository.class);
+		commentRepository = mock(CommentRepository.class);
 
-        ReportResponseMapper reportResponseMapper =
-                mock(ReportResponseMapper.class);
+		ReportResponseMapper reportResponseMapper =
+				new ReportResponseMapper(
+						memberRepository,
+						promptRepository,
+						commentRepository
+				);
 
-        promptRepository =
-                mock(PromptRepository.class);
+		MakeThreadRepository makeThreadRepository =
+				mock(MakeThreadRepository.class);
+		MakeFolderRepository makeFolderRepository =
+				mock(MakeFolderRepository.class);
+		adminAuditLogRepository =
+				mock(AdminAuditLogRepository.class);
 
-        TagRepository tagRepository =
-                mock(TagRepository.class);
+		controller = new AdminController(
+				reportRepository,
+				reportResponseMapper,
+				promptRepository,
+				tagRepository,
+				memberRepository,
+				commentRepository,
+				makeThreadRepository,
+				makeFolderRepository,
+				adminAuditLogRepository
+		);
+	}
 
-        memberRepository =
-                mock(MemberRepository.class);
+	@Test
+	void returnsSubmittedReportsInPagedResponse() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
 
-        commentRepository =
-                mock(CommentRepository.class);
+		Report report = new Report(
+				"prompt",
+				10L,
+				1L,
+				"부적절한 프롬프트입니다."
+		);
 
-        MakeThreadRepository makeThreadRepository =
-                mock(MakeThreadRepository.class);
+		ReflectionTestUtils.setField(report, "id", 30L);
+		ReflectionTestUtils.setField(
+				report,
+				"createdAt",
+				LocalDateTime.of(
+						2026,
+						7,
+						18,
+						10,
+						0
+				)
+		);
 
-        MakeFolderRepository makeFolderRepository =
-                mock(MakeFolderRepository.class);
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
 
-        adminAuditLogRepository =
-                mock(AdminAuditLogRepository.class);
+		when(reportRepository
+				.findByReporterIdOrderByCreatedAtDesc(1L))
+				.thenReturn(List.of(report));
 
-        controller = new AdminController(
-                reportRepository,
-                reportResponseMapper,
-                promptRepository,
-                tagRepository,
-                memberRepository,
-                commentRepository,
-                makeThreadRepository,
-                makeFolderRepository,
-                adminAuditLogRepository
-        );
-    }
+		when(promptRepository.findById(10L))
+				.thenReturn(Optional.empty());
+
+		Map<String, Object> response =
+				controller.userSubmittedReports(
+						1L,
+						1,
+						20,
+						null
+				);
+
+		assertEquals(1, response.get("page"));
+		assertEquals(20, response.get("size"));
+		assertEquals(1, response.get("total"));
+
+		List<?> items =
+				(List<?>) response.get("items");
+
+		assertEquals(1, items.size());
+
+		Map<?, ?> item =
+				(Map<?, ?>) items.get(0);
+
+		assertEquals(30L, item.get("id"));
+		assertEquals("prompt", item.get("targetType"));
+		assertEquals(10L, item.get("targetId"));
+		assertEquals(
+				"부적절한 프롬프트입니다.",
+				item.get("reason")
+		);
+		assertEquals("pending", item.get("status"));
+
+		verify(reportRepository)
+				.findByReporterIdOrderByCreatedAtDesc(1L);
+	}
+
+	@Test
+	void returnsReceivedReportsInNewestFirstOrder() {
+		Member member = localMember();
+		ReflectionTestUtils.setField(member, "id", 1L);
+
+		PromptPost prompt = new PromptPost(
+				1L,
+				"test-nickname",
+				"신고 대상 프롬프트",
+				"프롬프트 본문",
+				"테스트",
+				true
+		);
+		ReflectionTestUtils.setField(prompt, "id", 10L);
+
+		Comment comment = new Comment(
+				10L,
+				null,
+				1L,
+				"test-nickname",
+				"신고 대상 댓글"
+		);
+		ReflectionTestUtils.setField(comment, "id", 20L);
+
+		Report promptReport = new Report(
+				"prompt",
+				10L,
+				2L,
+				"프롬프트 신고"
+		);
+		ReflectionTestUtils.setField(
+				promptReport,
+				"id",
+				31L
+		);
+		ReflectionTestUtils.setField(
+				promptReport,
+				"createdAt",
+				LocalDateTime.of(
+						2026,
+						7,
+						18,
+						10,
+						0
+				)
+		);
+
+		Report commentReport = new Report(
+				"comment",
+				20L,
+				3L,
+				"댓글 신고"
+		);
+		ReflectionTestUtils.setField(
+				commentReport,
+				"id",
+				32L
+		);
+		ReflectionTestUtils.setField(
+				commentReport,
+				"createdAt",
+				LocalDateTime.of(
+						2026,
+						7,
+						18,
+						11,
+						0
+				)
+		);
+
+		when(memberRepository.findById(1L))
+				.thenReturn(Optional.of(member));
+
+		when(memberRepository.findById(2L))
+				.thenReturn(Optional.empty());
+
+		when(memberRepository.findById(3L))
+				.thenReturn(Optional.empty());
+
+		when(promptRepository
+				.findByAuthorIdOrderByUpdatedAtDesc(1L))
+				.thenReturn(List.of(prompt));
+
+		when(commentRepository
+				.findByAuthorIdOrderByCreatedAtDesc(1L))
+				.thenReturn(List.of(comment));
+
+		when(reportRepository
+				.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+						"prompt",
+						List.of(10L)
+				))
+				.thenReturn(List.of(promptReport));
+
+		when(reportRepository
+				.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+						"comment",
+						List.of(20L)
+				))
+				.thenReturn(List.of(commentReport));
+
+		when(promptRepository.findById(10L))
+				.thenReturn(Optional.of(prompt));
+
+		when(commentRepository.findById(20L))
+				.thenReturn(Optional.of(comment));
+
+		Map<String, Object> response =
+				controller.userReceivedReports(
+						1L,
+						1,
+						20,
+						null
+				);
+
+		assertEquals(2, response.get("total"));
+
+		List<?> items =
+				(List<?>) response.get("items");
+
+		assertEquals(2, items.size());
+
+		Map<?, ?> first =
+				(Map<?, ?>) items.get(0);
+
+		Map<?, ?> second =
+				(Map<?, ?>) items.get(1);
+
+		assertEquals(32L, first.get("id"));
+		assertEquals("comment", first.get("targetType"));
+
+		assertEquals(31L, second.get("id"));
+		assertEquals("prompt", second.get("targetType"));
+
+		verify(reportRepository)
+				.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+						"prompt",
+						List.of(10L)
+				);
+
+		verify(reportRepository)
+				.findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+						"comment",
+						List.of(20L)
+				);
+	}
 
 	@Test
 	void returnsUserCommentsInPagedResponse() {

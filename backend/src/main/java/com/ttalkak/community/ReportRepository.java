@@ -11,4 +11,8 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
         List<Long> targetIds
     );
 
+    List<Report> findByTargetTypeAndTargetIdInOrderByCreatedAtDesc(
+            String targetType,
+            List<Long> targetIds
+    );
 }
