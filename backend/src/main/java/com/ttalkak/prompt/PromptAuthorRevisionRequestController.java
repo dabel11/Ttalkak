@@ -1,5 +1,7 @@
 package com.ttalkak.prompt;
 
+import com.ttalkak.admin.AdminAuditLog;
+import com.ttalkak.admin.AdminAuditLogRepository;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.common.exception.ApiException;
 import jakarta.transaction.Transactional;
@@ -30,17 +32,21 @@ public class PromptAuthorRevisionRequestController {
     private final PromptAuthorRevisionRequestRepository requestRepository;
     private final PromptRepository promptRepository;
     private final AuthService authService;
+    private final AdminAuditLogRepository adminAuditLogRepository;
 
     public PromptAuthorRevisionRequestController(
             PromptAuthorRevisionRequestRepository requestRepository,
             PromptRepository promptRepository,
-            AuthService authService
+            AuthService authService,
+            AdminAuditLogRepository adminAuditLogRepository
     ) {
         this.requestRepository = requestRepository;
         this.promptRepository = promptRepository;
         this.authService = authService;
+        this.adminAuditLogRepository = adminAuditLogRepository;
     }
 
+    @Transactional
     @PostMapping(
             "/api/admin/prompts/{promptId}/author-revision-requests"
     )
@@ -53,6 +59,10 @@ public class PromptAuthorRevisionRequestController {
             ) String authorization
     ) {
         Long adminId = requireMemberId(authorization);
+        String adminNickname = normalizeNickname(
+                authService.currentNickname(authorization),
+                "관리자"
+        );
 
         PromptPost prompt = promptRepository.findById(promptId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -78,8 +88,9 @@ public class PromptAuthorRevisionRequestController {
                 promptId,
                 Set.of("pending", "acknowledged")
         )) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     HttpStatus.CONFLICT,
+                    "AUTHOR_REVISION_REQUEST_ALREADY_ACTIVE",
                     "이미 처리 중인 관리자 수정 요청이 있습니다."
             );
         }
@@ -96,16 +107,19 @@ public class PromptAuthorRevisionRequestController {
                                 "작성자"
                         ),
                         adminId,
-                        normalizeNickname(
-                                authService.currentNickname(
-                                        authorization
-                                ),
-                                "관리자"
-                        ),
+                        adminNickname,
                         message
                 );
 
         requestRepository.save(revisionRequest);
+
+        recordAudit(
+                adminId,
+                adminNickname,
+                "AUTHOR_REVISION_REQUEST_CREATE",
+                revisionRequest,
+                "관리자 수정 요청 생성"
+        );
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -124,7 +138,11 @@ public class PromptAuthorRevisionRequestController {
                     required = false
             ) String authorization
     ) {
-        requireMemberId(authorization);
+        Long adminId = requireMemberId(authorization);
+        String adminNickname = normalizeNickname(
+                authService.currentNickname(authorization),
+                "관리자"
+        );
 
         PromptAuthorRevisionRequest revisionRequest =
                 requestRepository.findById(requestId)
@@ -151,6 +169,14 @@ public class PromptAuthorRevisionRequestController {
         }
 
         requestRepository.save(revisionRequest);
+
+        recordAudit(
+                adminId,
+                adminNickname,
+                "AUTHOR_REVISION_REQUEST_UPDATE",
+                revisionRequest,
+                "관리자 수정 요청 내용 변경"
+        );
 
         return toResponse(revisionRequest);
     }
@@ -304,6 +330,33 @@ public class PromptAuthorRevisionRequestController {
                 );
 
         return body;
+    }
+
+    private void recordAudit(
+            Long adminId,
+            String adminNickname,
+            String action,
+            PromptAuthorRevisionRequest revisionRequest,
+            String operation
+    ) {
+        String detail = String.format(
+                "요청 ID: %d, 게시물 ID: %d, 게시물 제목: %s, %s",
+                revisionRequest.getId(),
+                revisionRequest.getPromptId(),
+                revisionRequest.getPromptTitle(),
+                operation
+        );
+
+        adminAuditLogRepository.save(
+                new AdminAuditLog(
+                        adminId,
+                        adminNickname,
+                        action,
+                        "AUTHOR_REVISION_REQUEST",
+                        revisionRequest.getId(),
+                        detail
+                )
+        );
     }
 
     private Long requireMemberId(String authorization) {

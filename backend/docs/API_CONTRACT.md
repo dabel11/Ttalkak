@@ -582,6 +582,59 @@ PATCH /api/admin/tags/{id}/status
 
 ---
 
+
+## 13-1. 관리자 → 작성자 수정 요청
+
+### 수정 요청 생성
+
+```text
+POST /api/admin/prompts/{promptId}/author-revision-requests
+```
+
+요청 본문:
+
+```json
+{
+  "message": "수정 요청 내용"
+}
+```
+
+동일한 게시물에 `pending` 또는 `acknowledged` 상태의 요청이 이미 존재하면 `409 CONFLICT`를 반환합니다.
+
+```json
+{
+  "code": "AUTHOR_REVISION_REQUEST_ALREADY_ACTIVE",
+  "message": "이미 처리 중인 관리자 수정 요청이 있습니다."
+}
+```
+
+### 수정 요청 내용 변경
+
+```text
+PATCH /api/admin/author-revision-requests/{requestId}
+```
+
+요청 본문:
+
+```json
+{
+  "message": "변경된 수정 요청 내용"
+}
+```
+
+수정 요청 내용은 작성자가 아직 확인하지 않은 `pending` 상태에서만 변경할 수 있습니다.
+
+* `pending`: 수정 가능
+* `acknowledged`: 수정 불가
+* `completed`: 수정 불가
+* `rejected`: 수정 불가
+
+수정할 수 없는 상태에서 요청하면 `409 CONFLICT`를 반환합니다.
+
+관리자 수정 요청 생성과 내용 변경은 관리자 감사 로그에 기록됩니다.
+
+---
+
 ## 14. 관리자 감사 로그
 
 관리자의 주요 데이터 변경 작업은 감사 로그로 저장됩니다.
@@ -596,6 +649,8 @@ PATCH /api/admin/tags/{id}/status
 * 댓글 숨김
 * 댓글 숨김 해제
 * 관리자 댓글 삭제
+* 관리자 수정 요청 생성
+* 관리자 수정 요청 내용 변경
 * 태그 상태 변경
 
 ### 감사 로그 조회
@@ -653,7 +708,9 @@ GET /api/admin/audit-logs
 | `PROMPT_RESTORE`       | 게시물 복구         |
 | `COMMENT_HIDE`         | 댓글 숨김           |
 | `COMMENT_RESTORE`      | 댓글 숨김 해제       |
-| `COMMENT_DELETE`       | 관리자 댓글 삭제     |
+| `COMMENT_DELETE`                       | 관리자 댓글 삭제           |
+| `AUTHOR_REVISION_REQUEST_CREATE`       | 관리자 수정 요청 생성      |
+| `AUTHOR_REVISION_REQUEST_UPDATE`       | 관리자 수정 요청 내용 변경 |
 | `TAG_STATUS_CHANGE`    | 태그 상태 변경       |
 
 ### targetType 값
@@ -663,6 +720,7 @@ USER
 REPORT
 PROMPT
 COMMENT
+AUTHOR_REVISION_REQUEST
 TAG
 ```
 
