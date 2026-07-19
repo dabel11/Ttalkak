@@ -4519,7 +4519,7 @@ async function moveThreadToFolder(threadId, folderId) {
 }
 
 async function moveThreadToFolderOnBackend(thread, backendFolderId) {
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.moveMakeThread) return canUseDemoFallback();
 
   const backendThreadId = await ensureBackendMakeThreadId(thread);
@@ -4532,15 +4532,16 @@ async function moveThreadToFolderOnBackend(thread, backendFolderId) {
     await api.moveMakeThread(
       backendThreadId,
       { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
-      getAuthToken() || undefined,
+      getMakeApiToken(),
     );
     return true;
   } catch (error) {
-    handleBackendAccessError(
+    handleMakeBackendSyncError(
       error,
-      canUseDemoFallback() ? "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다." : "대화 폴더 이동 요청에 실패했습니다.",
+      "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "대화 폴더 이동 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/threads/{id}/folder 호출에 실패했습니다.",
     );
-    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패했습니다.", error);
     return false;
   }
 }
@@ -7274,25 +7275,39 @@ async function runPromptStateMutation(action, promptId, fallbackMessage) {
   }
 }
 
+function getMakeApi() {
+  return window.TTALKAK_API || {};
+}
+
+function getMakeApiToken() {
+  return getAuthToken() || undefined;
+}
+
+function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
+  handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
+  if (logMessage) console.warn(logMessage, error);
+}
+
 async function createBackendMakeFolder(payload) {
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.createMakeFolder) return "";
 
   try {
-    const result = await api.createMakeFolder(payload, getAuthToken() || undefined);
+    const result = await api.createMakeFolder(payload, getMakeApiToken());
     return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
   } catch (error) {
-    handleBackendAccessError(
+    handleMakeBackendSyncError(
       error,
-      canUseDemoFallback() ? "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다." : "폴더 생성 요청에 실패했습니다.",
+      "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.",
+      "폴더 생성 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.",
     );
-    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.", error);
     return "";
   }
 }
 
 async function createBackendMakeThread(thread) {
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.createMakeThread || !thread) return "";
 
   const messages = Array.isArray(thread.messages) && thread.messages.length
@@ -7322,16 +7337,17 @@ async function createBackendMakeThread(thread) {
 
     const result = await api.createMakeThread(
       payload,
-      getAuthToken() || undefined,
+      getMakeApiToken(),
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
   } catch (error) {
-    handleBackendAccessError(
+    handleMakeBackendSyncError(
       error,
-      canUseDemoFallback() ? "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다." : "대화 저장 요청에 실패했습니다.",
+      "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.",
+      "대화 저장 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/threads 저장 호출에 실패했습니다.",
       { keepSession: true },
     );
-    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패했습니다.", error);
     return "";
   }
 }
@@ -7364,7 +7380,7 @@ function isBackendNumericId(value) {
 }
 
 async function improvePromptWithBackend(prompt) {
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.improvePrompt) {
     if (canUseDemoFallback()) return polishPrompt(prompt);
     const error = new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다.");
@@ -7373,7 +7389,7 @@ async function improvePromptWithBackend(prompt) {
   }
 
   try {
-    const improved = await api.improvePrompt({ prompt }, getAuthToken() || undefined);
+    const improved = await api.improvePrompt({ prompt }, getMakeApiToken());
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
     const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
@@ -7437,7 +7453,7 @@ async function syncMakeThreadWithBackend(threadId) {
 async function hydrateBackendMakeDataIfNeeded() {
   if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
 
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.getMakeThreads && !api?.getMakeFolders) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = canUseDemoFallback()
@@ -7451,8 +7467,8 @@ async function hydrateBackendMakeDataIfNeeded() {
   state.makeBackendMessage = "Make API 연결 확인 중";
 
   const [threadsResult, foldersResult] = await Promise.allSettled([
-    api.getMakeThreads?.(getAuthToken() || undefined),
-    api.getMakeFolders?.(getAuthToken() || undefined),
+    api.getMakeThreads?.(getMakeApiToken()),
+    api.getMakeFolders?.(getMakeApiToken()),
   ]);
 
   let shouldRender = false;
