@@ -2,31 +2,21 @@
   "use strict";
 
   function MakePageView(ctx, data) {
-    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { icons, escapeHtml } = ctx;
     const {
       composerHtml,
       hasMessages,
       messages,
-      promptTemplates,
       renderMessageBubble,
       sidePanelHtml,
-      templateCollapsed,
+      templateBarHtml,
     } = data;
 
     return `
       <section class="make-page" aria-label="프롬프트 첨삭">
         ${sidePanelHtml}
         <div class="chat-feed">
-          <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-            <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">${templateCollapsed ? "&gt;" : "&lt;"}</button>
-            ${
-              templateCollapsed
-                ? ""
-                : `<div class="template-list">
-                    ${promptTemplates.map((template) => `<button type="button" data-template="${escapeAttr(template.id)}">${escapeHtml(template.label)}</button>`).join("")}
-                  </div>`
-            }
-          </div>
+          ${templateBarHtml}
           ${
             hasMessages
               ? messages.map(renderMessageBubble).join("")
@@ -39,6 +29,24 @@
         </div>
         ${composerHtml}
       </section>
+    `;
+  }
+
+  function MakeTemplateBarView(ctx, data) {
+    const { escapeAttr, escapeHtml } = ctx;
+    const { promptTemplates, templateCollapsed } = data;
+
+    return `
+      <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">${templateCollapsed ? "&gt;" : "&lt;"}</button>
+        ${
+          templateCollapsed
+            ? ""
+            : `<div class="template-list">
+                ${promptTemplates.map((template) => `<button type="button" data-template="${escapeAttr(template.id)}">${escapeHtml(template.label)}</button>`).join("")}
+              </div>`
+        }
+      </div>
     `;
   }
 
@@ -238,6 +246,7 @@
     MakeFolderButtonView,
     MakePageView,
     MakeSidePanelView,
+    MakeTemplateBarView,
     MessageBubbleView,
   });
 })(window);

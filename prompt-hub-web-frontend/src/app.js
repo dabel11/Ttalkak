@@ -47,6 +47,7 @@ const {
   MakeFolderButtonView,
   MakePageView,
   MakeSidePanelView,
+  MakeTemplateBarView,
   MessageBubbleView,
   MyCommentsPanelView,
   MyPromptsPanelView,
@@ -63,7 +64,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1264,9 +1265,18 @@ function MakePage() {
       composerHtml: MakeComposer(hasMessages),
       hasMessages,
       messages: state.messages,
-      promptTemplates,
       renderMessageBubble: MessageBubble,
       sidePanelHtml: MakeSidePanel(),
+      templateBarHtml: MakeTemplateBar(),
+    },
+  );
+}
+
+function MakeTemplateBar() {
+  return MakeTemplateBarView(
+    { escapeAttr, escapeHtml },
+    {
+      promptTemplates,
       templateCollapsed: state.templateCollapsed,
     },
   );
