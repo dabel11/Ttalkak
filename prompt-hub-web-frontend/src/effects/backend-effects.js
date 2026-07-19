@@ -66,8 +66,152 @@
     ).trim();
   }
 
+  function applyBackendHomePromptsResult(ctx, result, page) {
+    const { popularPrompts, state, updateBackendHomePageMeta, normalizePersistedLikeCounts } = ctx;
+    if (!Array.isArray(result?.items)) return false;
+
+    popularPrompts.splice(
+      0,
+      popularPrompts.length,
+      ...result.items.map((prompt) => ({
+        ...prompt,
+        source: prompt.source || "community",
+        isShared: prompt.isShared ?? true,
+      })),
+    );
+    updateBackendHomePageMeta(result, page);
+    normalizePersistedLikeCounts();
+    return true;
+  }
+
+  function applyBackendHomeTagsResult(ctx, tags) {
+    const { state } = ctx;
+    if (!Array.isArray(tags)) return false;
+
+    state.backendPopularTags = tags.slice(0, 8);
+    return true;
+  }
+
+  function applyMakeFoldersResult(ctx, folders) {
+    const { normalizeMakeFolders, state } = ctx;
+    if (!Array.isArray(folders)) return false;
+
+    const validFolders = folders.filter((folder) => folder.id && folder.name);
+    if (!validFolders.length) return false;
+
+    state.makeFolders = normalizeMakeFolders(validFolders);
+    return true;
+  }
+
+  function applyMakeThreadsResult(ctx, threads) {
+    const { isBackendNumericId, makePreview, normalizeRecentThreads, state } = ctx;
+    if (!Array.isArray(threads)) return false;
+
+    const validThreads = threads.filter((thread) => thread.id);
+    if (!validThreads.length) return false;
+
+    state.recentThreads = validThreads.map((thread) => ({
+      id: thread.id,
+      dedupeKey: thread.id,
+      serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
+      title: thread.title || "새 대화",
+      preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
+      folderId: thread.folderId || "uncategorized",
+      createdAt: thread.createdAt || Date.now(),
+      messages: Array.isArray(thread.messages) ? thread.messages : [],
+    }));
+    normalizeRecentThreads();
+    return true;
+  }
+
+  function applyMyLibraryResult(ctx, result) {
+    const { popularPrompts, savedPrompts, state, upsertPrompt } = ctx;
+    if (!Array.isArray(result?.items)) return false;
+
+    state.backendLibraryPromptIds = new Set();
+    state.backendLibraryPrompts = result.items.map((prompt) => {
+      const normalized = {
+        ...prompt,
+        source: prompt.source || (prompt.isMine ? "mine" : "community"),
+        savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
+      };
+      upsertPrompt(savedPrompts, normalized);
+      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+      state.userLibraryPromptIds.add(normalized.id);
+      state.backendLibraryPromptIds.add(normalized.id);
+      return normalized;
+    });
+    return true;
+  }
+
+  function applyLikedLibraryResult(ctx, result) {
+    const { popularPrompts, savedPrompts, state, upsertPrompt } = ctx;
+    if (!Array.isArray(result?.items)) return false;
+
+    state.backendLikedPrompts = result.items.map((prompt) => {
+      const normalized = {
+        ...prompt,
+        source: prompt.source || (prompt.isMine ? "mine" : "community"),
+        likedByMe: true,
+      };
+      upsertPrompt(savedPrompts, normalized);
+      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+      state.likedPromptIds.add(normalized.id);
+      return normalized;
+    });
+    return true;
+  }
+
+  function applyMyPromptsResult(ctx, result) {
+    const { popularPrompts, savedPrompts, state, upsertPrompt } = ctx;
+    if (!Array.isArray(result?.items)) return false;
+
+    state.backendMyPrompts = result.items.map((prompt) => ({
+      ...prompt,
+      source: "mine",
+      owner: state.currentUser || prompt.owner || prompt.author,
+      author: state.currentUser || prompt.author,
+    }));
+    state.backendMyPrompts.forEach((prompt) => {
+      upsertPrompt(savedPrompts, prompt);
+      if (prompt.isShared) upsertPrompt(popularPrompts, prompt);
+    });
+    return true;
+  }
+
+  function applyMyCommentsResult(ctx, comments) {
+    const { popularPrompts, savedPrompts, state, upsertPrompt } = ctx;
+    if (!Array.isArray(comments)) return false;
+
+    state.backendMyComments = comments;
+    comments.forEach((comment) => {
+      if (comment.prompt) {
+        upsertPrompt(popularPrompts, comment.prompt);
+        upsertPrompt(savedPrompts, comment.prompt);
+      }
+    });
+    return true;
+  }
+
+  function applyMyReportsResult(ctx, reports) {
+    const { state } = ctx;
+    if (!Array.isArray(reports)) return false;
+
+    state.backendMyReports = reports;
+    return true;
+  }
+
   global.TtalkakBackendEffects = Object.freeze({
     ...(global.TtalkakBackendEffects || {}),
+    applyBackendHomePromptsResult,
+    applyBackendHomeTagsResult,
+    applyLikedLibraryResult,
+    applyMakeFoldersResult,
+    applyMakeThreadsResult,
+    applyMyCommentsResult,
+    applyMyLibraryResult,
+    applyMyPromptsResult,
+    applyMyReportsResult,
     getBackendErrorCode,
     getBackendErrorCodeMessage,
     getBackendErrorMessage,

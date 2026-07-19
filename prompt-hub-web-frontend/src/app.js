@@ -45,12 +45,36 @@ if (typeof bindAppEvents !== "function") {
 }
 
 const {
+  applyBackendHomePromptsResult,
+  applyBackendHomeTagsResult,
+  applyLikedLibraryResult,
+  applyMakeFoldersResult,
+  applyMakeThreadsResult,
+  applyMyCommentsResult,
+  applyMyLibraryResult,
+  applyMyPromptsResult,
+  applyMyReportsResult,
   getBackendErrorCode,
   getBackendErrorCodeMessage,
   getBackendErrorMessage,
 } = window.TtalkakBackendEffects || {};
 
-if ([getBackendErrorCode, getBackendErrorCodeMessage, getBackendErrorMessage].some((fn) => typeof fn !== "function")) {
+if (
+  [
+    applyBackendHomePromptsResult,
+    applyBackendHomeTagsResult,
+    applyLikedLibraryResult,
+    applyMakeFoldersResult,
+    applyMakeThreadsResult,
+    applyMyCommentsResult,
+    applyMyLibraryResult,
+    applyMyPromptsResult,
+    applyMyReportsResult,
+    getBackendErrorCode,
+    getBackendErrorCodeMessage,
+    getBackendErrorMessage,
+  ].some((fn) => typeof fn !== "function")
+) {
   throw new Error("TTALKAK 백엔드 후처리 헬퍼를 불러오지 못했습니다.");
 }
 
@@ -7302,6 +7326,21 @@ async function syncMakeThreadWithBackend(threadId) {
   if (serverId) thread.serverId = serverId;
 }
 
+function getBackendDataEffectContext() {
+  return {
+    isBackendNumericId,
+    makePreview,
+    normalizeMakeFolders,
+    normalizePersistedLikeCounts,
+    normalizeRecentThreads,
+    popularPrompts,
+    savedPrompts,
+    state,
+    updateBackendHomePageMeta,
+    upsertPrompt,
+  };
+}
+
 async function hydrateBackendMakeDataIfNeeded() {
   if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
 
@@ -7309,7 +7348,7 @@ async function hydrateBackendMakeDataIfNeeded() {
   if (!api?.getMakeThreads && !api?.getMakeFolders) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = canUseDemoFallback()
-      ? "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다."
+      ? "Make demo data 표시 중: Make API wrapper가 없어 데모 데이터를 표시합니다."
       : getApiFailureMessage("Make API");
     render();
     return;
@@ -7324,33 +7363,16 @@ async function hydrateBackendMakeDataIfNeeded() {
   ]);
 
   let shouldRender = false;
+  const backendDataContext = getBackendDataEffectContext();
 
-  if (foldersResult.status === "fulfilled" && Array.isArray(foldersResult.value)) {
-    const folders = foldersResult.value.filter((folder) => folder.id && folder.name);
-    if (folders.length) {
-      state.makeFolders = normalizeMakeFolders(folders);
-      shouldRender = true;
-    }
+  if (foldersResult.status === "fulfilled") {
+    shouldRender = applyMakeFoldersResult(backendDataContext, foldersResult.value) || shouldRender;
   } else if (foldersResult.status === "rejected") {
     console.warn("[TTALKAK] /api/make/folders 연동에 실패했습니다.", foldersResult.reason);
   }
 
-  if (threadsResult.status === "fulfilled" && Array.isArray(threadsResult.value)) {
-    const threads = threadsResult.value.filter((thread) => thread.id);
-    if (threads.length) {
-      state.recentThreads = threads.map((thread) => ({
-        id: thread.id,
-        dedupeKey: thread.id,
-        serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
-        title: thread.title || "새 대화",
-        preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
-        folderId: thread.folderId || "uncategorized",
-        createdAt: thread.createdAt || Date.now(),
-        messages: Array.isArray(thread.messages) ? thread.messages : [],
-      }));
-      normalizeRecentThreads();
-      shouldRender = true;
-    }
+  if (threadsResult.status === "fulfilled") {
+    shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
   } else if (threadsResult.status === "rejected") {
     console.warn("[TTALKAK] /api/make/threads 연동에 실패했습니다.", threadsResult.reason);
   }
@@ -7358,9 +7380,9 @@ async function hydrateBackendMakeDataIfNeeded() {
   const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
   state.makeBackendStatus = anyConnected ? "connected" : "fallback";
   state.makeBackendMessage = anyConnected
-    ? "Make API 연결됨: GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
+    ? "Make API 연결됨. GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
     : canUseDemoFallback()
-      ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다."
+      ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 데이터를 표시합니다."
       : getApiFailureMessage("Make API");
 
   if (shouldRender || state.route === "make") render();
@@ -7395,98 +7417,35 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
   );
 
   let shouldRender = false;
-  shouldRender = applyMyLibraryResult(libraryResult) || shouldRender;
-  if (libraryResult.status === "rejected") {
+  const backendDataContext = getBackendDataEffectContext();
+
+  if (libraryResult.status === "fulfilled") {
+    shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
+  } else {
     console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
   }
 
-  shouldRender = applyLikedLibraryResult(likedLibraryResult) || shouldRender;
-  if (likedLibraryResult.status === "rejected") {
+  if (likedLibraryResult.status === "fulfilled") {
+    shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
+  } else {
     console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
   }
 
-  shouldRender = applyMyPromptsResult(promptsResult) || shouldRender;
-  if (promptsResult.status === "rejected") {
+  if (promptsResult.status === "fulfilled") {
+    shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
+  } else {
     console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
   }
 
-  shouldRender = applyMyCommentsResult(commentsResult) || shouldRender;
-  shouldRender = applyMyReportsResult(reportsResult) || shouldRender;
+  if (commentsResult.status === "fulfilled") {
+    shouldRender = applyMyCommentsResult(backendDataContext, commentsResult.value) || shouldRender;
+  }
+  if (reportsResult.status === "fulfilled") {
+    shouldRender = applyMyReportsResult(backendDataContext, reportsResult.value) || shouldRender;
+  }
 
   state.myBackendStatus = allRequestsFailed ? "fallback" : "connected";
   if (shouldRender || allRequestsFailed) render();
-}
-
-function applyMyLibraryResult(result) {
-  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
-
-  state.backendLibraryPromptIds = new Set();
-  state.backendLibraryPrompts = result.value.items.map((prompt) => {
-    const normalized = {
-      ...prompt,
-      source: prompt.source || (prompt.isMine ? "mine" : "community"),
-      savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
-    };
-    upsertPrompt(savedPrompts, normalized);
-    if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
-    state.userLibraryPromptIds.add(normalized.id);
-    state.backendLibraryPromptIds.add(normalized.id);
-    return normalized;
-  });
-  return true;
-}
-
-function applyLikedLibraryResult(result) {
-  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
-
-  state.backendLikedPrompts = result.value.items.map((prompt) => {
-    const normalized = {
-      ...prompt,
-      source: prompt.source || (prompt.isMine ? "mine" : "community"),
-      likedByMe: true,
-    };
-    upsertPrompt(savedPrompts, normalized);
-    if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
-    state.likedPromptIds.add(normalized.id);
-    return normalized;
-  });
-  return true;
-}
-
-function applyMyPromptsResult(result) {
-  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
-
-  state.backendMyPrompts = result.value.items.map((prompt) => ({
-    ...prompt,
-    source: "mine",
-    owner: state.currentUser || prompt.owner || prompt.author,
-    author: state.currentUser || prompt.author,
-  }));
-  state.backendMyPrompts.forEach((prompt) => {
-    upsertPrompt(savedPrompts, prompt);
-    if (prompt.isShared) upsertPrompt(popularPrompts, prompt);
-  });
-  return true;
-}
-
-function applyMyCommentsResult(result) {
-  if (result.status !== "fulfilled" || !Array.isArray(result.value)) return false;
-
-  state.backendMyComments = result.value;
-  result.value.forEach((comment) => {
-    if (comment.prompt) {
-      upsertPrompt(popularPrompts, comment.prompt);
-      upsertPrompt(savedPrompts, comment.prompt);
-    }
-  });
-  return true;
-}
-
-function applyMyReportsResult(result) {
-  if (result.status !== "fulfilled" || !Array.isArray(result.value)) return false;
-
-  state.backendMyReports = result.value;
-  return true;
 }
 
 function getAdminHydrationEffectContext() {
@@ -7745,7 +7704,7 @@ async function hydrateBackendHomeData() {
   if (!api?.getCommunityPosts) {
     state.backendStatus = "fallback";
     state.backendStatusMessage = canUseDemoFallback()
-      ? "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다."
+      ? "src/api.js? ??? ? ?? ?? ???? ?? ????."
       : getApiFailureMessage("Home API");
     render();
     return;
@@ -7757,38 +7716,27 @@ async function hydrateBackendHomeData() {
   ]);
 
   let shouldRender = false;
+  const backendDataContext = getBackendDataEffectContext();
 
-  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
-    popularPrompts.splice(
-      0,
-      popularPrompts.length,
-      ...promptsResult.value.items.map((prompt) => ({
-        ...prompt,
-        source: prompt.source || "community",
-        isShared: prompt.isShared ?? true,
-      })),
-    );
-    updateBackendHomePageMeta(promptsResult.value, state.popularPage);
-    normalizePersistedLikeCounts();
+  if (promptsResult.status === "fulfilled" && applyBackendHomePromptsResult(backendDataContext, promptsResult.value, state.popularPage)) {
     state.backendStatus = "connected";
-    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+    state.backendStatusMessage = "GET http://localhost:8080/api/prompts ???? Home ??? ??? ????.";
     shouldRender = true;
   } else if (promptsResult.status === "rejected") {
     state.backendStatus = "fallback";
     state.backendStatusMessage = canUseDemoFallback()
-      ? "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다."
+      ? "GET http://localhost:8080/api/prompts ??? ??? ?? ???? ?? ????."
       : getApiFailureMessage("Home API");
-    console.warn("[TTALKAK] /api/prompts 연동에 실패했습니다.", promptsResult.reason);
+    console.warn("[TTALKAK] /api/prompts ??? ??????.", promptsResult.reason);
   }
 
-  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
-    state.backendPopularTags = tagsResult.value.slice(0, 8);
+  if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
     if (state.backendStatus === "connected") {
-      state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
+      state.backendStatusMessage = "GET /api/prompts? GET /api/tags/popular ??? Home? ?? ????.";
     }
     shouldRender = true;
   } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/tags/popular 연동에 실패했습니다.", tagsResult.reason);
+    console.warn("[TTALKAK] /api/tags/popular ??? ??????.", tagsResult.reason);
   }
 
   if (shouldRender || state.backendStatus === "fallback") render();
@@ -7802,7 +7750,7 @@ async function refreshBackendHomePrompts() {
   const scope = getValidSearchScope(state.searchScope);
   const page = Math.max(1, Number(state.popularPage) || 1);
   const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort, page });
-  state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
+  state.backendStatusMessage = "GET /api/prompts ?? ??? ???? ?? ????.";
 
   try {
     const result = await api.searchCommunityPosts({
@@ -7815,34 +7763,22 @@ async function refreshBackendHomePrompts() {
     if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort, page: Math.max(1, Number(state.popularPage) || 1) })) {
       return;
     }
-    if (Array.isArray(result?.items)) {
-      popularPrompts.splice(
-        0,
-        popularPrompts.length,
-        ...result.items.map((prompt) => ({
-          ...prompt,
-          source: prompt.source || (prompt.isMine ? "mine" : "community"),
-          isShared: prompt.isShared ?? true,
-        })),
-      );
-      updateBackendHomePageMeta(result, page);
+    if (applyBackendHomePromptsResult(getBackendDataEffectContext(), result, page)) {
       state.backendStatus = "connected";
       state.backendStatusMessage = query
-        ? `GET /api/prompts?scope=${scope}&query=... 검색 결과를 Home에 반영 중입니다.`
-        : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
-      normalizePersistedLikeCounts();
+        ? "GET /api/prompts?scope=" + scope + "&query=... ?? ??? Home? ?? ????."
+        : "GET /api/prompts ???? Home ??? ??? ????.";
       render();
     }
   } catch (error) {
     state.backendStatus = "fallback";
     state.backendStatusMessage = canUseDemoFallback()
-      ? "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다."
-      : getApiFailureMessage("Home 검색 API");
-    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패했습니다.", error);
+      ? "?? API ??? ??? ?? ??? ?? ??? ?????."
+      : getApiFailureMessage("Home ?? API");
+    console.warn("[TTALKAK] /api/prompts ?? ??? ??????.", error);
     render();
   }
 }
-
 loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
