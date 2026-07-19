@@ -1,4 +1,4 @@
-﻿const {
+const {
   normalizeSearchText,
   normalizeTag,
   isValidPhone,
@@ -52,6 +52,17 @@ const {
 
 if ([getBackendErrorCode, getBackendErrorCodeMessage, getBackendErrorMessage].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 백엔드 후처리 헬퍼를 불러오지 못했습니다.");
+}
+
+const {
+  STORAGE_KEY,
+  AUTH_TOKEN_KEY,
+  DEMO_AUTH_TOKEN,
+  createInitialState,
+} = window.TtalkakState || {};
+
+if (!STORAGE_KEY || !AUTH_TOKEN_KEY || !DEMO_AUTH_TOKEN || typeof createInitialState !== "function") {
+  throw new Error("TTALKAK 상태 헬퍼를 불러오지 못했습니다.");
 }
 
 const {
@@ -375,9 +386,6 @@ const promptTemplates = [
 ];
 
 const FREE_MAKE_LIMIT = 3;
-const STORAGE_KEY = "prompt_hub_web_state_v2";
-const AUTH_TOKEN_KEY = "ttalkak_access_token";
-const DEMO_AUTH_TOKEN = "demo-token";
 const WITHDRAWN_AUTHOR_LABEL = "탈퇴한 사용자";
 const PROTECTED_BACKEND_ACTIONS = new Set([
   "addComment",
@@ -471,120 +479,7 @@ const demoCommentBackfill = {
   ],
 };
 
-const state = {
-  route: "home",
-  authView: null,
-  detailPromptId: null,
-  detailHighlightCommentId: null,
-  reportPromptId: null,
-  reportCommentId: null,
-  editingPromptId: null,
-  adminRequestTargetKey: null,
-  adminBlockTarget: null,
-  editingMessageId: null,
-  executeMessageId: null,
-  executePromptId: null,
-  confirmAction: null,
-  hideReportedPrompts: false,
-  adminMode: false,
-  adminHiddenPromptIds: new Set(),
-  adminTagDecisions: {},
-  adminTab: "reports",
-  adminReportFilter: "all",
-  adminPromptQuery: "",
-  adminPromptFilter: "all",
-  adminTagQuery: "",
-  adminTagFilter: "all",
-  adminTagSort: "usage",
-  adminTagPromptKey: "",
-  adminUserQuery: "",
-  adminUserActivityNickname: "",
-  adminUserSearchResults: [],
-  adminUserSearchMessage: "",
-  adminPromptRevisionRequests: {},
-  reportRecords: {},
-  isLoggedIn: false,
-  currentUser: null,
-  currentUserId: null,
-  currentUserRole: "user",
-  authToken: "",
-  token: "",
-  accountScopes: {},
-  isComposingSearch: false,
-  isComposingShareTag: false,
-  isComposingAdminPromptSearch: false,
-  isComposingAdminTagSearch: false,
-  authDraft: {},
-  authDuplicateChecks: {},
-  authUserIdWarning: "",
-  authError: "",
-  libraryDemoSeeded: false,
-  userLibraryPromptIds: new Set(),
-  searchTipShown: false,
-  searchTipVisible: false,
-  openFolderMenuId: null,
-  openThreadMenuId: null,
-  creatingThreadFolderId: null,
-  openPromptCardMenuId: null,
-  searchScope: "all",
-  searchQuery: "",
-  backendHomePage: {
-    page: 1,
-    size: HOME_PAGE_SIZE,
-    totalPages: 1,
-    totalElements: 0,
-  },
-  backendPopularTags: [],
-  backendStatus: "checking",
-  backendStatusMessage: "백엔드 연결 확인 중",
-  myBackendStatus: "idle",
-  adminBackendStatus: "idle",
-  backendMyPrompts: [],
-  backendMyComments: [],
-  backendMyReports: [],
-  backendLibraryPrompts: [],
-  backendLikedPrompts: [],
-  backendLibraryPromptIds: new Set(),
-  backendAdminReports: [],
-  backendAdminReportsLoaded: false,
-  backendAdminTags: [],
-  backendAdminPrompts: [],
-  backendAdminRevisionRequests: [],
-  backendAdminUserActivities: {},
-  backendAdminAuditLogs: [],
-  adminAuditSyncMessage: "",
-  makeBackendStatus: "idle",
-  makeBackendMessage: "",
-  popularSort: "popular",
-  popularPage: 1,
-  savedPage: 1,
-  savedSort: "recent",
-  myPageTab: "library",
-  shareError: "",
-  shareTagQuery: "",
-  notice: "",
-  expandedComments: {},
-  replyingCommentId: null,
-  editingCommentId: null,
-  likedPromptIds: new Set(),
-  likedCommentIds: new Set(),
-  reportedPromptIds: new Set(),
-  reportedCommentIds: new Set(),
-  pendingUnsaveIds: new Set(),
-  composerDraft: "",
-  templateCollapsed: false,
-  guestImproveCount: 0,
-  shareDraft: null,
-  savedFilter: { community: true, mine: true, liked: false },
-  messages: [],
-  recentThreads: [],
-  makeFolders: [{ id: "uncategorized", name: "미분류" }],
-  activeFolderId: "all",
-  creatingFolder: false,
-  editingFolderId: null,
-  activeThreadId: null,
-  copiedMessageId: "",
-};
+const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 
 let templateToggleTimer = null;
 
