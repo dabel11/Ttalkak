@@ -43,6 +43,7 @@ const {
   AuthModalView,
   ExecuteModalView,
   HomePageView,
+  MakeFolderButtonView,
   MakePageView,
   MakeSidePanelView,
   MyCommentsPanelView,
@@ -60,7 +61,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakePageView, MakeSidePanelView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1308,41 +1309,24 @@ function MakeSidePanel() {
 }
 
 function MakeFolderButton(folderId, name, count) {
-  const safeFolderId = escapeAttr(folderId);
   const isUserFolder = folderId !== "all" && folderId !== "uncategorized";
   const canManage = state.isLoggedIn && isUserFolder;
   const isEditing = canManage && state.editingFolderId === folderId;
   const isMenuOpen = canManage && state.openFolderMenuId === folderId;
-  if (isEditing) {
-    return `
-      <form class="make-folder-edit-form" data-folder-edit-form="${safeFolderId}">
-        <input name="folderName" value="${escapeAttr(name)}" />
-        <button type="submit">저장</button>
-        <button type="button" data-cancel-folder-edit>취소</button>
-      </form>
-    `;
-  }
 
-  return `
-    <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${safeFolderId}">
-      <button type="button" data-open-folder="${safeFolderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
-      ${
-        canManage
-          ? `<div class="make-folder-menu-wrap">
-              <button class="make-folder-more" type="button" data-folder-menu="${safeFolderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
-              ${
-                isMenuOpen
-                  ? `<div class="make-folder-menu" role="menu">
-                      <button type="button" data-edit-folder="${safeFolderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
-                      <button type="button" data-delete-folder="${safeFolderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
-                    </div>`
-                  : ""
-              }
-            </div>`
-          : ""
-      }
-    </div>
-  `;
+  return MakeFolderButtonView(
+    { icons, escapeAttr, escapeHtml, formatNumber },
+    {
+      canManage,
+      count,
+      folderId,
+      isActive: state.activeFolderId === folderId,
+      isEditing,
+      isMenuOpen,
+      isUserFolder,
+      name,
+    },
+  );
 }
 
 function MessageBubble(message) {

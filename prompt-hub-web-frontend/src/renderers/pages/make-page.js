@@ -141,8 +141,46 @@
     `;
   }
 
+  function MakeFolderButtonView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml, formatNumber } = ctx;
+    const { canManage, count, folderId, isActive, isEditing, isMenuOpen, isUserFolder, name } = data;
+    const safeFolderId = escapeAttr(folderId);
+
+    if (isEditing) {
+      return `
+        <form class="make-folder-edit-form" data-folder-edit-form="${safeFolderId}">
+          <input name="folderName" value="${escapeAttr(name)}" />
+          <button type="submit">저장</button>
+          <button type="button" data-cancel-folder-edit>취소</button>
+        </form>
+      `;
+    }
+
+    return `
+      <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${isActive ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${safeFolderId}">
+        <button type="button" data-open-folder="${safeFolderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
+        ${
+          canManage
+            ? `<div class="make-folder-menu-wrap">
+                <button class="make-folder-more" type="button" data-folder-menu="${safeFolderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
+                ${
+                  isMenuOpen
+                    ? `<div class="make-folder-menu" role="menu">
+                        <button type="button" data-edit-folder="${safeFolderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
+                        <button type="button" data-delete-folder="${safeFolderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                      </div>`
+                    : ""
+                }
+              </div>`
+            : ""
+        }
+      </div>
+    `;
+  }
+
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
+    MakeFolderButtonView,
     MakePageView,
     MakeSidePanelView,
   });
