@@ -93,6 +93,7 @@ The previous direct RAG URL setting is no longer the intended frontend path.
 
 `public/manifest.json` is the development manifest and keeps localhost permissions for local testing.
 `manifest.production.example.json` is the production manifest template and is used by `npm run build:prod`.
+See `docs/WEB_STORE_RELEASE_CHECKLIST.md` for the Chrome Web Store release checklist and backend CORS handoff steps.
 
 For production packaging:
 
@@ -104,3 +105,14 @@ For production packaging:
 6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
 
 Production builds fail fast when `VITE_BACKEND_API_URL` is missing, so a package with an empty Backend API URL is not created by mistake.
+
+## Production Extension ID
+
+The production Extension ID is not known until the extension is registered in Chrome Web Store.
+After registration, share the origin below with the backend team so Spring Boot can allow it in CORS/security settings:
+
+```text
+chrome-extension://{productionExtensionId}
+```
+
+Unpacked local development extension IDs can differ by machine, so they should not be used as production allowlist values.

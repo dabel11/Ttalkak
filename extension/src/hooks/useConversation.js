@@ -233,7 +233,7 @@ export function useConversation({
           content:
             data.answer ||
             data.ragMessage ||
-            `"${prompt}"와 관련된 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`,
+            `"${prompt}"와 관련된 근거를 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`,
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
           sources: data.sources || [],
@@ -294,7 +294,7 @@ export function useConversation({
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: isNetwork
-            ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
+            ? "Backend API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
             : `오류가 발생했습니다.\n\n${err.message}`,
           executablePrompt: null,
           sourcePrompt: prompt,
@@ -311,7 +311,7 @@ export function useConversation({
   function requestDeleteRecentThread(id, setConfirmAction) {
     if (isLoggedIn) {
       setConfirmAction({
-        title: "서버 최근 대화",
+        title: "서버 최근 대화 삭제",
         message: "서버 최근 대화 삭제 API가 준비되면 삭제할 수 있습니다. 현재는 웹과 동일한 서버 목록을 표시합니다.",
         confirmLabel: "확인",
         onConfirm: () => {},
