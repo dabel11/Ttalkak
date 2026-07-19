@@ -45,8 +45,105 @@
     `;
   }
 
+  function MakeSidePanelView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml, formatShortDate } = ctx;
+    const {
+      activeFolderName,
+      activeThreadId,
+      canCreateFolder,
+      canManageFolders,
+      canStartThreadFolderCreate,
+      creatingFolder,
+      creatingThreadFolderId,
+      customFolderCount,
+      folders,
+      makeBackendMessage,
+      maxCustomFolders,
+      openThreadMenuId,
+      renderFolderButton,
+      threadCount,
+      visibleFolders,
+      visibleThreads,
+      getThreadFolderId,
+    } = data;
+
+    return `
+      <aside class="make-side-panel" aria-label="Make 최근 대화">
+        <section class="make-folder-section">
+          <div class="make-side-head">
+            <strong>폴더</strong>
+            <button type="button" data-show-folder-form ${canCreateFolder ? "" : "disabled"} title="${canManageFolders ? (canCreateFolder ? "새 폴더 만들기" : `폴더는 최대 ${maxCustomFolders}개까지 만들 수 있습니다.`) : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">새 폴더</button>
+          </div>
+          ${!canManageFolders ? `<p class="make-folder-limit">로그인하면 대화를 폴더로 정리할 수 있습니다.</p>` : ""}
+          ${canManageFolders && !canCreateFolder ? `<p class="make-folder-limit">폴더는 최대 ${maxCustomFolders}개까지 만들 수 있습니다.</p>` : ""}
+          ${makeBackendMessage ? `<p class="make-backend-note">${escapeHtml(makeBackendMessage)}</p>` : ""}
+          ${
+            creatingFolder
+              ? `<form class="make-folder-form" data-folder-create-form>
+                  <input name="folderName" type="text" placeholder="폴더 이름" autocomplete="off" />
+                  <button type="submit">추가</button>
+                  <button type="button" data-cancel-folder-create>취소</button>
+                </form>`
+              : ""
+          }
+          <div class="make-folder-list">
+            ${renderFolderButton("all", "전체", threadCount)}
+            ${visibleFolders.map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
+          </div>
+        </section>
+        <div class="make-side-head">
+          <strong>${escapeHtml(activeFolderName)}</strong>
+          <button type="button" data-new-chat>새 대화</button>
+        </div>
+        ${
+          visibleThreads.length
+            ? `<div class="recent-thread-list">
+                ${visibleThreads.map((thread) => `
+                  <article class="recent-thread ${activeThreadId === thread.id ? "active" : ""} ${openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${escapeAttr(thread.id)}">
+                    <button class="recent-thread-main" type="button" data-open-thread="${escapeAttr(thread.id)}">
+                      <strong>${escapeHtml(thread.title)}</strong>
+                      <span>${escapeHtml(thread.preview)}</span>
+                      <small>${formatShortDate(thread.createdAt)}</small>
+                    </button>
+                    <div class="recent-thread-menu-wrap">
+                      <button class="recent-thread-more" type="button" data-thread-menu="${escapeAttr(thread.id)}" aria-label="대화 더보기" aria-expanded="${openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
+                      ${
+                        openThreadMenuId === thread.id
+                          ? `<div class="recent-thread-menu" role="menu">
+                              <label class="recent-thread-folder-field">
+                                <span>폴더 이동</span>
+                                <select class="thread-folder-select" data-thread-folder="${escapeAttr(thread.id)}" aria-label="대화 폴더" ${canManageFolders ? "" : "disabled"} title="${canManageFolders ? "대화 폴더 이동" : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">
+                                  ${folders.map((folder) => `<option value="${escapeAttr(folder.id)}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
+                                </select>
+                              </label>
+                              ${
+                                creatingThreadFolderId === thread.id
+                                  ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${escapeAttr(thread.id)}">
+                                      <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
+                                      <div>
+                                        <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
+                                        <button type="button" data-cancel-thread-folder-create>취소</button>
+                                      </div>
+                                    </form>`
+                                  : `<button type="button" data-start-thread-folder-create="${escapeAttr(thread.id)}" ${canStartThreadFolderCreate ? "" : "disabled"} role="menuitem"><span>+</span><span>새 폴더로 이동...</span></button>`
+                              }
+                              <button type="button" data-delete-thread="${escapeAttr(thread.id)}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                            </div>`
+                          : ""
+                      }
+                    </div>
+                  </article>
+                `).join("")}
+              </div>`
+            : `<p class="recent-empty">아직 저장된 대화가 없습니다.</p>`
+        }
+      </aside>
+    `;
+  }
+
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
     MakePageView,
+    MakeSidePanelView,
   });
 })(window);
