@@ -66,7 +66,35 @@
     if (Array.isArray(payload?.data)) return payload.data;
     if (Array.isArray(payload?.content)) return payload.content;
     if (Array.isArray(payload?.result)) return payload.result;
+    if (payload?.data && typeof payload.data === "object") {
+      if (Array.isArray(payload.data.items)) return payload.data.items;
+      if (Array.isArray(payload.data.content)) return payload.data.content;
+    }
     return [];
+  }
+
+  function unwrapPageMeta(payload) {
+    const root = payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    const source = root.data && typeof root.data === "object" && !Array.isArray(root.data) ? root.data : root;
+    const page = source.page && typeof source.page === "object" ? source.page : {};
+    const totalPages = source.totalPages ?? source.total_pages ?? page.totalPages ?? page.total_pages;
+    const totalElements =
+      source.totalElements ??
+      source.total_elements ??
+      source.total ??
+      source.totalCount ??
+      page.totalElements ??
+      page.total_elements;
+    const pageNumber = source.pageNumber ?? source.currentPage ?? page.number ?? page.pageNumber ?? (typeof source.page === "number" ? source.page : undefined);
+    const pageSize = source.size ?? source.pageSize ?? page.size ?? page.pageSize;
+    const meta = {};
+
+    if (pageNumber !== undefined) meta.page = pageNumber;
+    if (pageSize !== undefined) meta.size = pageSize;
+    if (totalPages !== undefined) meta.totalPages = totalPages;
+    if (totalElements !== undefined) meta.totalElements = totalElements;
+
+    return meta;
   }
 
   function normalizeTags(value) {
@@ -491,6 +519,7 @@
     const payload = await request(`/api/prompts?${query.toString()}`);
     return {
       ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
+      ...unwrapPageMeta(payload),
       items: unwrapItems(payload).map(normalizePrompt),
     };
   }
@@ -545,6 +574,7 @@
       if (author) query.set("author", author);
       return request(`/api/prompts?${query.toString()}`).then((payload) => ({
         ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
+        ...unwrapPageMeta(payload),
         items: unwrapItems(payload).map(normalizePrompt),
       }));
     },

@@ -25,6 +25,17 @@ if (
 ) {
   throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
 }
+
+const {
+  AdminUserBlockDialog,
+  ConfirmDialog,
+  Pagination: BasePagination,
+} = window.TtalkakComponents || {};
+
+if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
+  throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
+}
+
 const popularPrompts = [
   {
     id: "post-1",
@@ -340,6 +351,7 @@ const PROTECTED_BACKEND_ACTIONS = new Set([
   "updateMakeFolder",
 ]);
 const SAVED_PAGE_SIZE = 16;
+const HOME_PAGE_SIZE = 16;
 const SEARCH_DEBOUNCE_MS = 320;
 const MAX_CUSTOM_MAKE_FOLDERS = 5;
 const DEMO_EXISTING_NICKNAMES = ["Google닉네임", "태그지니", "콘텐츠랩", "카피메이커", "박민준", "김지수", "이서연", "나"];
@@ -456,6 +468,12 @@ const state = {
   openPromptCardMenuId: null,
   searchScope: "all",
   searchQuery: "",
+  backendHomePage: {
+    page: 1,
+    size: HOME_PAGE_SIZE,
+    totalPages: 1,
+    totalElements: 0,
+  },
   backendPopularTags: [],
   backendStatus: "checking",
   backendStatusMessage: "백엔드 연결 확인 중",
@@ -665,6 +683,7 @@ function resetHomeView() {
   state.popularPage = 1;
   state.detailPromptId = null;
   state.detailHighlightCommentId = null;
+  if (state.backendStatus === "connected") refreshBackendHomePrompts();
 }
 
 function closeTopModal() {
@@ -830,13 +849,14 @@ function Page() {
 }
 
 function HomePage() {
-  const prompts = applyReportedVisibility(getVisiblePopularPrompts());
+  const isBackendHome = state.backendStatus === "connected";
+  const prompts = applyReportedVisibility(isBackendHome ? getUniquePrompts(popularPrompts) : getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = state.backendStatus === "connected" ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
+  const displayTags = isBackendHome ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
-  const totalPages = getPopularTotalPages(prompts.length);
+  const totalPages = isBackendHome ? getBackendHomeTotalPages() : getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
-  const pagePrompts = prompts.slice((currentPage - 1) * 16, currentPage * 16);
+  const pagePrompts = isBackendHome ? prompts : prompts.slice((currentPage - 1) * HOME_PAGE_SIZE, currentPage * HOME_PAGE_SIZE);
   const isSearching = state.searchQuery.trim().length > 0;
   const searchPlaceholder = getSearchPlaceholder(state.searchScope);
 
@@ -906,16 +926,7 @@ function getSearchPlaceholder(scope) {
 }
 
 function Pagination(totalPages, currentPage) {
-  if (totalPages <= 1) return "";
-
-  return `
-    <nav class="pagination" aria-label="인기 프롬프트 페이지">
-      ${Array.from({ length: totalPages }, (_, index) => {
-        const page = index + 1;
-        return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" data-page="${page}" aria-label="${page}페이지">${page}</button>`;
-      }).join("")}
-    </nav>
-  `;
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-page", ariaLabel: "인기 프롬프트 페이지" });
 }
 
 function normalizeSavedPromptOwnership() {
@@ -1406,45 +1417,18 @@ function ConfirmModal() {
   const action = state.confirmAction;
   if (!action) return "";
 
-  return `
-    <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <article class="modal confirm-modal">
-        <div class="modal-head">
-          <h2 id="confirm-title">${escapeHtml(action.title)}</h2>
-        </div>
-        <p class="confirm-message">${escapeHtml(action.message)}</p>
-        <div class="modal-actions">
-          <button class="secondary-button" type="button" data-cancel-confirm>취소</button>
-          <button class="primary-button ${action.danger ? "danger-primary" : ""}" type="button" data-confirm-action>${escapeHtml(action.confirmLabel || "확인")}</button>
-        </div>
-      </article>
-    </div>
-  `;
+  return ConfirmDialog(action);
 }
 
 function AdminUserBlockModal() {
   const target = state.adminBlockTarget;
   if (!target?.memberId) return "";
 
-  const nickname = String(target.nickname || "사용자").trim();
-
-  return `
-    <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-user-block-title">
-      <form class="modal confirm-modal" data-admin-user-block-form="${escapeHtml(target.memberId)}" data-admin-user-name="${escapeHtml(nickname)}">
-        <div class="modal-head">
-          <h2 id="admin-user-block-title">회원 차단</h2>
-          <button class="ghost-icon" type="button" data-close-admin-user-block aria-label="닫기">${icons.close}</button>
-        </div>
-        <p class="confirm-message">${escapeHtml(nickname)} 계정을 차단할 사유를 입력해주세요.</p>
-        <label class="field-label" for="admin-user-block-reason">차단 사유</label>
-        <textarea id="admin-user-block-reason" name="reason" rows="4" placeholder="예: 반복적인 운영 정책 위반">운영 정책 위반</textarea>
-        <div class="modal-actions">
-          <button class="secondary-button" type="button" data-close-admin-user-block>취소</button>
-          <button class="primary-button danger-primary" type="submit">차단</button>
-        </div>
-      </form>
-    </div>
-  `;
+  return AdminUserBlockDialog({
+    memberId: target.memberId,
+    nickname: target.nickname,
+    closeIcon: icons.close,
+  });
 }
 
 function ExecuteModal() {
@@ -1801,16 +1785,7 @@ function SavedLibraryPanel() {
 }
 
 function SavedPagination(totalPages, currentPage) {
-  if (totalPages <= 1) return "";
-
-  return `
-    <nav class="pagination" aria-label="저장한 프롬프트 페이지">
-      ${Array.from({ length: totalPages }, (_, index) => {
-        const page = index + 1;
-        return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" data-saved-page="${page}" aria-label="저장 목록 ${page}페이지">${page}</button>`;
-      }).join("")}
-    </nav>
-  `;
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-saved-page", ariaLabel: "저장한 프롬프트 페이지" });
 }
 
 function MyPromptsPanel() {
@@ -3351,6 +3326,9 @@ function bindEvents() {
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.popularPage = Number(button.dataset.page);
+      if (state.backendStatus === "connected") {
+        refreshBackendHomePrompts();
+      }
       render();
     });
   });
@@ -7320,7 +7298,37 @@ async function toggleAdminPromptHidden(promptId) {
 }
 
 function getPopularTotalPages(count) {
-  return Math.max(1, Math.ceil(count / 16));
+  return Math.max(1, Math.ceil(count / HOME_PAGE_SIZE));
+}
+
+function getBackendHomeTotalPages() {
+  const totalPages = Number(state.backendHomePage?.totalPages);
+  return Number.isFinite(totalPages) && totalPages > 0 ? Math.floor(totalPages) : 1;
+}
+
+function updateBackendHomePageMeta(payload = {}, fallbackPage = state.popularPage) {
+  const rawPage = Number(payload.page ?? payload.currentPage ?? payload.pageNumber ?? fallbackPage);
+  const rawSize = Number(payload.size ?? payload.pageSize ?? HOME_PAGE_SIZE);
+  const rawTotalPages = Number(payload.totalPages ?? payload.total_pages ?? payload.page?.totalPages ?? payload.page?.total_pages);
+  const rawTotalElements = Number(
+    payload.totalElements ??
+      payload.total_elements ??
+      payload.total ??
+      payload.totalCount ??
+      payload.page?.totalElements ??
+      payload.page?.total_elements,
+  );
+
+  const totalPages = Number.isFinite(rawTotalPages) && rawTotalPages > 0 ? Math.floor(rawTotalPages) : 1;
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : fallbackPage;
+
+  state.backendHomePage = {
+    page: Math.min(page, totalPages),
+    size: Number.isFinite(rawSize) && rawSize > 0 ? Math.floor(rawSize) : HOME_PAGE_SIZE,
+    totalPages,
+    totalElements: Number.isFinite(rawTotalElements) && rawTotalElements >= 0 ? Math.floor(rawTotalElements) : popularPrompts.length,
+  };
+  state.popularPage = state.backendHomePage.page;
 }
 
 function parsePromptSearchQuery(query, scope = "all") {
@@ -8205,7 +8213,7 @@ async function hydrateBackendHomeData() {
   }
 
   const [promptsResult, tagsResult] = await Promise.allSettled([
-    api.getCommunityPosts({ page: 1, size: 64, sort: state.popularSort }),
+    api.getCommunityPosts({ page: state.popularPage, size: HOME_PAGE_SIZE, sort: state.popularSort }),
     api.getPopularTags?.({ limit: 8 }),
   ]);
 
@@ -8221,6 +8229,7 @@ async function hydrateBackendHomeData() {
         isShared: prompt.isShared ?? true,
       })),
     );
+    updateBackendHomePageMeta(promptsResult.value, state.popularPage);
     normalizePersistedLikeCounts();
     state.backendStatus = "connected";
     state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
@@ -8250,18 +8259,19 @@ async function refreshBackendHomePrompts() {
 
   const query = String(state.searchQuery || "").trim();
   const scope = getValidSearchScope(state.searchScope);
-  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort });
+  const page = Math.max(1, Number(state.popularPage) || 1);
+  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort, page });
   state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
 
   try {
     const result = await api.searchCommunityPosts({
       scope,
       query,
-      page: 1,
-      size: 64,
+      page,
+      size: HOME_PAGE_SIZE,
       sort: state.popularSort,
     });
-    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort })) {
+    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort, page: Math.max(1, Number(state.popularPage) || 1) })) {
       return;
     }
     if (Array.isArray(result?.items)) {
@@ -8274,6 +8284,7 @@ async function refreshBackendHomePrompts() {
           isShared: prompt.isShared ?? true,
         })),
       );
+      updateBackendHomePageMeta(result, page);
       state.backendStatus = "connected";
       state.backendStatusMessage = query
         ? `GET /api/prompts?scope=${scope}&query=... 검색 결과를 Home에 반영 중입니다.`
