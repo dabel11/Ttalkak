@@ -38,6 +38,12 @@ if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn
   throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
 }
 
+const { ExecuteModalView, PromptCardView, ReportModalView, renderAppShell } = window.TtalkakRenderers || {};
+
+if ([ExecuteModalView, PromptCardView, ReportModalView, renderAppShell].some((fn) => typeof fn !== "function")) {
+  throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
+}
+
 const DEMO_FALLBACK_ENABLED = window.TTALKAK_DEMO_FALLBACK_ENABLED === true;
 
 const popularPrompts = [
@@ -569,33 +575,30 @@ const icons = {
 };
 
 function render() {
-  persistState();
-  document.querySelector("#app").innerHTML = `
-    <div class="app-shell">
-      ${Sidebar()}
-      <main class="main-area">
-        ${Header()}
-        <section class="content-area">${Page()}</section>
-      </main>
-      ${state.detailPromptId ? PromptDetailModal() : ""}
-      ${state.editingPromptId ? PromptEditModal() : ""}
-      ${state.adminRequestTargetKey ? AdminRevisionRequestModal() : ""}
-      ${state.authView ? AuthModal() : ""}
-      ${state.reportPromptId || state.reportCommentId ? ReportModal() : ""}
-      ${state.executeMessageId || state.executePromptId ? ExecuteModal() : ""}
-      ${state.confirmAction ? ConfirmModal() : ""}
-      ${state.adminBlockTarget ? AdminUserBlockModal() : ""}
-      ${state.notice ? `<div class="toast" role="status">${state.notice}</div>` : ""}
-    </div>
-  `;
-  bindEvents();
-  focusActiveModal();
-  restorePendingMessageScroll();
-  scrollToPendingLatestMessage();
-  scrollToHighlightedComment();
-  hydrateBackendMakeDataIfNeeded();
-  hydrateBackendMyPageDataIfNeeded();
-  hydrateBackendAdminDataIfNeeded();
+  return renderAppShell({
+    state,
+    escapeHtml,
+    persistState,
+    Sidebar,
+    Header,
+    Page,
+    PromptDetailModal,
+    PromptEditModal,
+    AdminRevisionRequestModal,
+    AuthModal,
+    ReportModal,
+    ExecuteModal,
+    ConfirmModal,
+    AdminUserBlockModal,
+    bindEvents,
+    focusActiveModal,
+    restorePendingMessageScroll,
+    scrollToPendingLatestMessage,
+    scrollToHighlightedComment,
+    hydrateBackendMakeDataIfNeeded,
+    hydrateBackendMyPageDataIfNeeded,
+    hydrateBackendAdminDataIfNeeded,
+  });
 }
 
 function scrollToHighlightedComment() {
@@ -1002,70 +1005,27 @@ function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myP
 }
 
 function PromptCard(prompt, options = {}) {
-  const safePromptId = escapeAttr(prompt.id);
-  const safeTitle = escapeHtml(prompt.title);
-  const safeText = escapeHtml(prompt.text);
-  const isSaved = isPromptSaved(prompt.id);
-  const isPendingUnsave = isPromptPendingUnsave(prompt.id);
-  const isMine = state.isLoggedIn && prompt.source === "mine";
-  const canDelete = isMine;
-  const isLiked = state.likedPromptIds.has(prompt.id);
-  const isReported = canShowReportedState() && state.reportedPromptIds.has(prompt.id);
-  const isShared = prompt.isShared === true || prompt.source === "community";
-  const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
-  const hasMakeHistory = isMine && Array.isArray(prompt.messages) && prompt.messages.length > 0;
-  const commentCount = getPromptCommentCount(prompt);
-  const showStatus = options.showStatus !== false;
-  const isCardMenuOpen = state.openPromptCardMenuId === prompt.id;
-  const previewTags = getPromptCardPreviewTags(prompt.tags || []);
-  const statusBadges = [
-    isMine
-      ? `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`
-      : "",
-    isMine && getPromptRevisionRequest(prompt.id) ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : "",
-    isPendingUnsave ? `<span class="status-badge pending-unsave">저장 취소 예정</span>` : "",
-  ].join("");
-
-  return `
-    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${safePromptId}" tabindex="0" role="button" aria-label="${escapeAttr(`${prompt.title} 전체 보기`)}">
-      <div class="card-head">
-        <h2>${safeTitle}</h2>
-        <div class="card-actions">
-          ${
-            isMine
-              ? `<div class="prompt-card-menu-wrap">
-                  <button class="icon-button prompt-card-more" type="button" data-prompt-card-menu="${safePromptId}" aria-label="프롬프트 더보기" aria-expanded="${isCardMenuOpen ? "true" : "false"}">${icons.more}</button>
-                  ${
-                    isCardMenuOpen
-                      ? `<div class="prompt-card-menu" role="menu">
-                          <button type="button" data-edit-prompt="${safePromptId}" role="menuitem">${icons.edit}<span>수정</span></button>
-                          ${!isShared ? `<button type="button" data-share-saved="${safePromptId}" role="menuitem">${icons.share}<span>공유하기</span></button>` : ""}
-                          ${isShared ? `<button type="button" data-unshare-prompt="${safePromptId}" role="menuitem">${icons.share}<span>공유 취소</span></button>` : ""}
-                          <button type="button" data-delete-prompt="${safePromptId}" role="menuitem">${icons.trash}<span>삭제</span></button>
-                        </div>`
-                      : ""
-                  }
-                </div>`
-              : ""
-          }
-          ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${safePromptId}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
-          <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${safePromptId}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-          <button class="icon-button metric-action comment-card-button" data-open-comments="${safePromptId}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
-          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${safePromptId}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-        </div>
-      </div>
-      ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}
-      <p>${safeText}</p>
-      <div class="tag-row card-tag-row">
-        ${previewTags.visibleTags.map((tag) => `<button type="button" data-search-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`).join("")}
-        ${previewTags.hiddenCount > 0 ? `<span class="tag-more">+${previewTags.hiddenCount}</span>` : ""}
-      </div>
-      <footer class="card-meta">
-        <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
-        ${renderAuthorSearchControl(prompt)}
-      </footer>
-    </article>
-  `;
+  return PromptCardView(
+    {
+      state,
+      icons,
+      escapeAttr,
+      escapeHtml,
+      formatNumber,
+      canShowReportedState,
+      isPromptSaved,
+      isPromptPendingUnsave,
+      getPromptRevisionRequest,
+      getPromptCommentCount,
+      getPromptCardPreviewTags,
+      getPromptLikes,
+      getPromptSaveCount,
+      getPromptViewCount,
+      renderAuthorSearchControl,
+    },
+    prompt,
+    options,
+  );
 }
 
 function BackendStatusBadge() {
@@ -1425,25 +1385,7 @@ function ReportModal() {
     ? "정말 이 프롬프트를 신고할까요? 신고 이유를 적어주시면 검토에 도움이 됩니다."
     : "정말 이 댓글을 신고할까요? 신고 이유를 적어주시면 검토에 도움이 됩니다.";
 
-  return `
-    <div class="modal-backdrop visible report-backdrop" role="dialog" aria-modal="true" aria-labelledby="report-title">
-      <form class="modal report-modal" data-report-form="${target.id}" data-report-type="${reportType}">
-        <div class="modal-head">
-          <h2 id="report-title">${title}</h2>
-          <button class="ghost-icon" type="button" data-close-report aria-label="닫기">${icons.close}</button>
-        </div>
-        <p class="auth-helper">${helper}</p>
-        <label>
-          <span>신고 이유</span>
-          <textarea name="reason" rows="5" placeholder="신고 이유를 입력해주세요."></textarea>
-        </label>
-        <div class="modal-actions">
-          <button class="secondary-button" type="button" data-close-report>취소</button>
-          <button class="primary-button" type="submit">신고하기</button>
-        </div>
-      </form>
-    </div>
-  `;
+  return ReportModalView({ icons, escapeAttr }, { target, reportType, title, helper });
 }
 
 function ConfirmModal() {
@@ -1476,20 +1418,7 @@ function ExecuteModal() {
     { id: "claude", name: "Claude", url: "https://claude.ai/" },
   ];
 
-  return `
-    <div class="modal-backdrop visible execute-backdrop" role="dialog" aria-modal="true" aria-labelledby="execute-title">
-      <article class="modal execute-modal">
-        <div class="modal-head">
-          <h2 id="execute-title">AI 도구 선택</h2>
-          <button class="ghost-icon" type="button" data-close-execute aria-label="닫기">${icons.close}</button>
-        </div>
-        <p class="confirm-message">AI 사이트를 선택하면 개선된 최종 프롬프트가 복사되고 선택한 사이트가 열립니다. 열린 사이트의 입력창을 클릭한 뒤 붙여넣기(Ctrl+V)해서 실행해주세요.</p>
-        <div class="execute-targets">
-          ${targets.map((target) => `<button type="button" data-execute-target="${target.id}">${target.name}</button>`).join("")}
-        </div>
-      </article>
-    </div>
-  `;
+  return ExecuteModalView({ icons, escapeAttr }, { targets });
 }
 
 function MakePage() {
