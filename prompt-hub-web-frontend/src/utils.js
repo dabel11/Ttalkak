@@ -31,11 +31,16 @@
   }
 
   function escapeHtml(value) {
-    return value
+    return String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
   }
 
   function getFinalPromptText(message) {
@@ -89,6 +94,7 @@
     isValidPhone,
     isFutureDate,
     escapeHtml,
+    escapeAttr,
     getFinalPromptText,
     formatNumber,
     formatShortDate,

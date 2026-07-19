@@ -4,6 +4,7 @@
   isValidPhone,
   isFutureDate,
   escapeHtml,
+  escapeAttr,
   getFinalPromptText,
   formatNumber,
   formatShortDate,
@@ -17,6 +18,7 @@ if (
     isValidPhone,
     isFutureDate,
     escapeHtml,
+    escapeAttr,
     getFinalPromptText,
     formatNumber,
     formatShortDate,
@@ -877,14 +879,14 @@ function HomePage() {
             ${SearchScopeOption("author", "작성자")}
           </select>
         </span>
-        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="${searchPlaceholder}" aria-label="프롬프트 검색" />
+        <input type="search" data-tag-search value="${escapeAttr(state.searchQuery)}" placeholder="${escapeAttr(searchPlaceholder)}" aria-label="프롬프트 검색" />
         <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
           <span>${icons.bulb}</span>
           <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
         </button>
       </label>
       <div class="popular-tags" aria-label="인기 태그">
-        ${displayTags.map((tag) => `<button class="${searchCriteria.tagTokens.includes(normalizeTag(tag)) ? "active" : ""}" type="button" data-popular-tag="${tag}">#${tag}</button>`).join("")}
+        ${displayTags.map((tag) => `<button class="${searchCriteria.tagTokens.includes(normalizeTag(tag)) ? "active" : ""}" type="button" data-popular-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`).join("")}
       </div>
       <div class="section-title">
         <div class="section-title-main">
@@ -921,11 +923,11 @@ function HomePage() {
 }
 
 function SortOption(value, label) {
-  return `<option value="${value}" ${state.popularSort === value ? "selected" : ""}>${label}</option>`;
+  return `<option value="${escapeAttr(value)}" ${state.popularSort === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function SearchScopeOption(value, label) {
-  return `<option value="${value}" ${state.searchScope === value ? "selected" : ""}>${label}</option>`;
+  return `<option value="${escapeAttr(value)}" ${state.searchScope === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function getSearchPlaceholder(scope) {
@@ -1000,6 +1002,9 @@ function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myP
 }
 
 function PromptCard(prompt, options = {}) {
+  const safePromptId = escapeAttr(prompt.id);
+  const safeTitle = escapeHtml(prompt.title);
+  const safeText = escapeHtml(prompt.text);
   const isSaved = isPromptSaved(prompt.id);
   const isPendingUnsave = isPromptPendingUnsave(prompt.id);
   const isMine = state.isLoggedIn && prompt.source === "mine";
@@ -1022,37 +1027,37 @@ function PromptCard(prompt, options = {}) {
   ].join("");
 
   return `
-    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${prompt.id}" tabindex="0" role="button" aria-label="${prompt.title} 전체 보기">
+    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${safePromptId}" tabindex="0" role="button" aria-label="${escapeAttr(`${prompt.title} 전체 보기`)}">
       <div class="card-head">
-        <h2>${prompt.title}</h2>
+        <h2>${safeTitle}</h2>
         <div class="card-actions">
           ${
             isMine
               ? `<div class="prompt-card-menu-wrap">
-                  <button class="icon-button prompt-card-more" type="button" data-prompt-card-menu="${prompt.id}" aria-label="프롬프트 더보기" aria-expanded="${isCardMenuOpen ? "true" : "false"}">${icons.more}</button>
+                  <button class="icon-button prompt-card-more" type="button" data-prompt-card-menu="${safePromptId}" aria-label="프롬프트 더보기" aria-expanded="${isCardMenuOpen ? "true" : "false"}">${icons.more}</button>
                   ${
                     isCardMenuOpen
                       ? `<div class="prompt-card-menu" role="menu">
-                          <button type="button" data-edit-prompt="${prompt.id}" role="menuitem">${icons.edit}<span>수정</span></button>
-                          ${!isShared ? `<button type="button" data-share-saved="${prompt.id}" role="menuitem">${icons.share}<span>공유하기</span></button>` : ""}
-                          ${isShared ? `<button type="button" data-unshare-prompt="${prompt.id}" role="menuitem">${icons.share}<span>공유 취소</span></button>` : ""}
-                          <button type="button" data-delete-prompt="${prompt.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                          <button type="button" data-edit-prompt="${safePromptId}" role="menuitem">${icons.edit}<span>수정</span></button>
+                          ${!isShared ? `<button type="button" data-share-saved="${safePromptId}" role="menuitem">${icons.share}<span>공유하기</span></button>` : ""}
+                          ${isShared ? `<button type="button" data-unshare-prompt="${safePromptId}" role="menuitem">${icons.share}<span>공유 취소</span></button>` : ""}
+                          <button type="button" data-delete-prompt="${safePromptId}" role="menuitem">${icons.trash}<span>삭제</span></button>
                         </div>`
                       : ""
                   }
                 </div>`
               : ""
           }
-          ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${prompt.id}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
-          <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${prompt.id}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-          <button class="icon-button metric-action comment-card-button" data-open-comments="${prompt.id}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
-          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
+          ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${safePromptId}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
+          <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${safePromptId}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
+          <button class="icon-button metric-action comment-card-button" data-open-comments="${safePromptId}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
+          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${safePromptId}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
         </div>
       </div>
       ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}
-      <p>${prompt.text}</p>
+      <p>${safeText}</p>
       <div class="tag-row card-tag-row">
-        ${previewTags.visibleTags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}
+        ${previewTags.visibleTags.map((tag) => `<button type="button" data-search-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`).join("")}
         ${previewTags.hiddenCount > 0 ? `<span class="tag-more">+${previewTags.hiddenCount}</span>` : ""}
       </div>
       <footer class="card-meta">
@@ -1108,6 +1113,9 @@ function PromptDetailModal() {
   const isAdminReview = Boolean(state.adminMode);
   const isHiddenByAdmin = state.adminHiddenPromptIds.has(prompt.id);
   const revisionRequest = canDelete || isAdminReview ? getPromptRevisionRequest(prompt.id) : null;
+  const safePromptId = escapeAttr(prompt.id);
+  const safeTitle = escapeHtml(prompt.title);
+  const safeText = escapeHtml(prompt.text);
   const adminStatusBadges = isAdminReview
     ? [
         `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`,
@@ -1121,12 +1129,12 @@ function PromptDetailModal() {
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-detail-title">
       <article class="modal prompt-detail-modal ${isAdminReview ? "admin-review-modal" : ""}">
         <div class="modal-head">
-          <h2 id="prompt-detail-title">${prompt.title}</h2>
+          <h2 id="prompt-detail-title">${safeTitle}</h2>
         </div>
         <div class="prompt-detail-layout">
           <section class="prompt-detail-main" aria-label="프롬프트 내용">
             ${isAdminReview && adminStatusBadges ? `<div class="status-row admin-detail-status">${adminStatusBadges}</div>` : ""}
-            <p class="prompt-detail-text">${prompt.text}</p>
+            <p class="prompt-detail-text">${safeText}</p>
             ${
               revisionRequest
                 ? `<div class="revision-request-notice">
@@ -1135,7 +1143,7 @@ function PromptDetailModal() {
                   </div>`
                 : ""
             }
-            <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
+            <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`).join("")}</div>
             <footer class="card-meta detail-meta">
               <span>${icons.eye}${formatNumber(getPromptViewCount(prompt))}</span>
               ${renderAuthorSearchControl(prompt, { admin: isAdminReview })}
@@ -1147,7 +1155,7 @@ function PromptDetailModal() {
               <h3>댓글</h3>
               <div class="comments-head-actions">
                 <span>${formatNumber(commentCount)}개</span>
-                <button class="comment-panel-toggle" type="button" data-toggle-comments="${prompt.id}">${isCommentsExpanded ? "접기" : "펼치기"}</button>
+                <button class="comment-panel-toggle" type="button" data-toggle-comments="${safePromptId}">${isCommentsExpanded ? "접기" : "펼치기"}</button>
               </div>
             </div>
             ${
@@ -1163,7 +1171,7 @@ function PromptDetailModal() {
                     isAdminReview
                       ? `<p class="comment-empty">관리자 검토 모드에서는 댓글을 읽기 전용으로 확인합니다.</p>`
                       : state.isLoggedIn
-                      ? `<form class="comment-form" data-comment-form="${prompt.id}">
+                      ? `<form class="comment-form" data-comment-form="${safePromptId}">
                           <input name="comment" type="text" placeholder="댓글을 입력하세요." autocomplete="off" />
                           <button class="primary-button" type="submit">등록</button>
                         </form>`
@@ -1180,24 +1188,24 @@ function PromptDetailModal() {
           ${
             isAdminReview
                  ? `<div class="detail-action-group manage-actions">
-                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
-                   <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
+                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${safePromptId}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
+                   <button class="secondary-button" type="button" data-admin-hide-prompt="${safePromptId}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
                  </div>
                  <div class="detail-action-group use-actions">
                    <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
                  </div>`
               : `<div class="detail-action-group manage-actions">
-                   ${canDelete ? `<button class="secondary-button" type="button" data-edit-prompt="${prompt.id}">${icons.edit}<span>수정</span></button>` : ""}
-                   ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">${icons.share}<span>공유하기</span></button>` : ""}
-                   ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">${icons.share}<span>공유 취소</span></button>` : ""}
-                   ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">${icons.trash}<span>삭제</span></button>` : ""}
+                   ${canDelete ? `<button class="secondary-button" type="button" data-edit-prompt="${safePromptId}">${icons.edit}<span>수정</span></button>` : ""}
+                   ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${safePromptId}">${icons.share}<span>공유하기</span></button>` : ""}
+                   ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${safePromptId}">${icons.share}<span>공유 취소</span></button>` : ""}
+                   ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${safePromptId}">${icons.trash}<span>삭제</span></button>` : ""}
                  </div>
                  <div class="detail-action-group use-actions">
                    <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-                   <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
-                   <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-                   <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-                   <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>
+                   <button class="detail-action-button execute-action" type="button" data-execute-prompt="${safePromptId}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
+                   <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${safePromptId}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
+                   <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${safePromptId}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
+                   <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${safePromptId}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>
                  </div>`
           }
         </div>
@@ -1210,10 +1218,11 @@ function PromptEditModal() {
   const prompt = findPromptById(state.editingPromptId);
   if (!prompt || prompt.source !== "mine") return "";
   const revisionRequest = getPromptRevisionRequest(prompt.id);
+  const safePromptId = escapeAttr(prompt.id);
 
   return `
     <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title">
-      <form class="modal prompt-edit-modal" data-prompt-edit-form="${prompt.id}">
+      <form class="modal prompt-edit-modal" data-prompt-edit-form="${safePromptId}">
         <div class="modal-head">
           <h2 id="prompt-edit-title">프롬프트 수정</h2>
           <button class="ghost-icon" type="button" data-close-prompt-edit aria-label="닫기">${icons.close}</button>
@@ -1228,7 +1237,7 @@ function PromptEditModal() {
         }
         <label>
           <span>제목</span>
-          <input name="title" type="text" value="${escapeHtml(prompt.title)}" />
+          <input name="title" type="text" value="${escapeAttr(prompt.title)}" />
         </label>
         <label>
           <span>프롬프트</span>
@@ -1236,7 +1245,7 @@ function PromptEditModal() {
         </label>
         <label>
           <span>해시태그</span>
-          <input name="tags" type="text" value="${escapeHtml((prompt.tags || []).join(", "))}" />
+          <input name="tags" type="text" value="${escapeAttr((prompt.tags || []).join(", "))}" />
         </label>
         <div class="form-actions">
           <button class="secondary-button" type="button" data-close-prompt-edit>취소</button>
@@ -1308,38 +1317,41 @@ function CommentItem(comment) {
   const replies = getSortedCommentReplies(comment);
   const isReplying = !isDeleted && state.replyingCommentId === comment.id;
   const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === comment.id;
+  const safeCommentId = escapeAttr(comment.id);
+  const safeAuthor = escapeHtml(comment.author);
+  const safeText = escapeHtml(comment.text);
 
   return `
-    <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
+    <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${safeCommentId}">
       <div class="comment-item-head">
-        <strong>${isDeleted ? "삭제된 댓글" : comment.author}${isHidden ? `<span class="edited-mark">숨김</span>` : ""}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : safeAuthor}${isHidden ? `<span class="edited-mark">숨김</span>` : ""}</strong>
         ${
           isAdminReview && !isDeleted
             ? `<div class="comment-actions">
-                <button class="comment-edit-button" type="button" data-admin-toggle-comment-hidden="${comment.id}:${isHidden ? "unhide" : "hide"}" title="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}" aria-label="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}">${isHidden ? icons.eye : icons.flag}</button>
-                <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>
+                <button class="comment-edit-button" type="button" data-admin-toggle-comment-hidden="${safeCommentId}:${isHidden ? "unhide" : "hide"}" title="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}" aria-label="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}">${isHidden ? icons.eye : icons.flag}</button>
+                <button class="comment-delete-button" type="button" data-delete-comment="${safeCommentId}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>
               </div>`
             : isDeleted
             ? ""
             : `<div class="comment-actions">
-                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
-                <button class="comment-reply-button" type="button" data-reply-comment="${comment.id}" title="답글" aria-label="답글">${icons.comment}</button>
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${safeCommentId}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
+                <button class="comment-reply-button" type="button" data-reply-comment="${safeCommentId}" title="답글" aria-label="답글">${icons.comment}</button>
                 ${
                   canDelete
-                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${comment.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                       <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
-                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${comment.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${safeCommentId}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${safeCommentId}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${safeCommentId}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
                 }
               </div>`
         }
       </div>
       ${
         isEditing
-          ? `<form class="comment-edit-form" data-edit-comment-form="${comment.id}">
-              <input name="comment" type="text" value="${escapeHtml(comment.text)}" autocomplete="off" />
+          ? `<form class="comment-edit-form" data-edit-comment-form="${safeCommentId}">
+              <input name="comment" type="text" value="${escapeAttr(comment.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${isDeleted ? "삭제된 댓글입니다." : comment.text}${!isDeleted && comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : safeText}${!isDeleted && comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
       ${
         replies.length || (!isAdminReview && isReplying)
@@ -1347,7 +1359,7 @@ function CommentItem(comment) {
               ${replies.map(ReplyItem).join("")}
               ${
                 !isAdminReview && isReplying
-                  ? `<form class="reply-form" data-reply-form="${comment.id}">
+                  ? `<form class="reply-form" data-reply-form="${safeCommentId}">
                       <input name="reply" type="text" placeholder="답글을 입력하세요." autocomplete="off" />
                       <button class="primary-button" type="submit">등록</button>
                     </form>`
@@ -1368,32 +1380,35 @@ function ReplyItem(reply) {
   const isAdminReview = Boolean(state.adminMode);
   const isHighlighted = isAdminReview && state.detailHighlightCommentId === reply.id;
   const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === reply.id;
+  const safeReplyId = escapeAttr(reply.id);
+  const safeAuthor = escapeHtml(reply.author);
+  const safeText = escapeHtml(reply.text);
 
   return `
-    <article class="reply-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(reply.id)}">
+    <article class="reply-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${safeReplyId}">
       <div class="reply-item-head">
-        <strong>${isDeleted ? "삭제된 댓글" : reply.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : safeAuthor}</strong>
         ${
           isAdminReview || isDeleted
             ? ""
             : `<div class="reply-actions">
-                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${reply.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${safeReplyId}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
                 ${
                   canDelete
-                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${reply.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                       <button class="comment-delete-button" type="button" data-delete-comment="${reply.id}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
-                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${reply.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${safeReplyId}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${safeReplyId}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${safeReplyId}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
                 }
               </div>`
         }
       </div>
       ${
         isEditing
-          ? `<form class="comment-edit-form" data-edit-comment-form="${reply.id}">
-              <input name="comment" type="text" value="${escapeHtml(reply.text)}" autocomplete="off" />
+          ? `<form class="comment-edit-form" data-edit-comment-form="${safeReplyId}">
+              <input name="comment" type="text" value="${escapeAttr(reply.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${isDeleted ? "삭제된 댓글입니다." : reply.text}${!isDeleted && reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : safeText}${!isDeleted && reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
     </article>
   `;
@@ -1558,35 +1573,35 @@ function MakeSidePanel() {
         visibleThreads.length
           ? `<div class="recent-thread-list">
               ${visibleThreads.map((thread) => `
-                <article class="recent-thread ${state.activeThreadId === thread.id ? "active" : ""} ${state.openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${thread.id}">
-                  <button class="recent-thread-main" type="button" data-open-thread="${thread.id}">
+                <article class="recent-thread ${state.activeThreadId === thread.id ? "active" : ""} ${state.openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${escapeAttr(thread.id)}">
+                  <button class="recent-thread-main" type="button" data-open-thread="${escapeAttr(thread.id)}">
                     <strong>${escapeHtml(thread.title)}</strong>
                     <span>${escapeHtml(thread.preview)}</span>
                     <small>${formatShortDate(thread.createdAt)}</small>
                   </button>
                   <div class="recent-thread-menu-wrap">
-                    <button class="recent-thread-more" type="button" data-thread-menu="${thread.id}" aria-label="대화 더보기" aria-expanded="${state.openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
+                    <button class="recent-thread-more" type="button" data-thread-menu="${escapeAttr(thread.id)}" aria-label="대화 더보기" aria-expanded="${state.openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
                     ${
                       state.openThreadMenuId === thread.id
                         ? `<div class="recent-thread-menu" role="menu">
                             <label class="recent-thread-folder-field">
                               <span>폴더 이동</span>
-                              <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더" ${canManageFolders ? "" : "disabled"} title="${canManageFolders ? "대화 폴더 이동" : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">
-                                ${state.makeFolders.map((folder) => `<option value="${folder.id}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
+                              <select class="thread-folder-select" data-thread-folder="${escapeAttr(thread.id)}" aria-label="대화 폴더" ${canManageFolders ? "" : "disabled"} title="${canManageFolders ? "대화 폴더 이동" : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">
+                                ${state.makeFolders.map((folder) => `<option value="${escapeAttr(folder.id)}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
                               </select>
                             </label>
                             ${
                               state.creatingThreadFolderId === thread.id
-                                ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${thread.id}">
+                                ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${escapeAttr(thread.id)}">
                                     <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
                                     <div>
                                       <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
                                       <button type="button" data-cancel-thread-folder-create>취소</button>
                                     </div>
                                   </form>`
-                                : `<button type="button" data-start-thread-folder-create="${thread.id}" ${canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS ? "" : "disabled"} role="menuitem"><span>+</span><span>새 폴더로 이동...</span></button>`
+                                : `<button type="button" data-start-thread-folder-create="${escapeAttr(thread.id)}" ${canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS ? "" : "disabled"} role="menuitem"><span>+</span><span>새 폴더로 이동...</span></button>`
                             }
-                            <button type="button" data-delete-thread="${thread.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                            <button type="button" data-delete-thread="${escapeAttr(thread.id)}" role="menuitem">${icons.trash}<span>삭제</span></button>
                           </div>`
                         : ""
                     }
@@ -1601,14 +1616,15 @@ function MakeSidePanel() {
 }
 
 function MakeFolderButton(folderId, name, count) {
+  const safeFolderId = escapeAttr(folderId);
   const isUserFolder = folderId !== "all" && folderId !== "uncategorized";
   const canManage = state.isLoggedIn && isUserFolder;
   const isEditing = canManage && state.editingFolderId === folderId;
   const isMenuOpen = canManage && state.openFolderMenuId === folderId;
   if (isEditing) {
     return `
-      <form class="make-folder-edit-form" data-folder-edit-form="${folderId}">
-        <input name="folderName" value="${escapeHtml(name)}" />
+      <form class="make-folder-edit-form" data-folder-edit-form="${safeFolderId}">
+        <input name="folderName" value="${escapeAttr(name)}" />
         <button type="submit">저장</button>
         <button type="button" data-cancel-folder-edit>취소</button>
       </form>
@@ -1616,17 +1632,17 @@ function MakeFolderButton(folderId, name, count) {
   }
 
   return `
-    <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${folderId}">
-      <button type="button" data-open-folder="${folderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
+    <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${safeFolderId}">
+      <button type="button" data-open-folder="${safeFolderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
       ${
         canManage
           ? `<div class="make-folder-menu-wrap">
-              <button class="make-folder-more" type="button" data-folder-menu="${folderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
+              <button class="make-folder-more" type="button" data-folder-menu="${safeFolderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
               ${
                 isMenuOpen
                   ? `<div class="make-folder-menu" role="menu">
-                      <button type="button" data-edit-folder="${folderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
-                      <button type="button" data-delete-folder="${folderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
+                      <button type="button" data-edit-folder="${safeFolderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
+                      <button type="button" data-delete-folder="${safeFolderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
                     </div>`
                   : ""
               }
@@ -1640,38 +1656,40 @@ function MakeFolderButton(folderId, name, count) {
 function MessageBubble(message) {
   const isAssistant = message.role === "assistant";
   const isSaved = isAssistant && isPromptSaved(message.id);
+  const safeMessageId = escapeAttr(message.id);
+  const safeContent = escapeHtml(message.content);
 
   if (isAssistant) {
     return `
-      <div class="message-group assistant-group" data-message-id="${escapeHtml(message.id)}">
+      <div class="message-group assistant-group" data-message-id="${safeMessageId}">
         <article class="message assistant">
-          <p>${message.content}</p>
+          <p>${safeContent}</p>
         </article>
         <footer class="message-actions">
-          <button type="button" data-copy-message="${message.id}">${state.copiedMessageId === message.id ? icons.check : icons.copy}<span>${state.copiedMessageId === message.id ? "Copied" : "Copy"}</span></button>
-          <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${message.id}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-          <button type="button" data-share-message="${message.id}">${icons.share}<span>Share</span></button>
-          <button type="button" data-execute-message="${message.id}">${icons.play}<span>Execute</span></button>
+          <button type="button" data-copy-message="${safeMessageId}">${state.copiedMessageId === message.id ? icons.check : icons.copy}<span>${state.copiedMessageId === message.id ? "Copied" : "Copy"}</span></button>
+          <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
+          <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
+          <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
         </footer>
       </div>
     `;
   }
 
   return `
-    <div class="message-group user-group" data-message-id="${escapeHtml(message.id)}">
+    <div class="message-group user-group" data-message-id="${safeMessageId}">
       ${
         state.editingMessageId === message.id
-          ? `<form class="message-edit-form" data-edit-message-form="${message.id}">
-              <textarea name="message" rows="3">${escapeHtml(message.content)}</textarea>
+          ? `<form class="message-edit-form" data-edit-message-form="${safeMessageId}">
+              <textarea name="message" rows="3">${safeContent}</textarea>
               <div class="message-edit-actions">
                 <button type="button" data-cancel-message-edit>취소</button>
                 <button type="submit">다시 전송</button>
               </div>
             </form>`
           : `<article class="message ${message.role}">
-              <p>${message.content}</p>
+              <p>${safeContent}</p>
               <div class="user-message-actions">
-                <button class="user-message-edit-button" type="button" data-edit-message="${message.id}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
+                <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
               </div>
             </article>`
       }

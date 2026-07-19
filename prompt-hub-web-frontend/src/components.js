@@ -1,27 +1,29 @@
 (function attachTtalkakComponents(global) {
   "use strict";
 
+  function escapeHtml(value) {
+    const escape = global.TtalkakUtils?.escapeHtml;
+    if (typeof escape === "function") return escape(value);
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
   function Pagination({ totalPages, currentPage, pageAttribute = "data-page", ariaLabel = "페이지" }) {
     if (totalPages <= 1) return "";
+    const safePageAttribute = /^[a-zA-Z0-9_-]+$/.test(String(pageAttribute || "")) ? pageAttribute : "data-page";
 
     return `
-      <nav class="pagination" aria-label="${ariaLabel}">
+      <nav class="pagination" aria-label="${escapeHtml(ariaLabel)}">
         ${Array.from({ length: totalPages }, (_, index) => {
           const page = index + 1;
-          return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" ${pageAttribute}="${page}" aria-label="${page}페이지">${page}</button>`;
+          return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" ${safePageAttribute}="${page}" aria-label="${page}페이지">${page}</button>`;
         }).join("")}
       </nav>
     `;
-  }
-
-  function escapeHtml(value) {
-    const escape = global.TtalkakUtils?.escapeHtml;
-    if (typeof escape === "function") return escape(String(value || ""));
-    return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
   }
 
   function ConfirmDialog({ title, message, confirmLabel = "확인", danger = false } = {}) {
