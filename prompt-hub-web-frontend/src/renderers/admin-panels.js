@@ -79,7 +79,7 @@
   }
 
   function AdminPromptsPanelView(ctx, data) {
-    const { escapeHtml, icons } = ctx;
+    const { escapeAttr, escapeHtml, icons } = ctx;
     const {
       adminPromptFilter,
       adminPromptFilters,
@@ -101,7 +101,7 @@
         </div>
         <label class="admin-search-field">
           <span>${icons.search}</span>
-          <input type="search" data-admin-prompt-search value="${escapeHtml(adminPromptQuery)}" placeholder="제목, 본문, 해시태그, 작성자, 상태로 검색" autocomplete="off" />
+          <input type="search" data-admin-prompt-search value="${escapeAttr(adminPromptQuery)}" placeholder="제목, 본문, 해시태그, 작성자, 상태로 검색" autocomplete="off" />
         </label>
         ${
           filteredAdminPrompts.length
@@ -114,6 +114,7 @@
 
   function AdminPromptRow(ctx, prompt) {
     const {
+      escapeAttr,
       escapeHtml,
       formatNumber,
       formatShortDate,
@@ -163,16 +164,16 @@
           }
         </div>
         <div class="admin-actions">
-          <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
-          <button type="button" data-admin-request-revision="prompt:${prompt.id}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
-          <button type="button" data-admin-hide-prompt="${prompt.id}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
+          <button type="button" data-open-prompt="${escapeAttr(prompt.id)}">원문 보기</button>
+          <button type="button" data-admin-request-revision="prompt:${escapeAttr(prompt.id)}">${revisionRequest ? "사유 확인" : "수정 요청"}</button>
+          <button type="button" data-admin-hide-prompt="${escapeAttr(prompt.id)}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
         </div>
       </article>
     `;
   }
 
   function AdminTagsPanelView(ctx, data) {
-    const { escapeHtml, icons, state } = ctx;
+    const { escapeAttr, escapeHtml, icons, state } = ctx;
     const {
       adminTagFilter,
       adminTagFilters,
@@ -195,7 +196,7 @@
         <div class="admin-search-toolbar">
           <label class="admin-search-field">
             <span>${icons.search}</span>
-            <input type="search" data-admin-tag-search value="${escapeHtml(state.adminTagQuery || "")}" placeholder="태그명을 검색" autocomplete="off" />
+            <input type="search" data-admin-tag-search value="${escapeAttr(state.adminTagQuery || "")}" placeholder="태그명을 검색" autocomplete="off" />
           </label>
           <select class="admin-sort-select" data-admin-tag-sort aria-label="태그 정렬">
             <option value="usage" ${adminTagSort === "usage" ? "selected" : ""}>사용량</option>
@@ -214,6 +215,7 @@
   function AdminTagRow(ctx, tag) {
     const {
       AdminTagPromptUsagePanel,
+      escapeAttr,
       escapeHtml,
       formatNumber,
       getAdminTagStatusClass,
@@ -230,11 +232,11 @@
           <span class="admin-tag-usage">사용 ${formatNumber(tag.count)}회</span>
         </div>
         <div class="admin-actions">
-          <button type="button" data-admin-tag-prompts="${escapeHtml(tag.key)}">${isSelectedTag ? "사용 게시물 닫기" : "사용 게시물 보기"}</button>
-          ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
-          ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">반려</button>` : ""}
-          ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="disabled:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-          ${tag.status === "disabled" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">추천 복구</button>` : ""}
+          <button type="button" data-admin-tag-prompts="${escapeAttr(tag.key)}">${isSelectedTag ? "사용 게시물 닫기" : "사용 게시물 보기"}</button>
+          ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="approved:${escapeAttr(tag.key)}">검토 완료</button>` : ""}
+          ${tag.status === "pending" ? `<button type="button" data-admin-tag-action="rejected:${escapeAttr(tag.key)}">반려</button>` : ""}
+          ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="disabled:${escapeAttr(tag.key)}">추천 제외</button>` : ""}
+          ${tag.status === "disabled" ? `<button type="button" data-admin-tag-action="approved:${escapeAttr(tag.key)}">추천 복구</button>` : ""}
         </div>
       </article>
       ${isSelectedTag ? AdminTagPromptUsagePanel(tag) : ""}
@@ -254,6 +256,7 @@
   function AdminUserActivityPanel(ctx) {
     const {
       AdminUserActivitySummary,
+      escapeAttr,
       escapeHtml,
       getAdminUserActivity,
       state,
@@ -270,7 +273,7 @@
           </div>
         </div>
         <form class="admin-user-search-form" data-admin-user-search-form>
-          <input name="nickname" type="search" value="${escapeHtml(state.adminUserQuery || adminUserNickname)}" placeholder="닉네임을 입력하세요" autocomplete="off" />
+          <input name="nickname" type="search" value="${escapeAttr(state.adminUserQuery || adminUserNickname)}" placeholder="닉네임을 입력하세요" autocomplete="off" />
           <button type="submit">조회</button>
         </form>
         ${
@@ -300,12 +303,12 @@
   }
 
   function AdminUserSearchResultButton(ctx, user) {
-    const { escapeHtml } = ctx;
+    const { escapeAttr, escapeHtml } = ctx;
     const memberId = String(user.id || user.memberId || "").trim();
     const nickname = String(user.nickname || "사용자").trim();
 
     return `
-      <button class="admin-user-search-result" type="button" data-admin-user-select="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(nickname)}" ${memberId ? "" : "disabled"}>
+      <button class="admin-user-search-result" type="button" data-admin-user-select="${escapeAttr(memberId)}" data-admin-user-name="${escapeAttr(nickname)}" ${memberId ? "" : "disabled"}>
         <span>
           <strong>${escapeHtml(nickname)}</strong>
           <small>memberId ${escapeHtml(memberId || "확인 필요")}</small>

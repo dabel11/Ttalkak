@@ -12,6 +12,12 @@
       .replaceAll(">", "&gt;");
   }
 
+  function escapeAttr(value) {
+    const escape = global.TtalkakUtils?.escapeAttr;
+    if (typeof escape === "function") return escape(value);
+    return escapeHtml(value);
+  }
+
   function Pagination({ totalPages, currentPage, pageAttribute = "data-page", ariaLabel = "페이지" }) {
     if (totalPages <= 1) return "";
     const safePageAttribute = /^[a-zA-Z0-9_-]+$/.test(String(pageAttribute || "")) ? pageAttribute : "data-page";
@@ -50,7 +56,7 @@
 
     return `
       <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-user-block-title">
-        <form class="modal confirm-modal" data-admin-user-block-form="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(safeNickname)}">
+        <form class="modal confirm-modal" data-admin-user-block-form="${escapeAttr(memberId)}" data-admin-user-name="${escapeAttr(safeNickname)}">
           <div class="modal-head">
             <h2 id="admin-user-block-title">회원 차단</h2>
             <button class="ghost-icon" type="button" data-close-admin-user-block aria-label="닫기">${closeIcon}</button>

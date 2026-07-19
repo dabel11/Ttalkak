@@ -52,7 +52,6 @@
         return "";
     }
   }
-
   function getBackendErrorMessage(error) {
     const payload = error?.payload;
     const codeMessage = getBackendErrorCodeMessage(getBackendErrorCode(error));

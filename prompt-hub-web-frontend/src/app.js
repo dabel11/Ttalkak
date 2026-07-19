@@ -114,6 +114,12 @@ if (
   throw new Error("TTALKAK admin effects failed to load.");
 }
 
+const { handleBackendAccessErrorEffect } = window.TtalkakErrorEffects || {};
+
+if (typeof handleBackendAccessErrorEffect !== "function") {
+  throw new Error("TTALKAK error effects failed to load.");
+}
+
 const {
   STORAGE_KEY,
   AUTH_TOKEN_KEY,
@@ -962,7 +968,11 @@ function Header() {
 }
 
 function Page() {
-  return resolvePageView({
+  return resolvePageView(getPageRouteContext());
+}
+
+function getPageRouteContext() {
+  return {
     state,
     isAdminAccount,
     AdminPage,
@@ -970,7 +980,7 @@ function Page() {
     MakePage,
     SavedPage,
     SharePage,
-  });
+  };
 }
 
 function HomePage() {
@@ -3342,7 +3352,7 @@ async function toggleSavedPrompt(promptId) {
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("????? ??? ? ????.");
+    showNotice("로그인 후 저장할 수 있습니다.");
     return;
   }
 
@@ -3355,18 +3365,18 @@ async function toggleSavedPrompt(promptId) {
     const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
 
     if (!isSavedByMe || wasHiddenDemoPrompt) {
-      if (!(await runPromptStateMutation("savePrompt", promptId, "?? ??? ??????."))) return;
+      if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
       applyExistingPromptSavedState(mutationContext, promptId, savedPrompt);
       refreshMyPageDataAfterMutation();
-      showNotice("??????.");
+      showNotice("저장했습니다.");
       return;
     }
 
     if (state.route === "saved" && state.myBackendStatus === "connected" && isBackendNumericId(promptId)) {
-      if (!(await runPromptStateMutation("unsavePrompt", promptId, "?? ?? ??? ??????."))) return;
+      if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
       applyBackendPromptUnsavedState(mutationContext, promptId, savedPrompt);
       refreshMyPageDataAfterMutation();
-      showNotice("??? ??????.");
+      showNotice("저장을 해제했습니다.");
       return;
     }
 
@@ -3374,16 +3384,16 @@ async function toggleSavedPrompt(promptId) {
       const pendingState = togglePendingUnsaveState(mutationContext, promptId);
       showNotice(
         pendingState === "restored"
-          ? "?? ??? ??????."
-          : "?? ???? ???? ?? ???? ?????."
+          ? "저장 해제를 취소했습니다."
+          : "페이지를 벗어나면 보관함에서 제거됩니다."
       );
       return;
     }
 
-    if (!(await runPromptStateMutation("unsavePrompt", promptId, "?? ?? ??? ??????."))) return;
+    if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
     applyPromptUnsavedState(mutationContext, promptId, savedPrompt, savedIndex);
     refreshMyPageDataAfterMutation();
-    showNotice("??? ??????.");
+    showNotice("저장을 해제했습니다.");
     return;
   }
 
@@ -3392,36 +3402,36 @@ async function toggleSavedPrompt(promptId) {
 
   if (state.pendingUnsaveIds.has(promptId)) {
     togglePendingUnsaveState(mutationContext, promptId);
-    showNotice("?? ??? ??????.");
+    showNotice("저장 해제를 취소했습니다.");
     return;
   }
 
-  if (!(await runPromptStateMutation("savePrompt", promptId, "?? ??? ??????."))) return;
+  if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
   applyNewPromptSavedState(mutationContext, promptId, prompt);
   refreshMyPageDataAfterMutation();
-  showNotice("??????.");
+  showNotice("저장했습니다.");
 }
 async function toggleLikePrompt(promptId) {
   if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("????? ???? ?? ? ????.");
+    showNotice("로그인 후 좋아요를 누를 수 있습니다.");
     return;
   }
 
   const isLiked = state.likedPromptIds.has(promptId);
   const mutationContext = getPromptMutationStateContext();
   if (isLiked) {
-    if (!(await runPromptStateMutation("unlikePrompt", promptId, "??? ?? ??? ??????."))) return;
+    if (!(await runPromptStateMutation("unlikePrompt", promptId, "좋아요 취소 요청에 실패했습니다."))) return;
     applyPromptUnlikedState(mutationContext, promptId);
     refreshMyPageDataAfterMutation();
   } else {
-    if (!(await runPromptStateMutation("likePrompt", promptId, "??? ??? ??????."))) return;
+    if (!(await runPromptStateMutation("likePrompt", promptId, "좋아요 요청에 실패했습니다."))) return;
     applyPromptLikedState(mutationContext, promptId, findPromptById(promptId));
     refreshMyPageDataAfterMutation();
   }
-  showNotice(isLiked ? "???? ??????." : "???? ?????.");
+  showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
@@ -3472,34 +3482,34 @@ function submitReport(type, targetId, reason) {
 async function reportPrompt(promptId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    showNotice("?? ??? ??????.");
+    showNotice("신고 사유를 입력해주세요.");
     return;
   }
 
   if (isBackendNumericId(promptId) && state.backendStatus === "connected") {
     const token = getAuthToken();
     if (!token || isDemoAuthToken(token)) {
-      showNotice("?? ??? ??? ??? ??? ??? ? ????.");
+      showNotice("실제 로그인 후 프롬프트를 신고할 수 있습니다.");
       openAuth("login");
       return;
     }
     try {
       await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
     } catch (error) {
-      handleBackendAccessError(error, "?? ??? ??????.");
+      handleBackendAccessError(error, "신고 요청에 실패했습니다.");
       return;
     }
   }
 
   applyPromptReportedState(getPromptMutationStateContext(), promptId, content);
-  showNotice("??? ???????.");
+  showNotice("신고가 접수되었습니다.");
   refreshMyPageDataAfterMutation();
   render();
 }
 async function reportComment(commentId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    showNotice("?? ??? ??????.");
+    showNotice("댓글 신고 사유를 입력해주세요.");
     return;
   }
 
@@ -3507,20 +3517,20 @@ async function reportComment(commentId, reason) {
   if (isBackendNumericId(commentId) && state.backendStatus === "connected") {
     const token = getAuthToken();
     if (!token || isDemoAuthToken(token)) {
-      showNotice("?? ??? ??? ??? ?? ??? ??? ? ????.");
+      showNotice("실제 로그인 후 댓글을 신고할 수 있습니다.");
       openAuth("login");
       return;
     }
     try {
       await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
     } catch (error) {
-      handleBackendAccessError(error, "?? ?? ??? ??????.");
+      handleBackendAccessError(error, "댓글 신고 요청에 실패했습니다.");
       return;
     }
   }
 
   applyCommentReportedState(getPromptMutationStateContext(), commentId, content, context);
-  showNotice("?? ??? ???????.");
+  showNotice("댓글 신고가 접수되었습니다.");
   refreshMyPageDataAfterMutation();
   render();
 }
@@ -3583,10 +3593,10 @@ function renderShareTagSuggestions() {
 
   if (suggestions.length > 0) {
     suggestionBox.innerHTML = suggestions
-      .map((tag) => `<button type="button" data-add-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`)
+      .map((tag) => `<button type="button" data-add-share-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`)
       .join("");
   } else if (query) {
-    suggestionBox.innerHTML = `<button class="new-tag-suggestion" type="button" data-add-share-tag="${escapeHtml(query)}">새 태그로 추가: #${escapeHtml(query)}</button>`;
+    suggestionBox.innerHTML = `<button class="new-tag-suggestion" type="button" data-add-share-tag="${escapeAttr(query)}">새 태그로 추가: #${escapeHtml(query)}</button>`;
   } else {
     suggestionBox.innerHTML = `<span>기존 해시태그를 검색해 선택할 수 있습니다.</span>`;
   }
@@ -3834,24 +3844,28 @@ function isWithdrawnAuthorName(value) {
 function renderAuthorSearchControl(prompt, options = {}) {
   const author = getDisplayPromptAuthor(prompt);
   const safeAuthor = escapeHtml(author);
+  const safeAuthorAttr = escapeAttr(author);
+  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
   if (isWithdrawnAuthorName(author)) {
     return `<span class="author-search-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
   }
 
   if (options.admin) {
-    return `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${safeAuthor}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${safeAuthor}</button>`;
+    return `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
   }
 
-  return `<button class="author-search-button" type="button" data-search-author="${safeAuthor}">${safeAuthor}</button>`;
+  return `<button class="author-search-button" type="button" data-search-author="${safeAuthorAttr}">${safeAuthor}</button>`;
 }
 
 function renderAdminInlineAuthorControl(prompt) {
   const author = getDisplayPromptAuthor(prompt);
   const safeAuthor = escapeHtml(author);
+  const safeAuthorAttr = escapeAttr(author);
+  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
   if (isWithdrawnAuthorName(author)) {
     return `<span class="admin-inline-author-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
   }
-  return `<button class="admin-inline-author-button" type="button" data-admin-user-author="${safeAuthor}" data-admin-user-id="${escapeHtml(getPromptAuthorId(prompt))}">${safeAuthor}</button>`;
+  return `<button class="admin-inline-author-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
 }
 
 function getPromptAuthorId(prompt) {
@@ -4674,8 +4688,8 @@ async function submitMakePrompt(composer) {
   } catch (error) {
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make ?? API");
-    handleBackendAccessError(error, "???? ?? ??? ??????.");
+    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
+    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
     render();
     return;
   }
@@ -4713,7 +4727,7 @@ function saveMakeMessage(messageId) {
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
   const result = toggleSavedMakeMessageState(getMakeMutationStateContext(), message, finalPrompt);
-  showNotice(result === "removed" ? "??? ?????? ??????." : "??? ????? ??????.");
+  showNotice(result === "removed" ? "메시지 저장을 해제했습니다." : "메시지를 저장했습니다.");
   render();
 }
 async function resendEditedMessage(messageId, value) {
@@ -4730,8 +4744,8 @@ async function resendEditedMessage(messageId, value) {
     improvedPrompt = await improvePromptWithBackend(cleanValue);
   } catch (error) {
     state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make ?? API");
-    handleBackendAccessError(error, "???? ?? ??? ??????.");
+    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
+    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
     render();
     return;
   }
@@ -4744,7 +4758,7 @@ async function resendEditedMessage(messageId, value) {
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
   syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
-  showNotice("??? ???? ?? ??????.");
+  showNotice("수정한 메시지를 다시 개선했습니다.");
   render();
 }
 function openShareFromMakeMessage(messageId) {
@@ -6631,145 +6645,20 @@ function hasBackendAuthToken() {
 }
 
 function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.", options = {}) {
-  const status = Number(error?.status || error?.payload?.status || 0);
-  const code = getBackendErrorCode(error);
-  const backendMessage = getBackendErrorMessage(error);
-  const keepSession = Boolean(options.keepSession);
-
-  return (
-    handleBlockedAccountError(code, backendMessage) ||
-    handleAuthenticationError({ status, code, backendMessage, fallbackMessage, keepSession }) ||
-    handleForbiddenError(status, code, backendMessage) ||
-    handleNotFoundError(status, code, backendMessage) ||
-    handleInvalidRequestError(status, code, backendMessage) ||
-    handleConflictError(status, code, backendMessage) ||
-    handleRateLimitError(status, code, backendMessage) ||
-    handleTimeoutError(status, code, backendMessage) ||
-    handleAiUnavailableError(status, code, backendMessage) ||
-    handleServerError(status, code, backendMessage) ||
-    handleFallbackBackendError(backendMessage, fallbackMessage)
-  );
+  return handleBackendAccessErrorEffect(getBackendAccessErrorContext(), error, fallbackMessage, options);
 }
 
-function handleBlockedAccountError(code, backendMessage) {
-  if (code === "ACCOUNT_BLOCKED") {
-    clearAuthenticatedSession({ keepRoute: true });
-    state.authView = "login";
-    showNotice(backendMessage || "차단된 계정입니다. 관리자에게 문의해주세요.");
-    return true;
-  }
-
-  return false;
+function getBackendAccessErrorContext() {
+  return {
+    clearAuthenticatedSession,
+    getAuthToken,
+    getBackendErrorCode,
+    getBackendErrorMessage,
+    isDemoAuthToken,
+    showNotice,
+    state,
+  };
 }
-
-function handleAuthenticationError({ status, code, backendMessage, fallbackMessage, keepSession }) {
-  if (status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED") {
-    const token = getAuthToken();
-    if (keepSession) {
-      showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
-      return true;
-    }
-
-    if (!token || isDemoAuthToken(token)) {
-      showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 데모 화면 상태는 유지합니다.");
-      return true;
-    }
-
-    clearAuthenticatedSession({ keepRoute: true });
-    state.authView = "login";
-    showNotice("로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleForbiddenError(status, code, backendMessage) {
-  if (status === 403 || code === "ACCESS_DENIED" || code === "OWNER_ONLY" || code === "ADMIN_ONLY" || code === "ADMIN_ACCOUNT_PROTECTED") {
-    showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleNotFoundError(status, code, backendMessage) {
-  if (status === 404 || code === "RESOURCE_NOT_FOUND") {
-    showNotice(backendMessage || "요청한 대상을 찾을 수 없습니다.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleInvalidRequestError(status, code, backendMessage) {
-  if (status === 400 || code === "VALIDATION_FAILED" || code === "INVALID_REQUEST" || code === "BLOCK_REASON_REQUIRED") {
-    showNotice(backendMessage || "입력값을 확인해주세요.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleConflictError(status, code, backendMessage) {
-  if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE" || code === "ACCOUNT_WITHDRAWN") {
-    showNotice(backendMessage || "현재 상태에서는 처리할 수 없습니다.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleRateLimitError(status, code, backendMessage) {
-  if (status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "FREE_TRIAL_LIMIT_EXCEEDED") {
-    showNotice(
-      backendMessage ||
-        (code === "FREE_TRIAL_LIMIT_EXCEEDED"
-          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요."
-          : "요청이 많습니다. 잠시 후 다시 시도해주세요."),
-    );
-    return true;
-  }
-
-  return false;
-}
-
-function handleTimeoutError(status, code, backendMessage) {
-  if (status === 0 || status === 504 || code === "REQUEST_TIMEOUT" || code === "AI_TIMEOUT") {
-    showNotice(backendMessage || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleAiUnavailableError(status, code, backendMessage) {
-  if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
-    showNotice(backendMessage || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleServerError(status, code, backendMessage) {
-  if (status >= 500 || code === "INTERNAL_SERVER_ERROR") {
-    showNotice(backendMessage || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-    return true;
-  }
-
-  return false;
-}
-
-function handleFallbackBackendError(backendMessage, fallbackMessage) {
-  if (backendMessage || fallbackMessage) {
-    showNotice(backendMessage || fallbackMessage);
-    return true;
-  }
-
-  return false;
-}
-
 function isAdminAccount() {
   return state.isLoggedIn && String(state.currentUserRole || "").toLowerCase() === "admin";
 }
