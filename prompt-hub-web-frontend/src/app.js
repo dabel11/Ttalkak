@@ -38,6 +38,12 @@ if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn
   throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
 }
 
+const { bindAppEvents } = window.TtalkakEvents || {};
+
+if (typeof bindAppEvents !== "function") {
+  throw new Error("TTALKAK 이벤트 바인더를 불러오지 못했습니다.");
+}
+
 const {
   AdminRevisionRequestModalView,
   AdminPageView,
@@ -2279,6 +2285,13 @@ function updateCapsLockWarning(input, event) {
 }
 
 function bindEvents() {
+  bindAppEvents({
+    bindCoreEvents,
+    bindMakeEvents,
+  });
+}
+
+function bindCoreEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
     const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
     const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
@@ -2797,10 +2810,6 @@ function bindEvents() {
     });
   });
 
-  bindMakeComposerEvents();
-  bindMakeTemplateEvents();
-  bindMakeMessageActionEvents();
-
   document.querySelectorAll("[data-admin-hide-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       toggleAdminPromptHidden(button.dataset.adminHidePrompt);
@@ -2963,9 +2972,6 @@ function bindEvents() {
       executeMakeMessage(state.executeMessageId, button.dataset.executeTarget);
     });
   });
-
-  bindMakeThreadEvents();
-  bindMakeFolderEvents();
 
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
@@ -4573,6 +4579,14 @@ function decrementPromptComments(promptId) {
     prompt.comments = Math.max(0, prompt.comments - 1);
     updated.add(prompt);
   }
+}
+
+function bindMakeEvents() {
+  bindMakeComposerEvents();
+  bindMakeTemplateEvents();
+  bindMakeMessageActionEvents();
+  bindMakeThreadEvents();
+  bindMakeFolderEvents();
 }
 
 function bindMakeComposerEvents() {
