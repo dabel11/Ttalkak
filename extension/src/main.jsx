@@ -24,6 +24,7 @@ const STORAGE = {
   RECENTS: "pp_recent_threads",
   CONFIG: "pp_backend_config",
   LEGACY_CONFIG: "pp_rag_config",
+  AUTH: "pp_auth_session",
 };
 
 const DEFAULT_RAG_CONFIG = {
@@ -115,6 +116,47 @@ function saveStorage(key, value) {
   } catch {}
 }
 
+function getChromeLocalStorage() {
+  return window.chrome?.storage?.local || null;
+}
+
+async function loadExtensionStorage(key, fallback) {
+  const chromeStorage = getChromeLocalStorage();
+  if (!chromeStorage) return loadStorage(key, fallback);
+
+  return new Promise((resolve) => {
+    chromeStorage.get([key], (result) => {
+      if (window.chrome?.runtime?.lastError) {
+        resolve(fallback);
+        return;
+      }
+      resolve(result?.[key] ?? fallback);
+    });
+  });
+}
+
+async function saveExtensionStorage(key, value) {
+  const chromeStorage = getChromeLocalStorage();
+  if (!chromeStorage) {
+    saveStorage(key, value);
+    return;
+  }
+
+  await new Promise((resolve) => chromeStorage.set({ [key]: value }, resolve));
+}
+
+async function removeExtensionStorage(key) {
+  const chromeStorage = getChromeLocalStorage();
+  if (!chromeStorage) {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    return;
+  }
+
+  await new Promise((resolve) => chromeStorage.remove([key], resolve));
+}
+
 function normalizeBackendConfig(config = {}) {
   const legacyUrl = config.serverUrl && !String(config.serverUrl).includes(":8000") ? config.serverUrl : "";
   return {
@@ -151,10 +193,15 @@ function promptMatches(item, query) {
 
 async function requestPromptImprove(config, payload) {
   const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
+  const accessToken = payload?.accessToken || "";
+  const { accessToken: _accessToken, ...requestPayload } = payload;
   const res = await fetch(`${baseUrl}/api/prompts/improve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(requestPayload),
   });
   const responseBody = await res.json().catch(() => null);
 
@@ -162,10 +209,57 @@ async function requestPromptImprove(config, payload) {
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";
+    error.payload = responseBody;
     throw error;
   }
 
-  return normalizeImproveResult(responseBody, payload.prompt);
+  return normalizeImproveResult(responseBody, requestPayload.prompt);
+}
+
+async function requestLogin(config, credentials) {
+  const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
+  const res = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
+  const responseBody = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const error = new Error(getApiErrorMessage(res.status, responseBody));
+    error.status = res.status;
+    error.code = responseBody?.code || "";
+    error.payload = responseBody;
+    throw error;
+  }
+
+  return normalizeAuthSession(responseBody);
+}
+
+function normalizeAuthSession(payload) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+  const user = data.user || {};
+  const accessToken = String(data.accessToken || data.token || data.authToken || data.jwt || "").trim();
+  if (!accessToken) throw new Error("로그인 응답에 accessToken이 없습니다.");
+
+  const normalizedUser = {
+    id: user.id ?? null,
+    userId: user.userId || "",
+    nickname: user.nickname || user.name || user.userId || "사용자",
+    role: String(user.role || "user").toLowerCase(),
+  };
+
+  return {
+    accessToken,
+    user: normalizedUser,
+    displayName: normalizedUser.nickname || normalizedUser.userId || "사용자",
+  };
+}
+
+function isAuthExpiredError(error) {
+  const status = Number(error?.status || error?.payload?.status || 0);
+  const code = String(error?.code || error?.payload?.code || "").toUpperCase();
+  return status === 401 || code === "LOGIN_REQUIRED" || code === "AUTHENTICATION_REQUIRED" || code === "ACCOUNT_BLOCKED";
 }
 
 function normalizeImproveResult(payload, fallbackPrompt = "") {
@@ -190,6 +284,7 @@ function normalizeImproveResult(payload, fallbackPrompt = "") {
 
 function getApiErrorMessage(status, body) {
   const code = body?.code || "";
+  if (code === "ACCOUNT_BLOCKED") return body?.message || "차단된 계정입니다. 관리자에게 문의해주세요.";
   if (code === "AI_TIMEOUT") return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
   if (code === "AI_SERVICE_UNAVAILABLE") return body?.message || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
   if (code === "FREE_TRIAL_LIMIT_EXCEEDED") return body?.message || "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
@@ -230,7 +325,7 @@ function App() {
   const [copiedId, setCopiedId] = useState("");
   const [notice, setNotice] = useState("");
   const [authMode, setAuthMode] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [authSession, setAuthSession] = useState(null);
   const [executeTarget] = useState("auto");
   const [showRagSettings, setShowRagSettings] = useState(false);
   const [ragStatus, setRagStatus] = useState("idle");
@@ -240,10 +335,21 @@ function App() {
   const [ragConfig, setRagConfig] = useState(loadBackendConfig);
   const [savedItems, setSavedItems] = useState(() => loadStorage(STORAGE.SAVED, []));
   const [recentThreads, setRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
+  const currentUser = authSession?.displayName || authSession?.user?.nickname || authSession?.user?.userId || "";
 
   useEffect(() => saveStorage(STORAGE.CONFIG, ragConfig), [ragConfig]);
   useEffect(() => saveStorage(STORAGE.SAVED, savedItems), [savedItems]);
   useEffect(() => saveStorage(STORAGE.RECENTS, recentThreads), [recentThreads]);
+  useEffect(() => {
+    let mounted = true;
+    loadExtensionStorage(STORAGE.AUTH, null).then((session) => {
+      if (!mounted || !session?.accessToken) return;
+      setAuthSession(session);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const ragMode = MODE_META[ragConfig.collectionName] ? ragConfig.collectionName : "prompt_techniques";
 
@@ -277,6 +383,25 @@ function App() {
     setNotice(message);
     window.clearTimeout(showNotice._timer);
     showNotice._timer = window.setTimeout(() => setNotice(""), 1800);
+  }
+
+  async function handleLogin(credentials) {
+    const session = await requestLogin(ragConfig, credentials);
+    setAuthSession(session);
+    await saveExtensionStorage(STORAGE.AUTH, session);
+    setAuthMode(null);
+    showNotice(`${session.displayName}님으로 로그인했습니다.`);
+  }
+
+  async function handleLogout(message = "로그아웃했습니다.") {
+    setAuthSession(null);
+    await removeExtensionStorage(STORAGE.AUTH);
+    showNotice(message);
+  }
+
+  async function handleAuthExpired() {
+    await handleLogout("로그인이 만료되었습니다. 다시 로그인해주세요.");
+    setAuthMode("login");
   }
 
   function openPrompt(item) {
@@ -422,6 +547,7 @@ function App() {
         collectionName: ragConfig.collectionName,
         topK: ragConfig.topK,
         model: ragConfig.model,
+        accessToken: authSession?.accessToken || "",
       });
       setRagStatus("connected");
 
@@ -473,6 +599,7 @@ function App() {
     } catch (err) {
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
+      if (isAuthExpiredError(err)) await handleAuthExpired();
       setMessages((prev) => [
         ...prev,
         {
@@ -535,7 +662,7 @@ function App() {
           <Header
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
-            onLogout={() => setCurrentUser(null)}
+            onLogout={() => handleLogout()}
             onToggleRagSettings={() => setShowRagSettings((v) => !v)}
             ragMode={ragMode}
             ragStatus={ragStatus}
@@ -579,10 +706,8 @@ function App() {
           mode={authMode}
           setMode={setAuthMode}
           onClose={() => setAuthMode(null)}
-          onLogin={(userName) => {
-            setCurrentUser(userName);
-            setAuthMode(null);
-          }}
+          onLogin={handleLogin}
+          backendApiUrl={ragConfig.backendApiUrl}
         />
       )}
       {confirmAction && (
@@ -1004,22 +1129,23 @@ function RagSettingsPanel({ config, status, onChange, onClose }) {
   );
 }
 
-function AuthModal({ mode, setMode, onClose, onLogin }) {
+function AuthModal({ mode, setMode, onClose, onLogin, backendApiUrl }) {
   const isSignup = mode === "signup";
   const isFindId = mode === "findId";
   const isFindPassword = mode === "findPassword";
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ userId: "", password: "", name: "", phone: "" });
   const [result, setResult] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const title = isSignup ? "Sign up" : isFindId ? "Find ID" : isFindPassword ? "Find password" : "Login";
   const description = isSignup
-    ? "Create an account with your name and phone number."
+    ? "회원가입은 웹사이트에서 진행해주세요."
     : isFindId
       ? "Enter your name and phone number to find your ID."
       : isFindPassword
         ? "Enter your ID and phone number to request a password reset."
-        : "Continue using your saved prompts and previous chats.";
+        : "Spring Boot 계정으로 로그인해 웹과 동일한 회원 정보를 사용합니다.";
 
   function updateField(field, value) {
     setResult("");
@@ -1031,7 +1157,7 @@ function AuthModal({ mode, setMode, onClose, onLogin }) {
     setMode(nextMode);
   }
 
-  function submitAuth(e) {
+  async function submitAuth(e) {
     e.preventDefault();
     if (isFindId) {
       setResult("After backend account API integration, the matching ID will be shown here.");
@@ -1041,7 +1167,19 @@ function AuthModal({ mode, setMode, onClose, onLogin }) {
       setResult("After backend account API integration, this will start the password reset flow.");
       return;
     }
-    onLogin(isSignup ? form.name || "User" : form.userId || "User");
+    if (isSignup) {
+      setResult("Extension 회원가입은 아직 지원하지 않습니다. 웹사이트에서 가입 후 로그인해주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onLogin({ userId: form.userId.trim(), password: form.password });
+    } catch (error) {
+      setResult(error?.message || "로그인에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -1052,6 +1190,7 @@ function AuthModal({ mode, setMode, onClose, onLogin }) {
           <div className="auth-icon"><Plus size={22} /></div>
           <h2>{title}</h2>
           <p>{description}</p>
+          {!isSignup && !isFindId && !isFindPassword && backendApiUrl && <p className="auth-result">API: {backendApiUrl}</p>}
         </div>
         <form className="auth-form" onSubmit={submitAuth}>
           {(isSignup || isFindId) && (
@@ -1084,8 +1223,8 @@ function AuthModal({ mode, setMode, onClose, onLogin }) {
             </label>
           )}
           {result && <p className="auth-result">{result}</p>}
-          <button className="auth-submit" type="submit">
-            {isFindId ? "Find ID" : isFindPassword ? "Find password" : isSignup ? "Sign up" : "Login"}
+          <button className="auth-submit" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : isFindId ? "Find ID" : isFindPassword ? "Find password" : isSignup ? "Sign up" : "Login"}
           </button>
         </form>
         {isSignup || isFindId || isFindPassword ? (

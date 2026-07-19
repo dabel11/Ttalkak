@@ -16,8 +16,11 @@ Chrome extension
 -> Chrome extension
 ```
 
-- The extension keeps saved prompts and recent chats in local storage for now.
-- Server-side login, thread storage, folder storage, and share integration are future integration points.
+- Login uses the Spring Boot `POST /api/auth/login` API.
+- The returned `accessToken` and user info are stored in `chrome.storage.local` and restored when the extension opens again.
+- Authenticated API requests include `Authorization: Bearer {accessToken}`.
+- On `401` or blocked-account responses, the extension clears the stored auth session and asks the user to log in again.
+- Saved prompts and recent chats are still extension-local for now. Server-side thread storage, folder storage, and share integration are future integration points.
 - Claude currently uses clipboard fallback. ChatGPT and Gemini use page insertion where possible, then clipboard fallback if insertion fails.
 
 ## Development

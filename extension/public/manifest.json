@@ -3,7 +3,7 @@
   "name": "Ttalkak",
   "description": "TTALKAK Chrome side panel for improving prompts and sending them to AI tools.",
   "version": "1.0.0",
-  "permissions": ["sidePanel", "scripting", "activeTab", "tabs", "clipboardWrite", "debugger"],
+  "permissions": ["sidePanel", "scripting", "activeTab", "tabs", "clipboardWrite", "debugger", "storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
