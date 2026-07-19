@@ -1,4 +1,31 @@
-﻿const popularPrompts = [
+﻿const {
+  normalizeSearchText,
+  normalizeTag,
+  isValidPhone,
+  isFutureDate,
+  escapeHtml,
+  getFinalPromptText,
+  formatNumber,
+  formatShortDate,
+  parseTimestamp,
+} = window.TtalkakUtils || {};
+
+if (
+  [
+    normalizeSearchText,
+    normalizeTag,
+    isValidPhone,
+    isFutureDate,
+    escapeHtml,
+    getFinalPromptText,
+    formatNumber,
+    formatShortDate,
+    parseTimestamp,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
+}
+const popularPrompts = [
   {
     id: "post-1",
     title: "전문적인 인스타그램 캡션 작성",
@@ -7338,80 +7365,8 @@ function getValidSearchScope(scope) {
   return ["all", "tag", "keyword", "author"].includes(scope) ? scope : "all";
 }
 
-function normalizeSearchText(value) {
-  return String(value || "")
-    .replace(/^#+/, "")
-    .replace(/[#,]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeTag(value) {
-  return value.replace(/^#+/, "").trim().toLowerCase();
-}
-
-function isValidPhone(value) {
-  return /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(value || "").trim());
-}
-
-function isFutureDate(value) {
-  if (!value) return false;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date > today;
-}
-
-function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 function polishPrompt(prompt) {
   return `역할: 당신은 해당 분야의 전문 어시스턴트입니다.\n\n목표: ${prompt}\n\n요구사항:\n- 요청의 목적을 먼저 파악하고 필요한 경우 합리적인 가정을 명시하세요.\n- 구체적인 단계, 출력 형식, 확인 기준을 포함해 답변하세요.\n- 모호한 표현은 명확한 기준과 예시로 바꿔 설명하세요.\n- 바로 사용할 수 있는 형태로 결과물을 작성하세요.\n\n출력 형식:\n1. 최종 답변\n2. 핵심 근거\n3. 필요 시 다음 액션`;
-}
-
-function getFinalPromptText(message) {
-  const content = String(message?.content || "");
-  const marker = "역할:";
-  const markerIndex = content.indexOf(marker);
-
-  if (markerIndex > 0 && content.slice(0, markerIndex).includes("개선")) {
-    return content.slice(markerIndex).trim();
-  }
-
-  return content.trim();
-}
-
-function formatNumber(value) {
-  const number = Number(value);
-  return new Intl.NumberFormat("ko-KR").format(Number.isFinite(number) ? number : 0);
-}
-
-function formatShortDate(value) {
-  const time = parseTimestamp(value);
-  if (!time) return "방금 생성";
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(time));
-}
-
-function parseTimestamp(value) {
-  if (!value) return 0;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue) && numericValue > 0) return numericValue;
-  const parsed = Date.parse(String(value));
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function showNotice(message) {
