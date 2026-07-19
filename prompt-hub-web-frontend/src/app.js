@@ -850,7 +850,7 @@ function Page() {
 
 function HomePage() {
   const isBackendHome = state.backendStatus === "connected";
-  const prompts = applyReportedVisibility(isBackendHome ? getUniquePrompts(popularPrompts) : getVisiblePopularPrompts());
+  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : getVisiblePopularPrompts());
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
   const displayTags = isBackendHome ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
