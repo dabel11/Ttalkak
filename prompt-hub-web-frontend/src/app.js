@@ -120,7 +120,12 @@ const {
   DEMO_AUTH_TOKEN,
   addCommentReplyState,
   addPromptCommentState,
+  applyAdminPromptHiddenState,
+  applyAdminReportStatusState,
   applyAdminRevisionRequestState,
+  applyAdminTagDecisionState,
+  applyAdminUserActivityRefreshState,
+  applyAdminUserBlockActivityState,
   applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
   applyCommentReportedState,
@@ -180,7 +185,12 @@ if (
     createInitialState,
     addCommentReplyState,
     addPromptCommentState,
+    applyAdminPromptHiddenState,
+    applyAdminReportStatusState,
     applyAdminRevisionRequestState,
+    applyAdminTagDecisionState,
+    applyAdminUserActivityRefreshState,
+    applyAdminUserBlockActivityState,
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
@@ -5413,31 +5423,10 @@ function getAdminUserBlockArgs(memberId, shouldBlock, reason) {
 }
 
 function applyAdminUserBlockActivity({ activity, memberId, shouldBlock, nickname }) {
-  const displayNickname = String(activity?.nickname || nickname || state.adminUserActivityNickname || "사용자").trim();
-  const normalizedNickname = normalizeAdminSearchText(displayNickname);
-  const previousActivity = state.backendAdminUserActivities[normalizedNickname] || getAdminUserActivity(displayNickname);
-
-  state.backendAdminUserActivities = {
-    ...state.backendAdminUserActivities,
-    [normalizedNickname]: {
-      ...previousActivity,
-      ...activity,
-      prompts: previousActivity.prompts || activity?.prompts || [],
-      comments: previousActivity.comments || activity?.comments || [],
-      replies: previousActivity.replies || activity?.replies || [],
-      reportsMade: previousActivity.reportsMade || activity?.reportsMade || [],
-      reportsReceived: previousActivity.reportsReceived || activity?.reportsReceived || [],
-      nickname: displayNickname,
-      memberId,
-      blocked: shouldBlock,
-    },
-  };
-  state.adminUserActivityNickname = displayNickname;
-  state.adminUserQuery = displayNickname;
-  state.adminBlockTarget = null;
-  state.adminBackendStatus = "idle";
-
-  return { displayNickname, normalizedNickname };
+  return applyAdminUserBlockActivityState(
+    { getAdminUserActivity, normalizeAdminSearchText, state },
+    { activity, memberId, shouldBlock, nickname },
+  );
 }
 
 function refreshAdminUserActivityAfterBlock(memberId, normalizedNickname, displayNickname, shouldBlock) {
@@ -5447,17 +5436,7 @@ function refreshAdminUserActivityAfterBlock(memberId, normalizedNickname, displa
   api
     .getAdminUserActivity(memberId, { page: 1, pageSize: 20 }, getAuthToken() || undefined)
     .then((refreshedActivity) => {
-      const currentActivity = state.backendAdminUserActivities[normalizedNickname] || {};
-      state.backendAdminUserActivities = {
-        ...state.backendAdminUserActivities,
-        [normalizedNickname]: {
-          ...currentActivity,
-          ...refreshedActivity,
-          nickname: displayNickname,
-          memberId,
-          blocked: shouldBlock,
-        },
-      };
+      applyAdminUserActivityRefreshState(state, { refreshedActivity, normalizedNickname, displayNickname, memberId, shouldBlock });
       if (normalizeAdminSearchText(state.adminUserActivityNickname) === normalizedNickname) {
         render();
       }
@@ -6295,6 +6274,7 @@ async function updateAdminTagDecision(tag, decision) {
   if (!tag || !["pending", "approved", "rejected", "disabled"].includes(decision)) return;
 
   let backendChanged = false;
+  let updated = null;
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
   const currentStatus = backendTag?.status || state.adminTagDecisions[tag] || "pending";
   if (!canTransitionAdminTagStatus(currentStatus, decision)) {
@@ -6309,16 +6289,12 @@ async function updateAdminTagDecision(tag, decision) {
     });
     if (!result.ok) return;
 
-    const updated = result.value;
-    state.backendAdminTags = state.backendAdminTags.map((item) =>
-      item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
-    );
+    updated = result.value;
     backendChanged = true;
   }
 
-  state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
-
-  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+  applyAdminTagDecisionState(state, { tag, decision, backendTag, updated, normalizeTag });
+  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}(으)로 변경했습니다.`);
   if (backendChanged) await refreshAdminAfterMutation({ auditReason: "태그 상태 변경 후" });
 }
 
@@ -6326,7 +6302,7 @@ async function updateReportRecordStatus(key, status) {
   if (!key || !["pending", "reviewed", "dismissed", "resolved"].includes(status)) return;
   const record = getReportRecord(key);
   if (isFinalReportStatus(record.status) && status !== record.status) {
-    showNotice("처리 완료 또는 기각된 신고는 상태를 다시 변경할 수 없습니다.");
+    showNotice("처리 완료 또는 기각된 신고의 상태를 다시 변경할 수 없습니다.");
     return;
   }
   if (status === "pending" && ["reviewed", "resolved", "dismissed"].includes(record.status)) {
@@ -6334,6 +6310,7 @@ async function updateReportRecordStatus(key, status) {
     return;
   }
   let backendChanged = false;
+  let updated = null;
   if (record.backendId && canUseAdminApiAction("updateAdminReportStatus")) {
     const result = await runAdminApiMutation(
       "updateAdminReportStatus",
@@ -6346,16 +6323,11 @@ async function updateReportRecordStatus(key, status) {
     );
     if (!result.ok) return;
 
-    const updated = result.value;
-    const backendStatus = mapBackendReportStatus(updated?.status || status);
-    state.backendAdminReports = state.backendAdminReports.map((report) =>
-      report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
-    );
-    status = backendStatus;
+    updated = result.value;
     backendChanged = true;
   }
-  state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
-  showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
+  const nextStatus = applyAdminReportStatusState(state, { key, record, status, updated, mapBackendReportStatus, getReportRecord });
+  showNotice(`신고 상태를 ${getReportStatusLabel(nextStatus)}로 변경했습니다.`);
   if (backendChanged) await refreshAdminAfterMutation({ auditReason: "신고 상태 변경 후" });
 }
 
@@ -6524,11 +6496,12 @@ async function toggleAdminPromptHidden(promptId) {
   const canUseBackendPromptAction = hasBackendAuthToken() && isBackendNumericId(promptId);
 
   if (!canUseBackendPromptAction) {
-    showNotice("서버 프롬프트 ID와 관리자 토큰이 있어야 게시물 숨김을 감사 로그에 남길 수 있습니다.");
+    showNotice("서버 프롬프트 ID와 관리자 토큰이 있어야 게시물 숨김 감사 로그를 남길 수 있습니다.");
     return;
   }
 
-  if (state.adminHiddenPromptIds.has(promptId)) {
+  const shouldRestore = state.adminHiddenPromptIds.has(promptId);
+  if (shouldRestore) {
     if (canUseAdminApiAction("restoreAdminPrompt")) {
       const result = await runAdminApiMutation("restoreAdminPrompt", [promptId], {
         fallbackMessage: "게시글 숨김 해제 요청에 실패했습니다.",
@@ -6540,7 +6513,7 @@ async function toggleAdminPromptHidden(promptId) {
       showNotice("게시글 숨김 해제 API가 연결되어 있지 않습니다.");
       return;
     }
-    state.adminHiddenPromptIds.delete(promptId);
+    applyAdminPromptHiddenState(state, promptId, false);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
     if (canUseAdminApiAction("hideAdminPrompt")) {
@@ -6554,7 +6527,7 @@ async function toggleAdminPromptHidden(promptId) {
       showNotice("게시글 숨김 API가 연결되어 있지 않습니다.");
       return;
     }
-    state.adminHiddenPromptIds.add(promptId);
+    applyAdminPromptHiddenState(state, promptId, true);
     showNotice("관리자 숨김 처리했습니다.");
   }
   if (backendChanged) await refreshAdminAfterMutation({ auditReason: "게시물 숨김/해제 후" });
