@@ -36,6 +36,8 @@ if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn
   throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
 }
 
+const DEMO_FALLBACK_ENABLED = window.TTALKAK_DEMO_FALLBACK_ENABLED === true;
+
 const popularPrompts = [
   {
     id: "post-1",
@@ -782,7 +784,7 @@ function getAdminTabs() {
   const filteredAdminPrompts = allPrompts
     .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
     .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
-  const adminTags = getAdminManagedTags();
+  const adminTags = canShowAdminData ? getAdminManagedTags() : [];
 
   return [
     { id: "reports", label: "신고 관리", count: reportRecords.length },
@@ -852,9 +854,10 @@ function Page() {
 
 function HomePage() {
   const isBackendHome = state.backendStatus === "connected";
-  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : getVisiblePopularPrompts());
+  const canShowDemoHome = !isBackendHome && canUseDemoFallback();
+  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : canShowDemoHome ? getVisiblePopularPrompts() : []);
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = isBackendHome ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
+  const displayTags = isBackendHome ? state.backendPopularTags : canShowDemoHome ? popularTags.length ? popularTags : fallbackPopularTags : [];
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const totalPages = isBackendHome ? getBackendHomeTotalPages() : getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
@@ -903,6 +906,11 @@ function HomePage() {
         pagePrompts.length
           ? `<div class="prompt-grid" aria-label="인기 프롬프트 목록">${pagePrompts.map((prompt) => PromptCard(prompt, { showStatus: false })).join("")}</div>
              ${Pagination(totalPages, currentPage)}`
+          : state.backendStatus === "fallback" && !canUseDemoFallback()
+            ? `<div class="empty-state search-empty">
+                <span>${icons.search}</span>
+                <p>서버 데이터를 불러오지 못했습니다. 백엔드 연결과 Network 응답을 확인해주세요.</p>
+              </div>`
           : `<div class="empty-state search-empty">
               <span>${icons.search}</span>
               <p>일치하는 프롬프트가 없습니다.</p>
@@ -1058,13 +1066,21 @@ function PromptCard(prompt, options = {}) {
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const message = state.backendStatusMessage || "백엔드 연결 확인 중";
-  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "데모 데이터 표시 중" : "Backend 확인 중";
+  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? canUseDemoFallback() ? "데모 데이터 표시 중" : "Backend 오류" : "Backend 확인 중";
   return `
     <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
       <span class="backend-status-dot" aria-hidden="true"></span>
       <span>${label}</span>
     </div>
   `;
+}
+
+function canUseDemoFallback() {
+  return DEMO_FALLBACK_ENABLED;
+}
+
+function getApiFailureMessage(areaLabel = "API") {
+  return `${areaLabel} 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 데이터를 표시하지 않습니다.`;
 }
 
 function getPromptCardPreviewTags(tags) {
@@ -1708,6 +1724,17 @@ function DemoLibraryPrompt() {
     `;
   }
 
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 응답 실패</strong>
+          <p>My page API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 보관함을 표시하지 않습니다.</p>
+        </div>
+      </div>
+    `;
+  }
+
   const isSeeded = state.libraryDemoSeeded;
   return `
     <div class="demo-library-prompt">
@@ -1715,7 +1742,7 @@ function DemoLibraryPrompt() {
         <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
         <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
       </div>
-      <button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>
+      ${canUseDemoFallback() ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
     </div>
   `;
 }
@@ -1925,8 +1952,9 @@ function AdminPage() {
     `;
   }
 
-  const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
-  const reportRecords = getAdminReportRecords();
+  const canShowAdminData = state.adminBackendStatus === "connected" || canUseDemoFallback();
+  const reportedPrompts = canShowAdminData ? [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean) : [];
+  const reportRecords = canShowAdminData ? getAdminReportRecords() : [];
   const adminReportFilter = ["all", "prompt", "comment"].includes(state.adminReportFilter) ? state.adminReportFilter : "all";
   const filteredReportRecords = reportRecords.filter((record) => adminReportFilter === "all" || record.type === adminReportFilter);
   const adminReportFilters = [
@@ -1934,7 +1962,9 @@ function AdminPage() {
     { id: "prompt", label: "프롬프트", count: reportRecords.filter((record) => record.type === "prompt").length },
     { id: "comment", label: "댓글", count: reportRecords.filter((record) => record.type === "comment").length },
   ];
-  const allPrompts = state.backendAdminPrompts.length
+  const allPrompts = !canShowAdminData
+    ? []
+    : state.backendAdminPrompts.length
     ? getUniquePrompts(state.backendAdminPrompts)
     : getUniquePrompts([...popularPrompts, ...savedPrompts]);
   const adminPromptQuery = state.adminPromptQuery || "";
@@ -2242,7 +2272,7 @@ function AdminPage() {
           <span>${icons.shield}</span>
           <h1 id="admin-heading">Admin</h1>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 댓글은 별도 메뉴로 분리하지 않고 신고 관리, 프롬프트 원문 보기, 사용자 활동 안에서 게시물 맥락과 함께 확인합니다.</p>
+        <p class="admin-demo-note">${escapeHtml(getAdminModeNotice())}</p>
       </div>
       <div class="admin-workspace">
         <div class="admin-content-panel">
@@ -2355,6 +2385,16 @@ function getAdminAuditTargetLabel(log) {
   if (!targetId) return targetType;
   if (!targetType) return `대상 ${targetId}`;
   return `${targetType} #${targetId}`;
+}
+
+function getAdminModeNotice() {
+  if (state.adminBackendStatus === "fallback" && !canUseDemoFallback()) {
+    return "관리자 API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 관리자 데이터를 표시하지 않습니다.";
+  }
+  if (state.adminBackendStatus === "demo") {
+    return "데모 관리자 데이터를 표시 중입니다. 실제 운영 검수는 관리자 토큰으로 백엔드 API 연결 상태에서 확인해주세요.";
+  }
+  return "프론트엔드 검수용 관리자 화면입니다. 댓글은 별도 메뉴로 분리하지 않고 신고 관리, 프롬프트 원문 보기, 사용자 활동 안에서 게시물 맥락과 함께 확인합니다.";
 }
 
 function AdminUserActivitySummary(activity) {
@@ -3433,7 +3473,17 @@ function bindEvents() {
       const assistantMessageId = `make-${now}`;
       state.activeThreadId = threadId;
       state.messages.push({ id: `user-${now}`, role: "user", content: value });
-      const improvedPrompt = await improvePromptWithBackend(value);
+      let improvedPrompt = "";
+      try {
+        improvedPrompt = await improvePromptWithBackend(value);
+      } catch (error) {
+        if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
+        state.makeBackendStatus = "fallback";
+        state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
+        handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
+        render();
+        return;
+      }
       state.messages.push({
         id: assistantMessageId,
         role: "assistant",
@@ -5201,7 +5251,15 @@ async function createMakeFolder(folderName) {
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
   const backendFolderId = await createBackendMakeFolder({ name: cleanName });
-  if (backendFolderId) folder.serverId = backendFolderId;
+  if (backendFolderId) {
+    folder.serverId = backendFolderId;
+  } else if (!canUseDemoFallback()) {
+    state.makeFolders = state.makeFolders.filter((item) => item.id !== folder.id);
+    state.activeFolderId = "all";
+    showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
+    render();
+    return;
+  }
   showNotice("폴더를 추가했습니다.");
   render();
 }
@@ -5242,6 +5300,7 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
     return;
   }
 
+  const previousFolderId = thread.folderId;
   const folder = { id: `folder-${Date.now()}`, name: cleanName };
   state.makeFolders.push(folder);
   thread.folderId = folder.id;
@@ -5253,7 +5312,15 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
     folder.serverId = backendFolderId;
     await moveThreadToFolderOnBackend(thread, backendFolderId);
   } else {
-    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다.");
+    if (!canUseDemoFallback()) {
+      state.makeFolders = state.makeFolders.filter((item) => item.id !== folder.id);
+      thread.folderId = previousFolderId || "uncategorized";
+      state.activeFolderId = thread.folderId;
+      showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
+      render();
+      return;
+    }
   }
   showNotice("새 폴더를 만들고 대화를 이동했습니다.");
   render();
@@ -5281,17 +5348,34 @@ async function renameMakeFolder(folderId, name) {
   const cleanName = String(name || "").trim();
   if (!folder || !cleanName) return;
 
-  folder.name = cleanName;
   state.editingFolderId = null;
   const backendFolderId = getBackendFolderId(folderId);
   if (backendFolderId) {
-    callBackendApi("updateMakeFolder", backendFolderId, { name: cleanName });
+    const api = window.TTALKAK_API;
+    try {
+      if (api?.updateMakeFolder) {
+        await api.updateMakeFolder(backendFolderId, { name: cleanName }, getAuthToken() || undefined);
+      } else if (!canUseDemoFallback()) {
+        showNotice("폴더 이름 수정 API가 없어 변경을 취소했습니다.");
+        render();
+        return;
+      }
+    } catch (error) {
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "폴더 이름 수정 요청에 실패해 로컬 데모 상태만 유지합니다." : "폴더 이름 수정 요청에 실패했습니다.",
+      );
+      showNotice("폴더 이름 수정 요청에 실패했습니다.");
+      render();
+      return;
+    }
   }
+  folder.name = cleanName;
   showNotice("폴더 이름을 수정했습니다.");
   render();
 }
 
-function performDeleteFolder(folderId) {
+async function performDeleteFolder(folderId) {
   if (guardAdminUserAction()) {
     render();
     return;
@@ -5305,15 +5389,41 @@ function performDeleteFolder(folderId) {
 
   if (!folderId || folderId === "uncategorized") return;
   const backendFolderId = getBackendFolderId(folderId);
+  const previousFolders = state.makeFolders.map((folder) => ({ ...folder }));
+  const previousThreadFolders = state.recentThreads.map((thread) => ({ id: thread.id, folderId: thread.folderId }));
+  const previousActiveFolderId = state.activeFolderId;
+  if (backendFolderId) {
+    const api = window.TTALKAK_API;
+    try {
+      if (api?.deleteMakeFolder) {
+        await api.deleteMakeFolder(backendFolderId, getAuthToken() || undefined);
+      } else if (!canUseDemoFallback()) {
+        showNotice("폴더 삭제 API가 없어 변경을 취소했습니다.");
+        render();
+        return;
+      }
+    } catch (error) {
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "폴더 삭제 요청에 실패해 로컬 데모 상태만 유지합니다." : "폴더 삭제 요청에 실패했습니다.",
+      );
+      state.makeFolders = previousFolders;
+      previousThreadFolders.forEach((previous) => {
+        const thread = state.recentThreads.find((item) => item.id === previous.id);
+        if (thread) thread.folderId = previous.folderId;
+      });
+      state.activeFolderId = previousActiveFolderId;
+      render();
+      return;
+    }
+  }
   state.makeFolders = state.makeFolders.filter((folder) => folder.id !== folderId);
   state.recentThreads.forEach((thread) => {
     if (thread.folderId === folderId) thread.folderId = "uncategorized";
   });
   if (state.activeFolderId === folderId) state.activeFolderId = "all";
-  if (backendFolderId) {
-    callBackendApi("deleteMakeFolder", backendFolderId);
-  }
   showNotice("폴더를 삭제했습니다.");
+  render();
 }
 
 async function moveThreadToFolder(threadId, folderId) {
@@ -5330,20 +5440,27 @@ async function moveThreadToFolder(threadId, folderId) {
 
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
+  const previousFolderId = thread.folderId;
   thread.folderId = folderId || "uncategorized";
-  await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
+  const backendMoved = await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
+  if (!backendMoved && !canUseDemoFallback()) {
+    thread.folderId = previousFolderId || "uncategorized";
+    showNotice("대화 폴더 이동 요청에 실패해 변경을 취소했습니다.");
+    render();
+    return;
+  }
   showNotice("대화 폴더를 변경했습니다.");
   render();
 }
 
 async function moveThreadToFolderOnBackend(thread, backendFolderId) {
   const api = window.TTALKAK_API;
-  if (!api?.moveMakeThread) return;
+  if (!api?.moveMakeThread) return canUseDemoFallback();
 
   const backendThreadId = await ensureBackendMakeThreadId(thread);
   if (!backendThreadId) {
-    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
-    return;
+    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다.");
+    return canUseDemoFallback();
   }
 
   try {
@@ -5352,9 +5469,14 @@ async function moveThreadToFolderOnBackend(thread, backendFolderId) {
       { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
       getAuthToken() || undefined,
     );
+    return true;
   } catch (error) {
-    handleBackendAccessError(error, "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.");
-    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패해 로컬 데모 상태만 유지합니다.", error);
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback() ? "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다." : "대화 폴더 이동 요청에 실패했습니다.",
+    );
+    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패했습니다.", error);
+    return false;
   }
 }
 
@@ -5408,6 +5530,10 @@ function resetDemoState() {
 }
 
 function toggleLibraryDemoData() {
+  if (!canUseDemoFallback()) {
+    showNotice("현재 환경에서는 데모 데이터 fallback이 비활성화되어 있습니다.");
+    return;
+  }
   state.libraryDemoSeeded = !state.libraryDemoSeeded;
   state.savedPage = 1;
   showNotice(state.libraryDemoSeeded ? "보관함 데모 데이터를 표시합니다." : "보관함 데모 데이터를 숨겼습니다.");
@@ -5502,7 +5628,16 @@ async function resendEditedMessage(messageId, value) {
   const assistantMessageId = `make-${now}`;
   state.messages = state.messages.slice(0, index + 1);
   state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
-  const improvedPrompt = await improvePromptWithBackend(cleanValue);
+  let improvedPrompt = "";
+  try {
+    improvedPrompt = await improvePromptWithBackend(cleanValue);
+  } catch (error) {
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
+    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
+    render();
+    return;
+  }
   state.messages.push({
     id: assistantMessageId,
     role: "assistant",
@@ -5954,6 +6089,7 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   const localSavedPrompts = getLocalSavedPagePrompts();
   if (state.myBackendStatus === "connected") {
     return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts, ...localSavedPrompts]);
@@ -6145,8 +6281,17 @@ async function searchAdminUserCandidates(nickname) {
       render();
       return;
     } catch (error) {
-      handleBackendAccessError(error, "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다.");
-      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패해 로컬 후보를 표시합니다.", error);
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      if (!canUseDemoFallback()) {
+        state.adminUserSearchResults = [];
+        state.adminUserSearchMessage = "사용자 검색 API 호출에 실패했습니다.";
+        render();
+        return;
+      }
     }
   }
 
@@ -6208,8 +6353,12 @@ async function openAdminUserActivity(nickname, options = {}) {
         showNotice("일치하는 사용자를 찾지 못했습니다.");
       }
     } catch (error) {
-      handleBackendAccessError(error, "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다.");
-      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패해 로컬 후보를 유지합니다.", error);
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      if (!canUseDemoFallback()) return;
     }
   }
 
@@ -6226,8 +6375,11 @@ async function openAdminUserActivity(nickname, options = {}) {
       };
       render();
     } catch (error) {
-      handleBackendAccessError(error, "사용자 활동 API 조회에 실패했습니다. 데모 데이터로 표시합니다.");
-      console.warn("[TTALKAK] /api/admin/users/{memberId}/activity 계열 호출에 실패해 데모 활동을 유지합니다.", error);
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 활동 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 활동 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users/{memberId}/activity 계열 호출에 실패했습니다.", error);
     }
   }
 }
@@ -6669,6 +6821,7 @@ function getTagStats() {
 }
 
 function getMyPrompts() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   if (state.myBackendStatus === "connected") {
     const localMinePrompts = savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt));
     return getUniquePrompts([...state.backendMyPrompts, ...localMinePrompts]);
@@ -6677,6 +6830,7 @@ function getMyPrompts() {
 }
 
 function getMyComments() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   const localComments = getLocalMyCommentItems();
   if (state.myBackendStatus === "connected") {
     const backendComments = state.backendMyComments.map((comment) => ({
@@ -6727,6 +6881,7 @@ function collectOwnedComments(items, promptId, comments, owner) {
 }
 
 function getMyReports() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   const backendReports = state.backendMyReports.map((report) => ({
     type: report.type,
     title: report.type === "comment" ? "댓글 신고" : "프롬프트 신고",
@@ -7683,13 +7838,18 @@ function callBackendApi(action, ...args) {
 
   const token = getAuthToken();
   if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
-    console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다. 로컬 데모 상태만 유지합니다.`);
+    console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다.`);
     return Promise.resolve(null);
   }
 
   return Promise.resolve(handler(...args, token || undefined)).catch((error) => {
-    handleBackendAccessError(error, "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다.");
-    console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback()
+        ? "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다."
+        : "백엔드 요청에 실패했습니다.",
+    );
+    console.warn(`[TTALKAK] ${action} API 호출에 실패했습니다.`, error);
     return null;
   });
 }
@@ -7727,8 +7887,11 @@ async function createBackendMakeFolder(payload) {
     const result = await api.createMakeFolder(payload, getAuthToken() || undefined);
     return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
   } catch (error) {
-    handleBackendAccessError(error, "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.");
-    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패해 로컬 데모 폴더만 유지합니다.", error);
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback() ? "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다." : "폴더 생성 요청에 실패했습니다.",
+    );
+    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.", error);
     return "";
   }
 }
@@ -7768,8 +7931,12 @@ async function createBackendMakeThread(thread) {
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
   } catch (error) {
-    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.", { keepSession: true });
-    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback() ? "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다." : "대화 저장 요청에 실패했습니다.",
+      { keepSession: true },
+    );
+    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패했습니다.", error);
     return "";
   }
 }
@@ -7803,7 +7970,12 @@ function isBackendNumericId(value) {
 
 async function improvePromptWithBackend(prompt) {
   const api = window.TTALKAK_API;
-  if (!api?.improvePrompt) return polishPrompt(prompt);
+  if (!api?.improvePrompt) {
+    if (canUseDemoFallback()) return polishPrompt(prompt);
+    const error = new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다.");
+    error.code = "API_NOT_CONFIGURED";
+    throw error;
+  }
 
   try {
     const improved = await api.improvePrompt({ prompt }, getAuthToken() || undefined);
@@ -7820,25 +7992,42 @@ async function improvePromptWithBackend(prompt) {
   } catch (error) {
     const status = Number(error?.status || error?.payload?.status || 0);
     const code = String(error?.payload?.code || error?.code || "").toUpperCase();
-    let fallbackMessage = "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.";
+    let fallbackMessage = canUseDemoFallback()
+      ? "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다."
+      : "프롬프트 첨삭 요청에 실패했습니다.";
     if (status === 404) {
-      fallbackMessage = "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다.";
+      fallbackMessage = canUseDemoFallback()
+        ? "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다."
+        : "요청한 프롬프트 또는 리소스를 찾지 못했습니다.";
     } else if (status === 429) {
       if (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED") {
-        fallbackMessage = "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다.";
+        fallbackMessage = canUseDemoFallback()
+          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다."
+          : "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
       } else {
-        fallbackMessage = "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+        fallbackMessage = canUseDemoFallback()
+          ? "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+          : "요청이 많습니다. 잠시 후 다시 시도해주세요.";
       }
     } else if (status === 500) {
-      fallbackMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+      fallbackMessage = canUseDemoFallback()
+        ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
     } else if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
-      fallbackMessage = "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+      fallbackMessage = canUseDemoFallback()
+        ? "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
     } else if (status === 504 || code === "AI_TIMEOUT") {
-      fallbackMessage = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+      fallbackMessage = canUseDemoFallback()
+        ? "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
     }
-    state.makeBackendMessage = `Make 데모 데이터 표시 중: ${fallbackMessage}`;
+    state.makeBackendMessage = canUseDemoFallback()
+      ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
+      : getApiFailureMessage("Make 첨삭 API");
     handleBackendAccessError(error, fallbackMessage);
-    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
+    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패했습니다.", error);
+    if (!canUseDemoFallback()) throw error;
     return polishPrompt(prompt);
   }
 }
@@ -7856,7 +8045,9 @@ async function hydrateBackendMakeDataIfNeeded() {
   const api = window.TTALKAK_API;
   if (!api?.getMakeThreads && !api?.getMakeFolders) {
     state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다.";
+    state.makeBackendMessage = canUseDemoFallback()
+      ? "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다."
+      : getApiFailureMessage("Make API");
     render();
     return;
   }
@@ -7878,7 +8069,7 @@ async function hydrateBackendMakeDataIfNeeded() {
       shouldRender = true;
     }
   } else if (foldersResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/folders 연동에 실패해 데모 폴더를 유지합니다.", foldersResult.reason);
+    console.warn("[TTALKAK] /api/make/folders 연동에 실패했습니다.", foldersResult.reason);
   }
 
   if (threadsResult.status === "fulfilled" && Array.isArray(threadsResult.value)) {
@@ -7898,14 +8089,16 @@ async function hydrateBackendMakeDataIfNeeded() {
       shouldRender = true;
     }
   } else if (threadsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/threads 연동에 실패해 데모 대화를 유지합니다.", threadsResult.reason);
+    console.warn("[TTALKAK] /api/make/threads 연동에 실패했습니다.", threadsResult.reason);
   }
 
   const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
   state.makeBackendStatus = anyConnected ? "connected" : "fallback";
   state.makeBackendMessage = anyConnected
     ? "Make API 연결됨: GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
-    : "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다.";
+    : canUseDemoFallback()
+      ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다."
+      : getApiFailureMessage("Make API");
 
   if (shouldRender || state.route === "make") render();
 }
@@ -7919,7 +8112,11 @@ function refreshMyPageDataAfterMutation() {
 async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
   if (state.route !== "saved" || !state.isLoggedIn || (!force && state.myBackendStatus !== "idle")) return;
   const api = window.TTALKAK_API;
-  if (!api?.getMyLibrary) return;
+  if (!api?.getMyLibrary) {
+    state.myBackendStatus = canUseDemoFallback() ? "idle" : "fallback";
+    render();
+    return;
+  }
 
   state.myBackendStatus = "checking";
   const token = getAuthToken() || undefined;
@@ -7930,6 +8127,9 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
     api.getMyComments?.({ page: 1, pageSize: 64 }, token),
     api.getMyReports?.({ page: 1, pageSize: 64 }, token),
   ]);
+  const allRequestsFailed = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult].every(
+    (result) => result.status === "rejected" || result.value === undefined,
+  );
 
   let shouldRender = false;
   if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
@@ -7948,7 +8148,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
     });
     shouldRender = true;
   } else if (libraryResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/me/library 연동에 실패해 데모 보관함을 유지합니다.", libraryResult.reason);
+    console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
   }
 
   if (likedLibraryResult.status === "fulfilled" && Array.isArray(likedLibraryResult.value?.items)) {
@@ -7965,7 +8165,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
     });
     shouldRender = true;
   } else if (likedLibraryResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패해 좋아요 보관함을 유지합니다.", likedLibraryResult.reason);
+    console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
   }
 
   if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
@@ -7981,7 +8181,7 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
     });
     shouldRender = true;
   } else if (promptsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/me/prompts 연동에 실패해 데모 내 프롬프트를 유지합니다.", promptsResult.reason);
+    console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
   }
 
   if (commentsResult.status === "fulfilled" && Array.isArray(commentsResult.value)) {
@@ -8000,16 +8200,21 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
     shouldRender = true;
   }
 
-  state.myBackendStatus = "connected";
-  if (shouldRender) render();
+  state.myBackendStatus = allRequestsFailed ? "fallback" : "connected";
+  if (shouldRender || allRequestsFailed) render();
 }
 
 async function hydrateBackendAdminDataIfNeeded() {
   if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
   const api = window.TTALKAK_API;
-  if (!api?.getAdminReports && !api?.getAdminTags && !api?.getAdminPrompts && !api?.getAdminRevisionRequests && !api?.getAdminAuditLogs) return;
+  if (!api?.getAdminReports && !api?.getAdminTags && !api?.getAdminPrompts && !api?.getAdminRevisionRequests && !api?.getAdminAuditLogs) {
+    state.adminBackendStatus = canUseDemoFallback() ? "demo" : "fallback";
+    render();
+    return;
+  }
   if (!hasBackendAuthToken()) {
-    state.adminBackendStatus = "demo";
+    state.adminBackendStatus = canUseDemoFallback() ? "demo" : "fallback";
+    render();
     return;
   }
 
@@ -8022,6 +8227,9 @@ async function hydrateBackendAdminDataIfNeeded() {
     api.getAdminRevisionRequests?.({}, token),
     api.getAdminAuditLogs?.({}, token),
   ]);
+  const allRequestsFailed = [reportsResult, tagsResult, promptsResult, revisionRequestsResult, auditLogsResult].every(
+    (result) => result.status === "rejected" || result.value === undefined,
+  );
 
   let shouldRender = false;
   if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
@@ -8041,7 +8249,7 @@ async function hydrateBackendAdminDataIfNeeded() {
     shouldRender = true;
   } else if (reportsResult.status === "rejected") {
     state.backendAdminReportsLoaded = false;
-    console.warn("[TTALKAK] /api/admin/reports 연동에 실패해 데모 신고 데이터를 유지합니다.", reportsResult.reason);
+    console.warn("[TTALKAK] /api/admin/reports 연동에 실패했습니다.", reportsResult.reason);
   }
 
   if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
@@ -8052,14 +8260,14 @@ async function hydrateBackendAdminDataIfNeeded() {
     });
     shouldRender = true;
   } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/admin/tags 연동에 실패해 데모 태그 데이터를 유지합니다.", tagsResult.reason);
+    console.warn("[TTALKAK] /api/admin/tags 연동에 실패했습니다.", tagsResult.reason);
   }
 
   if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value)) {
     state.backendAdminPrompts = promptsResult.value;
     shouldRender = true;
   } else if (promptsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/admin/prompts 연동에 실패해 데모 프롬프트 데이터를 유지합니다.", promptsResult.reason);
+    console.warn("[TTALKAK] /api/admin/prompts 연동에 실패했습니다.", promptsResult.reason);
   }
 
   if (revisionRequestsResult.status === "fulfilled" && Array.isArray(revisionRequestsResult.value)) {
@@ -8080,7 +8288,7 @@ async function hydrateBackendAdminDataIfNeeded() {
     });
     shouldRender = true;
   } else if (revisionRequestsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/admin/revision-requests 연동에 실패해 데모 수정 요청 데이터를 유지합니다.", revisionRequestsResult.reason);
+    console.warn("[TTALKAK] /api/admin/revision-requests 연동에 실패했습니다.", revisionRequestsResult.reason);
   }
 
   if (auditLogsResult.status === "fulfilled" && Array.isArray(auditLogsResult.value)) {
@@ -8090,8 +8298,8 @@ async function hydrateBackendAdminDataIfNeeded() {
     console.warn("[TTALKAK] /api/admin/audit-logs 연동에 실패해 감사 로그를 표시하지 못했습니다.", auditLogsResult.reason);
   }
 
-  state.adminBackendStatus = "connected";
-  if (shouldRender) render();
+  state.adminBackendStatus = allRequestsFailed ? "fallback" : "connected";
+  if (shouldRender || allRequestsFailed) render();
 }
 
 async function refreshAdminAuditLogs({ shouldRender = true, reason = "" } = {}) {
@@ -8355,7 +8563,9 @@ async function hydrateBackendHomeData() {
   const api = window.TTALKAK_API;
   if (!api?.getCommunityPosts) {
     state.backendStatus = "fallback";
-    state.backendStatusMessage = "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다.";
+    state.backendStatusMessage = canUseDemoFallback()
+      ? "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다."
+      : getApiFailureMessage("Home API");
     render();
     return;
   }
@@ -8384,8 +8594,10 @@ async function hydrateBackendHomeData() {
     shouldRender = true;
   } else if (promptsResult.status === "rejected") {
     state.backendStatus = "fallback";
-    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다.";
-    console.warn("[TTALKAK] /api/prompts 연동에 실패해 데모 데이터를 유지합니다.", promptsResult.reason);
+    state.backendStatusMessage = canUseDemoFallback()
+      ? "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다."
+      : getApiFailureMessage("Home API");
+    console.warn("[TTALKAK] /api/prompts 연동에 실패했습니다.", promptsResult.reason);
   }
 
   if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
@@ -8395,10 +8607,10 @@ async function hydrateBackendHomeData() {
     }
     shouldRender = true;
   } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/tags/popular 연동에 실패해 데모 태그를 유지합니다.", tagsResult.reason);
+    console.warn("[TTALKAK] /api/tags/popular 연동에 실패했습니다.", tagsResult.reason);
   }
 
-  if (shouldRender) render();
+  if (shouldRender || state.backendStatus === "fallback") render();
 }
 
 async function refreshBackendHomePrompts() {
@@ -8442,8 +8654,11 @@ async function refreshBackendHomePrompts() {
     }
   } catch (error) {
     state.backendStatus = "fallback";
-    state.backendStatusMessage = "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다.";
-    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패해 로컬 필터를 유지합니다.", error);
+    state.backendStatusMessage = canUseDemoFallback()
+      ? "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다."
+      : getApiFailureMessage("Home 검색 API");
+    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패했습니다.", error);
+    render();
   }
 }
 

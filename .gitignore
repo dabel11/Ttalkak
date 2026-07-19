@@ -1,1 +1,3 @@
 prompt-hub-web-frontend/preview-server.*.log
+extension/node_modules/
+extension/dist/

@@ -21,6 +21,8 @@ Chrome extension
 - Authenticated API requests include `Authorization: Bearer {accessToken}`.
 - On `401` or blocked-account responses, the extension clears the stored auth session and asks the user to log in again.
 - Saved prompts and recent chats are still extension-local for now. Server-side thread storage, folder storage, and share integration are future integration points.
+- The extension does not replace failed backend responses with demo AI results. API failures should be surfaced to the user so integration issues are visible during testing.
+- Extension-local saved prompts and recent chats must be treated as local browser data, not as server-synced website data.
 - Claude currently uses clipboard fallback. ChatGPT and Gemini use page insertion where possible, then clipboard fallback if insertion fails.
 
 ## Development
