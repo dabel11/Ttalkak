@@ -5776,6 +5776,30 @@ async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "", b
   }
 }
 
+function getAdminApiAction(action) {
+  const handler = window.TTALKAK_API?.[action];
+  return typeof handler === "function" ? handler : null;
+}
+
+function canUseAdminApiAction(action) {
+  return hasBackendAuthToken() && Boolean(getAdminApiAction(action));
+}
+
+async function runAdminApiMutation(action, args = [], options = {}) {
+  const handler = getAdminApiAction(action);
+  if (!handler) return { ok: false, missing: true, value: null };
+
+  try {
+    const value = await handler(...args, getAuthToken() || undefined);
+    return { ok: true, missing: false, value };
+  } catch (error) {
+    handleBackendAccessError(error, options.fallbackMessage || "관리자 요청 처리에 실패했습니다.");
+    if (options.logMessage) console.warn(options.logMessage, error);
+    if (options.refreshOnFailure) await hydrateBackendAdminDataIfNeeded({ force: true });
+    return { ok: false, missing: false, error, value: null };
+  }
+}
+
 function resolveAdminUserNickname(value) {
   const cleanValue = String(value || "").trim();
   const normalizedValue = normalizeAdminSearchText(cleanValue);
@@ -6534,20 +6558,19 @@ async function updateAdminTagDecision(tag, decision) {
     showNotice("현재 태그 상태에서는 이 변경을 할 수 없습니다.");
     return;
   }
-  if (backendTag?.id && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminTagStatus) {
-    try {
-      const backendDecision = decision;
-      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, backendDecision, getAuthToken() || undefined);
-      state.backendAdminTags = state.backendAdminTags.map((item) =>
-        item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
-      );
-      backendChanged = true;
-    } catch (error) {
-      handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 상태 변경을 취소합니다.", error);
-      await hydrateBackendAdminDataIfNeeded({ force: true });
-      return;
-    }
+  if (backendTag?.id && canUseAdminApiAction("updateAdminTagStatus")) {
+    const result = await runAdminApiMutation("updateAdminTagStatus", [backendTag.id, decision], {
+      fallbackMessage: "태그 상태 변경 요청에 실패했습니다.",
+      logMessage: "[TTALKAK] /api/admin/tags/{id}/status failed; cancelling local status change.",
+      refreshOnFailure: true,
+    });
+    if (!result.ok) return;
+
+    const updated = result.value;
+    state.backendAdminTags = state.backendAdminTags.map((item) =>
+      item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
+    );
+    backendChanged = true;
   }
 
   state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
@@ -6568,26 +6591,25 @@ async function updateReportRecordStatus(key, status) {
     return;
   }
   let backendChanged = false;
-  if (record.backendId && hasBackendAuthToken() && window.TTALKAK_API?.updateAdminReportStatus) {
-    try {
-      const updated = await window.TTALKAK_API.updateAdminReportStatus(
-        record.backendId,
-        mapFrontendReportStatus(status),
-        getAuthToken() || undefined,
-        `${getReportStatusLabel(status)} 처리`,
-      );
-      const backendStatus = mapBackendReportStatus(updated?.status || status);
-      state.backendAdminReports = state.backendAdminReports.map((report) =>
-        report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
-      );
-      status = backendStatus;
-      backendChanged = true;
-    } catch (error) {
-      handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 상태 변경을 취소합니다.", error);
-      await hydrateBackendAdminDataIfNeeded({ force: true });
-      return;
-    }
+  if (record.backendId && canUseAdminApiAction("updateAdminReportStatus")) {
+    const result = await runAdminApiMutation(
+      "updateAdminReportStatus",
+      [record.backendId, mapFrontendReportStatus(status), `${getReportStatusLabel(status)} 처리`],
+      {
+        fallbackMessage: "신고 상태 변경 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/reports/{id}/status failed; cancelling local status change.",
+        refreshOnFailure: true,
+      },
+    );
+    if (!result.ok) return;
+
+    const updated = result.value;
+    const backendStatus = mapBackendReportStatus(updated?.status || status);
+    state.backendAdminReports = state.backendAdminReports.map((report) =>
+      report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
+    );
+    status = backendStatus;
+    backendChanged = true;
   }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
   showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
@@ -6809,15 +6831,13 @@ async function toggleAdminPromptHidden(promptId) {
   }
 
   if (state.adminHiddenPromptIds.has(promptId)) {
-    if (window.TTALKAK_API?.restoreAdminPrompt) {
-      try {
-        await window.TTALKAK_API.restoreAdminPrompt(promptId, getAuthToken() || undefined);
-        backendChanged = true;
-      } catch (error) {
-        handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 숨김 해제를 중단합니다.", error);
-        return;
-      }
+    if (canUseAdminApiAction("restoreAdminPrompt")) {
+      const result = await runAdminApiMutation("restoreAdminPrompt", [promptId], {
+        fallbackMessage: "게시글 숨김 해제 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/prompts/{id}/restore failed; aborting prompt restore.",
+      });
+      if (!result.ok) return;
+      backendChanged = true;
     } else {
       showNotice("게시글 숨김 해제 API가 연결되어 있지 않습니다.");
       return;
@@ -6825,15 +6845,13 @@ async function toggleAdminPromptHidden(promptId) {
     state.adminHiddenPromptIds.delete(promptId);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
-    if (window.TTALKAK_API?.hideAdminPrompt) {
-      try {
-        await window.TTALKAK_API.hideAdminPrompt(promptId, getAuthToken() || undefined);
-        backendChanged = true;
-      } catch (error) {
-        handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 숨김 처리를 중단합니다.", error);
-        return;
-      }
+    if (canUseAdminApiAction("hideAdminPrompt")) {
+      const result = await runAdminApiMutation("hideAdminPrompt", [promptId], {
+        fallbackMessage: "게시글 숨김 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/prompts/{id}/hide failed; aborting prompt hide.",
+      });
+      if (!result.ok) return;
+      backendChanged = true;
     } else {
       showNotice("게시글 숨김 API가 연결되어 있지 않습니다.");
       return;
