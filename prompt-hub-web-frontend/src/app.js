@@ -62,6 +62,12 @@ if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView,
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
+const { resolvePageView } = window.TtalkakRouting || {};
+
+if (typeof resolvePageView !== "function") {
+  throw new Error("TTALKAK 라우팅 헬퍼를 불러오지 못했습니다.");
+}
+
 const DEMO_FALLBACK_ENABLED = window.TTALKAK_DEMO_FALLBACK_ENABLED === true;
 
 const popularPrompts = [
@@ -809,25 +815,15 @@ function Header() {
 }
 
 function Page() {
-  if (state.adminMode) return AdminPage();
-  if (isAdminAccount() && !["home", "admin"].includes(state.route)) {
-    state.route = "home";
-    return HomePage();
-  }
-  if (state.route === "make") return MakePage();
-  if (state.route === "saved") {
-    if (isAdminAccount()) {
-      state.route = "home";
-      return HomePage();
-    }
-    if (state.isLoggedIn) return SavedPage();
-    state.route = "home";
-    state.authView = "login";
-    return HomePage();
-  }
-  if (state.route === "share") return SharePage();
-  if (state.route === "admin") return AdminPage();
-  return HomePage();
+  return resolvePageView({
+    state,
+    isAdminAccount,
+    AdminPage,
+    HomePage,
+    MakePage,
+    SavedPage,
+    SharePage,
+  });
 }
 
 function HomePage() {
