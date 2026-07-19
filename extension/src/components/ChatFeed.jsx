@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, Check, Copy, Play, Plus } from "lucide-react";
-import { MODE_META, TIPS } from "../constants";
+import { EXAMPLE_QUERIES, TIPS } from "../constants";
 
-export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute, ragMode }) {
+export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute }) {
   const isEmpty = messages.length === 0 && !isLoading;
   const scrollRef = useRef(null);
 
@@ -15,7 +15,7 @@ export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExec
   return (
     <section ref={scrollRef} className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="채팅 메시지">
       {isEmpty ? (
-        <Intro ragMode={ragMode} />
+        <Intro />
       ) : (
         <div className="message-stack">
           {messages.map((message) => (
@@ -28,16 +28,11 @@ export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExec
   );
 }
 
-function Intro({ ragMode }) {
-  const meta = MODE_META[ragMode] || MODE_META.prompt_techniques;
+function Intro() {
   return (
     <div className="intro">
       <div className="intro-icon"><Plus size={34} /></div>
       <h1>AI Prompt Assistant</h1>
-      <div className="mode-badge">
-        <span>{meta.label}</span>
-        <span className="mode-desc">{meta.desc}</span>
-      </div>
       <p>Write a prompt for an AI tool, and TTALKAK will improve it into a clearer, executable prompt.</p>
       <div className="tip-list">
         {TIPS.map((tip) => (
@@ -52,7 +47,7 @@ function Intro({ ragMode }) {
       </div>
       <div className="example-queries">
         <p className="example-label">Try one of these</p>
-        {meta.examples.map((example) => <span className="example-chip" key={example}>{example}</span>)}
+        {EXAMPLE_QUERIES.map((example) => <span className="example-chip" key={example}>{example}</span>)}
       </div>
     </div>
   );

@@ -42,7 +42,7 @@ Chrome extension
 
 ```bash
 npm install
-npm run build
+npm run build:dev
 ```
 
 Load the built extension in Chrome:
@@ -67,10 +67,18 @@ Chrome loading steps:
 
 ## Backend Setting
 
-The default Backend API URL is:
+Backend API URL is managed in one place through `VITE_BACKEND_API_URL`.
+
+Development:
 
 ```text
 http://localhost:8080
+```
+
+Production:
+
+```text
+Set VITE_BACKEND_API_URL to the Spring Boot HTTPS production URL.
 ```
 
 The extension calls:
@@ -80,3 +88,19 @@ POST /api/prompts/improve
 ```
 
 The previous direct RAG URL setting is no longer the intended frontend path.
+
+## Production Manifest
+
+`public/manifest.json` is the development manifest and keeps localhost permissions for local testing.
+`manifest.production.example.json` is the production manifest template and is used by `npm run build:prod`.
+
+For production packaging:
+
+1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL.
+2. Replace `https://SPRING_BOOT_PRODUCTION_HOST/*` in `manifest.production.example.json` with the same production host.
+3. Use the production manifest content for the packaged `manifest.json`.
+4. Do not include `http://localhost:8080/*` or `http://127.0.0.1:8080/*` in the production manifest.
+5. Keep ChatGPT, Gemini, and Claude host permissions while Execute is supported.
+6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
+
+Production builds fail fast when `VITE_BACKEND_API_URL` is missing, so a package with an empty Backend API URL is not created by mistake.

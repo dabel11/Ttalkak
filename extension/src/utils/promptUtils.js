@@ -1,9 +1,10 @@
 import { DEFAULT_RAG_CONFIG, STORAGE } from "../constants";
+import { assertBackendApiUrl } from "../config/backendConfig";
 import { loadStorage } from "../storage/extensionStorage";
 
 export function normalizeBackendConfig(config = {}) {
   return {
-    backendApiUrl: config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl,
+    backendApiUrl: assertBackendApiUrl(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl),
   };
 }
 

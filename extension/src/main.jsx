@@ -20,7 +20,6 @@ function App() {
   const [executeTarget] = useState("auto");
   const [confirmAction, setConfirmAction] = useState(null);
   const [ragConfig] = useState(loadBackendConfig);
-  const ragMode = "prompt_techniques";
 
   const {
     authMode,
@@ -128,7 +127,6 @@ function App() {
             onCopy={copyMessage}
             onSave={toggleSave}
             onExecute={executeMessage}
-            ragMode={ragMode}
           />
           <Composer
             value={composerValue}

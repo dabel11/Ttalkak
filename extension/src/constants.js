@@ -1,3 +1,5 @@
+import { getDefaultBackendApiUrl } from "./config/backendConfig";
+
 export const STORAGE = {
   SAVED: "pp_saved_prompts",
   RECENTS: "pp_recent_threads",
@@ -8,33 +10,17 @@ export const STORAGE = {
 };
 
 export const DEFAULT_RAG_CONFIG = {
-  backendApiUrl: "http://localhost:8080",
+  backendApiUrl: getDefaultBackendApiUrl(),
 };
 
 export const API_TIMEOUT_MS = 15000;
 
-export const MODE_META = {
-  prompt_techniques: {
-    label: "기법 모드",
-    desc: "프롬프트 엔지니어링 기법 기반",
-    examples: [
-      "역할 프롬프트 예시를 보여줘",
-      "Chain-of-Thought 기법을 설명해줘",
-      "Few-shot 프롬프팅 예시를 보여줘",
-      "제약 조건을 포함한 프롬프트로 바꿔줘",
-    ],
-  },
-  papers: {
-    label: "논문 모드",
-    desc: "프롬프트 엔지니어링 논문 기반",
-    examples: [
-      "프롬프트 엔지니어링 연구 흐름을 요약해줘",
-      "LLM에서 Few-shot 학습 원리를 설명해줘",
-      "Promptware Engineering이 뭐야?",
-      "논문 기반으로 메타 프롬프트 작성법을 알려줘",
-    ],
-  },
-};
+export const EXAMPLE_QUERIES = [
+  "역할과 목표가 분명한 프롬프트로 바꿔줘",
+  "결과 형식과 제약 조건을 포함해서 개선해줘",
+  "문제 상황과 기대 결과가 잘 드러나게 정리해줘",
+  "마케팅 캠페인 기획 프롬프트로 다듬어줘",
+];
 
 export const PROMPT_LIBRARY = [
   {

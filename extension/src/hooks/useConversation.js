@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
-import { MODE_META, STORAGE } from "../constants";
+import { EXAMPLE_QUERIES, STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
@@ -226,15 +226,14 @@ export function useConversation({
       setRagStatus("connected");
 
       if (data.ragStatus === "no_evidence") {
-        const meta = MODE_META.prompt_techniques;
-        const examples = meta.examples.map((example) => `- ${example}`).join("\n");
+        const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
         const assistantMsg = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content:
             data.answer ||
             data.ragMessage ||
-            `"${prompt}"와 관련된 기법 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
+            `"${prompt}"와 관련된 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`,
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
           sources: data.sources || [],

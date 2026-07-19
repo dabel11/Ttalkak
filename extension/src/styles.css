@@ -922,98 +922,6 @@ button:disabled {
   }
 }
 
-/* ── RAG Settings Button ─────────────────────────────────── */
-.rag-settings-button {
-  flex: none;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--muted-dark);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.rag-settings-button:hover {
-  background: var(--line);
-  color: var(--text);
-}
-
-/* ── RAG Settings Panel ──────────────────────────────────── */
-.rag-settings-panel {
-  border-bottom: 1px solid var(--line);
-  background: var(--sidebar);
-  padding: 10px 16px 12px;
-  font-size: 13px;
-}
-.rag-settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: var(--text);
-}
-.rag-settings-header button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--muted);
-  padding: 2px;
-  display: flex;
-  align-items: center;
-}
-.rag-settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.rag-settings-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
-  color: var(--muted-dark);
-  font-weight: 500;
-}
-.rag-settings-form input,
-.rag-settings-form select {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 12px;
-  background: var(--bg);
-  color: var(--text);
-  outline: none;
-}
-.rag-settings-form input:focus,
-.rag-settings-form select:focus {
-  border-color: var(--cta-soft);
-}
-.rag-settings-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.rag-settings-apply {
-  align-self: flex-end;
-  margin-top: 4px;
-  padding: 5px 16px;
-  border: none;
-  border-radius: 6px;
-  background: var(--cta);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.rag-settings-apply:hover { opacity: 0.85; }
-
 /* ── Sources Section ─────────────────────────────────────── */
 .sources-section {
   margin-top: 10px;
@@ -1062,59 +970,6 @@ button:disabled {
   background: #fff3f3;
   border: 1px solid #ffd0d0;
   color: #b00020;
-}
-
-/* ── RAG Mode Toggle Button ──────────────────────────────── */
-.rag-mode-toggle {
-  flex: none;
-  white-space: nowrap;
-  line-height: 1.4;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1.5px solid transparent;
-  transition: all 0.18s;
-}
-.rag-mode-toggle.prompt_techniques {
-  background: #eef4ff;
-  border-color: #c0d4ff;
-  color: #2a5bc7;
-}
-.rag-mode-toggle.prompt_techniques:hover {
-  background: #ddeaff;
-}
-.rag-mode-toggle.papers {
-  background: #f0faf0;
-  border-color: #b2ddb2;
-  color: #267a26;
-}
-.rag-mode-toggle.papers:hover {
-  background: #ddf3dd;
-}
-
-/* ── Mode Badge (Intro) ──────────────────────────────────── */
-.mode-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 4px 14px;
-  margin: 6px 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted-dark);
-}
-.mode-badge .mode-desc {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 11px;
 }
 
 /* ── Example query chips (Intro) ────────────────────────────── */
@@ -1229,8 +1084,7 @@ button:disabled {
 
 .sidebar-top,
 .tab-list,
-.composer,
-.rag-settings-panel {
+.composer {
   border: 0;
 }
 
@@ -1242,14 +1096,9 @@ button:disabled {
 .message-card,
 .typing-message,
 .tip-card,
-.mode-badge,
 .example-chip,
 .composer textarea,
 .newchat-button,
-.rag-settings-button,
-.rag-mode-toggle,
-.rag-settings-form input,
-.rag-settings-form select,
 .auth-modal,
 .auth-form input,
 .password-field,
@@ -1264,8 +1113,6 @@ button:disabled {
 .recent-item,
 .action-button,
 .newchat-button,
-.rag-settings-button,
-.rag-mode-toggle,
 .example-chip {
   color: var(--brand-green);
 }
@@ -1361,9 +1208,7 @@ button:disabled {
 .search-input input,
 .composer textarea,
 .auth-form input,
-.password-field,
-.rag-settings-form input,
-.rag-settings-form select {
+.password-field {
   background: var(--brand-green-soft);
 }
 
@@ -1399,35 +1244,20 @@ button:disabled {
 }
 
 .intro h1,
-.auth-heading h2,
-.rag-settings-header {
+.auth-heading h2 {
   color: var(--brand-green);
   font-weight: 700;
 }
 
 .tip-card,
-.mode-badge,
-.example-chip,
-.rag-settings-panel {
+.example-chip {
   background: var(--brand-green-soft);
 }
 
-.example-chip:hover,
-.rag-mode-toggle:hover,
-.rag-mode-toggle.prompt_techniques:hover,
-.rag-mode-toggle.papers:hover,
-.rag-settings-button:hover {
+.example-chip:hover {
   color: #fff;
   background: var(--brand-green);
   box-shadow: var(--brand-shadow-hover);
-}
-
-.rag-mode-toggle.prompt_techniques,
-.rag-mode-toggle.papers,
-.rag-settings-button {
-  color: var(--brand-green);
-  background: var(--brand-green-soft);
-  border-color: transparent;
 }
 
 .message-row.user .message-card {
@@ -1475,8 +1305,7 @@ button:disabled {
   background: #fff;
 }
 
-.auth-submit,
-.rag-settings-apply {
+.auth-submit {
   background: var(--brand-green);
   box-shadow: 0 10px 24px rgba(18, 63, 52, 0.16);
 }
