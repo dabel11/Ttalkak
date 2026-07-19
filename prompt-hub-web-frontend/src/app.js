@@ -6970,6 +6970,22 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
   const backendMessage = getBackendErrorMessage(error);
   const keepSession = Boolean(options.keepSession);
 
+  return (
+    handleBlockedAccountError(code, backendMessage) ||
+    handleAuthenticationError({ status, code, backendMessage, fallbackMessage, keepSession }) ||
+    handleForbiddenError(status, code, backendMessage) ||
+    handleNotFoundError(status, code, backendMessage) ||
+    handleInvalidRequestError(status, code, backendMessage) ||
+    handleConflictError(status, code, backendMessage) ||
+    handleRateLimitError(status, code, backendMessage) ||
+    handleTimeoutError(status, code, backendMessage) ||
+    handleAiUnavailableError(status, code, backendMessage) ||
+    handleServerError(status, code, backendMessage) ||
+    handleFallbackBackendError(backendMessage, fallbackMessage)
+  );
+}
+
+function handleBlockedAccountError(code, backendMessage) {
   if (code === "ACCOUNT_BLOCKED") {
     clearAuthenticatedSession({ keepRoute: true });
     state.authView = "login";
@@ -6977,6 +6993,10 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
+  return false;
+}
+
+function handleAuthenticationError({ status, code, backendMessage, fallbackMessage, keepSession }) {
   if (status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED") {
     const token = getAuthToken();
     if (keepSession) {
@@ -6995,26 +7015,46 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
+  return false;
+}
+
+function handleForbiddenError(status, code, backendMessage) {
   if (status === 403 || code === "ACCESS_DENIED" || code === "OWNER_ONLY" || code === "ADMIN_ONLY" || code === "ADMIN_ACCOUNT_PROTECTED") {
     showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
     return true;
   }
 
+  return false;
+}
+
+function handleNotFoundError(status, code, backendMessage) {
   if (status === 404 || code === "RESOURCE_NOT_FOUND") {
     showNotice(backendMessage || "요청한 대상을 찾을 수 없습니다.");
     return true;
   }
 
+  return false;
+}
+
+function handleInvalidRequestError(status, code, backendMessage) {
   if (status === 400 || code === "VALIDATION_FAILED" || code === "INVALID_REQUEST" || code === "BLOCK_REASON_REQUIRED") {
     showNotice(backendMessage || "입력값을 확인해주세요.");
     return true;
   }
 
+  return false;
+}
+
+function handleConflictError(status, code, backendMessage) {
   if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE" || code === "ACCOUNT_WITHDRAWN") {
     showNotice(backendMessage || "현재 상태에서는 처리할 수 없습니다.");
     return true;
   }
 
+  return false;
+}
+
+function handleRateLimitError(status, code, backendMessage) {
   if (status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "FREE_TRIAL_LIMIT_EXCEEDED") {
     showNotice(
       backendMessage ||
@@ -7025,21 +7065,37 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
+  return false;
+}
+
+function handleTimeoutError(status, code, backendMessage) {
   if (status === 0 || status === 504 || code === "REQUEST_TIMEOUT" || code === "AI_TIMEOUT") {
     showNotice(backendMessage || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
     return true;
   }
 
+  return false;
+}
+
+function handleAiUnavailableError(status, code, backendMessage) {
   if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
     showNotice(backendMessage || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.");
     return true;
   }
 
+  return false;
+}
+
+function handleServerError(status, code, backendMessage) {
   if (status >= 500 || code === "INTERNAL_SERVER_ERROR") {
     showNotice(backendMessage || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     return true;
   }
 
+  return false;
+}
+
+function handleFallbackBackendError(backendMessage, fallbackMessage) {
   if (backendMessage || fallbackMessage) {
     showNotice(backendMessage || fallbackMessage);
     return true;
