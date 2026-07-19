@@ -4278,19 +4278,47 @@ function performDeleteThread(threadId) {
   showNotice("대화를 삭제했습니다.");
 }
 
-async function createMakeFolder(folderName) {
+function guardMakeFolderMutation(clearSelection) {
   if (guardAdminUserAction()) {
-    state.creatingFolder = false;
+    clearSelection?.();
     render();
-    return;
+    return true;
   }
 
   if (!state.isLoggedIn) {
-    state.creatingFolder = false;
+    clearSelection?.();
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
     render();
-    return;
+    return true;
   }
+
+  return false;
+}
+
+function normalizeMakeFolderName(name) {
+  return String(name || "").trim();
+}
+
+function hasMakeFolderName(name) {
+  return state.makeFolders.some((folder) => folder.name === name);
+}
+
+function createLocalMakeFolder(name) {
+  const folder = { id: `folder-${Date.now()}`, name };
+  state.makeFolders.push(folder);
+  return folder;
+}
+
+function removeLocalMakeFolder(folderId) {
+  state.makeFolders = state.makeFolders.filter((item) => item.id !== folderId);
+}
+
+function restoreThreadFolder(thread, folderId) {
+  if (thread) thread.folderId = folderId || "uncategorized";
+}
+
+async function createMakeFolder(folderName) {
+  if (guardMakeFolderMutation(() => { state.creatingFolder = false; })) return;
 
   if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
     showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
@@ -4299,27 +4327,25 @@ async function createMakeFolder(folderName) {
     return;
   }
 
-  const cleanName = String(folderName || "").trim();
+  const cleanName = normalizeMakeFolderName(folderName);
   if (!cleanName) {
     showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
-  const exists = state.makeFolders.some((folder) => folder.name === cleanName);
-  if (exists) {
+  if (hasMakeFolderName(cleanName)) {
     showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
-  const folder = { id: `folder-${Date.now()}`, name: cleanName };
-  state.makeFolders.push(folder);
+  const folder = createLocalMakeFolder(cleanName);
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
   const backendFolderId = await createBackendMakeFolder({ name: cleanName });
   if (backendFolderId) {
     folder.serverId = backendFolderId;
   } else if (!canUseDemoFallback()) {
-    state.makeFolders = state.makeFolders.filter((item) => item.id !== folder.id);
+    removeLocalMakeFolder(folder.id);
     state.activeFolderId = "all";
     showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
     render();
@@ -4330,18 +4356,7 @@ async function createMakeFolder(folderName) {
 }
 
 async function createMakeFolderAndMoveThread(threadId, folderName) {
-  if (guardAdminUserAction()) {
-    state.creatingThreadFolderId = null;
-    render();
-    return;
-  }
-
-  if (!state.isLoggedIn) {
-    state.creatingThreadFolderId = null;
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation(() => { state.creatingThreadFolderId = null; })) return;
 
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
@@ -4353,21 +4368,19 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
     return;
   }
 
-  const cleanName = String(folderName || "").trim();
+  const cleanName = normalizeMakeFolderName(folderName);
   if (!cleanName) {
     showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
-  const exists = state.makeFolders.some((folder) => folder.name === cleanName);
-  if (exists) {
+  if (hasMakeFolderName(cleanName)) {
     showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
   const previousFolderId = thread.folderId;
-  const folder = { id: `folder-${Date.now()}`, name: cleanName };
-  state.makeFolders.push(folder);
+  const folder = createLocalMakeFolder(cleanName);
   thread.folderId = folder.id;
   state.activeFolderId = folder.id;
   state.openThreadMenuId = null;
@@ -4379,8 +4392,8 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
   } else {
     console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다.");
     if (!canUseDemoFallback()) {
-      state.makeFolders = state.makeFolders.filter((item) => item.id !== folder.id);
-      thread.folderId = previousFolderId || "uncategorized";
+      removeLocalMakeFolder(folder.id);
+      restoreThreadFolder(thread, previousFolderId);
       state.activeFolderId = thread.folderId;
       showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
       render();
@@ -4396,44 +4409,18 @@ function getCustomMakeFolderCount() {
 }
 
 async function renameMakeFolder(folderId, name) {
-  if (guardAdminUserAction()) {
-    state.editingFolderId = null;
-    render();
-    return;
-  }
-
-  if (!state.isLoggedIn) {
-    state.editingFolderId = null;
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation(() => { state.editingFolderId = null; })) return;
 
   const folder = state.makeFolders.find((item) => item.id === folderId);
-  const cleanName = String(name || "").trim();
+  const cleanName = normalizeMakeFolderName(name);
   if (!folder || !cleanName) return;
 
   state.editingFolderId = null;
-  const backendFolderId = getBackendFolderId(folderId);
-  if (backendFolderId) {
-    const api = window.TTALKAK_API;
-    try {
-      if (api?.updateMakeFolder) {
-        await api.updateMakeFolder(backendFolderId, { name: cleanName }, getAuthToken() || undefined);
-      } else if (!canUseDemoFallback()) {
-        showNotice("폴더 이름 수정 API가 없어 변경을 취소했습니다.");
-        render();
-        return;
-      }
-    } catch (error) {
-      handleBackendAccessError(
-        error,
-        canUseDemoFallback() ? "폴더 이름 수정 요청에 실패해 로컬 데모 상태만 유지합니다." : "폴더 이름 수정 요청에 실패했습니다.",
-      );
-      showNotice("폴더 이름 수정 요청에 실패했습니다.");
-      render();
-      return;
-    }
+  const backendUpdated = await updateBackendMakeFolderName(folderId, cleanName);
+  if (!backendUpdated && !canUseDemoFallback()) {
+    showNotice("폴더 이름 수정 요청에 실패했습니다.");
+    render();
+    return;
   }
   folder.name = cleanName;
   showNotice("폴더 이름을 수정했습니다.");
@@ -4441,48 +4428,25 @@ async function renameMakeFolder(folderId, name) {
 }
 
 async function performDeleteFolder(folderId) {
-  if (guardAdminUserAction()) {
-    render();
-    return;
-  }
-
-  if (!state.isLoggedIn) {
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation()) return;
 
   if (!folderId || folderId === "uncategorized") return;
-  const backendFolderId = getBackendFolderId(folderId);
   const previousFolders = state.makeFolders.map((folder) => ({ ...folder }));
   const previousThreadFolders = state.recentThreads.map((thread) => ({ id: thread.id, folderId: thread.folderId }));
   const previousActiveFolderId = state.activeFolderId;
-  if (backendFolderId) {
-    const api = window.TTALKAK_API;
-    try {
-      if (api?.deleteMakeFolder) {
-        await api.deleteMakeFolder(backendFolderId, getAuthToken() || undefined);
-      } else if (!canUseDemoFallback()) {
-        showNotice("폴더 삭제 API가 없어 변경을 취소했습니다.");
-        render();
-        return;
-      }
-    } catch (error) {
-      handleBackendAccessError(
-        error,
-        canUseDemoFallback() ? "폴더 삭제 요청에 실패해 로컬 데모 상태만 유지합니다." : "폴더 삭제 요청에 실패했습니다.",
-      );
-      state.makeFolders = previousFolders;
-      previousThreadFolders.forEach((previous) => {
-        const thread = state.recentThreads.find((item) => item.id === previous.id);
-        if (thread) thread.folderId = previous.folderId;
-      });
-      state.activeFolderId = previousActiveFolderId;
-      render();
-      return;
-    }
+  const backendDeleted = await deleteBackendMakeFolder(folderId);
+  if (!backendDeleted && !canUseDemoFallback()) {
+    state.makeFolders = previousFolders;
+    previousThreadFolders.forEach((previous) => {
+      const thread = state.recentThreads.find((item) => item.id === previous.id);
+      restoreThreadFolder(thread, previous.folderId);
+    });
+    state.activeFolderId = previousActiveFolderId;
+    showNotice("폴더 삭제 요청에 실패했습니다.");
+    render();
+    return;
   }
-  state.makeFolders = state.makeFolders.filter((folder) => folder.id !== folderId);
+  removeLocalMakeFolder(folderId);
   state.recentThreads.forEach((thread) => {
     if (thread.folderId === folderId) thread.folderId = "uncategorized";
   });
@@ -4492,16 +4456,7 @@ async function performDeleteFolder(folderId) {
 }
 
 async function moveThreadToFolder(threadId, folderId) {
-  if (guardAdminUserAction()) {
-    render();
-    return;
-  }
-
-  if (!state.isLoggedIn) {
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation()) return;
 
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
@@ -4509,7 +4464,7 @@ async function moveThreadToFolder(threadId, folderId) {
   thread.folderId = folderId || "uncategorized";
   const backendMoved = await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
   if (!backendMoved && !canUseDemoFallback()) {
-    thread.folderId = previousFolderId || "uncategorized";
+    restoreThreadFolder(thread, previousFolderId);
     showNotice("대화 폴더 이동 요청에 실패해 변경을 취소했습니다.");
     render();
     return;
@@ -7303,6 +7258,48 @@ async function createBackendMakeFolder(payload) {
       "[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.",
     );
     return "";
+  }
+}
+
+async function updateBackendMakeFolderName(folderId, name) {
+  const backendFolderId = getBackendFolderId(folderId);
+  if (!backendFolderId) return true;
+
+  const api = getMakeApi();
+  if (!api?.updateMakeFolder) return canUseDemoFallback();
+
+  try {
+    await api.updateMakeFolder(backendFolderId, { name }, getMakeApiToken());
+    return true;
+  } catch (error) {
+    handleMakeBackendSyncError(
+      error,
+      "폴더 이름 수정 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "폴더 이름 수정 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders/{id} 수정 호출에 실패했습니다.",
+    );
+    return false;
+  }
+}
+
+async function deleteBackendMakeFolder(folderId) {
+  const backendFolderId = getBackendFolderId(folderId);
+  if (!backendFolderId) return true;
+
+  const api = getMakeApi();
+  if (!api?.deleteMakeFolder) return canUseDemoFallback();
+
+  try {
+    await api.deleteMakeFolder(backendFolderId, getMakeApiToken());
+    return true;
+  } catch (error) {
+    handleMakeBackendSyncError(
+      error,
+      "폴더 삭제 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "폴더 삭제 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders/{id} 삭제 호출에 실패했습니다.",
+    );
+    return false;
   }
 }
 
