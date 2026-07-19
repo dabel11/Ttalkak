@@ -45,7 +45,14 @@ function App() {
     saveLibraryPrompt,
     searchItems,
     setSavedItems,
-  } = useSavedLibrary({ query, showNotice, setConfirmAction });
+  } = useSavedLibrary({
+    authSession,
+    query,
+    ragConfig,
+    showNotice,
+    setConfirmAction,
+    onAuthExpired: handleAuthExpired,
+  });
 
   const {
     messages,

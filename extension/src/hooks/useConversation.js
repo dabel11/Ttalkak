@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { MODE_META, STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
@@ -22,10 +23,45 @@ export function useConversation({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState("");
   const [ragStatus, setRagStatus] = useState("idle");
-  const [recentThreads, setRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
+  const [localRecentThreads, setLocalRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
+  const [serverRecentThreads, setServerRecentThreads] = useState([]);
   const activeThreadId = useRef(null);
+  const isLoggedIn = Boolean(authSession?.accessToken);
+  const recentThreads = isLoggedIn ? serverRecentThreads : localRecentThreads;
 
-  useEffect(() => saveStorage(STORAGE.RECENTS, recentThreads), [recentThreads]);
+  useEffect(() => {
+    if (!isLoggedIn) saveStorage(STORAGE.RECENTS, localRecentThreads);
+  }, [isLoggedIn, localRecentThreads]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoggedIn) {
+      setServerRecentThreads([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function hydrateServerThreads() {
+      try {
+        const items = await requestMakeThreads(ragConfig, authSession.accessToken);
+        if (cancelled) return;
+        setServerRecentThreads(items);
+      } catch (error) {
+        if (cancelled) return;
+        if (isAuthExpiredError(error)) {
+          await onAuthExpired?.();
+          return;
+        }
+        showNotice(error?.message || "서버 최근 대화를 불러오지 못했습니다.");
+      }
+    }
+
+    hydrateServerThreads();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.accessToken, isLoggedIn, ragConfig.backendApiUrl]);
 
   function openPrompt(item) {
     if (item.messages?.length) {
@@ -60,6 +96,10 @@ export function useConversation({
   function toggleSave(messageId) {
     const message = messages.find((m) => m.id === messageId);
     if (!message) return;
+    if (authSession?.accessToken) {
+      showNotice("개선 결과는 서버 최근 대화로 동기화됩니다. 보관함 저장은 서버 프롬프트에서 지원됩니다.");
+      return;
+    }
     const nextSaved = !message.saved;
 
     setMessages((items) =>
@@ -88,6 +128,47 @@ export function useConversation({
     } else {
       setSavedItems((items) => items.filter((i) => i.id !== messageId));
       showNotice("저장을 해제했습니다.");
+    }
+  }
+
+  function toServerMakeMessages(items) {
+    return items.map((message) => ({
+      role: message.role,
+      content: message.content,
+      sourcePrompt: message.sourcePrompt || "",
+      executablePrompt: message.executablePrompt || "",
+    }));
+  }
+
+  async function saveServerThread(prompt, nextMessages) {
+    if (!authSession?.accessToken) return;
+    try {
+      const activeServerId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
+      const payload = {
+        title: makeTitle(prompt),
+        preview: makePreview(nextMessages[nextMessages.length - 1]?.content || ""),
+        messages: toServerMakeMessages(nextMessages),
+      };
+      if (activeServerId) {
+        payload.id = activeServerId;
+        payload.threadId = activeServerId;
+      }
+      const savedThread = await createMakeThread(
+        ragConfig,
+        payload,
+        authSession.accessToken
+      );
+      if (!savedThread) return;
+      activeThreadId.current = savedThread.id;
+      setServerRecentThreads((prev) =>
+        [savedThread, ...prev.filter((thread) => thread.id !== savedThread.id && thread.id !== String(activeServerId || ""))].slice(0, 30)
+      );
+    } catch (error) {
+      if (isAuthExpiredError(error)) {
+        await onAuthExpired?.();
+        return;
+      }
+      showNotice(error?.message || "서버 최근 대화에 저장하지 못했습니다.");
     }
   }
 
@@ -151,22 +232,31 @@ export function useConversation({
       if (data.ragStatus === "no_evidence") {
         const meta = MODE_META[ragMode];
         const examples = meta.examples.map((example) => `- ${example}`).join("\n");
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: "assistant",
-            content:
-              data.answer ||
-              data.ragMessage ||
-              `"${prompt}"와 관련된 기법 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
-            executablePrompt: data.improvedPrompt || null,
-            sourcePrompt: prompt,
-            sources: data.sources || [],
-            saved: false,
-            excludeFromHistory: true,
-          },
-        ]);
+        const assistantMsg = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content:
+            data.answer ||
+            data.ragMessage ||
+            `"${prompt}"와 관련된 기법 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
+          executablePrompt: data.improvedPrompt || null,
+          sourcePrompt: prompt,
+          sources: data.sources || [],
+          saved: false,
+          excludeFromHistory: true,
+        };
+        const nextMessages = [...messages, userMsg, assistantMsg];
+        setMessages((prev) => [...prev, assistantMsg]);
+        if (isLoggedIn) {
+          await saveServerThread(prompt, nextMessages);
+        } else {
+          if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+          const threadId = activeThreadId.current;
+          setLocalRecentThreads((prev) => [
+            { id: threadId, title: makeTitle(prompt), time: "방금", messages: nextMessages },
+            ...prev.filter((t) => t.id !== threadId),
+          ].slice(0, 30));
+        }
         return;
       }
 
@@ -182,9 +272,14 @@ export function useConversation({
       const nextMessages = [...messages, userMsg, assistantMsg];
       setMessages((prev) => [...prev, assistantMsg]);
 
+      if (isLoggedIn) {
+        await saveServerThread(prompt, nextMessages);
+        return;
+      }
+
       if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
       const threadId = activeThreadId.current;
-      setRecentThreads((prev) => {
+      setLocalRecentThreads((prev) => {
         const updatedThread = {
           id: threadId,
           title: makeTitle(prompt),
@@ -219,11 +314,21 @@ export function useConversation({
   }
 
   function requestDeleteRecentThread(id, setConfirmAction) {
+    if (isLoggedIn) {
+      setConfirmAction({
+        title: "서버 최근 대화",
+        message: "서버 최근 대화 삭제 API가 준비되면 삭제할 수 있습니다. 현재는 웹과 동일한 서버 목록을 표시합니다.",
+        confirmLabel: "확인",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
     setConfirmAction({
       title: "최근 대화 삭제",
       message: "이 최근 대화를 삭제할까요?",
       confirmLabel: "삭제",
-      onConfirm: () => setRecentThreads((prev) => prev.filter((t) => t.id !== id)),
+      onConfirm: () => setLocalRecentThreads((prev) => prev.filter((t) => t.id !== id)),
     });
   }
 
