@@ -301,24 +301,47 @@ public class PromptController {
     }
 
     private Comparator<PromptPost> comparator(String sort) {
-        Comparator<PromptPost> byLatest = Comparator.comparing(PromptPost::getCreatedAt).reversed();
-        Comparator<PromptPost> byViews = Comparator.comparing(PromptPost::getViews).reversed();
+        Comparator<PromptPost> byViews =
+                Comparator.comparingLong(PromptPost::getViews).reversed();
+        Comparator<PromptPost> byComments =
+                Comparator.comparingLong(PromptPost::getComments).reversed();
+        Comparator<PromptPost> bySaves =
+                Comparator.comparingLong(PromptPost::getSaves).reversed();
+        Comparator<PromptPost> byLikes =
+                Comparator.comparingLong(PromptPost::getLikes).reversed();
+        Comparator<PromptPost> byLatest =
+                Comparator.comparing(PromptPost::getCreatedAt).reversed();
+        Comparator<PromptPost> byId =
+                Comparator.comparing(PromptPost::getId).reversed();
 
         return switch (sort == null ? "popular" : sort) {
-            case "saves" -> Comparator.comparing(PromptPost::getSaves).reversed()
+            case "saves" -> bySaves
                     .thenComparing(byViews)
-                    .thenComparing(byLatest);
-            case "comments" -> Comparator.comparing(PromptPost::getComments).reversed()
+                    .thenComparing(byComments)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "comments" -> byComments
                     .thenComparing(byViews)
-                    .thenComparing(byLatest);
-            case "likes" -> Comparator.comparing(PromptPost::getLikes).reversed()
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "likes" -> byLikes
                     .thenComparing(byViews)
-                    .thenComparing(byLatest);
-            case "latest" -> byLatest;
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "latest" -> byLatest
+                    .thenComparing(byViews)
+                    .thenComparing(byId);
+
             default -> byViews
-                    .thenComparing(Comparator.comparing(PromptPost::getComments).reversed())
-                    .thenComparing(Comparator.comparing(PromptPost::getSaves).reversed())
-                    .thenComparing(byLatest);
+                    .thenComparing(byComments)
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
         };
     }
 
