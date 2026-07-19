@@ -2972,184 +2972,8 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-new-chat]").forEach((button) => {
-    button.addEventListener("click", startNewChat);
-  });
-
-  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const threadId = button.dataset.threadMenu;
-      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
-      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      state.creatingFolder = true;
-      render();
-      window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-create]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.creatingFolder = false;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolder(new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-open-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.activeFolderId = button.dataset.openFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      const folderId = button.dataset.folderMenu;
-      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.editingFolderId = button.dataset.editFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-delete-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openFolderMenuId = null;
-      openConfirmAction({
-        type: "delete-folder",
-        targetId: button.dataset.deleteFolder,
-        title: "폴더 삭제",
-        message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder]").forEach((select) => {
-    select.addEventListener("change", () => {
-      if (guardAdminUserAction()) {
-        render();
-        return;
-      }
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        render();
-        return;
-      }
-      state.openThreadMenuId = null;
-      moveThreadToFolder(select.dataset.threadFolder, select.value);
-    });
-  });
-
-  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
-        return;
-      }
-      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
-      render();
-      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-folder-edit-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-open-thread]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.openThreadMenuId = null;
-      openRecentThread(button.dataset.openThread);
-    });
-  });
-
-  document.querySelectorAll("[data-delete-thread]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openThreadMenuId = null;
-      openConfirmAction({
-        type: "delete-thread",
-        targetId: button.dataset.deleteThread,
-        title: "대화 삭제",
-        message: "이 대화를 최근 대화 목록에서 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
+  bindMakeThreadEvents();
+  bindMakeFolderEvents();
 
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
@@ -4898,6 +4722,189 @@ function bindMakeMessageEditForm(form) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
+  });
+}
+
+function bindMakeThreadEvents() {
+  document.querySelectorAll("[data-new-chat]").forEach((button) => {
+    button.addEventListener("click", startNewChat);
+  });
+
+  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const threadId = button.dataset.threadMenu;
+      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
+      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-open-thread]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.openThreadMenuId = null;
+      openRecentThread(button.dataset.openThread);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-thread]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openThreadMenuId = null;
+      openConfirmAction({
+        type: "delete-thread",
+        targetId: button.dataset.deleteThread,
+        title: "대화 삭제",
+        message: "이 대화를 최근 대화 목록에서 삭제할까요?",
+        confirmLabel: "삭제",
+        danger: true,
+      });
+    });
+  });
+}
+
+function bindMakeFolderEvents() {
+  document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      state.creatingFolder = true;
+      render();
+      window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-folder-create]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.creatingFolder = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-folder-create-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      createMakeFolder(new FormData(form).get("folderName"));
+    });
+  });
+
+  document.querySelectorAll("[data-open-folder]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeFolderId = button.dataset.openFolder;
+      state.openFolderMenuId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      const folderId = button.dataset.folderMenu;
+      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-folder]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.editingFolderId = button.dataset.editFolder;
+      state.openFolderMenuId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-folder-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-delete-folder]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openFolderMenuId = null;
+      openConfirmAction({
+        type: "delete-folder",
+        targetId: button.dataset.deleteFolder,
+        title: "폴더 삭제",
+        message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?",
+        confirmLabel: "삭제",
+        danger: true,
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-thread-folder]").forEach((select) => {
+    select.addEventListener("change", () => {
+      if (guardAdminUserAction()) {
+        render();
+        return;
+      }
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        render();
+        return;
+      }
+      state.openThreadMenuId = null;
+      moveThreadToFolder(select.dataset.threadFolder, select.value);
+    });
+  });
+
+  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
+        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+        return;
+      }
+      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
+      render();
+      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.creatingThreadFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
+    });
+  });
+
+  document.querySelectorAll("[data-folder-edit-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName"));
+    });
   });
 }
 
