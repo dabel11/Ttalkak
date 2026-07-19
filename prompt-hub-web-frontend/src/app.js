@@ -7553,6 +7553,26 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
+  if (status === 429 || code === "RATE_LIMIT_EXCEEDED" || code === "FREE_TRIAL_LIMIT_EXCEEDED") {
+    showNotice(
+      backendMessage ||
+        (code === "FREE_TRIAL_LIMIT_EXCEEDED"
+          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요."
+          : "요청이 많습니다. 잠시 후 다시 시도해주세요."),
+    );
+    return true;
+  }
+
+  if (status === 504 || code === "AI_TIMEOUT") {
+    showNotice(backendMessage || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
+    return true;
+  }
+
+  if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
+    showNotice(backendMessage || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    return true;
+  }
+
   if (status >= 500 || code === "INTERNAL_SERVER_ERROR") {
     showNotice(backendMessage || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     return true;
@@ -7685,7 +7705,7 @@ async function improvePromptWithBackend(prompt) {
     const improved = await api.improvePrompt({ prompt }, getAuthToken() || undefined);
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
-    const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || "").trim() : "";
+    const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
     if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
       state.makeBackendMessage =
         ragMessage || "Make API 연결됨: 관련 프롬프팅 기법 근거가 없어 기본 첨삭 결과를 반영했습니다.";
@@ -7700,16 +7720,17 @@ async function improvePromptWithBackend(prompt) {
     if (status === 404) {
       fallbackMessage = "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다.";
     } else if (status === 429) {
-      fallbackMessage =
-        code === "TRIAL_LIMIT_EXCEEDED"
-          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다."
-          : "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+      if (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED") {
+        fallbackMessage = "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다.";
+      } else {
+        fallbackMessage = "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+      }
     } else if (status === 500) {
       fallbackMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
-    } else if (status === 503) {
+    } else if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
       fallbackMessage = "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
-    } else if (status === 504) {
-      fallbackMessage = "응답 시간이 초과되었습니다. 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
+    } else if (status === 504 || code === "AI_TIMEOUT") {
+      fallbackMessage = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다.";
     }
     state.makeBackendMessage = `Make 데모 데이터 표시 중: ${fallbackMessage}`;
     handleBackendAccessError(error, fallbackMessage);

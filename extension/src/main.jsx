@@ -170,25 +170,30 @@ async function requestPromptImprove(config, payload) {
 
 function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
+  const answer = result.answer || result.explanation || result.summary || "";
   const improvedText =
     result.improvedPrompt ||
     result.improved_prompt ||
-    result.answer ||
     result.text ||
     result.content ||
+    answer ||
     fallbackPrompt;
 
   return {
-    answer: result.answer || result.explanation || "프롬프트를 개선했습니다.",
+    answer: answer || "프롬프트를 개선했습니다.",
     improvedPrompt: improvedText,
     sources: result.sources || result.references || result.documents || [],
     ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(),
-    ragMessage: result.ragMessage || result.rag_message || result.message || "",
+    ragMessage: result.ragMessage || result.rag_message || "",
   };
 }
 
 function getApiErrorMessage(status, body) {
   const code = body?.code || "";
+  if (code === "AI_TIMEOUT") return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+  if (code === "AI_SERVICE_UNAVAILABLE") return body?.message || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+  if (code === "FREE_TRIAL_LIMIT_EXCEEDED") return body?.message || "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
+  if (code === "RATE_LIMIT_EXCEEDED") return body?.message || "요청이 많습니다. 잠시 후 다시 시도해주세요.";
   if (status === 400) return body?.message || "요청 내용을 확인해주세요.";
   if (status === 401 || code === "LOGIN_REQUIRED") return "로그인이 필요하거나 세션이 만료되었습니다.";
   if (status === 403) return "이 작업을 수행할 권한이 없습니다.";
@@ -196,6 +201,7 @@ function getApiErrorMessage(status, body) {
   if (status === 409) return body?.message || "이미 처리 중인 요청이 있습니다.";
   if (status === 429) return body?.message || "요청이 많습니다. 잠시 후 다시 시도해주세요.";
   if (status === 503) return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+  if (status === 504) return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
   if (status >= 500) return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
   return body?.message || `요청 처리 중 오류가 발생했습니다. (${status})`;
 }
@@ -427,7 +433,10 @@ function App() {
           {
             id: `assistant-${Date.now()}`,
             role: "assistant",
-            content: data.ragMessage || `"${prompt}"와 관련된 기법을 찾지 못했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
+            content:
+              data.answer ||
+              data.ragMessage ||
+              `"${prompt}"와 관련된 기법 근거는 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n현재 모드: ${meta.label}\n\n이런 질문을 입력해보세요:\n${examples}`,
             executablePrompt: data.improvedPrompt || null,
             sourcePrompt: prompt,
             sources: data.sources || [],

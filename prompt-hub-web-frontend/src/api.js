@@ -419,7 +419,7 @@
 
   function normalizeImproveResult(payload, fallbackPrompt = "") {
     if (typeof payload === "string") {
-      return { text: payload, ragStatus: "", ragMessage: "" };
+      return { text: payload, answer: "", improvedPrompt: payload, sources: [], ragStatus: "ok", ragMessage: "" };
     }
 
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
@@ -430,15 +430,35 @@
         result?.ragStatus ||
         result?.rag?.status ||
         result?.evidenceStatus ||
-        "",
+        "ok",
     ).trim();
     const ragMessage = String(
       result?.rag_message ||
         result?.ragMessage ||
-        result?.message ||
         result?.fallbackReason ||
         "",
     ).trim();
+    const answer = String(result?.answer || result?.explanation || result?.summary || "").trim();
+    const improvedPrompt = String(
+      result?.improvedPrompt ||
+        result?.improved_prompt ||
+        result?.finalPrompt ||
+        result?.final_prompt ||
+        result?.markdown ||
+        result?.text ||
+        result?.content ||
+        result?.prompt ||
+        (typeof result?.result === "string" ? result.result : "") ||
+        answer ||
+        fallbackPrompt,
+    );
+    const sources = Array.isArray(result?.sources)
+      ? result.sources
+      : Array.isArray(result?.references)
+        ? result.references
+        : Array.isArray(result?.documents)
+          ? result.documents
+          : [];
 
     if (String(result?.mode || result?.type || "").toLowerCase() === "question" && Array.isArray(questions) && questions.length) {
       return {
@@ -448,25 +468,19 @@
           ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
         ].join("\n"),
         mode: "question",
+        answer,
+        improvedPrompt,
+        sources,
         ragStatus,
         ragMessage,
       };
     }
 
     return {
-      text: String(
-        result?.improvedPrompt ||
-          result?.improved_prompt ||
-          result?.finalPrompt ||
-          result?.final_prompt ||
-          result?.answer ||
-          result?.markdown ||
-          result?.text ||
-          result?.content ||
-          result?.prompt ||
-          (typeof result?.result === "string" ? result.result : "") ||
-          fallbackPrompt,
-      ),
+      text: improvedPrompt,
+      answer,
+      improvedPrompt,
+      sources,
       ragStatus,
       ragMessage,
     };
