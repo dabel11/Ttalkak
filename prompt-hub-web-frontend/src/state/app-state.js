@@ -384,6 +384,132 @@
     state.reportCommentId = null;
   }
 
+  function deleteMakeThreadState(state, threadId) {
+    state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
+    if (state.activeThreadId === threadId) {
+      state.activeThreadId = null;
+      state.messages = [];
+      state.composerDraft = "";
+    }
+  }
+
+  function createLocalMakeFolderState(state, name) {
+    const folder = { id: `folder-${Date.now()}`, name };
+    state.makeFolders.push(folder);
+    return folder;
+  }
+
+  function removeLocalMakeFolderState(state, folderId) {
+    state.makeFolders = state.makeFolders.filter((item) => item.id !== folderId);
+  }
+
+  function restoreMakeThreadFolderState(thread, folderId) {
+    if (thread) thread.folderId = folderId || "uncategorized";
+  }
+
+  function deleteMakeFolderState(ctx, folderId) {
+    const { state } = ctx;
+    removeLocalMakeFolderState(state, folderId);
+    state.recentThreads.forEach((thread) => {
+      if (thread.folderId === folderId) thread.folderId = "uncategorized";
+    });
+    if (state.activeFolderId === folderId) state.activeFolderId = "all";
+  }
+
+  function updateRecentMakeThreadState(ctx, threadId) {
+    const { makePreview, makePromptTitle, state } = ctx;
+    const lastUser = [...state.messages].reverse().find((message) => message.role === "user");
+    const firstUser = state.messages.find((message) => message.role === "user");
+    const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
+    const existingThread = state.recentThreads.find((item) => item.id === threadId);
+    const thread = {
+      id: threadId,
+      dedupeKey: threadId,
+      title: makePromptTitle(lastUser?.content || "새 대화"),
+      preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
+      createdAt: existingThread?.createdAt || Date.now(),
+      folderId: existingThread?.folderId || (state.activeFolderId !== "all" ? state.activeFolderId : "uncategorized"),
+      serverId: existingThread?.serverId || "",
+      messages: state.messages.map((item) => ({ ...item })),
+    };
+
+    state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId)].slice(0, 8);
+    return thread;
+  }
+
+  function openRecentMakeThreadState(state, thread) {
+    state.activeThreadId = thread.id;
+    state.messages = thread.messages.map((item) => ({ ...item }));
+    state.route = "make";
+  }
+
+  function openSavedMakePromptState(ctx, promptId, prompt) {
+    const { updateRecentThread, state } = ctx;
+    const threadId = `saved-thread-${promptId}`;
+    state.activeThreadId = threadId;
+    state.messages = prompt.messages.map((item) => ({ ...item }));
+    updateRecentThread(threadId);
+    state.route = "make";
+  }
+
+  function startNewMakeChatState(state) {
+    state.activeThreadId = null;
+    state.messages = [];
+    state.copiedMessageId = "";
+    state.composerDraft = "";
+  }
+
+  function appendMakeUserMessageState(state, threadId, message) {
+    state.activeThreadId = threadId;
+    state.messages.push(message);
+  }
+
+  function appendMakeAssistantMessageState(state, message) {
+    state.messages.push(message);
+    state.composerDraft = "";
+  }
+
+  function applyEditedMakeMessageState(state, index, cleanValue, now) {
+    state.messages = state.messages.slice(0, index + 1);
+    state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
+  }
+
+  function finishEditedMakeMessageState(state, message) {
+    state.messages.push(message);
+    state.editingMessageId = null;
+  }
+
+  function toggleSavedMakeMessageState(ctx, message, finalPrompt) {
+    const { makePromptTitle, savedPrompts, state } = ctx;
+    const savedIndex = savedPrompts.findIndex((item) => item.id === message.id);
+    if (savedIndex >= 0) {
+      savedPrompts.splice(savedIndex, 1);
+      state.userLibraryPromptIds.delete(message.id);
+      state.savedPage = 1;
+      return "removed";
+    }
+
+    savedPrompts.unshift({
+      id: message.id,
+      title: makePromptTitle(message.sourcePrompt || finalPrompt),
+      text: finalPrompt,
+      tags: ["내프롬프트", "Make", "첨삭"],
+      views: 0,
+      comments: 0,
+      saves: 1,
+      author: state.currentUser || "나",
+      owner: state.currentUser || "나",
+      source: "mine",
+      isShared: false,
+      savedByMe: true,
+      sourcePrompt: message.sourcePrompt || finalPrompt,
+      messages: state.messages.map((item) => ({ ...item })),
+    });
+    state.userLibraryPromptIds.add(message.id);
+    state.savedPage = 1;
+    return "added";
+  }
+
   global.TtalkakState = Object.freeze({
     ...(global.TtalkakState || {}),
     STORAGE_KEY,
@@ -405,12 +531,26 @@
     clearPersistedPayload,
     clearSessionBackendDataState,
     clearTransientSessionUiState,
+    createLocalMakeFolderState,
+    deleteMakeFolderState,
+    deleteMakeThreadState,
     readPersistedPayload,
     readStorageItem,
     removeStorageItem,
+    removeLocalMakeFolderState,
+    restoreMakeThreadFolderState,
     resetSessionBackendState,
     resetHomeViewState,
+    appendMakeAssistantMessageState,
+    appendMakeUserMessageState,
+    applyEditedMakeMessageState,
+    finishEditedMakeMessageState,
+    openRecentMakeThreadState,
+    openSavedMakePromptState,
+    startNewMakeChatState,
     togglePendingUnsaveState,
+    toggleSavedMakeMessageState,
+    updateRecentMakeThreadState,
     writePersistedPayload,
     writeStorageItem,
   });

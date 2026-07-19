@@ -127,6 +127,9 @@ const {
   applyPromptReportedState,
   applyPromptUnlikedState,
   applyPromptUnsavedState,
+  appendMakeAssistantMessageState,
+  appendMakeUserMessageState,
+  applyEditedMakeMessageState,
   clearAuthenticatedIdentityState,
   clearAuthenticatedSessionState,
   createInitialState,
@@ -134,12 +137,23 @@ const {
   clearPersistedPayload,
   clearSessionBackendDataState,
   clearTransientSessionUiState: clearTransientSessionUiStateValue,
+  createLocalMakeFolderState,
+  deleteMakeFolderState,
+  deleteMakeThreadState,
+  finishEditedMakeMessageState,
+  openRecentMakeThreadState,
+  openSavedMakePromptState,
   readPersistedPayload,
   readStorageItem,
   removeStorageItem,
+  removeLocalMakeFolderState,
+  restoreMakeThreadFolderState,
   resetSessionBackendState: resetSessionBackendStateValue,
   resetHomeViewState,
+  startNewMakeChatState,
   togglePendingUnsaveState,
+  toggleSavedMakeMessageState,
+  updateRecentMakeThreadState,
   writePersistedPayload,
   writeStorageItem,
 } = window.TtalkakState || {};
@@ -159,18 +173,32 @@ if (
     applyPromptReportedState,
     applyPromptUnlikedState,
     applyPromptUnsavedState,
+    appendMakeAssistantMessageState,
+    appendMakeUserMessageState,
+    applyEditedMakeMessageState,
     clearAuthenticatedIdentityState,
     clearAuthenticatedSessionState,
     closeTopModalState,
     clearPersistedPayload,
     clearSessionBackendDataState,
     clearTransientSessionUiStateValue,
+    createLocalMakeFolderState,
+    deleteMakeFolderState,
+    deleteMakeThreadState,
+    finishEditedMakeMessageState,
+    openRecentMakeThreadState,
+    openSavedMakePromptState,
     readPersistedPayload,
     readStorageItem,
     removeStorageItem,
+    removeLocalMakeFolderState,
+    restoreMakeThreadFolderState,
     resetSessionBackendStateValue,
     resetHomeViewState,
+    startNewMakeChatState,
     togglePendingUnsaveState,
+    toggleSavedMakeMessageState,
+    updateRecentMakeThreadState,
     writePersistedPayload,
     writeStorageItem,
   ].some((fn) => typeof fn !== "function")
@@ -2051,6 +2079,16 @@ function getPromptMutationStateContext() {
     state,
     updatePromptField,
     upsertPrompt,
+  };
+}
+
+function getMakeMutationStateContext() {
+  return {
+    makePreview,
+    makePromptTitle,
+    savedPrompts,
+    state,
+    updateRecentThread,
   };
 }
 
@@ -4050,12 +4088,7 @@ function performDeleteComment(commentId) {
 }
 
 function performDeleteThread(threadId) {
-  state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
-  if (state.activeThreadId === threadId) {
-    state.activeThreadId = null;
-    state.messages = [];
-    state.composerDraft = "";
-  }
+  deleteMakeThreadState(state, threadId);
   showNotice("대화를 삭제했습니다.");
 }
 
@@ -4085,17 +4118,15 @@ function hasMakeFolderName(name) {
 }
 
 function createLocalMakeFolder(name) {
-  const folder = { id: `folder-${Date.now()}`, name };
-  state.makeFolders.push(folder);
-  return folder;
+  return createLocalMakeFolderState(state, name);
 }
 
 function removeLocalMakeFolder(folderId) {
-  state.makeFolders = state.makeFolders.filter((item) => item.id !== folderId);
+  removeLocalMakeFolderState(state, folderId);
 }
 
 function restoreThreadFolder(thread, folderId) {
-  if (thread) thread.folderId = folderId || "uncategorized";
+  restoreMakeThreadFolderState(thread, folderId);
 }
 
 async function createMakeFolder(folderName) {
@@ -4227,11 +4258,7 @@ async function performDeleteFolder(folderId) {
     render();
     return;
   }
-  removeLocalMakeFolder(folderId);
-  state.recentThreads.forEach((thread) => {
-    if (thread.folderId === folderId) thread.folderId = "uncategorized";
-  });
-  if (state.activeFolderId === folderId) state.activeFolderId = "all";
+  deleteMakeFolderState(getMakeMutationStateContext(), folderId);
   showNotice("폴더를 삭제했습니다.");
   render();
 }
@@ -4676,32 +4703,29 @@ async function submitMakePrompt(composer) {
   const now = Date.now();
   const threadId = state.activeThreadId || `thread-${now}`;
   const assistantMessageId = `make-${now}`;
-  state.activeThreadId = threadId;
-  state.messages.push({ id: `user-${now}`, role: "user", content: value });
+  appendMakeUserMessageState(state, threadId, { id: `user-${now}`, role: "user", content: value });
   let improvedPrompt = "";
   try {
     improvedPrompt = await improvePromptWithBackend(value);
   } catch (error) {
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
-    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
+    state.makeBackendMessage = getApiFailureMessage("Make ?? API");
+    handleBackendAccessError(error, "???? ?? ??? ??????.");
     render();
     return;
   }
-  state.messages.push({
+  appendMakeAssistantMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
     content: improvedPrompt,
     sourcePrompt: value,
   });
-  state.composerDraft = "";
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(threadId);
   syncMakeThreadWithBackend(threadId);
   render();
 }
-
 async function copyMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
@@ -4724,40 +4748,10 @@ function saveMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
-
-  const savedIndex = savedPrompts.findIndex((item) => item.id === messageId);
-  if (savedIndex >= 0) {
-    savedPrompts.splice(savedIndex, 1);
-    state.userLibraryPromptIds.delete(messageId);
-    state.savedPage = 1;
-    showNotice("저장한 프롬프트에서 제거했습니다.");
-    render();
-    return;
-  }
-
-  savedPrompts.unshift({
-    id: message.id,
-    title: makePromptTitle(message.sourcePrompt || finalPrompt),
-    text: finalPrompt,
-    tags: ["내프롬프트", "Make", "첨삭"],
-    views: 0,
-    comments: 0,
-    saves: 1,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    source: "mine",
-    isShared: false,
-    savedByMe: true,
-    sourcePrompt: message.sourcePrompt || finalPrompt,
-    messages: state.messages.map((item) => ({ ...item })),
-  });
-  state.userLibraryPromptIds.add(message.id);
-
-  state.savedPage = 1;
-  showNotice("저장한 프롬프트에 추가했습니다.");
+  const result = toggleSavedMakeMessageState(getMakeMutationStateContext(), message, finalPrompt);
+  showNotice(result === "removed" ? "??? ?????? ??????." : "??? ????? ??????.");
   render();
 }
-
 async function resendEditedMessage(messageId, value) {
   const cleanValue = String(value || "").trim();
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
@@ -4766,32 +4760,29 @@ async function resendEditedMessage(messageId, value) {
 
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
-  state.messages = state.messages.slice(0, index + 1);
-  state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
+  applyEditedMakeMessageState(state, index, cleanValue, now);
   let improvedPrompt = "";
   try {
     improvedPrompt = await improvePromptWithBackend(cleanValue);
   } catch (error) {
     state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
-    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
+    state.makeBackendMessage = getApiFailureMessage("Make ?? API");
+    handleBackendAccessError(error, "???? ?? ??? ??????.");
     render();
     return;
   }
-  state.messages.push({
+  finishEditedMakeMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
     content: improvedPrompt,
     sourcePrompt: cleanValue,
   });
-  state.editingMessageId = null;
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
   syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
-  showNotice("수정한 메시지로 다시 전송했습니다.");
+  showNotice("??? ???? ?? ??????.");
   render();
 }
-
 function openShareFromMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
@@ -4862,54 +4853,27 @@ function getExecuteTarget(targetId) {
 }
 
 function updateRecentThread(threadId) {
-  const lastUser = [...state.messages].reverse().find((message) => message.role === "user");
-  const firstUser = state.messages.find((message) => message.role === "user");
-  const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
-  const existingThread = state.recentThreads.find((item) => item.id === threadId);
-  const thread = {
-    id: threadId,
-    dedupeKey: threadId,
-    title: makePromptTitle(lastUser?.content || "새 대화"),
-    preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
-    createdAt: existingThread?.createdAt || Date.now(),
-    folderId: existingThread?.folderId || (state.activeFolderId !== "all" ? state.activeFolderId : "uncategorized"),
-    serverId: existingThread?.serverId || "",
-    messages: state.messages.map((item) => ({ ...item })),
-  };
-
-  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId)].slice(0, 8);
+  updateRecentMakeThreadState(getMakeMutationStateContext(), threadId);
 }
 
 function openRecentThread(threadId) {
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
 
-  state.activeThreadId = thread.id;
-  state.messages = thread.messages.map((item) => ({ ...item }));
-  state.route = "make";
+  openRecentMakeThreadState(state, thread);
   render();
 }
-
 function openSavedMakePrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt?.messages?.length) return;
 
-  const threadId = `saved-thread-${promptId}`;
-  state.activeThreadId = threadId;
-  state.messages = prompt.messages.map((item) => ({ ...item }));
-  updateRecentThread(threadId);
-  state.route = "make";
+  openSavedMakePromptState(getMakeMutationStateContext(), promptId, prompt);
   render();
 }
-
 function startNewChat() {
-  state.activeThreadId = null;
-  state.messages = [];
-  state.copiedMessageId = "";
-  state.composerDraft = "";
+  startNewMakeChatState(state);
   render();
 }
-
 function getRecentThreadKeyFromThread(thread) {
   return thread.id || thread.dedupeKey || "";
 }
