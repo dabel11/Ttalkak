@@ -2,33 +2,38 @@
   "use strict";
 
   function MakePageView(ctx, data) {
-    const { icons, escapeHtml } = ctx;
     const {
       composerHtml,
-      hasMessages,
-      messages,
-      renderMessageBubble,
+      feedHtml,
       sidePanelHtml,
-      templateBarHtml,
     } = data;
 
     return `
       <section class="make-page" aria-label="프롬프트 첨삭">
         ${sidePanelHtml}
-        <div class="chat-feed">
-          ${templateBarHtml}
-          ${
-            hasMessages
-              ? messages.map(renderMessageBubble).join("")
-              : `<div class="empty-state make-empty">
-                  <div class="spark-badge">${icons.make}</div>
-                  <h1>프롬프트 첨삭 도우미</h1>
-                  <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
-                </div>`
-          }
-        </div>
+        ${feedHtml}
         ${composerHtml}
       </section>
+    `;
+  }
+
+  function MakeFeedView(ctx, data) {
+    const { icons } = ctx;
+    const { hasMessages, messages, renderMessageBubble, templateBarHtml } = data;
+
+    return `
+      <div class="chat-feed">
+        ${templateBarHtml}
+        ${
+          hasMessages
+            ? messages.map(renderMessageBubble).join("")
+            : `<div class="empty-state make-empty">
+                <div class="spark-badge">${icons.make}</div>
+                <h1>프롬프트 첨삭 도우미</h1>
+                <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
+              </div>`
+        }
+      </div>
     `;
   }
 
@@ -243,6 +248,7 @@
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
     MakeComposerView,
+    MakeFeedView,
     MakeFolderButtonView,
     MakePageView,
     MakeSidePanelView,
