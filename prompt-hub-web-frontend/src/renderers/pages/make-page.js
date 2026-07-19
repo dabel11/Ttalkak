@@ -178,10 +178,56 @@
     `;
   }
 
+  function MessageBubbleView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { content, id, isCopied, isEditing, isSaved, role } = data;
+    const isAssistant = role === "assistant";
+    const safeMessageId = escapeAttr(id);
+    const safeContent = escapeHtml(content);
+
+    if (isAssistant) {
+      return `
+        <div class="message-group assistant-group" data-message-id="${safeMessageId}">
+          <article class="message assistant">
+            <p>${safeContent}</p>
+          </article>
+          <footer class="message-actions">
+            <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
+            <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
+            <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
+            <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
+          </footer>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="message-group user-group" data-message-id="${safeMessageId}">
+        ${
+          isEditing
+            ? `<form class="message-edit-form" data-edit-message-form="${safeMessageId}">
+                <textarea name="message" rows="3">${safeContent}</textarea>
+                <div class="message-edit-actions">
+                  <button type="button" data-cancel-message-edit>취소</button>
+                  <button type="submit">다시 전송</button>
+                </div>
+              </form>`
+            : `<article class="message ${escapeAttr(role)}">
+                <p>${safeContent}</p>
+                <div class="user-message-actions">
+                  <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
+                </div>
+              </article>`
+        }
+      </div>
+    `;
+  }
+
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
     MakeFolderButtonView,
     MakePageView,
     MakeSidePanelView,
+    MessageBubbleView,
   });
 })(window);

@@ -46,6 +46,7 @@ const {
   MakeFolderButtonView,
   MakePageView,
   MakeSidePanelView,
+  MessageBubbleView,
   MyCommentsPanelView,
   MyPromptsPanelView,
   MyReportsPanelView,
@@ -61,7 +62,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1331,46 +1332,18 @@ function MakeFolderButton(folderId, name, count) {
 
 function MessageBubble(message) {
   const isAssistant = message.role === "assistant";
-  const isSaved = isAssistant && isPromptSaved(message.id);
-  const safeMessageId = escapeAttr(message.id);
-  const safeContent = escapeHtml(message.content);
 
-  if (isAssistant) {
-    return `
-      <div class="message-group assistant-group" data-message-id="${safeMessageId}">
-        <article class="message assistant">
-          <p>${safeContent}</p>
-        </article>
-        <footer class="message-actions">
-          <button type="button" data-copy-message="${safeMessageId}">${state.copiedMessageId === message.id ? icons.check : icons.copy}<span>${state.copiedMessageId === message.id ? "Copied" : "Copy"}</span></button>
-          <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-          <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
-          <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
-        </footer>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="message-group user-group" data-message-id="${safeMessageId}">
-      ${
-        state.editingMessageId === message.id
-          ? `<form class="message-edit-form" data-edit-message-form="${safeMessageId}">
-              <textarea name="message" rows="3">${safeContent}</textarea>
-              <div class="message-edit-actions">
-                <button type="button" data-cancel-message-edit>취소</button>
-                <button type="submit">다시 전송</button>
-              </div>
-            </form>`
-          : `<article class="message ${message.role}">
-              <p>${safeContent}</p>
-              <div class="user-message-actions">
-                <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
-              </div>
-            </article>`
-      }
-    </div>
-  `;
+  return MessageBubbleView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      content: message.content,
+      id: message.id,
+      isCopied: state.copiedMessageId === message.id,
+      isEditing: !isAssistant && state.editingMessageId === message.id,
+      isSaved: isAssistant && isPromptSaved(message.id),
+      role: message.role,
+    },
+  );
 }
 
 function SavedPage() {
