@@ -2200,6 +2200,17 @@ function bindEvents() {
 }
 
 function bindCoreEvents() {
+  bindGlobalNavigationEvents();
+  bindDiscoveryEvents();
+  bindAuthControlEvents();
+  bindModalControlEvents();
+  bindPromptInteractionEvents();
+  bindHomeSearchEvents();
+  bindAdminControlEvents();
+  bindFormSubmitEvents();
+}
+
+function bindGlobalNavigationEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
     const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
     const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
@@ -2286,7 +2297,9 @@ function bindCoreEvents() {
       showNotice(state.adminMode ? "관리자 운영 화면으로 이동했습니다." : "사용자 화면을 읽기 전용으로 확인합니다.");
     });
   });
+}
 
+function bindDiscoveryEvents() {
   document.querySelectorAll("[data-popular-tag]").forEach((button) => {
     button.addEventListener("click", () => {
       searchByTag(button.dataset.popularTag);
@@ -2365,7 +2378,9 @@ function bindCoreEvents() {
       openAdminUserActivity(nickname, { memberId, keepQuery: true });
     });
   });
+}
 
+function bindAuthControlEvents() {
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
     button.addEventListener("click", () => {
       togglePasswordVisibility(button);
@@ -2457,7 +2472,9 @@ function bindCoreEvents() {
       showNotice("사용 가능한 값입니다.");
     });
   });
+}
 
+function bindModalControlEvents() {
   document.querySelectorAll("[data-close-auth]").forEach((button) => {
     button.addEventListener("click", () => {
       state.authView = null;
@@ -2530,7 +2547,9 @@ function bindCoreEvents() {
       await runConfirmedAction();
     });
   });
+}
 
+function bindPromptInteractionEvents() {
   document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2646,7 +2665,9 @@ function bindCoreEvents() {
       deleteOwnPrompt(button.dataset.deletePrompt);
     });
   });
+}
 
+function bindHomeSearchEvents() {
   const searchInput = document.querySelector("[data-tag-search]");
   const searchScopeSelect = document.querySelector("[data-search-scope]");
   if (searchScopeSelect) {
@@ -2717,7 +2738,9 @@ function bindCoreEvents() {
       render();
     });
   });
+}
 
+function bindAdminControlEvents() {
   document.querySelectorAll("[data-admin-hide-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       toggleAdminPromptHidden(button.dataset.adminHidePrompt);
@@ -2880,7 +2903,9 @@ function bindCoreEvents() {
       executeMakeMessage(state.executeMessageId, button.dataset.executeTarget);
     });
   });
+}
 
+function bindFormSubmitEvents() {
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
     authForm.addEventListener("input", (event) => {
