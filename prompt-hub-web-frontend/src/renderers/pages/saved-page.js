@@ -161,10 +161,58 @@
     `;
   }
 
+  function MyReportsPanelView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml, formatShortDate, getReportStatusLabel } = ctx;
+    const { reports } = data;
+
+    return `
+      <div class="my-page-panel">
+        <div class="page-head">
+          <div class="page-title">
+            <span>${icons.flag}</span>
+            <h1>신고 내역</h1>
+          </div>
+        </div>
+        ${
+          reports.length
+            ? `<div class="activity-list">
+                ${reports
+                  .map(
+                    (report) => `
+                      <article class="activity-item reported-activity">
+                        <div>
+                          <div class="my-report-heading">
+                            <strong>${escapeHtml(report.title)}</strong>
+                            <span class="status-badge ${["reviewed", "resolved"].includes(report.status) ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
+                          </div>
+                          <p>${escapeHtml(report.label)}</p>
+                          ${report.reason ? `<p class="activity-reason">${escapeHtml(report.reason)}</p>` : ""}
+                          ${report.memo ? `<p class="activity-reason">처리 메모: ${escapeHtml(report.memo)}</p>` : ""}
+                          ${report.reviewedAt ? `<small class="activity-meta">처리 일시 ${formatShortDate(report.reviewedAt)}</small>` : ""}
+                          ${
+                            report.status === "revision-requested" && report.editPromptId
+                              ? `<div class="activity-actions">
+                                  <button type="button" data-edit-prompt="${escapeAttr(report.editPromptId)}">수정하기</button>
+                                </div>`
+                              : ""
+                          }
+                        </div>
+                      </article>
+                    `,
+                  )
+                  .join("")}
+              </div>`
+            : `<div class="empty-state saved-empty"><span>${icons.flag}</span><p>신고 내역이 아직 없습니다.</p></div>`
+        }
+      </div>
+    `;
+  }
+
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
     MyCommentsPanelView,
     MyPromptsPanelView,
+    MyReportsPanelView,
     SavedLibraryPanelView,
     SavedPageView,
   });
