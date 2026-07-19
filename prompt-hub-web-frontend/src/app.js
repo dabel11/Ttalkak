@@ -43,6 +43,7 @@ const {
   AuthModalView,
   ExecuteModalView,
   HomePageView,
+  MyCommentsPanelView,
   MyPromptsPanelView,
   PromptCardView,
   PromptDetailModalView,
@@ -53,7 +54,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HomePageView, MyPromptsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HomePageView, MyCommentsPanelView, MyPromptsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1586,60 +1587,16 @@ function MyPromptsPanel() {
 }
 
 function MyCommentsPanel() {
-  const comments = getMyComments();
+  const comments = getMyComments().map((item) => ({
+    item,
+    isEditing: state.editingCommentId === item.comment.id,
+    revisionRequest: state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)],
+  }));
 
-  return `
-    <div class="my-page-panel">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.comment}</span>
-          <h1>댓글 관리</h1>
-        </div>
-      </div>
-      ${
-        comments.length
-          ? `<div class="activity-list">
-              ${comments
-                .map(
-                  (item) => {
-                    const isEditing = state.editingCommentId === item.comment.id;
-                    const revisionRequest = state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)];
-                    return `
-                    <article class="activity-item">
-                      <div>
-                        <strong>${escapeHtml(item.prompt?.title || "삭제된 프롬프트")}</strong>
-                        ${
-                          isEditing
-                            ? `<form class="comment-edit-form my-comment-edit-form" data-edit-comment-form="${item.comment.id}">
-                                <textarea name="comment" rows="3">${escapeHtml(item.comment.text)}</textarea>
-                                <button class="primary-button" type="submit">저장</button>
-                              </form>`
-                            : `<p>${escapeHtml(item.comment.text)}${item.comment.edited ? `<span class="activity-edited-mark">수정됨</span>` : ""}</p>`
-                        }
-                        ${
-                          revisionRequest
-                            ? `<div class="revision-request-notice activity-revision-notice">
-                                <strong>수정 요청 사유</strong>
-                                <p>${escapeHtml(revisionRequest.reason || "수정 요청 사유가 입력되지 않았습니다.")}</p>
-                              </div>`
-                            : ""
-                        }
-                      </div>
-                      <div class="activity-actions">
-                        <button type="button" data-open-prompt="${item.promptId}">원문 보기</button>
-                        <button type="button" data-edit-comment="${item.comment.id}">${isEditing ? "취소" : "수정"}</button>
-                        <button type="button" data-delete-comment="${item.comment.id}">삭제</button>
-                      </div>
-                    </article>
-                  `;
-                  },
-                )
-                .join("")}
-            </div>`
-          : `<div class="empty-state saved-empty"><span>${icons.comment}</span><p>작성한 댓글이 아직 없습니다.</p></div>`
-      }
-    </div>
-  `;
+  return MyCommentsPanelView(
+    { icons, escapeAttr, escapeHtml },
+    { comments },
+  );
 }
 
 function MyReportsPanel() {
