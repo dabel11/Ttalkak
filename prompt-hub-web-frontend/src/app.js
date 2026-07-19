@@ -1965,6 +1965,13 @@ function restoreCurrentAccountScope() {
 
 function applyAuthenticatedUser(authResult) {
   saveCurrentAccountScope();
+  applyAuthenticatedIdentity(authResult);
+  resetSessionBackendState();
+  restoreCurrentAccountScope();
+  writeStorageItem(AUTH_TOKEN_KEY, authResult.token);
+}
+
+function applyAuthenticatedIdentity(authResult) {
   state.isLoggedIn = true;
   state.currentUser = authResult.user.nickname;
   state.currentUserId = authResult.user.id;
@@ -1973,9 +1980,6 @@ function applyAuthenticatedUser(authResult) {
   state.token = authResult.token;
   state.adminMode = state.currentUserRole === "admin";
   if (state.adminMode) state.route = "admin";
-  resetSessionBackendState();
-  restoreCurrentAccountScope();
-  writeStorageItem(AUTH_TOKEN_KEY, authResult.token);
 }
 
 function resetSessionBackendState() {
@@ -2016,12 +2020,7 @@ function clearTransientSessionUiState() {
 
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
   saveCurrentAccountScope();
-  state.isLoggedIn = false;
-  state.currentUser = null;
-  state.currentUserId = null;
-  state.currentUserRole = "user";
-  state.authToken = "";
-  state.token = "";
+  clearAuthenticatedIdentity();
   restoreCurrentAccountScope();
   state.adminMode = false;
   state.authView = null;
@@ -2031,6 +2030,15 @@ function clearAuthenticatedSession({ keepRoute = false } = {}) {
   clearTransientSessionUiState();
   if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
   removeStorageItem(AUTH_TOKEN_KEY);
+}
+
+function clearAuthenticatedIdentity() {
+  state.isLoggedIn = false;
+  state.currentUser = null;
+  state.currentUserId = null;
+  state.currentUserRole = "user";
+  state.authToken = "";
+  state.token = "";
 }
 
 function normalizeUserIdInput(input) {
@@ -2604,6 +2612,16 @@ function bindHomeSearchEvents() {
 }
 
 function bindAdminControlEvents() {
+  bindAdminPromptEvents();
+  bindAdminReportEvents();
+  bindAdminTagEvents();
+  bindAdminUserEvents();
+  bindAdminTabEvents();
+  bindAdminRevisionEvents();
+  bindPromptEditAndExecuteEvents();
+}
+
+function bindAdminPromptEvents() {
   document.querySelectorAll("[data-admin-hide-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       toggleAdminPromptHidden(button.dataset.adminHidePrompt);
@@ -2631,7 +2649,9 @@ function bindAdminControlEvents() {
       render();
     });
   });
+}
 
+function bindAdminReportEvents() {
   document.querySelectorAll("[data-admin-report-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.adminReportFilter = button.dataset.adminReportFilter || "all";
@@ -2639,6 +2659,18 @@ function bindAdminControlEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-report-status]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = String(button.dataset.adminReportStatus || "");
+      const separatorIndex = value.lastIndexOf(":");
+      const key = value.slice(0, separatorIndex);
+      const status = value.slice(separatorIndex + 1);
+      updateReportRecordStatus(key, status);
+    });
+  });
+}
+
+function bindAdminTagEvents() {
   document.querySelectorAll("[data-admin-tag-search]").forEach((input) => {
     input.addEventListener("compositionstart", () => {
       state.isComposingAdminTagSearch = true;
@@ -2665,29 +2697,6 @@ function bindAdminControlEvents() {
     select.addEventListener("change", () => {
       state.adminTagSort = select.value || "usage";
       render();
-    });
-  });
-
-  document.querySelectorAll("[data-admin-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.adminTab = button.dataset.adminTab || "reports";
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-admin-user-block]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.adminBlockTarget = {
-        memberId: button.dataset.adminUserBlock,
-        nickname: button.dataset.adminUserName || state.adminUserActivityNickname || "사용자",
-      };
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-admin-user-unblock]").forEach((button) => {
-    button.addEventListener("click", () => {
-      updateAdminUserBlockState(button.dataset.adminUserUnblock, false, button.dataset.adminUserName);
     });
   });
 
@@ -2720,16 +2729,36 @@ function bindAdminControlEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-report-status]").forEach((button) => {
+}
+
+function bindAdminUserEvents() {
+  document.querySelectorAll("[data-admin-user-block]").forEach((button) => {
     button.addEventListener("click", () => {
-      const value = String(button.dataset.adminReportStatus || "");
-      const separatorIndex = value.lastIndexOf(":");
-      const key = value.slice(0, separatorIndex);
-      const status = value.slice(separatorIndex + 1);
-      updateReportRecordStatus(key, status);
+      state.adminBlockTarget = {
+        memberId: button.dataset.adminUserBlock,
+        nickname: button.dataset.adminUserName || state.adminUserActivityNickname || "사용자",
+      };
+      render();
     });
   });
 
+  document.querySelectorAll("[data-admin-user-unblock]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateAdminUserBlockState(button.dataset.adminUserUnblock, false, button.dataset.adminUserName);
+    });
+  });
+}
+
+function bindAdminTabEvents() {
+  document.querySelectorAll("[data-admin-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminTab = button.dataset.adminTab || "reports";
+      render();
+    });
+  });
+}
+
+function bindAdminRevisionEvents() {
   document.querySelectorAll("[data-admin-request-revision]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2738,7 +2767,9 @@ function bindAdminControlEvents() {
       render();
     });
   });
+}
 
+function bindPromptEditAndExecuteEvents() {
   document.querySelectorAll("[data-edit-prompt]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2769,6 +2800,12 @@ function bindAdminControlEvents() {
 }
 
 function bindFormSubmitEvents() {
+  bindAuthFormEvents();
+  bindShareFormEvents();
+  bindReportAndCommentFormEvents();
+}
+
+function bindAuthFormEvents() {
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
     authForm.addEventListener("input", (event) => {
@@ -3006,7 +3043,9 @@ function bindFormSubmitEvents() {
       }
     });
   }
+}
 
+function bindShareFormEvents() {
   const shareForm = document.querySelector(".share-form");
   if (shareForm) {
     shareForm.addEventListener("input", () => {
@@ -3052,7 +3091,9 @@ function bindFormSubmitEvents() {
       addShareTag(button.dataset.addShareTag);
     });
   });
+}
 
+function bindReportAndCommentFormEvents() {
   const reportForm = document.querySelector("[data-report-form]");
   if (reportForm) {
     reportForm.addEventListener("submit", (event) => {
@@ -7354,76 +7395,98 @@ async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
   );
 
   let shouldRender = false;
-  if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
-    state.backendLibraryPromptIds = new Set();
-    state.backendLibraryPrompts = libraryResult.value.items.map((prompt) => {
-      const normalized = {
-        ...prompt,
-        source: prompt.source || (prompt.isMine ? "mine" : "community"),
-        savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
-      };
-      upsertPrompt(savedPrompts, normalized);
-      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
-      state.userLibraryPromptIds.add(normalized.id);
-      state.backendLibraryPromptIds.add(normalized.id);
-      return normalized;
-    });
-    shouldRender = true;
-  } else if (libraryResult.status === "rejected") {
+  shouldRender = applyMyLibraryResult(libraryResult) || shouldRender;
+  if (libraryResult.status === "rejected") {
     console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
   }
 
-  if (likedLibraryResult.status === "fulfilled" && Array.isArray(likedLibraryResult.value?.items)) {
-    state.backendLikedPrompts = likedLibraryResult.value.items.map((prompt) => {
-      const normalized = {
-        ...prompt,
-        source: prompt.source || (prompt.isMine ? "mine" : "community"),
-        likedByMe: true,
-      };
-      upsertPrompt(savedPrompts, normalized);
-      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
-      state.likedPromptIds.add(normalized.id);
-      return normalized;
-    });
-    shouldRender = true;
-  } else if (likedLibraryResult.status === "rejected") {
+  shouldRender = applyLikedLibraryResult(likedLibraryResult) || shouldRender;
+  if (likedLibraryResult.status === "rejected") {
     console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
   }
 
-  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
-    state.backendMyPrompts = promptsResult.value.items.map((prompt) => ({
-      ...prompt,
-      source: "mine",
-      owner: state.currentUser || prompt.owner || prompt.author,
-      author: state.currentUser || prompt.author,
-    }));
-    state.backendMyPrompts.forEach((prompt) => {
-      upsertPrompt(savedPrompts, prompt);
-      if (prompt.isShared) upsertPrompt(popularPrompts, prompt);
-    });
-    shouldRender = true;
-  } else if (promptsResult.status === "rejected") {
+  shouldRender = applyMyPromptsResult(promptsResult) || shouldRender;
+  if (promptsResult.status === "rejected") {
     console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
   }
 
-  if (commentsResult.status === "fulfilled" && Array.isArray(commentsResult.value)) {
-    state.backendMyComments = commentsResult.value;
-    commentsResult.value.forEach((comment) => {
-      if (comment.prompt) {
-        upsertPrompt(popularPrompts, comment.prompt);
-        upsertPrompt(savedPrompts, comment.prompt);
-      }
-    });
-    shouldRender = true;
-  }
-
-  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
-    state.backendMyReports = reportsResult.value;
-    shouldRender = true;
-  }
+  shouldRender = applyMyCommentsResult(commentsResult) || shouldRender;
+  shouldRender = applyMyReportsResult(reportsResult) || shouldRender;
 
   state.myBackendStatus = allRequestsFailed ? "fallback" : "connected";
   if (shouldRender || allRequestsFailed) render();
+}
+
+function applyMyLibraryResult(result) {
+  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
+
+  state.backendLibraryPromptIds = new Set();
+  state.backendLibraryPrompts = result.value.items.map((prompt) => {
+    const normalized = {
+      ...prompt,
+      source: prompt.source || (prompt.isMine ? "mine" : "community"),
+      savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
+    };
+    upsertPrompt(savedPrompts, normalized);
+    if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+    state.userLibraryPromptIds.add(normalized.id);
+    state.backendLibraryPromptIds.add(normalized.id);
+    return normalized;
+  });
+  return true;
+}
+
+function applyLikedLibraryResult(result) {
+  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
+
+  state.backendLikedPrompts = result.value.items.map((prompt) => {
+    const normalized = {
+      ...prompt,
+      source: prompt.source || (prompt.isMine ? "mine" : "community"),
+      likedByMe: true,
+    };
+    upsertPrompt(savedPrompts, normalized);
+    if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
+    state.likedPromptIds.add(normalized.id);
+    return normalized;
+  });
+  return true;
+}
+
+function applyMyPromptsResult(result) {
+  if (result.status !== "fulfilled" || !Array.isArray(result.value?.items)) return false;
+
+  state.backendMyPrompts = result.value.items.map((prompt) => ({
+    ...prompt,
+    source: "mine",
+    owner: state.currentUser || prompt.owner || prompt.author,
+    author: state.currentUser || prompt.author,
+  }));
+  state.backendMyPrompts.forEach((prompt) => {
+    upsertPrompt(savedPrompts, prompt);
+    if (prompt.isShared) upsertPrompt(popularPrompts, prompt);
+  });
+  return true;
+}
+
+function applyMyCommentsResult(result) {
+  if (result.status !== "fulfilled" || !Array.isArray(result.value)) return false;
+
+  state.backendMyComments = result.value;
+  result.value.forEach((comment) => {
+    if (comment.prompt) {
+      upsertPrompt(popularPrompts, comment.prompt);
+      upsertPrompt(savedPrompts, comment.prompt);
+    }
+  });
+  return true;
+}
+
+function applyMyReportsResult(result) {
+  if (result.status !== "fulfilled" || !Array.isArray(result.value)) return false;
+
+  state.backendMyReports = result.value;
+  return true;
 }
 
 function getAdminHydrationEffectContext() {
