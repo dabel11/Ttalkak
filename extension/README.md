@@ -23,10 +23,20 @@ Chrome extension
 - Guest prompt-improve requests include `X-Session-UUID`; logged-in requests use JWT instead.
 - Trial-limit responses such as `FREE_TRIAL_LIMIT_EXCEEDED` should prompt the user to log in.
 - On `401` or blocked-account responses, the extension clears the stored auth session and asks the user to log in again.
-- Saved prompts and recent chats are still extension-local for now. Server-side thread storage, folder storage, and share integration are future integration points.
+- Logged-in users sync Saved prompts through the Spring Boot saved-prompt API.
+- Logged-in users sync Recents through the Spring Boot Make thread API.
+- Guest Saved prompts and Recents remain local browser data.
 - The extension does not replace failed backend responses with demo AI results. API failures should be surfaced to the user so integration issues are visible during testing.
 - Extension-local saved prompts and recent chats must be treated as local browser data, not as server-synced website data.
-- Claude currently uses clipboard fallback. ChatGPT and Gemini use page insertion where possible, then clipboard fallback if insertion fails.
+- Claude currently uses clipboard fallback. ChatGPT and Gemini use page insertion where possible.
+
+## Permission Notes
+
+- `scripting` is the primary method for inserting prompts into supported AI sites.
+- `debugger` is kept only as a last-resort fallback for ChatGPT and Gemini when DOM insertion fails.
+- The background script blocks debugger fallback outside the supported ChatGPT and Gemini hosts.
+- Debugger sessions are detached in a `finally` block, and detach failures are logged.
+- If ChatGPT and Gemini are verified to work reliably with DOM insertion only, remove the `debugger` permission from `public/manifest.json`.
 
 ## Development
 

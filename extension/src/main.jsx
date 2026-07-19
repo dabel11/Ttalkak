@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
 import { Composer } from "./components/Composer";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { Header } from "./components/Header";
-import { RagSettingsPanel } from "./components/RagSettingsPanel";
 import { Sidebar } from "./components/Sidebar";
-import { MODE_META, STORAGE } from "./constants";
 import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
-import { saveStorage } from "./storage/extensionStorage";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import "./styles.css";
 
@@ -21,10 +18,9 @@ function App() {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [executeTarget] = useState("auto");
-  const [showRagSettings, setShowRagSettings] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
-  const [ragConfig, setRagConfig] = useState(loadBackendConfig);
-  const ragMode = MODE_META[ragConfig.collectionName] ? ragConfig.collectionName : "prompt_techniques";
+  const [ragConfig] = useState(loadBackendConfig);
+  const ragMode = "prompt_techniques";
 
   const {
     authMode,
@@ -74,7 +70,6 @@ function App() {
     authSession,
     executeTarget,
     ragConfig,
-    ragMode,
     sessionUuid,
     setAuthMode,
     setSavedItems,
@@ -82,8 +77,6 @@ function App() {
     showNotice,
     onAuthExpired: handleAuthExpired,
   });
-
-  useEffect(() => saveStorage(STORAGE.CONFIG, ragConfig), [ragConfig]);
 
   const filteredRecentThreads = useMemo(() => {
     if (activeTab !== "recents") return recentThreads;
@@ -126,24 +119,8 @@ function App() {
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
             onLogout={() => handleLogout()}
-            onToggleRagSettings={() => setShowRagSettings((v) => !v)}
-            ragMode={ragMode}
             ragStatus={ragStatus}
-            onToggleRagMode={() =>
-              setRagConfig((config) => ({
-                ...config,
-                collectionName: config.collectionName === "papers" ? "prompt_techniques" : "papers",
-              }))
-            }
           />
-          {showRagSettings && (
-            <RagSettingsPanel
-              config={ragConfig}
-              status={ragStatus}
-              onChange={setRagConfig}
-              onClose={() => setShowRagSettings(false)}
-            />
-          )}
           <ChatFeed
             messages={messages}
             isLoading={isLoading}
@@ -170,7 +147,6 @@ function App() {
           setMode={setAuthMode}
           onClose={() => setAuthMode(null)}
           onLogin={handleLogin}
-          backendApiUrl={ragConfig.backendApiUrl}
         />
       )}
       {confirmAction && (

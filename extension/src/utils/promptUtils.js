@@ -2,18 +2,14 @@ import { DEFAULT_RAG_CONFIG, STORAGE } from "../constants";
 import { loadStorage } from "../storage/extensionStorage";
 
 export function normalizeBackendConfig(config = {}) {
-  const legacyUrl = config.serverUrl && !String(config.serverUrl).includes(":8000") ? config.serverUrl : "";
   return {
-    ...DEFAULT_RAG_CONFIG,
-    ...config,
-    backendApiUrl: config.backendApiUrl || legacyUrl || DEFAULT_RAG_CONFIG.backendApiUrl,
+    backendApiUrl: config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl,
   };
 }
 
 export function loadBackendConfig() {
-  const stored = loadStorage(STORAGE.CONFIG, null);
-  const legacy = stored ? null : loadStorage(STORAGE.LEGACY_CONFIG, null);
-  return normalizeBackendConfig(stored || legacy || DEFAULT_RAG_CONFIG);
+  const devConfig = import.meta.env.DEV ? loadStorage(STORAGE.CONFIG, null) || loadStorage(STORAGE.LEGACY_CONFIG, null) : null;
+  return normalizeBackendConfig(devConfig || DEFAULT_RAG_CONFIG);
 }
 
 export function makeTitle(text = "") {

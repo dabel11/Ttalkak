@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, Plus, X } from "lucide-react";
 
-export function AuthModal({ mode, setMode, onClose, onLogin, backendApiUrl }) {
+export function AuthModal({ mode, setMode, onClose, onLogin }) {
   const isSignup = mode === "signup";
   const isFindId = mode === "findId";
   const isFindPassword = mode === "findPassword";
@@ -62,7 +62,6 @@ export function AuthModal({ mode, setMode, onClose, onLogin, backendApiUrl }) {
           <div className="auth-icon"><Plus size={22} /></div>
           <h2>{title}</h2>
           <p>{description}</p>
-          {!isSignup && !isFindId && !isFindPassword && backendApiUrl && <p className="auth-result">API: {backendApiUrl}</p>}
         </div>
         <form className="auth-form" onSubmit={submitAuth}>
           {(isSignup || isFindId) && (

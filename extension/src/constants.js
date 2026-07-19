@@ -9,9 +9,6 @@ export const STORAGE = {
 
 export const DEFAULT_RAG_CONFIG = {
   backendApiUrl: "http://localhost:8080",
-  collectionName: "prompt_techniques",
-  topK: 5,
-  model: "gemini-2.0-flash",
 };
 
 export const API_TIMEOUT_MS = 15000;

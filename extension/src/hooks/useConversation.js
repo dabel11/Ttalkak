@@ -10,7 +10,6 @@ export function useConversation({
   authSession,
   executeTarget,
   ragConfig,
-  ragMode,
   sessionUuid,
   setAuthMode,
   setSavedItems,
@@ -221,16 +220,13 @@ export function useConversation({
       const data = await requestPromptImprove(ragConfig, {
         prompt,
         history,
-        collectionName: ragConfig.collectionName,
-        topK: ragConfig.topK,
-        model: ragConfig.model,
         accessToken: authSession?.accessToken || "",
         sessionUuid: guestSessionUuid,
       });
       setRagStatus("connected");
 
       if (data.ragStatus === "no_evidence") {
-        const meta = MODE_META[ragMode];
+        const meta = MODE_META.prompt_techniques;
         const examples = meta.examples.map((example) => `- ${example}`).join("\n");
         const assistantMsg = {
           id: `assistant-${Date.now()}`,
@@ -299,7 +295,7 @@ export function useConversation({
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: isNetwork
-            ? `백엔드 API에 연결할 수 없습니다.\n\n현재 설정된 주소: ${ragConfig.backendApiUrl}\n\nSpring Boot 서버가 실행 중인지 확인하거나 설정에서 Backend API URL을 확인해주세요.`
+            ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
             : `오류가 발생했습니다.\n\n${err.message}`,
           executablePrompt: null,
           sourcePrompt: prompt,
