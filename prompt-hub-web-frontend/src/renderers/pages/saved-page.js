@@ -82,8 +82,30 @@
     `;
   }
 
+  function MyPromptsPanelView(ctx, data) {
+    const { icons, PromptCard } = ctx;
+    const { prompts } = data;
+
+    return `
+      <div class="my-page-panel">
+        <div class="page-head">
+          <div class="page-title">
+            <span>${icons.edit}</span>
+            <h1>내가 만든 프롬프트</h1>
+          </div>
+        </div>
+        ${
+          prompts.length
+            ? `<div class="prompt-grid saved-grid">${prompts.map(PromptCard).join("")}</div>`
+            : `<div class="empty-state saved-empty"><span>${icons.edit}</span><p>아직 직접 만든 프롬프트가 없습니다.</p></div>`
+        }
+      </div>
+    `;
+  }
+
   global.TtalkakRenderers = Object.freeze({
     ...(global.TtalkakRenderers || {}),
+    MyPromptsPanelView,
     SavedLibraryPanelView,
     SavedPageView,
   });

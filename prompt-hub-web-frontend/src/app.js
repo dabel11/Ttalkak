@@ -43,6 +43,7 @@ const {
   AuthModalView,
   ExecuteModalView,
   HomePageView,
+  MyPromptsPanelView,
   PromptCardView,
   PromptDetailModalView,
   PromptEditModalView,
@@ -52,7 +53,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HomePageView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HomePageView, MyPromptsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1578,21 +1579,10 @@ function SavedPagination(totalPages, currentPage) {
 function MyPromptsPanel() {
   const prompts = getMyPrompts().sort(getSavedSorter());
 
-  return `
-    <div class="my-page-panel">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.edit}</span>
-          <h1>내가 만든 프롬프트</h1>
-        </div>
-      </div>
-      ${
-        prompts.length
-          ? `<div class="prompt-grid saved-grid">${prompts.map(PromptCard).join("")}</div>`
-          : `<div class="empty-state saved-empty"><span>${icons.edit}</span><p>아직 직접 만든 프롬프트가 없습니다.</p></div>`
-      }
-    </div>
-  `;
+  return MyPromptsPanelView(
+    { icons, PromptCard },
+    { prompts },
+  );
 }
 
 function MyCommentsPanel() {
