@@ -5,6 +5,46 @@
   const AUTH_TOKEN_KEY = "ttalkak_access_token";
   const DEMO_AUTH_TOKEN = "demo-token";
 
+  function readStorageItem(key) {
+    try {
+      return global.localStorage?.getItem(key) || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function writeStorageItem(key, value) {
+    try {
+      global.localStorage?.setItem(key, value);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function removeStorageItem(key) {
+    try {
+      global.localStorage?.removeItem(key);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function readPersistedPayload() {
+    const raw = readStorageItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  }
+
+  function writePersistedPayload(payload) {
+    return writeStorageItem(STORAGE_KEY, JSON.stringify(payload));
+  }
+
+  function clearPersistedPayload() {
+    return removeStorageItem(STORAGE_KEY);
+  }
+
   function createInitialState(options = {}) {
     const homePageSize = Number(options.homePageSize || 16);
 
@@ -130,5 +170,11 @@
     AUTH_TOKEN_KEY,
     DEMO_AUTH_TOKEN,
     createInitialState,
+    clearPersistedPayload,
+    readPersistedPayload,
+    readStorageItem,
+    removeStorageItem,
+    writePersistedPayload,
+    writeStorageItem,
   });
 })(window);

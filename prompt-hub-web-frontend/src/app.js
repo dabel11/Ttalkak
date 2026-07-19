@@ -59,9 +59,20 @@ const {
   AUTH_TOKEN_KEY,
   DEMO_AUTH_TOKEN,
   createInitialState,
+  clearPersistedPayload,
+  readPersistedPayload,
+  readStorageItem,
+  removeStorageItem,
+  writePersistedPayload,
+  writeStorageItem,
 } = window.TtalkakState || {};
 
-if (!STORAGE_KEY || !AUTH_TOKEN_KEY || !DEMO_AUTH_TOKEN || typeof createInitialState !== "function") {
+if (
+  !STORAGE_KEY ||
+  !AUTH_TOKEN_KEY ||
+  !DEMO_AUTH_TOKEN ||
+  [createInitialState, clearPersistedPayload, readPersistedPayload, readStorageItem, removeStorageItem, writePersistedPayload, writeStorageItem].some((fn) => typeof fn !== "function")
+) {
   throw new Error("TTALKAK 상태 헬퍼를 불러오지 못했습니다.");
 }
 
@@ -2113,11 +2124,7 @@ function applyAuthenticatedUser(authResult) {
   state.adminBackendStatus = "idle";
   state.makeBackendStatus = "idle";
   restoreCurrentAccountScope();
-  try {
-    localStorage.setItem(AUTH_TOKEN_KEY, authResult.token);
-  } catch (_error) {
-    // Local preview can still run if browser storage is blocked.
-  }
+  writeStorageItem(AUTH_TOKEN_KEY, authResult.token);
 }
 
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
@@ -2160,11 +2167,7 @@ function clearAuthenticatedSession({ keepRoute = false } = {}) {
   state.executeMessageId = null;
   state.executePromptId = null;
   if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
-  try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch (_error) {
-    // Local preview can continue if browser storage is unavailable.
-  }
+  removeStorageItem(AUTH_TOKEN_KEY);
 }
 
 function normalizeUserIdInput(input) {
@@ -4445,8 +4448,8 @@ function removeCommentFromList(comments, commentId) {
 
 function resetDemoState() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+    clearPersistedPayload();
+    removeStorageItem(AUTH_TOKEN_KEY);
   } catch (_error) {
     // Ignore storage failures in preview mode.
   }
@@ -6923,12 +6926,7 @@ function showNotice(message) {
 }
 
 function getAuthToken() {
-  let storedToken = "";
-  try {
-    storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
-  } catch (_error) {
-    storedToken = "";
-  }
+  const storedToken = readStorageItem(AUTH_TOKEN_KEY);
   return String(state.authToken || state.token || storedToken || "").trim();
 }
 
@@ -7594,60 +7592,57 @@ async function refreshAdminAuditLogs({ shouldRender = true, reason = "" } = {}) 
 function persistState() {
   try {
     saveCurrentAccountScope();
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        popularPrompts,
-        savedPrompts: savedPrompts
-          .filter((prompt) => !state.pendingUnsaveIds.has(prompt.id) || prompt.source === "mine")
-          .map((prompt) =>
-            state.pendingUnsaveIds.has(prompt.id) && prompt.source === "mine" ? { ...prompt, savedByMe: false } : prompt,
-          ),
-        commentsByPrompt,
-        state: {
-          isLoggedIn: state.isLoggedIn,
-          currentUser: state.currentUser,
-          currentUserId: state.currentUserId,
-          currentUserRole: state.currentUserRole,
-          authToken: state.authToken,
-          token: state.token,
-          accountScopes: state.accountScopes,
-          libraryDemoSeeded: state.libraryDemoSeeded,
-          userLibraryPromptIds: [...state.userLibraryPromptIds],
-          likedPromptIds: [...state.likedPromptIds],
-          likedCommentIds: [...state.likedCommentIds],
-          reportedPromptIds: [...state.reportedPromptIds],
-          reportedCommentIds: [...state.reportedCommentIds],
-          hideReportedPrompts: state.hideReportedPrompts,
-          adminMode: state.adminMode,
-          adminHiddenPromptIds: [...state.adminHiddenPromptIds],
-          adminTagDecisions: state.adminTagDecisions,
-          adminTab: state.adminTab,
-          adminPromptQuery: state.adminPromptQuery,
-          adminPromptFilter: state.adminPromptFilter,
-          adminTagQuery: state.adminTagQuery,
-          adminTagFilter: state.adminTagFilter,
-          adminTagSort: state.adminTagSort,
-          adminTagPromptKey: state.adminTagPromptKey,
-          adminUserQuery: state.adminUserQuery,
-          adminUserActivityNickname: state.adminUserActivityNickname,
-          adminPromptRevisionRequests: state.adminPromptRevisionRequests,
-          adminReportFilter: state.adminReportFilter,
-          reportRecords: state.reportRecords,
-          searchScope: state.searchScope,
-          popularSort: state.popularSort,
-          savedSort: state.savedSort,
-          guestImproveCount: state.guestImproveCount,
-          recentThreads: state.recentThreads,
-          makeFolders: state.makeFolders,
-          activeFolderId: state.activeFolderId,
-          activeThreadId: state.activeThreadId,
-          messages: state.messages,
-          composerDraft: state.composerDraft,
-          templateCollapsed: state.templateCollapsed,
-        },
-      }),
-    );
+    writePersistedPayload({
+      popularPrompts,
+      savedPrompts: savedPrompts
+        .filter((prompt) => !state.pendingUnsaveIds.has(prompt.id) || prompt.source === "mine")
+        .map((prompt) =>
+          state.pendingUnsaveIds.has(prompt.id) && prompt.source === "mine" ? { ...prompt, savedByMe: false } : prompt,
+        ),
+      commentsByPrompt,
+      state: {
+        isLoggedIn: state.isLoggedIn,
+        currentUser: state.currentUser,
+        currentUserId: state.currentUserId,
+        currentUserRole: state.currentUserRole,
+        authToken: state.authToken,
+        token: state.token,
+        accountScopes: state.accountScopes,
+        libraryDemoSeeded: state.libraryDemoSeeded,
+        userLibraryPromptIds: [...state.userLibraryPromptIds],
+        likedPromptIds: [...state.likedPromptIds],
+        likedCommentIds: [...state.likedCommentIds],
+        reportedPromptIds: [...state.reportedPromptIds],
+        reportedCommentIds: [...state.reportedCommentIds],
+        hideReportedPrompts: state.hideReportedPrompts,
+        adminMode: state.adminMode,
+        adminHiddenPromptIds: [...state.adminHiddenPromptIds],
+        adminTagDecisions: state.adminTagDecisions,
+        adminTab: state.adminTab,
+        adminPromptQuery: state.adminPromptQuery,
+        adminPromptFilter: state.adminPromptFilter,
+        adminTagQuery: state.adminTagQuery,
+        adminTagFilter: state.adminTagFilter,
+        adminTagSort: state.adminTagSort,
+        adminTagPromptKey: state.adminTagPromptKey,
+        adminUserQuery: state.adminUserQuery,
+        adminUserActivityNickname: state.adminUserActivityNickname,
+        adminPromptRevisionRequests: state.adminPromptRevisionRequests,
+        adminReportFilter: state.adminReportFilter,
+        reportRecords: state.reportRecords,
+        searchScope: state.searchScope,
+        popularSort: state.popularSort,
+        savedSort: state.savedSort,
+        guestImproveCount: state.guestImproveCount,
+        recentThreads: state.recentThreads,
+        makeFolders: state.makeFolders,
+        activeFolderId: state.activeFolderId,
+        activeThreadId: state.activeThreadId,
+        messages: state.messages,
+        composerDraft: state.composerDraft,
+        templateCollapsed: state.templateCollapsed,
+      },
+    });
   } catch (_error) {
     // Local preview can still run if browser storage is blocked.
   }
@@ -7655,10 +7650,8 @@ function persistState() {
 
 function loadPersistedState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-
-    const parsed = JSON.parse(raw);
+    const parsed = readPersistedPayload();
+    if (!parsed) return;
     if (Array.isArray(parsed.popularPrompts)) {
       popularPrompts.splice(0, popularPrompts.length, ...parsed.popularPrompts);
     }
@@ -7672,7 +7665,7 @@ function loadPersistedState() {
     }
 
     const savedState = parsed.state || {};
-    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const storedToken = readStorageItem(AUTH_TOKEN_KEY);
     const restoredToken = storedToken || savedState.authToken || savedState.token || "";
     state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);
     state.currentUser = state.isLoggedIn ? savedState.currentUser || null : null;
@@ -7733,7 +7726,7 @@ function loadPersistedState() {
     state.templateCollapsed = Boolean(savedState.templateCollapsed);
     normalizePersistedLikeCounts();
   } catch (_error) {
-    localStorage.removeItem(STORAGE_KEY);
+    clearPersistedPayload();
   }
 }
 
