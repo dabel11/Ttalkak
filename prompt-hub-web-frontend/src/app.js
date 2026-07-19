@@ -2806,64 +2806,8 @@ function bindEvents() {
   });
 
   bindMakeComposerEvents();
-
-  document.querySelectorAll("[data-template]").forEach((button) => {
-    button.addEventListener("click", () => {
-      applyTemplate(button.dataset.template);
-    });
-  });
-
-  document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
-    button.addEventListener("click", () => {
-      toggleTemplateBar(button);
-    });
-  });
-
-  document.querySelectorAll("[data-copy-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      copyMakeMessage(button.dataset.copyMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingMessageId = button.dataset.editMessage;
-      pendingMessageScrollId = button.dataset.editMessage;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const form = button.closest("[data-edit-message-form]");
-      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
-      state.editingMessageId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
-    const textarea = form.querySelector('textarea[name="message"]');
-    textarea?.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-      event.preventDefault();
-      if (typeof form.requestSubmit === "function") {
-        form.requestSubmit();
-      } else {
-        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      }
-    });
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
-    });
-  });
-
-  document.querySelectorAll("[data-save-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      saveMakeMessage(button.dataset.saveMessage);
-    });
-  });
+  bindMakeTemplateEvents();
+  bindMakeMessageActionEvents();
 
   document.querySelectorAll("[data-admin-hide-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3013,18 +2957,6 @@ function bindEvents() {
       }
       state.editingPromptId = prompt.id;
       render();
-    });
-  });
-
-  document.querySelectorAll("[data-share-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openShareFromMakeMessage(button.dataset.shareMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-execute-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openExecuteModal(button.dataset.executeMessage);
     });
   });
 
@@ -4892,6 +4824,80 @@ function bindMakeComposerEvents() {
   composer.addEventListener("submit", (event) => {
     event.preventDefault();
     submitMakePrompt(composer);
+  });
+}
+
+function bindMakeTemplateEvents() {
+  document.querySelectorAll("[data-template]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyTemplate(button.dataset.template);
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleTemplateBar(button);
+    });
+  });
+}
+
+function bindMakeMessageActionEvents() {
+  document.querySelectorAll("[data-copy-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      copyMakeMessage(button.dataset.copyMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-edit-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingMessageId = button.dataset.editMessage;
+      pendingMessageScrollId = button.dataset.editMessage;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("[data-edit-message-form]");
+      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
+      state.editingMessageId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
+    bindMakeMessageEditForm(form);
+  });
+
+  document.querySelectorAll("[data-save-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      saveMakeMessage(button.dataset.saveMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-share-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openShareFromMakeMessage(button.dataset.shareMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-execute-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openExecuteModal(button.dataset.executeMessage);
+    });
+  });
+}
+
+function bindMakeMessageEditForm(form) {
+  const textarea = form.querySelector('textarea[name="message"]');
+  textarea?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    submitMakeComposer(form);
+  });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
   });
 }
 
