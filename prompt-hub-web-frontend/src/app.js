@@ -441,6 +441,8 @@ const state = {
   adminTagPromptKey: "",
   adminUserQuery: "",
   adminUserActivityNickname: "",
+  adminUserSearchResults: [],
+  adminUserSearchMessage: "",
   adminPromptRevisionRequests: {},
   reportRecords: {},
   isLoggedIn: false,
@@ -1951,6 +1953,7 @@ function AdminPage() {
   ];
   const adminUserNickname = String(state.adminUserActivityNickname || "").trim();
   const adminUserActivity = adminUserNickname ? getAdminUserActivity(adminUserNickname) : null;
+  const adminUserSearchResults = Array.isArray(state.adminUserSearchResults) ? state.adminUserSearchResults : [];
   const adminUserPanel = `
     <section class="admin-user-activity-panel" aria-label="사용자 활동 조회">
       <div class="admin-user-activity-head">
@@ -1962,6 +1965,35 @@ function AdminPage() {
         <input name="nickname" type="search" value="${escapeHtml(state.adminUserQuery || adminUserNickname)}" placeholder="닉네임을 입력하세요" autocomplete="off" />
         <button type="submit">조회</button>
       </form>
+      ${
+        state.adminUserSearchMessage
+          ? `<p class="admin-user-search-message">${escapeHtml(state.adminUserSearchMessage)}</p>`
+          : ""
+      }
+      ${
+        adminUserSearchResults.length
+          ? `<div class="admin-user-search-results" aria-label="사용자 검색 결과">
+              <strong>검색 결과</strong>
+              <div>
+                ${adminUserSearchResults
+                  .map((user) => {
+                    const memberId = String(user.id || user.memberId || "").trim();
+                    const nickname = String(user.nickname || "사용자").trim();
+                    return `
+                      <button class="admin-user-search-result" type="button" data-admin-user-select="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(nickname)}" ${memberId ? "" : "disabled"}>
+                        <span>
+                          <strong>${escapeHtml(nickname)}</strong>
+                          <small>memberId ${escapeHtml(memberId || "확인 필요")}</small>
+                        </span>
+                        <em class="${user.blocked ? "blocked" : ""}">${user.blocked ? "차단됨" : "활성"}</em>
+                      </button>
+                    `;
+                  })
+                  .join("")}
+              </div>
+            </div>`
+          : ""
+      }
       ${
         adminUserActivity
           ? AdminUserActivitySummary(adminUserActivity)
@@ -2970,9 +3002,18 @@ function bindEvents() {
   const adminUserSearchInput = adminUserSearchForm?.querySelector('input[name="nickname"]');
   adminUserSearchInput?.addEventListener("input", () => {
     const nickname = String(adminUserSearchInput.value || "").trim();
+    const previousSelectedNickname = state.adminUserActivityNickname;
+    const hadSearchResults = state.adminUserSearchResults.length > 0;
     state.adminUserQuery = adminUserSearchInput.value;
-    if (!nickname && state.adminUserActivityNickname) {
+    state.adminUserSearchMessage = "";
+    if (hadSearchResults) {
+      state.adminUserSearchResults = [];
+    }
+    if (!nickname || normalizeAdminSearchText(nickname) !== normalizeAdminSearchText(previousSelectedNickname)) {
       state.adminUserActivityNickname = "";
+    }
+    if (!nickname || previousSelectedNickname || hadSearchResults) {
+      state.adminUserSearchResults = [];
       render();
     }
   });
@@ -2982,10 +3023,24 @@ function bindEvents() {
     if (!nickname) {
       state.adminUserQuery = "";
       state.adminUserActivityNickname = "";
+      state.adminUserSearchResults = [];
+      state.adminUserSearchMessage = "";
       render();
       return;
     }
-    openAdminUserActivity(nickname, { keepQuery: true });
+    searchAdminUserCandidates(nickname);
+  });
+
+  document.querySelectorAll("[data-admin-user-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const memberId = String(button.dataset.adminUserSelect || "").trim();
+      const nickname = String(button.dataset.adminUserName || "").trim();
+      if (!memberId) {
+        showNotice("회원 ID를 확인할 수 없어 활동 조회를 열 수 없습니다.");
+        return;
+      }
+      openAdminUserActivity(nickname, { memberId, keepQuery: true });
+    });
   });
 
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
@@ -6060,6 +6115,58 @@ function searchByAuthor(author) {
   restoreSearchFocus();
 }
 
+async function searchAdminUserCandidates(nickname) {
+  const cleanNickname = String(nickname || "").trim();
+  if (!cleanNickname) return;
+
+  state.adminUserQuery = cleanNickname;
+  state.adminUserActivityNickname = "";
+  state.adminUserSearchResults = [];
+  state.adminUserSearchMessage = "사용자를 검색하는 중입니다.";
+  state.adminTab = "users";
+  state.route = "admin";
+  render();
+
+  const api = window.TTALKAK_API;
+  const token = getAuthToken() || undefined;
+  if (api?.searchAdminUsers && hasBackendAuthToken()) {
+    try {
+      const users = await api.searchAdminUsers({ nickname: cleanNickname, page: 1, pageSize: 20 }, token);
+      state.adminUserSearchResults = users;
+      state.adminUserSearchMessage = users.length
+        ? "조회할 사용자를 선택해주세요."
+        : "일치하는 사용자를 찾지 못했습니다.";
+      render();
+      return;
+    } catch (error) {
+      handleBackendAccessError(error, "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다.");
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패해 로컬 후보를 표시합니다.", error);
+    }
+  }
+
+  const normalizedQuery = normalizeAdminSearchText(cleanNickname);
+  const localUsers = getAdminKnownNicknames()
+    .filter((knownNickname) => normalizeAdminSearchText(knownNickname).includes(normalizedQuery))
+    .slice(0, 20)
+    .map((knownNickname, index) => {
+      const memberId = getAdminKnownMemberId(knownNickname);
+      const activity = getAdminUserActivity(knownNickname) || {};
+      return {
+        id: memberId || "",
+        nickname: knownNickname,
+        blocked: Boolean(activity.blocked),
+        active: true,
+        localOnly: true,
+        index,
+      };
+    });
+  state.adminUserSearchResults = localUsers;
+  state.adminUserSearchMessage = localUsers.length
+    ? "서버 검색 대신 로컬 후보를 표시합니다. 조회할 사용자를 선택해주세요."
+    : "일치하는 사용자를 찾지 못했습니다.";
+  render();
+}
+
 async function openAdminUserActivity(nickname, options = {}) {
   const cleanNickname = String(nickname || "").trim();
   if (!cleanNickname) return;
@@ -6067,6 +6174,7 @@ async function openAdminUserActivity(nickname, options = {}) {
 
   state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
   state.adminUserActivityNickname = resolvedNickname;
+  state.adminUserSearchMessage = "";
   state.adminTab = "users";
   state.route = "admin";
   state.detailPromptId = null;
