@@ -172,6 +172,51 @@
     state.detailHighlightCommentId = null;
   }
 
+  function applyHomeSearchScopeState(state, scope) {
+    state.searchScope = scope;
+    state.popularPage = 1;
+  }
+
+  function applyHomeSortState(state, sort) {
+    state.popularSort = sort;
+    state.popularPage = 1;
+  }
+
+  function applyHomePageState(state, page) {
+    state.popularPage = Number(page);
+  }
+
+  function applyHomeSearchQueryState(state, query) {
+    const nextQuery = String(query || "");
+    if (state.searchQuery === nextQuery) return false;
+    state.searchQuery = nextQuery;
+    state.popularPage = 1;
+    return true;
+  }
+
+  function applyHomeTagSearchState(state, tag) {
+    state.searchScope = "tag";
+    state.searchQuery = tag;
+    state.popularPage = 1;
+    state.detailPromptId = null;
+    state.route = "home";
+  }
+
+  function applyHomeAuthorSearchState(state, author) {
+    state.searchScope = "author";
+    state.searchQuery = author;
+    state.popularPage = 1;
+    state.detailPromptId = null;
+    state.detailHighlightCommentId = null;
+    state.route = "home";
+  }
+
+  function toggleReportedVisibilityState(state) {
+    state.hideReportedPrompts = !state.hideReportedPrompts;
+    state.popularPage = 1;
+    state.savedPage = 1;
+  }
+
   function closeTopModalState(state) {
     if (state.confirmAction) {
       state.confirmAction = null;
@@ -888,6 +933,13 @@
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    applyHomeAuthorSearchState,
+    applyHomePageState,
+    applyHomeSearchQueryState,
+    applyHomeSearchScopeState,
+    applyHomeSortState,
+    applyHomeTagSearchState,
+    toggleReportedVisibilityState,
     applyEditedPromptState,
     deleteCommentState,
     applyExistingPromptSavedState,

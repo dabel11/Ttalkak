@@ -129,6 +129,13 @@ const {
   applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
   applyCommentReportedState,
+  applyHomeAuthorSearchState,
+  applyHomePageState,
+  applyHomeSearchQueryState,
+  applyHomeSearchScopeState,
+  applyHomeSortState,
+  applyHomeTagSearchState,
+  toggleReportedVisibilityState,
   applyDeletedPromptState,
   applyEditedPromptState,
   deleteCommentState,
@@ -197,6 +204,13 @@ if (
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    applyHomeAuthorSearchState,
+    applyHomePageState,
+    applyHomeSearchQueryState,
+    applyHomeSearchScopeState,
+    applyHomeSortState,
+    applyHomeTagSearchState,
+    toggleReportedVisibilityState,
     applyDeletedPromptState,
     applyEditedPromptState,
     deleteCommentState,
@@ -2219,9 +2233,7 @@ function bindRouteNavigationEvents() {
 function bindGlobalActionEvents() {
   document.querySelectorAll("[data-toggle-reported]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.hideReportedPrompts = !state.hideReportedPrompts;
-      state.popularPage = 1;
-      state.savedPage = 1;
+      toggleReportedVisibilityState(state);
       render();
     });
   });
@@ -2652,8 +2664,7 @@ function bindHomeSearchEvents() {
   const searchScopeSelect = document.querySelector("[data-search-scope]");
   if (searchScopeSelect) {
     searchScopeSelect.addEventListener("change", () => {
-      state.searchScope = getValidSearchScope(searchScopeSelect.value);
-      state.popularPage = 1;
+      applyHomeSearchScopeState(state, getValidSearchScope(searchScopeSelect.value));
       refreshBackendHomePrompts();
       render();
       restoreSearchFocus();
@@ -2695,8 +2706,7 @@ function bindHomeSearchEvents() {
   const popularSortSelect = document.querySelector("[data-popular-sort]");
   if (popularSortSelect) {
     popularSortSelect.addEventListener("change", () => {
-      state.popularSort = popularSortSelect.value;
-      state.popularPage = 1;
+      applyHomeSortState(state, popularSortSelect.value);
       refreshBackendHomePrompts();
       render();
     });
@@ -2704,7 +2714,7 @@ function bindHomeSearchEvents() {
 
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.popularPage = Number(button.dataset.page);
+      applyHomePageState(state, button.dataset.page);
       if (state.backendStatus === "connected") {
         refreshBackendHomePrompts();
       }
@@ -5170,12 +5180,9 @@ function scheduleSearchCommit(value) {
 }
 
 function commitSearchQuery(value) {
-  const nextQuery = String(value || "");
   window.clearTimeout(searchCommitTimer);
-  if (state.searchQuery === nextQuery) return;
+  if (!applyHomeSearchQueryState(state, value)) return;
 
-  state.searchQuery = nextQuery;
-  state.popularPage = 1;
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
@@ -5236,11 +5243,7 @@ function searchByTag(tag) {
   if (!cleanTag) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "tag";
-  state.searchQuery = cleanTag;
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.route = "home";
+  applyHomeTagSearchState(state, cleanTag);
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
@@ -5251,12 +5254,7 @@ function searchByAuthor(author) {
   if (!cleanAuthor) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "author";
-  state.searchQuery = cleanAuthor;
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
-  state.route = "home";
+  applyHomeAuthorSearchState(state, cleanAuthor);
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
