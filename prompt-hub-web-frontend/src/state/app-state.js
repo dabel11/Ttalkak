@@ -164,16 +164,128 @@
     };
   }
 
+  function resetHomeViewState(state) {
+    state.searchScope = "all";
+    state.searchQuery = "";
+    state.popularPage = 1;
+    state.detailPromptId = null;
+    state.detailHighlightCommentId = null;
+  }
+
+  function closeTopModalState(state) {
+    if (state.confirmAction) {
+      state.confirmAction = null;
+    } else if (state.adminBlockTarget) {
+      state.adminBlockTarget = null;
+    } else if (state.executeMessageId) {
+      state.executeMessageId = null;
+    } else if (state.executePromptId) {
+      state.executePromptId = null;
+    } else if (state.reportPromptId) {
+      state.reportPromptId = null;
+    } else if (state.reportCommentId) {
+      state.reportCommentId = null;
+    } else if (state.authView) {
+      state.authView = null;
+    } else if (state.adminRequestTargetKey) {
+      state.adminRequestTargetKey = null;
+    } else if (state.editingPromptId) {
+      state.editingPromptId = null;
+    } else if (state.detailPromptId) {
+      state.detailPromptId = null;
+      state.detailHighlightCommentId = null;
+    } else {
+      return false;
+    }
+
+    return true;
+  }
+
+  function applyAuthenticatedIdentityState(state, authResult) {
+    state.isLoggedIn = true;
+    state.currentUser = authResult.user.nickname;
+    state.currentUserId = authResult.user.id;
+    state.currentUserRole = authResult.user.role || "user";
+    state.authToken = authResult.token;
+    state.token = authResult.token;
+    state.adminMode = state.currentUserRole === "admin";
+    if (state.adminMode) state.route = "admin";
+  }
+
+  function clearAuthenticatedIdentityState(state) {
+    state.isLoggedIn = false;
+    state.currentUser = null;
+    state.currentUserId = null;
+    state.currentUserRole = "user";
+    state.authToken = "";
+    state.token = "";
+  }
+
+  function resetSessionBackendState(state) {
+    state.myBackendStatus = "idle";
+    state.adminBackendStatus = "idle";
+    state.makeBackendStatus = "idle";
+  }
+
+  function clearSessionBackendDataState(state) {
+    state.backendMyPrompts = [];
+    state.backendMyComments = [];
+    state.backendMyReports = [];
+    state.backendLibraryPrompts = [];
+    state.backendLikedPrompts = [];
+    state.backendLibraryPromptIds = new Set();
+    state.backendAdminReports = [];
+    state.backendAdminReportsLoaded = false;
+    state.backendAdminTags = [];
+  }
+
+  function clearTransientSessionUiState(state) {
+    state.creatingFolder = false;
+    state.editingFolderId = null;
+    state.openFolderMenuId = null;
+    state.creatingThreadFolderId = null;
+    state.openThreadMenuId = null;
+    state.openPromptCardMenuId = null;
+    state.detailPromptId = null;
+    state.detailHighlightCommentId = null;
+    state.reportPromptId = null;
+    state.reportCommentId = null;
+    state.editingPromptId = null;
+    state.adminRequestTargetKey = null;
+    state.editingMessageId = null;
+    state.executeMessageId = null;
+    state.executePromptId = null;
+  }
+
+  function clearAuthenticatedSessionState(state, options = {}) {
+    clearAuthenticatedIdentityState(state);
+    state.adminMode = false;
+    state.authView = null;
+    state.authError = "";
+    resetSessionBackendState(state);
+    clearSessionBackendDataState(state);
+    clearTransientSessionUiState(state);
+    if (!options.keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
+  }
+
   global.TtalkakState = Object.freeze({
     ...(global.TtalkakState || {}),
     STORAGE_KEY,
     AUTH_TOKEN_KEY,
     DEMO_AUTH_TOKEN,
+    applyAuthenticatedIdentityState,
+    clearAuthenticatedIdentityState,
+    clearAuthenticatedSessionState,
     createInitialState,
+    closeTopModalState,
     clearPersistedPayload,
+    clearSessionBackendDataState,
+    clearTransientSessionUiState,
     readPersistedPayload,
     readStorageItem,
     removeStorageItem,
+    resetSessionBackendState,
+    resetHomeViewState,
     writePersistedPayload,
     writeStorageItem,
   });

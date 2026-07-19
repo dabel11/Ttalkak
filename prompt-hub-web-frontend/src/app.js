@@ -57,6 +57,10 @@ const {
   getBackendErrorCode,
   getBackendErrorCodeMessage,
   getBackendErrorMessage,
+  hydrateBackendHomeDataEffect,
+  hydrateBackendMakeDataEffect,
+  hydrateBackendMyPageDataEffect,
+  refreshBackendHomePromptsEffect,
 } = window.TtalkakBackendEffects || {};
 
 if (
@@ -73,6 +77,10 @@ if (
     getBackendErrorCode,
     getBackendErrorCodeMessage,
     getBackendErrorMessage,
+    hydrateBackendHomeDataEffect,
+    hydrateBackendMakeDataEffect,
+    hydrateBackendMyPageDataEffect,
+    refreshBackendHomePromptsEffect,
   ].some((fn) => typeof fn !== "function")
 ) {
   throw new Error("TTALKAK 백엔드 후처리 헬퍼를 불러오지 못했습니다.");
@@ -110,11 +118,19 @@ const {
   STORAGE_KEY,
   AUTH_TOKEN_KEY,
   DEMO_AUTH_TOKEN,
+  applyAuthenticatedIdentityState,
+  clearAuthenticatedIdentityState,
+  clearAuthenticatedSessionState,
   createInitialState,
+  closeTopModalState,
   clearPersistedPayload,
+  clearSessionBackendDataState,
+  clearTransientSessionUiState: clearTransientSessionUiStateValue,
   readPersistedPayload,
   readStorageItem,
   removeStorageItem,
+  resetSessionBackendState: resetSessionBackendStateValue,
+  resetHomeViewState,
   writePersistedPayload,
   writeStorageItem,
 } = window.TtalkakState || {};
@@ -123,7 +139,23 @@ if (
   !STORAGE_KEY ||
   !AUTH_TOKEN_KEY ||
   !DEMO_AUTH_TOKEN ||
-  [createInitialState, clearPersistedPayload, readPersistedPayload, readStorageItem, removeStorageItem, writePersistedPayload, writeStorageItem].some((fn) => typeof fn !== "function")
+  [
+    createInitialState,
+    applyAuthenticatedIdentityState,
+    clearAuthenticatedIdentityState,
+    clearAuthenticatedSessionState,
+    closeTopModalState,
+    clearPersistedPayload,
+    clearSessionBackendDataState,
+    clearTransientSessionUiStateValue,
+    readPersistedPayload,
+    readStorageItem,
+    removeStorageItem,
+    resetSessionBackendStateValue,
+    resetHomeViewState,
+    writePersistedPayload,
+    writeStorageItem,
+  ].some((fn) => typeof fn !== "function")
 ) {
   throw new Error("TTALKAK 상태 헬퍼를 불러오지 못했습니다.");
 }
@@ -698,41 +730,12 @@ function navigateTo(route) {
 
 function resetHomeView() {
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "all";
-  state.searchQuery = "";
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
+  resetHomeViewState(state);
   if (state.backendStatus === "connected") refreshBackendHomePrompts();
 }
 
 function closeTopModal() {
-  if (state.confirmAction) {
-    state.confirmAction = null;
-  } else if (state.adminBlockTarget) {
-    state.adminBlockTarget = null;
-  } else if (state.executeMessageId) {
-    state.executeMessageId = null;
-  } else if (state.executePromptId) {
-    state.executePromptId = null;
-  } else if (state.reportPromptId) {
-    state.reportPromptId = null;
-  } else if (state.reportCommentId) {
-    state.reportCommentId = null;
-  } else if (state.authView) {
-    state.authView = null;
-  } else if (state.adminRequestTargetKey) {
-    state.adminRequestTargetKey = null;
-  } else if (state.editingPromptId) {
-    state.editingPromptId = null;
-  } else if (state.detailPromptId) {
-    state.detailPromptId = null;
-    state.detailHighlightCommentId = null;
-  } else {
-    return;
-  }
-
-  render();
+  if (closeTopModalState(state)) render();
 }
 
 function focusActiveModal() {
@@ -1996,73 +1999,30 @@ function applyAuthenticatedUser(authResult) {
 }
 
 function applyAuthenticatedIdentity(authResult) {
-  state.isLoggedIn = true;
-  state.currentUser = authResult.user.nickname;
-  state.currentUserId = authResult.user.id;
-  state.currentUserRole = authResult.user.role || "user";
-  state.authToken = authResult.token;
-  state.token = authResult.token;
-  state.adminMode = state.currentUserRole === "admin";
-  if (state.adminMode) state.route = "admin";
+  applyAuthenticatedIdentityState(state, authResult);
 }
 
 function resetSessionBackendState() {
-  state.myBackendStatus = "idle";
-  state.adminBackendStatus = "idle";
-  state.makeBackendStatus = "idle";
+  resetSessionBackendStateValue(state);
 }
 
 function clearSessionBackendData() {
-  state.backendMyPrompts = [];
-  state.backendMyComments = [];
-  state.backendMyReports = [];
-  state.backendLibraryPrompts = [];
-  state.backendLikedPrompts = [];
-  state.backendLibraryPromptIds = new Set();
-  state.backendAdminReports = [];
-  state.backendAdminReportsLoaded = false;
-  state.backendAdminTags = [];
+  clearSessionBackendDataState(state);
 }
 
 function clearTransientSessionUiState() {
-  state.creatingFolder = false;
-  state.editingFolderId = null;
-  state.openFolderMenuId = null;
-  state.creatingThreadFolderId = null;
-  state.openThreadMenuId = null;
-  state.openPromptCardMenuId = null;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
-  state.reportPromptId = null;
-  state.reportCommentId = null;
-  state.editingPromptId = null;
-  state.adminRequestTargetKey = null;
-  state.editingMessageId = null;
-  state.executeMessageId = null;
-  state.executePromptId = null;
+  clearTransientSessionUiStateValue(state);
 }
 
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
   saveCurrentAccountScope();
-  clearAuthenticatedIdentity();
+  clearAuthenticatedSessionState(state, { keepRoute });
   restoreCurrentAccountScope();
-  state.adminMode = false;
-  state.authView = null;
-  state.authError = "";
-  resetSessionBackendState();
-  clearSessionBackendData();
-  clearTransientSessionUiState();
-  if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
   removeStorageItem(AUTH_TOKEN_KEY);
 }
 
 function clearAuthenticatedIdentity() {
-  state.isLoggedIn = false;
-  state.currentUser = null;
-  state.currentUserId = null;
-  state.currentUserRole = "user";
-  state.authToken = "";
-  state.token = "";
+  clearAuthenticatedIdentityState(state);
 }
 
 function normalizeUserIdInput(input) {
@@ -2106,6 +2066,12 @@ function bindCoreEvents() {
 }
 
 function bindGlobalNavigationEvents() {
+  bindGlobalMenuDismissEvents();
+  bindRouteNavigationEvents();
+  bindGlobalActionEvents();
+}
+
+function bindGlobalMenuDismissEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
     const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
     const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
@@ -2125,13 +2091,17 @@ function bindGlobalNavigationEvents() {
       closeTopModal();
     }
   };
+}
 
+function bindRouteNavigationEvents() {
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
       navigateTo(button.dataset.route);
     });
   });
+}
 
+function bindGlobalActionEvents() {
   document.querySelectorAll("[data-toggle-reported]").forEach((button) => {
     button.addEventListener("click", () => {
       state.hideReportedPrompts = !state.hideReportedPrompts;
@@ -7341,53 +7311,25 @@ function getBackendDataEffectContext() {
   };
 }
 
-async function hydrateBackendMakeDataIfNeeded() {
-  if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
-
-  const api = getMakeApi();
-  if (!api?.getMakeThreads && !api?.getMakeFolders) {
-    state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = canUseDemoFallback()
-      ? "Make demo data 표시 중: Make API wrapper가 없어 데모 데이터를 표시합니다."
-      : getApiFailureMessage("Make API");
-    render();
-    return;
-  }
-
-  state.makeBackendStatus = "checking";
-  state.makeBackendMessage = "Make API 연결 확인 중";
-
-  const [threadsResult, foldersResult] = await Promise.allSettled([
-    api.getMakeThreads?.(getMakeApiToken()),
-    api.getMakeFolders?.(getMakeApiToken()),
-  ]);
-
-  let shouldRender = false;
-  const backendDataContext = getBackendDataEffectContext();
-
-  if (foldersResult.status === "fulfilled") {
-    shouldRender = applyMakeFoldersResult(backendDataContext, foldersResult.value) || shouldRender;
-  } else if (foldersResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/folders 연동에 실패했습니다.", foldersResult.reason);
-  }
-
-  if (threadsResult.status === "fulfilled") {
-    shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
-  } else if (threadsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/threads 연동에 실패했습니다.", threadsResult.reason);
-  }
-
-  const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
-  state.makeBackendStatus = anyConnected ? "connected" : "fallback";
-  state.makeBackendMessage = anyConnected
-    ? "Make API 연결됨. GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
-    : canUseDemoFallback()
-      ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 데이터를 표시합니다."
-      : getApiFailureMessage("Make API");
-
-  if (shouldRender || state.route === "make") render();
+function getBackendHydrationEffectContext() {
+  return {
+    api: window.TTALKAK_API,
+    applyContext: getBackendDataEffectContext,
+    canUseDemoFallback,
+    getApiFailureMessage,
+    getAuthToken,
+    getMakeApi,
+    getMakeApiToken,
+    getValidSearchScope,
+    homePageSize: HOME_PAGE_SIZE,
+    render,
+    state,
+  };
 }
 
+async function hydrateBackendMakeDataIfNeeded() {
+  return hydrateBackendMakeDataEffect(getBackendHydrationEffectContext());
+}
 function refreshMyPageDataAfterMutation() {
   if (!state.isLoggedIn || state.myBackendStatus !== "connected") return Promise.resolve();
   state.myBackendStatus = "idle";
@@ -7395,59 +7337,8 @@ function refreshMyPageDataAfterMutation() {
 }
 
 async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
-  if (state.route !== "saved" || !state.isLoggedIn || (!force && state.myBackendStatus !== "idle")) return;
-  const api = window.TTALKAK_API;
-  if (!api?.getMyLibrary) {
-    state.myBackendStatus = canUseDemoFallback() ? "idle" : "fallback";
-    render();
-    return;
-  }
-
-  state.myBackendStatus = "checking";
-  const token = getAuthToken() || undefined;
-  const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = await Promise.allSettled([
-    api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
-    api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64 }, token),
-    api.getMyPrompts?.({ page: 1, pageSize: 64 }, token),
-    api.getMyComments?.({ page: 1, pageSize: 64 }, token),
-    api.getMyReports?.({ page: 1, pageSize: 64 }, token),
-  ]);
-  const allRequestsFailed = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult].every(
-    (result) => result.status === "rejected" || result.value === undefined,
-  );
-
-  let shouldRender = false;
-  const backendDataContext = getBackendDataEffectContext();
-
-  if (libraryResult.status === "fulfilled") {
-    shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
-  } else {
-    console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
-  }
-
-  if (likedLibraryResult.status === "fulfilled") {
-    shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
-  } else {
-    console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
-  }
-
-  if (promptsResult.status === "fulfilled") {
-    shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
-  } else {
-    console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
-  }
-
-  if (commentsResult.status === "fulfilled") {
-    shouldRender = applyMyCommentsResult(backendDataContext, commentsResult.value) || shouldRender;
-  }
-  if (reportsResult.status === "fulfilled") {
-    shouldRender = applyMyReportsResult(backendDataContext, reportsResult.value) || shouldRender;
-  }
-
-  state.myBackendStatus = allRequestsFailed ? "fallback" : "connected";
-  if (shouldRender || allRequestsFailed) render();
+  return hydrateBackendMyPageDataEffect(getBackendHydrationEffectContext(), { force });
 }
-
 function getAdminHydrationEffectContext() {
   return {
     api: window.TTALKAK_API,
@@ -7700,84 +7591,11 @@ function normalizeDemoCopy() {
 }
 
 async function hydrateBackendHomeData() {
-  const api = window.TTALKAK_API;
-  if (!api?.getCommunityPosts) {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = canUseDemoFallback()
-      ? "src/api.js? ??? ? ?? ?? ???? ?? ????."
-      : getApiFailureMessage("Home API");
-    render();
-    return;
-  }
-
-  const [promptsResult, tagsResult] = await Promise.allSettled([
-    api.getCommunityPosts({ page: state.popularPage, size: HOME_PAGE_SIZE, sort: state.popularSort }),
-    api.getPopularTags?.({ limit: 8 }),
-  ]);
-
-  let shouldRender = false;
-  const backendDataContext = getBackendDataEffectContext();
-
-  if (promptsResult.status === "fulfilled" && applyBackendHomePromptsResult(backendDataContext, promptsResult.value, state.popularPage)) {
-    state.backendStatus = "connected";
-    state.backendStatusMessage = "GET http://localhost:8080/api/prompts ???? Home ??? ??? ????.";
-    shouldRender = true;
-  } else if (promptsResult.status === "rejected") {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = canUseDemoFallback()
-      ? "GET http://localhost:8080/api/prompts ??? ??? ?? ???? ?? ????."
-      : getApiFailureMessage("Home API");
-    console.warn("[TTALKAK] /api/prompts ??? ??????.", promptsResult.reason);
-  }
-
-  if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
-    if (state.backendStatus === "connected") {
-      state.backendStatusMessage = "GET /api/prompts? GET /api/tags/popular ??? Home? ?? ????.";
-    }
-    shouldRender = true;
-  } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/tags/popular ??? ??????.", tagsResult.reason);
-  }
-
-  if (shouldRender || state.backendStatus === "fallback") render();
+  return hydrateBackendHomeDataEffect(getBackendHydrationEffectContext());
 }
 
 async function refreshBackendHomePrompts() {
-  const api = window.TTALKAK_API;
-  if (!api?.searchCommunityPosts) return;
-
-  const query = String(state.searchQuery || "").trim();
-  const scope = getValidSearchScope(state.searchScope);
-  const page = Math.max(1, Number(state.popularPage) || 1);
-  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort, page });
-  state.backendStatusMessage = "GET /api/prompts ?? ??? ???? ?? ????.";
-
-  try {
-    const result = await api.searchCommunityPosts({
-      scope,
-      query,
-      page,
-      size: HOME_PAGE_SIZE,
-      sort: state.popularSort,
-    });
-    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort, page: Math.max(1, Number(state.popularPage) || 1) })) {
-      return;
-    }
-    if (applyBackendHomePromptsResult(getBackendDataEffectContext(), result, page)) {
-      state.backendStatus = "connected";
-      state.backendStatusMessage = query
-        ? "GET /api/prompts?scope=" + scope + "&query=... ?? ??? Home? ?? ????."
-        : "GET /api/prompts ???? Home ??? ??? ????.";
-      render();
-    }
-  } catch (error) {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = canUseDemoFallback()
-      ? "?? API ??? ??? ?? ??? ?? ??? ?????."
-      : getApiFailureMessage("Home ?? API");
-    console.warn("[TTALKAK] /api/prompts ?? ??? ??????.", error);
-    render();
-  }
+  return refreshBackendHomePromptsEffect(getBackendHydrationEffectContext());
 }
 loadPersistedState();
 normalizeDemoCopy();
