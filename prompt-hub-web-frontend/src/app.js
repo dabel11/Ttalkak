@@ -55,6 +55,28 @@ if ([getBackendErrorCode, getBackendErrorCodeMessage, getBackendErrorMessage].so
 }
 
 const {
+  canTransitionAdminTagStatus,
+  getAdminTagStatusClass,
+  getAdminTagStatusLabel,
+  getAdminTagStatusOrder,
+  normalizeAdminSearchText,
+  resolveAdminTagStatus,
+} = window.TtalkakAdminEffects || {};
+
+if (
+  [
+    canTransitionAdminTagStatus,
+    getAdminTagStatusClass,
+    getAdminTagStatusLabel,
+    getAdminTagStatusOrder,
+    normalizeAdminSearchText,
+    resolveAdminTagStatus,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK admin effects failed to load.");
+}
+
+const {
   STORAGE_KEY,
   AUTH_TOKEN_KEY,
   DEMO_AUTH_TOKEN,
@@ -6498,46 +6520,8 @@ function matchesAdminPromptFilter(prompt, filter) {
   return true;
 }
 
-function normalizeAdminSearchText(value) {
-  return String(value || "")
-    .replace(/^#+/, "")
-    .replace(/[#,]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
 function getAdminTagStatus(tag) {
-  const decision = state.adminTagDecisions[normalizeTag(tag)];
-  if (["approved", "rejected", "disabled"].includes(decision)) return decision;
-  return "pending";
-}
-
-function getAdminTagStatusLabel(status) {
-  if (status === "approved") return "검토 완료";
-  if (status === "disabled") return "추천 제외";
-  if (status === "rejected") return "반려";
-  return "검토 중";
-}
-
-function getAdminTagStatusClass(status) {
-  if (status === "approved") return "public";
-  if (["rejected", "disabled"].includes(status)) return "private";
-  return "pending-unsave";
-}
-
-function getAdminTagStatusOrder(status) {
-  if (status === "pending") return 0;
-  if (status === "approved") return 1;
-  if (status === "disabled") return 2;
-  return 3;
-}
-
-function canTransitionAdminTagStatus(currentStatus, nextStatus) {
-  if (currentStatus === "pending") return ["approved", "rejected"].includes(nextStatus);
-  if (currentStatus === "approved") return nextStatus === "disabled";
-  if (currentStatus === "disabled") return nextStatus === "approved";
-  return false;
+  return resolveAdminTagStatus(state.adminTagDecisions, tag, normalizeTag);
 }
 
 async function updateAdminTagDecision(tag, decision) {
