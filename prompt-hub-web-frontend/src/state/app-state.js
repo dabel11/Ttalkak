@@ -384,6 +384,133 @@
     state.reportCommentId = null;
   }
 
+  function updatePromptCommentCountState(ctx, promptId, delta) {
+    const { popularPrompts, savedPrompts } = ctx;
+    const updated = new Set();
+
+    for (const list of [popularPrompts, savedPrompts]) {
+      const prompt = list.find((item) => item.id === promptId);
+      if (!prompt || updated.has(prompt)) continue;
+      prompt.comments = Math.max(0, Number(prompt.comments || 0) + delta);
+      updated.add(prompt);
+    }
+  }
+
+  function addPromptCommentState(ctx, promptId, text, now = Date.now()) {
+    const { commentsByPrompt, state } = ctx;
+    if (!commentsByPrompt[promptId]) commentsByPrompt[promptId] = [];
+
+    const comment = {
+      id: `comment-${now}`,
+      author: state.currentUser || "\uC775\uBA85",
+      owner: state.currentUser || "\uC775\uBA85",
+      text,
+      likes: 0,
+      replies: [],
+    };
+
+    commentsByPrompt[promptId].push(comment);
+    state.expandedComments[promptId] = true;
+    updatePromptCommentCountState(ctx, promptId, 1);
+    return comment;
+  }
+
+  function toggleReplyCommentState(state, commentId) {
+    state.replyingCommentId = state.replyingCommentId === commentId ? null : commentId;
+  }
+
+  function addCommentReplyState(ctx, parentComment, promptId, text, now = Date.now()) {
+    const { state } = ctx;
+    if (!Array.isArray(parentComment.replies)) parentComment.replies = [];
+
+    const reply = {
+      id: `reply-${now}`,
+      author: state.currentUser || "\uC775\uBA85",
+      owner: state.currentUser || "\uC775\uBA85",
+      text,
+      likes: 0,
+      replies: [],
+    };
+
+    parentComment.replies.push(reply);
+    state.replyingCommentId = null;
+    if (promptId) updatePromptCommentCountState(ctx, promptId, 1);
+    return reply;
+  }
+
+  function toggleEditCommentState(state, commentId) {
+    state.editingCommentId = state.editingCommentId === commentId ? null : commentId;
+    state.replyingCommentId = null;
+  }
+
+  function updateOwnCommentState(state, comment, commentId, text, revisionKey) {
+    const changed = comment.text !== text;
+    if (changed) {
+      comment.text = text;
+      comment.edited = true;
+    }
+
+    if (revisionKey && state.adminPromptRevisionRequests[revisionKey]) {
+      const { [revisionKey]: _resolvedRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
+      state.adminPromptRevisionRequests = remainingRequests;
+    }
+
+    if (state.editingCommentId === commentId) state.editingCommentId = null;
+    return changed;
+  }
+
+  function toggleCommentLikedState(state, commentId, comment, getCommentLikes) {
+    const wasLiked = state.likedCommentIds.has(commentId);
+    if (wasLiked) {
+      state.likedCommentIds.delete(commentId);
+      comment.likes = Math.max(0, getCommentLikes(comment) - 1);
+    } else {
+      state.likedCommentIds.add(commentId);
+      comment.likes = getCommentLikes(comment) + 1;
+    }
+
+    return { wasLiked };
+  }
+
+  function removeCommentFromListState(comments, commentId, canRemoveComment) {
+    for (let index = 0; index < comments.length; index += 1) {
+      const comment = comments[index];
+      if (comment.id === commentId && canRemoveComment(comment)) {
+        if ((comment.replies || []).length > 0) {
+          comment.deleted = true;
+          comment.text = "\uC0AD\uC81C\uB41C \uB313\uAE00\uC785\uB2C8\uB2E4.";
+          comment.author = "\uC0AD\uC81C\uB41C \uB313\uAE00";
+          comment.owner = null;
+          comment.likes = 0;
+          comment.edited = false;
+          return true;
+        }
+
+        comments.splice(index, 1);
+        return true;
+      }
+
+      if (removeCommentFromListState(comment.replies || [], commentId, canRemoveComment)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function deleteCommentState(ctx, promptId, comments, commentId, canRemoveComment) {
+    const { state } = ctx;
+    const removed = removeCommentFromListState(comments, commentId, canRemoveComment);
+    if (!removed) return false;
+
+    updatePromptCommentCountState(ctx, promptId, -1);
+    state.likedCommentIds.delete(commentId);
+    state.reportedCommentIds.delete(commentId);
+    if (state.replyingCommentId === commentId) state.replyingCommentId = null;
+    if (state.editingCommentId === commentId) state.editingCommentId = null;
+    return true;
+  }
+
   function deleteMakeThreadState(state, threadId) {
     state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
     if (state.activeThreadId === threadId) {
@@ -515,15 +642,21 @@
     STORAGE_KEY,
     AUTH_TOKEN_KEY,
     DEMO_AUTH_TOKEN,
+    addCommentReplyState,
+    addPromptCommentState,
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
     applyPromptLikedState,
     applyPromptReportedState,
     applyPromptUnlikedState,
     applyPromptUnsavedState,
+    toggleCommentLikedState,
+    toggleEditCommentState,
+    toggleReplyCommentState,
     clearAuthenticatedIdentityState,
     clearAuthenticatedSessionState,
     createInitialState,
@@ -550,6 +683,8 @@
     startNewMakeChatState,
     togglePendingUnsaveState,
     toggleSavedMakeMessageState,
+    updateOwnCommentState,
+    updatePromptCommentCountState,
     updateRecentMakeThreadState,
     writePersistedPayload,
     writeStorageItem,

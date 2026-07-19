@@ -118,15 +118,21 @@ const {
   STORAGE_KEY,
   AUTH_TOKEN_KEY,
   DEMO_AUTH_TOKEN,
+  addCommentReplyState,
+  addPromptCommentState,
   applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
   applyCommentReportedState,
+  deleteCommentState,
   applyExistingPromptSavedState,
   applyNewPromptSavedState,
   applyPromptLikedState,
   applyPromptReportedState,
   applyPromptUnlikedState,
   applyPromptUnsavedState,
+  toggleCommentLikedState,
+  toggleEditCommentState,
+  toggleReplyCommentState,
   appendMakeAssistantMessageState,
   appendMakeUserMessageState,
   applyEditedMakeMessageState,
@@ -153,6 +159,7 @@ const {
   startNewMakeChatState,
   togglePendingUnsaveState,
   toggleSavedMakeMessageState,
+  updateOwnCommentState,
   updateRecentMakeThreadState,
   writePersistedPayload,
   writeStorageItem,
@@ -164,15 +171,21 @@ if (
   !DEMO_AUTH_TOKEN ||
   [
     createInitialState,
+    addCommentReplyState,
+    addPromptCommentState,
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
     applyPromptLikedState,
     applyPromptReportedState,
     applyPromptUnlikedState,
     applyPromptUnsavedState,
+    toggleCommentLikedState,
+    toggleEditCommentState,
+    toggleReplyCommentState,
     appendMakeAssistantMessageState,
     appendMakeUserMessageState,
     applyEditedMakeMessageState,
@@ -198,6 +211,7 @@ if (
     startNewMakeChatState,
     togglePendingUnsaveState,
     toggleSavedMakeMessageState,
+    updateOwnCommentState,
     updateRecentMakeThreadState,
     writePersistedPayload,
     writeStorageItem,
@@ -2082,6 +2096,15 @@ function getPromptMutationStateContext() {
   };
 }
 
+function getCommentMutationStateContext() {
+  return {
+    commentsByPrompt,
+    popularPrompts,
+    savedPrompts,
+    state,
+  };
+}
+
 function getMakeMutationStateContext() {
   return {
     makePreview,
@@ -3732,13 +3755,10 @@ function toggleLikeComment(commentId) {
   }
 
   const isLiked = state.likedCommentIds.has(commentId);
+  toggleCommentLikedState(state, commentId, comment, getCommentLikes);
   if (isLiked) {
-    state.likedCommentIds.delete(commentId);
-    comment.likes = Math.max(0, getCommentLikes(comment) - 1);
     callBackendApi("unlikeComment", commentId);
   } else {
-    state.likedCommentIds.add(commentId);
-    comment.likes = getCommentLikes(comment) + 1;
     callBackendApi("likeComment", commentId);
   }
 
@@ -3823,26 +3843,12 @@ function addPromptComment(promptId, text) {
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("댓글을 작성하려면 로그인이 필요합니다.");
+    showNotice("\uB313\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
     render();
     return;
   }
 
-  if (!commentsByPrompt[promptId]) {
-    commentsByPrompt[promptId] = [];
-  }
-
-  commentsByPrompt[promptId].push({
-    id: `comment-${Date.now()}`,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    text: content,
-    likes: 0,
-    replies: [],
-  });
-
-  state.expandedComments[promptId] = true;
-  incrementPromptComments(promptId);
+  addPromptCommentState(getCommentMutationStateContext(), promptId, content);
   callBackendApi("addComment", promptId, { text: content }).then(() => {
     if (hasBackendAuthToken()) hydratePromptComments(promptId);
   });
@@ -3857,7 +3863,7 @@ function toggleReplyForm(commentId) {
     return render();
   }
 
-  state.replyingCommentId = state.replyingCommentId === commentId ? null : commentId;
+  toggleReplyCommentState(state, commentId);
   render();
 }
 
@@ -3868,7 +3874,7 @@ function addCommentReply(commentId, text) {
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("답글을 작성하려면 로그인이 필요합니다.");
+    showNotice("\uB2F5\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
     render();
     return;
   }
@@ -3877,25 +3883,11 @@ function addCommentReply(commentId, text) {
   if (!parentComment) return;
   const promptId = findPromptIdByCommentId(commentId);
 
-  if (!Array.isArray(parentComment.replies)) {
-    parentComment.replies = [];
-  }
-
-  parentComment.replies.push({
-    id: `reply-${Date.now()}`,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    text: content,
-    likes: 0,
-    replies: [],
-  });
-
-  state.replyingCommentId = null;
-  if (promptId) incrementPromptComments(promptId);
+  addCommentReplyState(getCommentMutationStateContext(), parentComment, promptId, content);
   callBackendApi("addReply", commentId, { text: content }).then(() => {
     if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
   });
-  showNotice("답글을 등록했습니다.");
+  showNotice("\uB2F5\uAE00\uC744 \uB4F1\uB85D\uD588\uC2B5\uB2C8\uB2E4.");
   render();
 }
 
@@ -3905,8 +3897,7 @@ function toggleEditComment(commentId) {
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
 
-  state.editingCommentId = state.editingCommentId === commentId ? null : commentId;
-  state.replyingCommentId = null;
+  toggleEditCommentState(state, commentId);
   render();
 }
 
@@ -3918,25 +3909,16 @@ function updateOwnComment(commentId, text) {
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
   const promptId = findPromptIdByCommentId(commentId);
-
-  if (comment.text !== content) {
-    comment.text = content;
-    comment.edited = true;
-    if (isBackendNumericId(commentId)) {
-      callBackendApi("updateComment", commentId, { text: content }).then(() => {
-        if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
-      });
-    }
-  }
-
   const revisionKey = makeRevisionRequestKey("comment", commentId);
-  if (state.adminPromptRevisionRequests[revisionKey]) {
-    const { [revisionKey]: _resolvedRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
-    state.adminPromptRevisionRequests = remainingRequests;
+  const changed = updateOwnCommentState(state, comment, commentId, content, revisionKey);
+
+  if (changed && isBackendNumericId(commentId)) {
+    callBackendApi("updateComment", commentId, { text: content }).then(() => {
+      if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
+    });
   }
 
-  state.editingCommentId = null;
-  showNotice("댓글을 수정했습니다.");
+  showNotice("\uB313\uAE00\uC744 \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.");
 }
 
 function deleteOwnComment(commentId) {
@@ -4067,22 +4049,17 @@ async function runConfirmedAction() {
 
 function performDeleteComment(commentId) {
   for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    const removed = removeCommentFromList(comments, commentId);
+    const removed = deleteCommentState(getCommentMutationStateContext(), promptId, comments, commentId, canDeleteComment);
     if (!removed) continue;
 
     if (isBackendNumericId(commentId)) {
       const apiName = state.adminMode && window.TTALKAK_API?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
       callBackendApi(apiName, commentId).then(() => {
         if (hasBackendAuthToken()) hydratePromptComments(promptId);
-        if (state.adminMode) refreshAdminAfterMutation({ auditReason: "댓글 삭제 후" });
+        if (state.adminMode) refreshAdminAfterMutation({ auditReason: "\uB313\uAE00 \uC0AD\uC81C \uD6C4" });
       });
     }
-    decrementPromptComments(promptId);
-    state.likedCommentIds.delete(commentId);
-    state.reportedCommentIds.delete(commentId);
-    if (state.replyingCommentId === commentId) state.replyingCommentId = null;
-    if (state.editingCommentId === commentId) state.editingCommentId = null;
-    showNotice("댓글을 삭제했습니다.");
+    showNotice("\uB313\uAE00\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
     return;
   }
 }
@@ -4322,32 +4299,6 @@ function getActiveFolderName() {
   return state.makeFolders.find((folder) => folder.id === state.activeFolderId)?.name || "최근 대화";
 }
 
-function removeCommentFromList(comments, commentId) {
-  for (let index = 0; index < comments.length; index += 1) {
-    const comment = comments[index];
-    if (comment.id === commentId && canDeleteComment(comment)) {
-      if ((comment.replies || []).length > 0) {
-        comment.deleted = true;
-        comment.text = "삭제된 댓글입니다.";
-        comment.author = "삭제된 댓글";
-        comment.owner = null;
-        comment.likes = 0;
-        comment.edited = false;
-        return true;
-      }
-
-      comments.splice(index, 1);
-      return true;
-    }
-
-    if (removeCommentFromList(comment.replies || [], commentId)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function resetDemoState() {
   try {
     clearPersistedPayload();
@@ -4367,28 +4318,6 @@ function toggleLibraryDemoData() {
   state.savedPage = 1;
   showNotice(state.libraryDemoSeeded ? "보관함 데모 데이터를 표시합니다." : "보관함 데모 데이터를 숨겼습니다.");
   render();
-}
-
-function incrementPromptComments(promptId) {
-  const updated = new Set();
-
-  for (const list of [popularPrompts, savedPrompts]) {
-    const prompt = list.find((item) => item.id === promptId);
-    if (!prompt || updated.has(prompt)) continue;
-    prompt.comments += 1;
-    updated.add(prompt);
-  }
-}
-
-function decrementPromptComments(promptId) {
-  const updated = new Set();
-
-  for (const list of [popularPrompts, savedPrompts]) {
-    const prompt = list.find((item) => item.id === promptId);
-    if (!prompt || updated.has(prompt)) continue;
-    prompt.comments = Math.max(0, prompt.comments - 1);
-    updated.add(prompt);
-  }
 }
 
 function bindMakeEvents() {
