@@ -353,6 +353,117 @@
     updatePromptField(promptId, "likes", -1);
   }
 
+  function applyPublishedSavedPromptState(ctx, prompt, backendPrompt) {
+    const { popularPrompts, state } = ctx;
+    if (backendPrompt) {
+      Object.assign(prompt, backendPrompt, {
+        source: "mine",
+        isShared: true,
+        savedByMe: prompt.savedByMe,
+        author: state.currentUser || backendPrompt.author,
+        owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
+      });
+    }
+
+    prompt.isShared = true;
+    prompt.source = "mine";
+    prompt.author = state.currentUser || prompt.author || "\uC775\uBA85";
+    prompt.owner = state.currentUser || prompt.owner || prompt.author;
+    prompt.createdAt = prompt.createdAt || Date.now();
+
+    const popularIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
+    if (popularIndex >= 0) {
+      popularPrompts[popularIndex] = { ...popularPrompts[popularIndex], ...prompt, isShared: true, source: "mine" };
+    } else {
+      popularPrompts.unshift({ ...prompt, isShared: true, source: "mine" });
+    }
+
+    state.popularSort = "latest";
+    state.popularPage = 1;
+    state.userLibraryPromptIds.add(prompt.id);
+  }
+
+  function applyEditedPromptState(ctx, promptId, nextValues, revisionKey) {
+    const { popularPrompts, savedPrompts, state } = ctx;
+    [popularPrompts, savedPrompts].forEach((list) => {
+      const item = list.find((entry) => entry.id === promptId);
+      if (item) Object.assign(item, nextValues);
+    });
+
+    if (state.adminPromptRevisionRequests[revisionKey] || state.adminPromptRevisionRequests[promptId]) {
+      const { [revisionKey]: _resolvedRequest, [promptId]: _legacyRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
+      state.adminPromptRevisionRequests = remainingRequests;
+    }
+
+    state.editingPromptId = null;
+  }
+
+  function applyUnsharedPromptState(ctx, promptId, prompt) {
+    const { popularPrompts, savedPrompts, state } = ctx;
+    removePromptByIdState(popularPrompts, promptId);
+    const savedPrompt = savedPrompts.find((item) => item.id === promptId);
+    if (savedPrompt) {
+      savedPrompt.isShared = false;
+      savedPrompt.source = "mine";
+    } else {
+      savedPrompts.unshift({ ...prompt, isShared: false, source: "mine" });
+    }
+
+    state.popularPage = 1;
+    state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+  }
+
+  function applySharedPromptState(ctx, localPrompt, finalPrompt) {
+    const { commentsByPrompt, existingPrompt, popularPrompts, savedPrompts, state, upsertPrompt } = ctx;
+    if (localPrompt.id !== finalPrompt.id) {
+      removePromptByIdState(popularPrompts, localPrompt.id);
+      removePromptByIdState(savedPrompts, localPrompt.id);
+    }
+
+    upsertPrompt(popularPrompts, finalPrompt);
+    upsertPrompt(savedPrompts, finalPrompt);
+    state.userLibraryPromptIds.add(finalPrompt.id);
+    state.backendLibraryPromptIds.add(finalPrompt.id);
+    if (state.myBackendStatus === "connected") {
+      upsertPrompt(state.backendLibraryPrompts, finalPrompt);
+      upsertPrompt(state.backendMyPrompts, finalPrompt);
+    }
+    if (!commentsByPrompt[finalPrompt.id]) commentsByPrompt[finalPrompt.id] = [];
+
+    state.searchQuery = "";
+    state.popularSort = "latest";
+    state.popularPage = 1;
+    state.shareError = "";
+    state.shareDraft = null;
+    state.route = "home";
+    return existingPrompt;
+  }
+
+  function applyAdminRevisionRequestState(state, target, request, fallback = {}) {
+    state.adminPromptRevisionRequests = {
+      ...state.adminPromptRevisionRequests,
+      [target.key]: {
+        ...fallback.previousRequest,
+        ...request,
+        id: request?.id || fallback.id || "",
+        type: target.type,
+        targetId: target.id,
+        reason: request?.reason || request?.message || fallback.reason || "",
+        requestedAt: request?.requestedAt || fallback.requestedAt || Date.now(),
+        status: request?.status || fallback.status || "pending",
+      },
+    };
+  }
+
+  function finishAdminRevisionRequestState(state) {
+    state.adminRequestTargetKey = null;
+  }
+
+  function removePromptByIdState(list, promptId) {
+    const index = list.findIndex((item) => item.id === promptId);
+    if (index >= 0) list.splice(index, 1);
+  }
+
   function applyPromptReportedState(ctx, promptId, reason) {
     const { state } = ctx;
     state.reportedPromptIds.add(promptId);
@@ -644,16 +755,21 @@
     DEMO_AUTH_TOKEN,
     addCommentReplyState,
     addPromptCommentState,
+    applyAdminRevisionRequestState,
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    applyEditedPromptState,
     deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
+    applyPublishedSavedPromptState,
+    applySharedPromptState,
     applyPromptLikedState,
     applyPromptReportedState,
     applyPromptUnlikedState,
     applyPromptUnsavedState,
+    applyUnsharedPromptState,
     toggleCommentLikedState,
     toggleEditCommentState,
     toggleReplyCommentState,
@@ -667,9 +783,11 @@
     createLocalMakeFolderState,
     deleteMakeFolderState,
     deleteMakeThreadState,
+    finishAdminRevisionRequestState,
     readPersistedPayload,
     readStorageItem,
     removeStorageItem,
+    removePromptByIdState,
     removeLocalMakeFolderState,
     restoreMakeThreadFolderState,
     resetSessionBackendState,

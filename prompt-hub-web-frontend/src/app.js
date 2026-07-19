@@ -120,16 +120,21 @@ const {
   DEMO_AUTH_TOKEN,
   addCommentReplyState,
   addPromptCommentState,
+  applyAdminRevisionRequestState,
   applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
   applyCommentReportedState,
+  applyEditedPromptState,
   deleteCommentState,
   applyExistingPromptSavedState,
   applyNewPromptSavedState,
+  applyPublishedSavedPromptState,
+  applySharedPromptState,
   applyPromptLikedState,
   applyPromptReportedState,
   applyPromptUnlikedState,
   applyPromptUnsavedState,
+  applyUnsharedPromptState,
   toggleCommentLikedState,
   toggleEditCommentState,
   toggleReplyCommentState,
@@ -146,12 +151,14 @@ const {
   createLocalMakeFolderState,
   deleteMakeFolderState,
   deleteMakeThreadState,
+  finishAdminRevisionRequestState,
   finishEditedMakeMessageState,
   openRecentMakeThreadState,
   openSavedMakePromptState,
   readPersistedPayload,
   readStorageItem,
   removeStorageItem,
+  removePromptByIdState,
   removeLocalMakeFolderState,
   restoreMakeThreadFolderState,
   resetSessionBackendState: resetSessionBackendStateValue,
@@ -173,16 +180,21 @@ if (
     createInitialState,
     addCommentReplyState,
     addPromptCommentState,
+    applyAdminRevisionRequestState,
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    applyEditedPromptState,
     deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
+    applyPublishedSavedPromptState,
+    applySharedPromptState,
     applyPromptLikedState,
     applyPromptReportedState,
     applyPromptUnlikedState,
     applyPromptUnsavedState,
+    applyUnsharedPromptState,
     toggleCommentLikedState,
     toggleEditCommentState,
     toggleReplyCommentState,
@@ -198,12 +210,14 @@ if (
     createLocalMakeFolderState,
     deleteMakeFolderState,
     deleteMakeThreadState,
+    finishAdminRevisionRequestState,
     finishEditedMakeMessageState,
     openRecentMakeThreadState,
     openSavedMakePromptState,
     readPersistedPayload,
     readStorageItem,
     removeStorageItem,
+    removePromptByIdState,
     removeLocalMakeFolderState,
     restoreMakeThreadFolderState,
     resetSessionBackendStateValue,
@@ -2102,6 +2116,7 @@ function getCommentMutationStateContext() {
     popularPrompts,
     savedPrompts,
     state,
+    upsertPrompt,
   };
 }
 
@@ -4964,32 +4979,7 @@ async function publishSavedPrompt(promptId) {
     }
   }
 
-  if (backendPrompt) {
-    Object.assign(prompt, backendPrompt, {
-      source: "mine",
-      isShared: true,
-      savedByMe: prompt.savedByMe,
-      author: state.currentUser || backendPrompt.author,
-      owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
-    });
-  }
-
-  prompt.isShared = true;
-  prompt.source = "mine";
-  prompt.author = state.currentUser || prompt.author || "나";
-  prompt.owner = state.currentUser || prompt.owner || prompt.author;
-  prompt.createdAt = prompt.createdAt || Date.now();
-
-  const popularIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
-  if (popularIndex >= 0) {
-    popularPrompts[popularIndex] = { ...popularPrompts[popularIndex], ...prompt, isShared: true, source: "mine" };
-  } else {
-    popularPrompts.unshift({ ...prompt, isShared: true, source: "mine" });
-  }
-
-  state.popularSort = "latest";
-  state.popularPage = 1;
-  state.userLibraryPromptIds.add(prompt.id);
+  applyPublishedSavedPromptState(getCommentMutationStateContext(), prompt, backendPrompt);
   showNotice("프롬프트를 공유됨 상태로 전환했습니다.");
   render();
 }
@@ -5026,19 +5016,7 @@ async function updateOwnPrompt(promptId, formData) {
     ? { ...backendPrompt, source: "mine", savedByMe: prompt.savedByMe, isShared: prompt.isShared }
     : { title, text, tags, updatedAt: Date.now() };
 
-  [popularPrompts, savedPrompts].forEach((list) => {
-    const item = list.find((entry) => entry.id === promptId);
-    if (!item) return;
-    Object.assign(item, nextValues);
-  });
-
-  const revisionKey = makeRevisionRequestKey("prompt", promptId);
-  if (state.adminPromptRevisionRequests[revisionKey] || state.adminPromptRevisionRequests[promptId]) {
-    const { [revisionKey]: _resolvedRequest, [promptId]: _legacyRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
-    state.adminPromptRevisionRequests = remainingRequests;
-  }
-
-  state.editingPromptId = null;
+  applyEditedPromptState(getCommentMutationStateContext(), promptId, nextValues, makeRevisionRequestKey("prompt", promptId));
   showNotice("프롬프트를 수정했습니다.");
   await refreshMyPageDataAfterMutation();
   render();
@@ -5063,17 +5041,7 @@ function performUnsharePrompt(promptId) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
 
-  removePromptById(popularPrompts, promptId);
-  const savedPrompt = savedPrompts.find((item) => item.id === promptId);
-  if (savedPrompt) {
-    savedPrompt.isShared = false;
-    savedPrompt.source = "mine";
-  } else {
-    savedPrompts.unshift({ ...prompt, isShared: false, source: "mine" });
-  }
-
-  state.popularPage = 1;
-  state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+  applyUnsharedPromptState(getCommentMutationStateContext(), promptId, prompt);
   if (isBackendNumericId(promptId)) {
     callBackendApi("unsharePrompt", promptId);
   }
@@ -5081,8 +5049,7 @@ function performUnsharePrompt(promptId) {
 }
 
 function removePromptById(list, promptId) {
-  const index = list.findIndex((item) => item.id === promptId);
-  if (index >= 0) list.splice(index, 1);
+  removePromptByIdState(list, promptId);
 }
 
 function normalizeSavedPage() {
@@ -5555,23 +5522,11 @@ function shouldUseBackendAuthorRevisionRequest(target) {
 }
 
 function setAdminRevisionRequestState(target, request, fallback = {}) {
-  state.adminPromptRevisionRequests = {
-    ...state.adminPromptRevisionRequests,
-    [target.key]: {
-      ...fallback.previousRequest,
-      ...request,
-      id: request?.id || fallback.id || "",
-      type: target.type,
-      targetId: target.id,
-      reason: request?.reason || request?.message || fallback.reason || "",
-      requestedAt: request?.requestedAt || fallback.requestedAt || Date.now(),
-      status: request?.status || fallback.status || "pending",
-    },
-  };
+  applyAdminRevisionRequestState(state, target, request, fallback);
 }
 
 async function finishAdminRevisionRequestMutation(notice, auditReason, backendChanged) {
-  state.adminRequestTargetKey = null;
+  finishAdminRevisionRequestState(state);
   showNotice(notice);
   if (backendChanged) await refreshAdminAfterMutation({ auditReason });
   render();
@@ -5764,23 +5719,7 @@ async function sharePrompt(formData) {
     }
   }
 
-  upsertPrompt(popularPrompts, finalPrompt);
-  upsertPrompt(savedPrompts, finalPrompt);
-  state.userLibraryPromptIds.add(finalPrompt.id);
-  state.backendLibraryPromptIds.add(finalPrompt.id);
-  if (state.myBackendStatus === "connected") {
-    upsertPrompt(state.backendLibraryPrompts, finalPrompt);
-    upsertPrompt(state.backendMyPrompts, finalPrompt);
-  }
-  if (!commentsByPrompt[finalPrompt.id]) {
-    commentsByPrompt[finalPrompt.id] = [];
-  }
-  state.searchQuery = "";
-  state.popularSort = "latest";
-  state.popularPage = 1;
-  state.shareError = "";
-  state.shareDraft = null;
-  state.route = "home";
+  applySharedPromptState({ ...getCommentMutationStateContext(), existingPrompt }, prompt, finalPrompt);
   showNotice("최종 프롬프트가 공유되었습니다. Home 최신 목록에서 확인할 수 있습니다.");
 }
 
