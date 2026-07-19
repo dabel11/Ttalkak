@@ -43,6 +43,7 @@ const {
   AuthModalView,
   ExecuteModalView,
   HomePageView,
+  MakePageView,
   MyCommentsPanelView,
   MyPromptsPanelView,
   MyReportsPanelView,
@@ -58,7 +59,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakePageView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1253,36 +1254,18 @@ function ExecuteModal() {
 function MakePage() {
   const hasMessages = state.messages.length > 0;
 
-  return `
-    <section class="make-page" aria-label="프롬프트 첨삭">
-      ${MakeSidePanel()}
-      <div class="chat-feed">
-        <div class="make-template-bar ${state.templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-          <button class="template-toggle" type="button" data-toggle-templates aria-label="${state.templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${state.templateCollapsed ? "false" : "true"}">${state.templateCollapsed ? "&gt;" : "&lt;"}</button>
-          ${
-            state.templateCollapsed
-              ? ""
-              : `<div class="template-list">
-                  ${promptTemplates.map((template) => `<button type="button" data-template="${template.id}">${template.label}</button>`).join("")}
-                </div>`
-          }
-        </div>
-        ${
-          hasMessages
-            ? state.messages.map(MessageBubble).join("")
-            : `<div class="empty-state make-empty">
-                <div class="spark-badge">${icons.make}</div>
-                <h1>프롬프트 첨삭 도우미</h1>
-                <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
-              </div>`
-        }
-      </div>
-      <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
-        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요...">${escapeHtml(state.composerDraft)}</textarea>
-        <button class="send-button" type="submit" aria-label="보내기">${icons.send}</button>
-      </form>
-    </section>
-  `;
+  return MakePageView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      composerDraft: state.composerDraft,
+      hasMessages,
+      messages: state.messages,
+      promptTemplates,
+      renderMessageBubble: MessageBubble,
+      sidePanelHtml: MakeSidePanel(),
+      templateCollapsed: state.templateCollapsed,
+    },
+  );
 }
 
 function MakeSidePanel() {
