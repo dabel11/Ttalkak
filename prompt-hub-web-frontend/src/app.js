@@ -40,6 +40,7 @@ if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn
 
 const {
   AdminRevisionRequestModalView,
+  AdminPageView,
   AuthModalView,
   ExecuteModalView,
   HomePageView,
@@ -65,7 +66,7 @@ const {
   renderAppShell,
 } = window.TtalkakRenderers || {};
 
-if ([AdminRevisionRequestModalView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminRevisionRequestModalView, AdminPageView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
@@ -1487,14 +1488,13 @@ function MyReportsPanel() {
 
 function AdminPage() {
   if (!state.adminMode) {
-    return `
-      <section class="admin-page">
-        <div class="empty-state saved-empty">
-          <span>${icons.shield}</span>
-          <p>${state.isLoggedIn ? "관리자 권한 계정으로 로그인해야 Admin 페이지를 볼 수 있습니다." : "Admin 페이지는 로그인 후 사용할 수 있습니다."}</p>
-        </div>
-      </section>
-    `;
+    return AdminPageView(
+      { icons, escapeHtml },
+      {
+        adminMode: false,
+        unavailableMessage: state.isLoggedIn ? "관리자 권한 계정으로 로그인해야 Admin 페이지를 볼 수 있습니다." : "Admin 페이지는 로그인 후 사용할 수 있습니다.",
+      },
+    );
   }
 
   const canShowAdminData = state.adminBackendStatus === "connected" || canUseDemoFallback();
@@ -1810,22 +1810,14 @@ function AdminPage() {
             ? auditPanel
             : reportsPanel;
 
-  return `
-    <section class="admin-page" aria-labelledby="admin-heading">
-      <div class="page-head admin-head">
-        <div class="page-title">
-          <span>${icons.shield}</span>
-          <h1 id="admin-heading">Admin</h1>
-        </div>
-        <p class="admin-demo-note">${escapeHtml(getAdminModeNotice())}</p>
-      </div>
-      <div class="admin-workspace">
-        <div class="admin-content-panel">
-          ${activePanel}
-        </div>
-      </div>
-    </section>
-  `;
+  return AdminPageView(
+    { icons, escapeHtml },
+    {
+      activePanel,
+      adminMode: true,
+      notice: getAdminModeNotice(),
+    },
+  );
 }
 
 function AdminTagPromptUsagePanel(tag) {
