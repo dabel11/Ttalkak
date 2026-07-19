@@ -48,7 +48,7 @@
       return text ? JSON.parse(text) : null;
     } catch (error) {
       if (error?.name === "AbortError") {
-        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 서버 실행 상태와 API 응답 지연을 확인해주세요.");
+        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
         timeoutError.status = 0;
         timeoutError.code = "REQUEST_TIMEOUT";
         timeoutError.cause = error;

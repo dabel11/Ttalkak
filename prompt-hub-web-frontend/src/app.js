@@ -4268,7 +4268,7 @@ function bindEvents() {
   });
 }
 
-function toggleSavedPrompt(promptId) {
+async function toggleSavedPrompt(promptId) {
   if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
@@ -4285,6 +4285,7 @@ function toggleSavedPrompt(promptId) {
     const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
 
     if (!isSavedByMe || wasHiddenDemoPrompt) {
+      if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
       savedPrompt.savedByMe = true;
       state.userLibraryPromptIds.add(promptId);
       state.backendLibraryPromptIds.add(promptId);
@@ -4293,19 +4294,20 @@ function toggleSavedPrompt(promptId) {
       }
       state.pendingUnsaveIds.delete(promptId);
       updatePromptField(promptId, "saves", 1);
-      if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId).then(refreshMyPageDataAfterMutation);
+      refreshMyPageDataAfterMutation();
       showNotice("저장했습니다.");
       return;
     }
 
     if (state.route === "saved" && state.myBackendStatus === "connected" && isBackendNumericId(promptId)) {
+      if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 취소 요청에 실패했습니다."))) return;
       savedPrompt.savedByMe = false;
       state.pendingUnsaveIds.delete(promptId);
       state.userLibraryPromptIds.delete(promptId);
       state.backendLibraryPromptIds.delete(promptId);
       state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
       updatePromptField(promptId, "saves", -1);
-      callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
+      refreshMyPageDataAfterMutation();
       showNotice("저장을 취소했습니다.");
       return;
     }
@@ -4326,6 +4328,7 @@ function toggleSavedPrompt(promptId) {
       return;
     }
 
+    if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 취소 요청에 실패했습니다."))) return;
     if (savedPrompt.source === "mine") {
       savedPrompt.savedByMe = false;
     } else {
@@ -4335,7 +4338,7 @@ function toggleSavedPrompt(promptId) {
     state.backendLibraryPromptIds.delete(promptId);
     state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
     updatePromptField(promptId, "saves", -1);
-    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
+    refreshMyPageDataAfterMutation();
     if (state.detailPromptId === promptId && !findPromptById(promptId)) {
       state.detailPromptId = null;
     }
@@ -4353,6 +4356,7 @@ function toggleSavedPrompt(promptId) {
     return;
   }
 
+  if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
   updatePromptField(promptId, "saves", 1);
   const updatedPrompt = findPromptById(promptId) || prompt;
 
@@ -4370,12 +4374,12 @@ function toggleSavedPrompt(promptId) {
       savedByMe: true,
     });
   }
-  if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId).then(refreshMyPageDataAfterMutation);
+  refreshMyPageDataAfterMutation();
 
   showNotice("저장했습니다.");
 }
 
-function toggleLikePrompt(promptId) {
+async function toggleLikePrompt(promptId) {
   if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
@@ -4386,18 +4390,20 @@ function toggleLikePrompt(promptId) {
 
   const isLiked = state.likedPromptIds.has(promptId);
   if (isLiked) {
+    if (!(await runPromptStateMutation("unlikePrompt", promptId, "좋아요 취소 요청에 실패했습니다."))) return;
     state.likedPromptIds.delete(promptId);
     state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
     updatePromptField(promptId, "likes", -1);
-    if (isBackendNumericId(promptId)) callBackendApi("unlikePrompt", promptId).then(refreshMyPageDataAfterMutation);
+    refreshMyPageDataAfterMutation();
   } else {
+    if (!(await runPromptStateMutation("likePrompt", promptId, "좋아요 요청에 실패했습니다."))) return;
     state.likedPromptIds.add(promptId);
     const prompt = findPromptById(promptId);
     if (prompt && state.myBackendStatus === "connected") {
       upsertPrompt(state.backendLikedPrompts, { ...prompt, likedByMe: true });
     }
     updatePromptField(promptId, "likes", 1);
-    if (isBackendNumericId(promptId)) callBackendApi("likePrompt", promptId).then(refreshMyPageDataAfterMutation);
+    refreshMyPageDataAfterMutation();
   }
   showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
@@ -7109,7 +7115,9 @@ async function updateAdminTagDecision(tag, decision) {
       backendChanged = true;
     } catch (error) {
       handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 상태 변경을 취소합니다.", error);
+      await hydrateBackendAdminDataIfNeeded({ force: true });
+      return;
     }
   }
 
@@ -7147,7 +7155,9 @@ async function updateReportRecordStatus(key, status) {
       backendChanged = true;
     } catch (error) {
       handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
+      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 상태 변경을 취소합니다.", error);
+      await hydrateBackendAdminDataIfNeeded({ force: true });
+      return;
     }
   }
   state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
@@ -7540,6 +7550,11 @@ function getBackendErrorCodeMessage(code) {
       return "이미 처리되었거나 중복된 요청입니다.";
     case "INVALID_STATE":
       return "현재 상태에서는 처리할 수 없습니다.";
+    case "REQUEST_TIMEOUT":
+    case "AI_TIMEOUT":
+      return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+    case "AI_SERVICE_UNAVAILABLE":
+      return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
     case "INTERNAL_SERVER_ERROR":
       return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
     default:
@@ -7627,7 +7642,7 @@ function handleBackendAccessError(error, fallbackMessage = "요청을 처리하�
     return true;
   }
 
-  if (status === 504 || code === "AI_TIMEOUT") {
+  if (status === 0 || status === 504 || code === "REQUEST_TIMEOUT" || code === "AI_TIMEOUT") {
     showNotice(backendMessage || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
     return true;
   }
@@ -7677,6 +7692,31 @@ function callBackendApi(action, ...args) {
     console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
     return null;
   });
+}
+
+async function runPromptStateMutation(action, promptId, fallbackMessage) {
+  if (!isBackendNumericId(promptId) || state.backendStatus !== "connected") return true;
+
+  const api = window.TTALKAK_API;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return true;
+
+  const token = getAuthToken();
+  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+    openAuth("login");
+    showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
+    return false;
+  }
+
+  try {
+    await handler(promptId, token || undefined);
+    return true;
+  } catch (error) {
+    handleBackendAccessError(error, fallbackMessage);
+    await Promise.allSettled([refreshBackendHomePrompts(), refreshMyPageDataAfterMutation()]);
+    render();
+    return false;
+  }
 }
 
 async function createBackendMakeFolder(payload) {

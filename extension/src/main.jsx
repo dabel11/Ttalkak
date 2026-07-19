@@ -33,6 +33,7 @@ const DEFAULT_RAG_CONFIG = {
   topK: 5,
   model: "gemini-2.0-flash",
 };
+const API_TIMEOUT_MS = 15000;
 
 const MODE_META = {
   prompt_techniques: {
@@ -195,7 +196,7 @@ async function requestPromptImprove(config, payload) {
   const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
   const accessToken = payload?.accessToken || "";
   const { accessToken: _accessToken, ...requestPayload } = payload;
-  const res = await fetch(`${baseUrl}/api/prompts/improve`, {
+  const res = await fetchWithTimeout(`${baseUrl}/api/prompts/improve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -218,7 +219,7 @@ async function requestPromptImprove(config, payload) {
 
 async function requestLogin(config, credentials) {
   const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
-  const res = await fetch(`${baseUrl}/api/auth/login`, {
+  const res = await fetchWithTimeout(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
@@ -234,6 +235,27 @@ async function requestLogin(config, credentials) {
   }
 
   return normalizeAuthSession(responseBody);
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error("응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
+      timeoutError.status = 0;
+      timeoutError.code = "REQUEST_TIMEOUT";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function normalizeAuthSession(payload) {
@@ -285,6 +307,7 @@ function normalizeImproveResult(payload, fallbackPrompt = "") {
 function getApiErrorMessage(status, body) {
   const code = body?.code || "";
   if (code === "ACCOUNT_BLOCKED") return body?.message || "차단된 계정입니다. 관리자에게 문의해주세요.";
+  if (code === "REQUEST_TIMEOUT") return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
   if (code === "AI_TIMEOUT") return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
   if (code === "AI_SERVICE_UNAVAILABLE") return body?.message || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
   if (code === "FREE_TRIAL_LIMIT_EXCEEDED") return body?.message || "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
