@@ -2805,68 +2805,7 @@ function bindEvents() {
     });
   });
 
-  const composer = document.querySelector("[data-composer]");
-  if (composer) {
-    const composerTextarea = composer.querySelector("[data-autosize-textarea]");
-    if (composerTextarea) {
-      autosizeTextarea(composerTextarea);
-      composerTextarea.addEventListener("input", () => {
-        state.composerDraft = composerTextarea.value;
-        autosizeTextarea(composerTextarea);
-      });
-      composerTextarea.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-        event.preventDefault();
-        if (typeof composer.requestSubmit === "function") {
-          composer.requestSubmit();
-        } else {
-          composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-        }
-      });
-    }
-
-    composer.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (guardAdminUserAction()) return;
-      const value = new FormData(composer).get("prompt").trim();
-      if (!value) return;
-      if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
-        state.authView = "login";
-        render();
-        return;
-      }
-      if (!state.isLoggedIn) {
-        state.guestImproveCount += 1;
-      }
-      const now = Date.now();
-      const threadId = state.activeThreadId || `thread-${now}`;
-      const assistantMessageId = `make-${now}`;
-      state.activeThreadId = threadId;
-      state.messages.push({ id: `user-${now}`, role: "user", content: value });
-      let improvedPrompt = "";
-      try {
-        improvedPrompt = await improvePromptWithBackend(value);
-      } catch (error) {
-        if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
-        state.makeBackendStatus = "fallback";
-        state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
-        handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
-        render();
-        return;
-      }
-      state.messages.push({
-        id: assistantMessageId,
-        role: "assistant",
-        content: improvedPrompt,
-        sourcePrompt: value,
-      });
-      state.composerDraft = "";
-      pendingLatestMessageScrollId = assistantMessageId;
-      updateRecentThread(threadId);
-      syncMakeThreadWithBackend(threadId);
-      render();
-    });
-  }
+  bindMakeComposerEvents();
 
   document.querySelectorAll("[data-template]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4930,6 +4869,79 @@ function decrementPromptComments(promptId) {
     prompt.comments = Math.max(0, prompt.comments - 1);
     updated.add(prompt);
   }
+}
+
+function bindMakeComposerEvents() {
+  const composer = document.querySelector("[data-composer]");
+  if (!composer) return;
+
+  const composerTextarea = composer.querySelector("[data-autosize-textarea]");
+  if (composerTextarea) {
+    autosizeTextarea(composerTextarea);
+    composerTextarea.addEventListener("input", () => {
+      state.composerDraft = composerTextarea.value;
+      autosizeTextarea(composerTextarea);
+    });
+    composerTextarea.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      submitMakeComposer(composer);
+    });
+  }
+
+  composer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitMakePrompt(composer);
+  });
+}
+
+function submitMakeComposer(composer) {
+  if (typeof composer.requestSubmit === "function") {
+    composer.requestSubmit();
+    return;
+  }
+  composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+async function submitMakePrompt(composer) {
+  if (guardAdminUserAction()) return;
+  const value = String(new FormData(composer).get("prompt") || "").trim();
+  if (!value) return;
+  if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
+    state.authView = "login";
+    render();
+    return;
+  }
+  if (!state.isLoggedIn) {
+    state.guestImproveCount += 1;
+  }
+  const now = Date.now();
+  const threadId = state.activeThreadId || `thread-${now}`;
+  const assistantMessageId = `make-${now}`;
+  state.activeThreadId = threadId;
+  state.messages.push({ id: `user-${now}`, role: "user", content: value });
+  let improvedPrompt = "";
+  try {
+    improvedPrompt = await improvePromptWithBackend(value);
+  } catch (error) {
+    if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = getApiFailureMessage("Make 첨삭 API");
+    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패했습니다.");
+    render();
+    return;
+  }
+  state.messages.push({
+    id: assistantMessageId,
+    role: "assistant",
+    content: improvedPrompt,
+    sourcePrompt: value,
+  });
+  state.composerDraft = "";
+  pendingLatestMessageScrollId = assistantMessageId;
+  updateRecentThread(threadId);
+  syncMakeThreadWithBackend(threadId);
+  render();
 }
 
 async function copyMakeMessage(messageId) {
