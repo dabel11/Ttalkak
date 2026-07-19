@@ -19,6 +19,9 @@ Chrome extension
 - Login uses the Spring Boot `POST /api/auth/login` API.
 - The returned `accessToken` and user info are stored in `chrome.storage.local` and restored when the extension opens again.
 - Authenticated API requests include `Authorization: Bearer {accessToken}`.
+- Guest users get a persistent `X-Session-UUID` stored in `chrome.storage.local`.
+- Guest prompt-improve requests include `X-Session-UUID`; logged-in requests use JWT instead.
+- Trial-limit responses such as `FREE_TRIAL_LIMIT_EXCEEDED` should prompt the user to log in.
 - On `401` or blocked-account responses, the extension clears the stored auth session and asks the user to log in again.
 - Saved prompts and recent chats are still extension-local for now. Server-side thread storage, folder storage, and share integration are future integration points.
 - The extension does not replace failed backend responses with demo AI results. API failures should be surfaced to the user so integration issues are visible during testing.

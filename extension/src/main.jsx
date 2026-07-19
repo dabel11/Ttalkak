@@ -25,6 +25,7 @@ const STORAGE = {
   CONFIG: "pp_backend_config",
   LEGACY_CONFIG: "pp_rag_config",
   AUTH: "pp_auth_session",
+  SESSION_UUID: "pp_session_uuid",
 };
 
 const DEFAULT_RAG_CONFIG = {
@@ -158,6 +159,22 @@ async function removeExtensionStorage(key) {
   await new Promise((resolve) => chromeStorage.remove([key], resolve));
 }
 
+function createSessionUuid() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  const randomPart = Array.from(window.crypto?.getRandomValues?.(new Uint8Array(16)) || [])
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+  return `session-${Date.now()}-${randomPart || Math.random().toString(36).slice(2)}`;
+}
+
+async function getOrCreateSessionUuid() {
+  const existing = await loadExtensionStorage(STORAGE.SESSION_UUID, "");
+  if (existing) return existing;
+  const sessionUuid = createSessionUuid();
+  await saveExtensionStorage(STORAGE.SESSION_UUID, sessionUuid);
+  return sessionUuid;
+}
+
 function normalizeBackendConfig(config = {}) {
   const legacyUrl = config.serverUrl && !String(config.serverUrl).includes(":8000") ? config.serverUrl : "";
   return {
@@ -195,12 +212,14 @@ function promptMatches(item, query) {
 async function requestPromptImprove(config, payload) {
   const baseUrl = String(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl).replace(/\/+$/, "");
   const accessToken = payload?.accessToken || "";
-  const { accessToken: _accessToken, ...requestPayload } = payload;
+  const sessionUuid = payload?.sessionUuid || "";
+  const { accessToken: _accessToken, sessionUuid: _sessionUuid, ...requestPayload } = payload;
   const res = await fetchWithTimeout(`${baseUrl}/api/prompts/improve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(!accessToken && sessionUuid ? { "X-Session-UUID": sessionUuid } : {}),
     },
     body: JSON.stringify(requestPayload),
   });
@@ -349,6 +368,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [authMode, setAuthMode] = useState(null);
   const [authSession, setAuthSession] = useState(null);
+  const [sessionUuid, setSessionUuid] = useState("");
   const [executeTarget] = useState("auto");
   const [showRagSettings, setShowRagSettings] = useState(false);
   const [ragStatus, setRagStatus] = useState("idle");
@@ -368,6 +388,9 @@ function App() {
     loadExtensionStorage(STORAGE.AUTH, null).then((session) => {
       if (!mounted || !session?.accessToken) return;
       setAuthSession(session);
+    });
+    getOrCreateSessionUuid().then((uuid) => {
+      if (mounted) setSessionUuid(uuid);
     });
     return () => {
       mounted = false;
@@ -552,6 +575,8 @@ function App() {
   async function submitPrompt() {
     const prompt = composerValue.trim();
     if (!prompt || isLoading) return;
+    const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
+    if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
     const history = messages
@@ -571,6 +596,7 @@ function App() {
         topK: ragConfig.topK,
         model: ragConfig.model,
         accessToken: authSession?.accessToken || "",
+        sessionUuid: guestSessionUuid,
       });
       setRagStatus("connected");
 
@@ -623,6 +649,7 @@ function App() {
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
       if (isAuthExpiredError(err)) await handleAuthExpired();
+      if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
       setMessages((prev) => [
         ...prev,
         {
