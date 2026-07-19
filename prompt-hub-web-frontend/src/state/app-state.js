@@ -268,12 +268,136 @@
     if (!options.keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
   }
 
+  function applyExistingPromptSavedState(ctx, promptId, savedPrompt) {
+    const { state, upsertPrompt, updatePromptField } = ctx;
+    savedPrompt.savedByMe = true;
+    state.userLibraryPromptIds.add(promptId);
+    state.backendLibraryPromptIds.add(promptId);
+    if (state.myBackendStatus === "connected") {
+      upsertPrompt(state.backendLibraryPrompts, { ...savedPrompt, savedByMe: true });
+    }
+    state.pendingUnsaveIds.delete(promptId);
+    updatePromptField(promptId, "saves", 1);
+  }
+
+  function applyBackendPromptUnsavedState(ctx, promptId, savedPrompt) {
+    const { state, updatePromptField } = ctx;
+    savedPrompt.savedByMe = false;
+    state.pendingUnsaveIds.delete(promptId);
+    state.userLibraryPromptIds.delete(promptId);
+    state.backendLibraryPromptIds.delete(promptId);
+    state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
+    updatePromptField(promptId, "saves", -1);
+  }
+
+  function togglePendingUnsaveState(ctx, promptId) {
+    const { state, updatePromptField } = ctx;
+    if (state.pendingUnsaveIds.has(promptId)) {
+      state.pendingUnsaveIds.delete(promptId);
+      updatePromptField(promptId, "saves", 1);
+      return "restored";
+    }
+
+    state.pendingUnsaveIds.add(promptId);
+    updatePromptField(promptId, "saves", -1);
+    return "pending";
+  }
+
+  function applyPromptUnsavedState(ctx, promptId, savedPrompt, savedIndex) {
+    const { findPromptById, savedPrompts, state, updatePromptField } = ctx;
+    if (savedPrompt.source === "mine") {
+      savedPrompt.savedByMe = false;
+    } else {
+      savedPrompts.splice(savedIndex, 1);
+    }
+    state.userLibraryPromptIds.delete(promptId);
+    state.backendLibraryPromptIds.delete(promptId);
+    state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
+    updatePromptField(promptId, "saves", -1);
+    if (state.detailPromptId === promptId && !findPromptById(promptId)) {
+      state.detailPromptId = null;
+    }
+  }
+
+  function applyNewPromptSavedState(ctx, promptId, prompt) {
+    const { findPromptById, savedPrompts, state, upsertPrompt, updatePromptField } = ctx;
+    updatePromptField(promptId, "saves", 1);
+    const updatedPrompt = findPromptById(promptId) || prompt;
+    const normalized = {
+      ...updatedPrompt,
+      source: prompt.source === "mine" ? "mine" : "community",
+      savedByMe: true,
+    };
+
+    savedPrompts.unshift(normalized);
+    state.userLibraryPromptIds.add(promptId);
+    state.backendLibraryPromptIds.add(promptId);
+    if (state.myBackendStatus === "connected") {
+      upsertPrompt(state.backendLibraryPrompts, normalized);
+    }
+  }
+
+  function applyPromptLikedState(ctx, promptId, prompt) {
+    const { state, upsertPrompt, updatePromptField } = ctx;
+    state.likedPromptIds.add(promptId);
+    if (prompt && state.myBackendStatus === "connected") {
+      upsertPrompt(state.backendLikedPrompts, { ...prompt, likedByMe: true });
+    }
+    updatePromptField(promptId, "likes", 1);
+  }
+
+  function applyPromptUnlikedState(ctx, promptId) {
+    const { state, updatePromptField } = ctx;
+    state.likedPromptIds.delete(promptId);
+    state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
+    updatePromptField(promptId, "likes", -1);
+  }
+
+  function applyPromptReportedState(ctx, promptId, reason) {
+    const { state } = ctx;
+    state.reportedPromptIds.add(promptId);
+    state.reportRecords[`prompt:${promptId}`] = {
+      type: "prompt",
+      targetId: promptId,
+      status: "pending",
+      reporter: state.currentUser || "",
+      reason,
+      createdAt: Date.now(),
+    };
+    state.reportPromptId = null;
+  }
+
+  function applyCommentReportedState(ctx, commentId, reason, context) {
+    const { makePreview, state } = ctx;
+    state.reportedCommentIds.add(commentId);
+    state.reportRecords[`comment:${commentId}`] = {
+      type: "comment",
+      targetId: commentId,
+      promptId: context?.promptId || "",
+      reporter: state.currentUser || "",
+      targetAuthor: context?.comment?.author || context?.comment?.owner || "",
+      targetPreview: makePreview(context?.comment?.text || ""),
+      status: "pending",
+      reason,
+      createdAt: Date.now(),
+    };
+    state.reportCommentId = null;
+  }
+
   global.TtalkakState = Object.freeze({
     ...(global.TtalkakState || {}),
     STORAGE_KEY,
     AUTH_TOKEN_KEY,
     DEMO_AUTH_TOKEN,
+    applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
+    applyCommentReportedState,
+    applyExistingPromptSavedState,
+    applyNewPromptSavedState,
+    applyPromptLikedState,
+    applyPromptReportedState,
+    applyPromptUnlikedState,
+    applyPromptUnsavedState,
     clearAuthenticatedIdentityState,
     clearAuthenticatedSessionState,
     createInitialState,
@@ -286,6 +410,7 @@
     removeStorageItem,
     resetSessionBackendState,
     resetHomeViewState,
+    togglePendingUnsaveState,
     writePersistedPayload,
     writeStorageItem,
   });

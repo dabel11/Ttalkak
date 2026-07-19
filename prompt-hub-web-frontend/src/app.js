@@ -118,7 +118,15 @@ const {
   STORAGE_KEY,
   AUTH_TOKEN_KEY,
   DEMO_AUTH_TOKEN,
+  applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
+  applyCommentReportedState,
+  applyExistingPromptSavedState,
+  applyNewPromptSavedState,
+  applyPromptLikedState,
+  applyPromptReportedState,
+  applyPromptUnlikedState,
+  applyPromptUnsavedState,
   clearAuthenticatedIdentityState,
   clearAuthenticatedSessionState,
   createInitialState,
@@ -131,6 +139,7 @@ const {
   removeStorageItem,
   resetSessionBackendState: resetSessionBackendStateValue,
   resetHomeViewState,
+  togglePendingUnsaveState,
   writePersistedPayload,
   writeStorageItem,
 } = window.TtalkakState || {};
@@ -141,7 +150,15 @@ if (
   !DEMO_AUTH_TOKEN ||
   [
     createInitialState,
+    applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
+    applyCommentReportedState,
+    applyExistingPromptSavedState,
+    applyNewPromptSavedState,
+    applyPromptLikedState,
+    applyPromptReportedState,
+    applyPromptUnlikedState,
+    applyPromptUnsavedState,
     clearAuthenticatedIdentityState,
     clearAuthenticatedSessionState,
     closeTopModalState,
@@ -153,6 +170,7 @@ if (
     removeStorageItem,
     resetSessionBackendStateValue,
     resetHomeViewState,
+    togglePendingUnsaveState,
     writePersistedPayload,
     writeStorageItem,
   ].some((fn) => typeof fn !== "function")
@@ -2025,6 +2043,17 @@ function clearAuthenticatedIdentity() {
   clearAuthenticatedIdentityState(state);
 }
 
+function getPromptMutationStateContext() {
+  return {
+    findPromptById,
+    makePreview,
+    savedPrompts,
+    state,
+    updatePromptField,
+    upsertPrompt,
+  };
+}
+
 function normalizeUserIdInput(input) {
   if (!input) return "";
   const lowered = input.value.toLowerCase();
@@ -3217,11 +3246,12 @@ async function toggleSavedPrompt(promptId) {
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("로그인 후 저장할 수 있습니다.");
+    showNotice("????? ??? ? ????.");
     return;
   }
 
   const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
+  const mutationContext = getPromptMutationStateContext();
 
   if (savedIndex >= 0) {
     const savedPrompt = savedPrompts[savedIndex];
@@ -3229,64 +3259,35 @@ async function toggleSavedPrompt(promptId) {
     const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
 
     if (!isSavedByMe || wasHiddenDemoPrompt) {
-      if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
-      savedPrompt.savedByMe = true;
-      state.userLibraryPromptIds.add(promptId);
-      state.backendLibraryPromptIds.add(promptId);
-      if (state.myBackendStatus === "connected") {
-        upsertPrompt(state.backendLibraryPrompts, { ...savedPrompt, savedByMe: true });
-      }
-      state.pendingUnsaveIds.delete(promptId);
-      updatePromptField(promptId, "saves", 1);
+      if (!(await runPromptStateMutation("savePrompt", promptId, "?? ??? ??????."))) return;
+      applyExistingPromptSavedState(mutationContext, promptId, savedPrompt);
       refreshMyPageDataAfterMutation();
-      showNotice("저장했습니다.");
+      showNotice("??????.");
       return;
     }
 
     if (state.route === "saved" && state.myBackendStatus === "connected" && isBackendNumericId(promptId)) {
-      if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 취소 요청에 실패했습니다."))) return;
-      savedPrompt.savedByMe = false;
-      state.pendingUnsaveIds.delete(promptId);
-      state.userLibraryPromptIds.delete(promptId);
-      state.backendLibraryPromptIds.delete(promptId);
-      state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
-      updatePromptField(promptId, "saves", -1);
+      if (!(await runPromptStateMutation("unsavePrompt", promptId, "?? ?? ??? ??????."))) return;
+      applyBackendPromptUnsavedState(mutationContext, promptId, savedPrompt);
       refreshMyPageDataAfterMutation();
-      showNotice("저장을 취소했습니다.");
+      showNotice("??? ??????.");
       return;
     }
 
     if (state.route === "saved") {
-      const wasPending = state.pendingUnsaveIds.has(promptId);
-
-      if (wasPending) {
-        state.pendingUnsaveIds.delete(promptId);
-        updatePromptField(promptId, "saves", 1);
-        showNotice("저장 취소를 되돌렸습니다.");
-      } else {
-        state.pendingUnsaveIds.add(promptId);
-        updatePromptField(promptId, "saves", -1);
-        showNotice("다른 화면으로 이동하면 저장 목록에서 사라집니다.");
-      }
-
+      const pendingState = togglePendingUnsaveState(mutationContext, promptId);
+      showNotice(
+        pendingState === "restored"
+          ? "?? ??? ??????."
+          : "?? ???? ???? ?? ???? ?????."
+      );
       return;
     }
 
-    if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 취소 요청에 실패했습니다."))) return;
-    if (savedPrompt.source === "mine") {
-      savedPrompt.savedByMe = false;
-    } else {
-      savedPrompts.splice(savedIndex, 1);
-    }
-    state.userLibraryPromptIds.delete(promptId);
-    state.backendLibraryPromptIds.delete(promptId);
-    state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
-    updatePromptField(promptId, "saves", -1);
+    if (!(await runPromptStateMutation("unsavePrompt", promptId, "?? ?? ??? ??????."))) return;
+    applyPromptUnsavedState(mutationContext, promptId, savedPrompt, savedIndex);
     refreshMyPageDataAfterMutation();
-    if (state.detailPromptId === promptId && !findPromptById(promptId)) {
-      state.detailPromptId = null;
-    }
-    showNotice("저장을 취소했습니다.");
+    showNotice("??? ??????.");
     return;
   }
 
@@ -3294,64 +3295,38 @@ async function toggleSavedPrompt(promptId) {
   if (!prompt) return;
 
   if (state.pendingUnsaveIds.has(promptId)) {
-    state.pendingUnsaveIds.delete(promptId);
-    updatePromptField(promptId, "saves", 1);
-    showNotice("저장 취소를 되돌렸습니다.");
+    togglePendingUnsaveState(mutationContext, promptId);
+    showNotice("?? ??? ??????.");
     return;
   }
 
-  if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
-  updatePromptField(promptId, "saves", 1);
-  const updatedPrompt = findPromptById(promptId) || prompt;
-
-  savedPrompts.unshift({
-    ...updatedPrompt,
-    source: prompt.source === "mine" ? "mine" : "community",
-    savedByMe: true,
-  });
-  state.userLibraryPromptIds.add(promptId);
-  state.backendLibraryPromptIds.add(promptId);
-  if (state.myBackendStatus === "connected") {
-    upsertPrompt(state.backendLibraryPrompts, {
-      ...updatedPrompt,
-      source: prompt.source === "mine" ? "mine" : "community",
-      savedByMe: true,
-    });
-  }
+  if (!(await runPromptStateMutation("savePrompt", promptId, "?? ??? ??????."))) return;
+  applyNewPromptSavedState(mutationContext, promptId, prompt);
   refreshMyPageDataAfterMutation();
-
-  showNotice("저장했습니다.");
+  showNotice("??????.");
 }
-
 async function toggleLikePrompt(promptId) {
   if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("로그인 후 좋아요를 누를 수 있습니다.");
+    showNotice("????? ???? ?? ? ????.");
     return;
   }
 
   const isLiked = state.likedPromptIds.has(promptId);
+  const mutationContext = getPromptMutationStateContext();
   if (isLiked) {
-    if (!(await runPromptStateMutation("unlikePrompt", promptId, "좋아요 취소 요청에 실패했습니다."))) return;
-    state.likedPromptIds.delete(promptId);
-    state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
-    updatePromptField(promptId, "likes", -1);
+    if (!(await runPromptStateMutation("unlikePrompt", promptId, "??? ?? ??? ??????."))) return;
+    applyPromptUnlikedState(mutationContext, promptId);
     refreshMyPageDataAfterMutation();
   } else {
-    if (!(await runPromptStateMutation("likePrompt", promptId, "좋아요 요청에 실패했습니다."))) return;
-    state.likedPromptIds.add(promptId);
-    const prompt = findPromptById(promptId);
-    if (prompt && state.myBackendStatus === "connected") {
-      upsertPrompt(state.backendLikedPrompts, { ...prompt, likedByMe: true });
-    }
-    updatePromptField(promptId, "likes", 1);
+    if (!(await runPromptStateMutation("likePrompt", promptId, "??? ??? ??????."))) return;
+    applyPromptLikedState(mutationContext, promptId, findPromptById(promptId));
     refreshMyPageDataAfterMutation();
   }
-  showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
+  showNotice(isLiked ? "???? ??????." : "???? ?????.");
 }
-
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
   if (guardAdminUserAction()) return;
@@ -3401,44 +3376,34 @@ function submitReport(type, targetId, reason) {
 async function reportPrompt(promptId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    showNotice("신고 이유를 입력해주세요.");
+    showNotice("?? ??? ??????.");
     return;
   }
 
   if (isBackendNumericId(promptId) && state.backendStatus === "connected") {
     const token = getAuthToken();
     if (!token || isDemoAuthToken(token)) {
-      showNotice("실제 로그인 토큰이 있어야 신고를 접수할 수 있습니다.");
+      showNotice("?? ??? ??? ??? ??? ??? ? ????.");
       openAuth("login");
       return;
     }
     try {
       await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
     } catch (error) {
-      handleBackendAccessError(error, "신고 접수에 실패했습니다.");
+      handleBackendAccessError(error, "?? ??? ??????.");
       return;
     }
   }
 
-  state.reportedPromptIds.add(promptId);
-  state.reportRecords[`prompt:${promptId}`] = {
-    type: "prompt",
-    targetId: promptId,
-    status: "pending",
-    reporter: state.currentUser || "",
-    reason: content,
-    createdAt: Date.now(),
-  };
-  state.reportPromptId = null;
-  showNotice("신고가 접수되었습니다.");
+  applyPromptReportedState(getPromptMutationStateContext(), promptId, content);
+  showNotice("??? ???????.");
   refreshMyPageDataAfterMutation();
   render();
 }
-
 async function reportComment(commentId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    showNotice("신고 이유를 입력해주세요.");
+    showNotice("?? ??? ??????.");
     return;
   }
 
@@ -3446,36 +3411,23 @@ async function reportComment(commentId, reason) {
   if (isBackendNumericId(commentId) && state.backendStatus === "connected") {
     const token = getAuthToken();
     if (!token || isDemoAuthToken(token)) {
-      showNotice("실제 로그인 토큰이 있어야 댓글 신고를 접수할 수 있습니다.");
+      showNotice("?? ??? ??? ??? ?? ??? ??? ? ????.");
       openAuth("login");
       return;
     }
     try {
       await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
     } catch (error) {
-      handleBackendAccessError(error, "댓글 신고 접수에 실패했습니다.");
+      handleBackendAccessError(error, "?? ?? ??? ??????.");
       return;
     }
   }
 
-  state.reportedCommentIds.add(commentId);
-  state.reportRecords[`comment:${commentId}`] = {
-    type: "comment",
-    targetId: commentId,
-    promptId: context?.promptId || "",
-    reporter: state.currentUser || "",
-    targetAuthor: context?.comment?.author || context?.comment?.owner || "",
-    targetPreview: makePreview(context?.comment?.text || ""),
-    status: "pending",
-    reason: content,
-    createdAt: Date.now(),
-  };
-  state.reportCommentId = null;
-  showNotice("댓글 신고가 접수되었습니다.");
+  applyCommentReportedState(getPromptMutationStateContext(), commentId, content, context);
+  showNotice("?? ??? ???????.");
   refreshMyPageDataAfterMutation();
   render();
 }
-
 function openShareFromSaved(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt) return;
