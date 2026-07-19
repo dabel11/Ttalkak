@@ -722,6 +722,7 @@ function Sidebar() {
 }
 
 function getAdminTabs() {
+  const canShowAdminData = state.adminBackendStatus === "connected" || canUseDemoFallback();
   const reportRecords = getAdminReportRecords();
   const allPrompts = state.backendAdminPrompts.length
     ? getUniquePrompts(state.backendAdminPrompts)
