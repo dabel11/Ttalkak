@@ -5696,84 +5696,109 @@ async function openAdminUserActivity(nickname, options = {}) {
   }
 }
 
-async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "", blockReason = "") {
+function validateAdminUserBlockInput(memberId, shouldBlock, blockReason = "") {
   const cleanMemberId = String(memberId || "").trim();
   if (!cleanMemberId) {
     showNotice("샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.");
-    return;
+    return null;
   }
-  const api = window.TTALKAK_API;
-  if (!api?.blockAdminUser || !api?.unblockAdminUser) {
+  if (!getAdminApiAction("blockAdminUser") || !getAdminApiAction("unblockAdminUser")) {
     showNotice("회원 차단 API가 아직 연결되지 않았습니다.");
-    return;
+    return null;
   }
 
-  let reason = "";
-  if (shouldBlock) {
-    reason = String(blockReason || "").trim();
-    if (!reason) {
-      showNotice("차단 사유가 필요합니다.");
-      return;
-    }
+  const reason = shouldBlock ? String(blockReason || "").trim() : "";
+  if (shouldBlock && !reason) {
+    showNotice("차단 사유가 필요합니다.");
+    return null;
   }
 
-  try {
-    const token = getAuthToken() || undefined;
-    const activity = shouldBlock
-      ? await api.blockAdminUser(cleanMemberId, { reason }, token)
-      : await api.unblockAdminUser(cleanMemberId, token);
-    const displayNickname = String(activity?.nickname || nickname || state.adminUserActivityNickname || "사용자").trim();
-    const normalizedNickname = normalizeAdminSearchText(displayNickname);
-    const previousActivity = state.backendAdminUserActivities[normalizedNickname] || getAdminUserActivity(displayNickname);
+  return { memberId: cleanMemberId, reason };
+}
 
-    state.backendAdminUserActivities = {
-      ...state.backendAdminUserActivities,
-      [normalizedNickname]: {
-        ...previousActivity,
-        ...activity,
-        prompts: previousActivity.prompts || activity.prompts || [],
-        comments: previousActivity.comments || activity.comments || [],
-        replies: previousActivity.replies || activity.replies || [],
-        reportsMade: previousActivity.reportsMade || activity.reportsMade || [],
-        reportsReceived: previousActivity.reportsReceived || activity.reportsReceived || [],
-        nickname: displayNickname,
-        memberId: cleanMemberId,
-        blocked: shouldBlock,
-      },
-    };
-    state.adminUserActivityNickname = displayNickname;
-    state.adminUserQuery = displayNickname;
-    state.adminBlockTarget = null;
-    state.adminBackendStatus = "idle";
-    showNotice(shouldBlock ? "회원 차단을 처리했습니다." : "회원 차단을 해제했습니다.");
-    render();
+function getAdminUserBlockAction(shouldBlock) {
+  return shouldBlock ? "blockAdminUser" : "unblockAdminUser";
+}
 
-    if (api.getAdminUserActivity) {
-      api
-        .getAdminUserActivity(cleanMemberId, { page: 1, pageSize: 20 }, token)
-        .then((refreshedActivity) => {
-          const currentActivity = state.backendAdminUserActivities[normalizedNickname] || {};
-          state.backendAdminUserActivities = {
-            ...state.backendAdminUserActivities,
-            [normalizedNickname]: {
-              ...currentActivity,
-              ...refreshedActivity,
-              nickname: displayNickname,
-              memberId: cleanMemberId,
-              blocked: shouldBlock,
-            },
-          };
-          if (normalizeAdminSearchText(state.adminUserActivityNickname) === normalizedNickname) {
-            render();
-          }
-        })
-        .catch((refreshError) => {
-          console.warn("[TTALKAK] 회원 차단 상태 변경 후 사용자 활동 재조회에 실패했습니다.", refreshError);
-        });
-    }
-  } catch (error) {
-    handleBackendAccessError(error, shouldBlock ? "회원 차단 요청에 실패했습니다." : "회원 차단 해제 요청에 실패했습니다.");
-  }
+function getAdminUserBlockArgs(memberId, shouldBlock, reason) {
+  return shouldBlock ? [memberId, { reason }] : [memberId];
+}
+
+function applyAdminUserBlockActivity({ activity, memberId, shouldBlock, nickname }) {
+  const displayNickname = String(activity?.nickname || nickname || state.adminUserActivityNickname || "사용자").trim();
+  const normalizedNickname = normalizeAdminSearchText(displayNickname);
+  const previousActivity = state.backendAdminUserActivities[normalizedNickname] || getAdminUserActivity(displayNickname);
+
+  state.backendAdminUserActivities = {
+    ...state.backendAdminUserActivities,
+    [normalizedNickname]: {
+      ...previousActivity,
+      ...activity,
+      prompts: previousActivity.prompts || activity?.prompts || [],
+      comments: previousActivity.comments || activity?.comments || [],
+      replies: previousActivity.replies || activity?.replies || [],
+      reportsMade: previousActivity.reportsMade || activity?.reportsMade || [],
+      reportsReceived: previousActivity.reportsReceived || activity?.reportsReceived || [],
+      nickname: displayNickname,
+      memberId,
+      blocked: shouldBlock,
+    },
+  };
+  state.adminUserActivityNickname = displayNickname;
+  state.adminUserQuery = displayNickname;
+  state.adminBlockTarget = null;
+  state.adminBackendStatus = "idle";
+
+  return { displayNickname, normalizedNickname };
+}
+
+function refreshAdminUserActivityAfterBlock(memberId, normalizedNickname, displayNickname, shouldBlock) {
+  const api = window.TTALKAK_API;
+  if (!api?.getAdminUserActivity) return;
+
+  api
+    .getAdminUserActivity(memberId, { page: 1, pageSize: 20 }, getAuthToken() || undefined)
+    .then((refreshedActivity) => {
+      const currentActivity = state.backendAdminUserActivities[normalizedNickname] || {};
+      state.backendAdminUserActivities = {
+        ...state.backendAdminUserActivities,
+        [normalizedNickname]: {
+          ...currentActivity,
+          ...refreshedActivity,
+          nickname: displayNickname,
+          memberId,
+          blocked: shouldBlock,
+        },
+      };
+      if (normalizeAdminSearchText(state.adminUserActivityNickname) === normalizedNickname) {
+        render();
+      }
+    })
+    .catch((refreshError) => {
+      console.warn("[TTALKAK] Failed to refresh admin user activity after block state change.", refreshError);
+    });
+}
+
+async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "", blockReason = "") {
+  const input = validateAdminUserBlockInput(memberId, shouldBlock, blockReason);
+  if (!input) return;
+
+  const action = getAdminUserBlockAction(shouldBlock);
+  const result = await runAdminApiMutation(action, getAdminUserBlockArgs(input.memberId, shouldBlock, input.reason), {
+    fallbackMessage: shouldBlock ? "회원 차단 요청에 실패했습니다." : "회원 차단 해제 요청에 실패했습니다.",
+  });
+  if (!result.ok) return;
+
+  const { displayNickname, normalizedNickname } = applyAdminUserBlockActivity({
+    activity: result.value,
+    memberId: input.memberId,
+    shouldBlock,
+    nickname,
+  });
+  showNotice(shouldBlock ? "회원 차단을 처리했습니다." : "회원 차단을 해제했습니다.");
+  render();
+
+  refreshAdminUserActivityAfterBlock(input.memberId, normalizedNickname, displayNickname, shouldBlock);
 }
 
 function getAdminApiAction(action) {
