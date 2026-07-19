@@ -129,10 +129,12 @@ const {
   applyBackendPromptUnsavedState,
   applyAuthenticatedIdentityState,
   applyCommentReportedState,
+  applyDeletedPromptState,
   applyEditedPromptState,
   deleteCommentState,
   applyExistingPromptSavedState,
   applyNewPromptSavedState,
+  applyPendingUnsavesState,
   applyPublishedSavedPromptState,
   applySharedPromptState,
   applyPromptLikedState,
@@ -166,6 +168,7 @@ const {
   removePromptByIdState,
   removeLocalMakeFolderState,
   restoreMakeThreadFolderState,
+  normalizeSavedPageState,
   resetSessionBackendState: resetSessionBackendStateValue,
   resetHomeViewState,
   startNewMakeChatState,
@@ -194,10 +197,12 @@ if (
     applyBackendPromptUnsavedState,
     applyAuthenticatedIdentityState,
     applyCommentReportedState,
+    applyDeletedPromptState,
     applyEditedPromptState,
     deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
+    applyPendingUnsavesState,
     applyPublishedSavedPromptState,
     applySharedPromptState,
     applyPromptLikedState,
@@ -230,6 +235,7 @@ if (
     removePromptByIdState,
     removeLocalMakeFolderState,
     restoreMakeThreadFolderState,
+    normalizeSavedPageState,
     resetSessionBackendStateValue,
     resetHomeViewState,
     startNewMakeChatState,
@@ -1047,27 +1053,14 @@ function isPromptPendingUnsave(promptId) {
 }
 
 function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myPageTab) {
-  const staysInLibrary = state.route === "saved" && nextRoute === "saved" && state.myPageTab === "library" && nextMyPageTab === "library";
-  if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return;
-
-  state.pendingUnsaveIds.forEach((promptId) => {
-    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
-    const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
-    if (savedIndex >= 0) {
-      if (savedPrompts[savedIndex].source === "mine") {
-        savedPrompts[savedIndex].savedByMe = false;
-      } else {
-        savedPrompts.splice(savedIndex, 1);
-      }
-      state.userLibraryPromptIds.delete(promptId);
-    }
-    if (state.detailPromptId === promptId && !findPromptById(promptId)) {
-      state.detailPromptId = null;
-    }
+  const promptIds = applyPendingUnsavesState(getPromptMutationStateContext(), {
+    nextRoute,
+    nextMyPageTab,
+    pageSize: SAVED_PAGE_SIZE,
   });
-
-  state.pendingUnsaveIds.clear();
-  normalizeSavedPage();
+  promptIds.forEach((promptId) => {
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
+  });
 }
 
 function PromptCard(prompt, options = {}) {
@@ -2112,7 +2105,9 @@ function clearAuthenticatedIdentity() {
 function getPromptMutationStateContext() {
   return {
     findPromptById,
+    getSavedFilteredCount,
     makePreview,
+    popularPrompts,
     savedPrompts,
     state,
     updatePromptField,
@@ -2123,11 +2118,16 @@ function getPromptMutationStateContext() {
 function getCommentMutationStateContext() {
   return {
     commentsByPrompt,
+    getSavedFilteredCount,
     popularPrompts,
     savedPrompts,
     state,
     upsertPrompt,
   };
+}
+
+function getSavedFilteredCount() {
+  return getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
 }
 
 function getMakeMutationStateContext() {
@@ -5036,15 +5036,12 @@ function performDeletePrompt(promptId) {
   if (isBackendNumericId(promptId)) {
     callBackendApi("deletePrompt", promptId);
   }
-  removePromptById(popularPrompts, promptId);
-  removePromptById(savedPrompts, promptId);
-  state.userLibraryPromptIds.delete(promptId);
-  state.backendLibraryPromptIds.delete(promptId);
-  state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
-  state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
-  state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
-  normalizeSavedPage();
-  showNotice("프롬프트를 삭제했습니다.");
+  applyDeletedPromptState(
+    getPromptMutationStateContext(),
+    promptId,
+    SAVED_PAGE_SIZE,
+  );
+  showNotice("\uD504\uB86C\uD504\uD2B8\uB97C \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
 }
 
 function performUnsharePrompt(promptId) {
@@ -5063,9 +5060,7 @@ function removePromptById(list, promptId) {
 }
 
 function normalizeSavedPage() {
-  const filteredCount = getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
-  const totalPages = Math.max(1, Math.ceil(filteredCount / SAVED_PAGE_SIZE));
-  state.savedPage = Math.min(state.savedPage, totalPages);
+  normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
 }
 
 function togglePasswordVisibility(button) {

@@ -337,6 +337,54 @@
     }
   }
 
+  function normalizeSavedPageState(state, filteredCount, pageSize) {
+    const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
+    state.savedPage = Math.min(state.savedPage, totalPages);
+  }
+
+  function applyPendingUnsavesState(ctx, { nextRoute, nextMyPageTab, pageSize }) {
+    const { findPromptById, getSavedFilteredCount, savedPrompts, state } = ctx;
+    const staysInLibrary =
+      state.route === "saved" &&
+      nextRoute === "saved" &&
+      state.myPageTab === "library" &&
+      nextMyPageTab === "library";
+
+    if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return [];
+
+    const promptIds = [...state.pendingUnsaveIds];
+    promptIds.forEach((promptId) => {
+      const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
+      if (savedIndex >= 0) {
+        if (savedPrompts[savedIndex].source === "mine") {
+          savedPrompts[savedIndex].savedByMe = false;
+        } else {
+          savedPrompts.splice(savedIndex, 1);
+        }
+        state.userLibraryPromptIds.delete(promptId);
+      }
+      if (state.detailPromptId === promptId && !findPromptById(promptId)) {
+        state.detailPromptId = null;
+      }
+    });
+
+    state.pendingUnsaveIds.clear();
+    normalizeSavedPageState(state, getSavedFilteredCount(), pageSize);
+    return promptIds;
+  }
+
+  function applyDeletedPromptState(ctx, promptId, pageSize) {
+    const { getSavedFilteredCount, popularPrompts, savedPrompts, state } = ctx;
+    removePromptByIdState(popularPrompts, promptId);
+    removePromptByIdState(savedPrompts, promptId);
+    state.userLibraryPromptIds.delete(promptId);
+    state.backendLibraryPromptIds.delete(promptId);
+    state.backendLibraryPrompts = state.backendLibraryPrompts.filter((prompt) => prompt.id !== promptId);
+    state.backendLikedPrompts = state.backendLikedPrompts.filter((prompt) => prompt.id !== promptId);
+    state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+    normalizeSavedPageState(state, getSavedFilteredCount(), pageSize);
+  }
+
   function applyPromptLikedState(ctx, promptId, prompt) {
     const { state, upsertPrompt, updatePromptField } = ctx;
     state.likedPromptIds.add(promptId);
@@ -844,6 +892,8 @@
     deleteCommentState,
     applyExistingPromptSavedState,
     applyNewPromptSavedState,
+    applyDeletedPromptState,
+    applyPendingUnsavesState,
     applyPublishedSavedPromptState,
     applySharedPromptState,
     applyPromptLikedState,
@@ -873,6 +923,7 @@
     restoreMakeThreadFolderState,
     resetSessionBackendState,
     resetHomeViewState,
+    normalizeSavedPageState,
     appendMakeAssistantMessageState,
     appendMakeUserMessageState,
     applyEditedMakeMessageState,
