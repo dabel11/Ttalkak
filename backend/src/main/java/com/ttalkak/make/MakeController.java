@@ -87,6 +87,29 @@ public class MakeController {
         return threadMap(threadRepository.save(thread));
     }
 
+    @DeleteMapping("/threads/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteThread(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
+        Long memberId = requireMemberId(authorization);
+        Long threadId = parseNumericId(id, "thread id");
+
+        MakeThread thread =
+                threadRepository
+                        .findByIdAndMemberId(threadId, memberId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "대화를 찾을 수 없습니다."
+                                )
+                        );
+
+        threadRepository.delete(thread);
+    }
+
     @GetMapping("/folders")
     public Map<String, Object> folders(
             @RequestHeader(
