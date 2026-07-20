@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createMakeThread, requestMakeThreads } from "../api/make";
+import { createMakeThread, deleteMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { EXAMPLE_QUERIES, STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
@@ -27,6 +27,13 @@ export function useConversation({
   const activeThreadId = useRef(null);
   const isLoggedIn = Boolean(authSession?.accessToken);
   const recentThreads = isLoggedIn ? serverRecentThreads : localRecentThreads;
+
+  async function refreshServerThreads() {
+    if (!authSession?.accessToken) return [];
+    const items = await requestMakeThreads(ragConfig, authSession.accessToken);
+    setServerRecentThreads(items);
+    return items;
+  }
 
   useEffect(() => {
     if (!isLoggedIn) saveStorage(STORAGE.RECENTS, localRecentThreads);
@@ -308,7 +315,7 @@ export function useConversation({
     }
   }
 
-  function requestDeleteRecentThread(id, setConfirmAction) {
+  function requestDeleteRecentThreadLocal(id, setConfirmAction) {
     if (isLoggedIn) {
       setConfirmAction({
         title: "서버 최근 대화 삭제",
@@ -324,6 +331,53 @@ export function useConversation({
       message: "이 최근 대화를 삭제할까요?",
       confirmLabel: "삭제",
       onConfirm: () => setLocalRecentThreads((prev) => prev.filter((t) => t.id !== id)),
+    });
+  }
+
+  function requestDeleteRecentThread(id, setConfirmAction) {
+    if (!isLoggedIn) {
+      requestDeleteRecentThreadLocal(id, setConfirmAction);
+      return;
+    }
+
+    const thread = serverRecentThreads.find((item) => item.id === id || item.serverId === id);
+    const serverId = thread?.serverId || (/^\d+$/.test(String(id || "")) ? id : "");
+
+    setConfirmAction({
+      title: "최근 대화 삭제",
+      message: "이 서버 최근 대화를 삭제할까요?",
+      confirmLabel: "삭제",
+      onConfirm: async () => {
+        if (!serverId) {
+          showNotice("삭제할 수 있는 서버 대화 ID가 없습니다.");
+          return;
+        }
+
+        try {
+          await deleteMakeThread(ragConfig, serverId, authSession.accessToken);
+          setServerRecentThreads((prev) => prev.filter((item) => item.id !== id && item.serverId !== serverId));
+          if (activeThreadId.current === id || activeThreadId.current === serverId) {
+            activeThreadId.current = null;
+            setMessages([]);
+          }
+          showNotice("최근 대화를 삭제했습니다.");
+          await refreshServerThreads();
+        } catch (error) {
+          if (isAuthExpiredError(error)) {
+            await onAuthExpired?.();
+            return;
+          }
+
+          if (Number(error?.status || 0) === 404) {
+            showNotice("이미 삭제되었거나 접근할 수 없는 대화입니다.");
+            setServerRecentThreads((prev) => prev.filter((item) => item.id !== id && item.serverId !== serverId));
+            await refreshServerThreads().catch(() => {});
+            return;
+          }
+
+          showNotice(error?.message || "최근 대화 삭제에 실패했습니다.");
+        }
+      },
     });
   }
 

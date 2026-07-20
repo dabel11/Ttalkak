@@ -12,6 +12,9 @@
       createMakeThread(payload, token) {
         return request("/api/make/threads", { method: "POST", token, body: JSON.stringify(payload) });
       },
+      deleteMakeThread(threadId, token) {
+        return request(`/api/make/threads/${threadId}`, { method: "DELETE", token });
+      },
       createMakeFolder(payload, token) {
         return request("/api/make/folders", { method: "POST", token, body: JSON.stringify(payload) });
       },

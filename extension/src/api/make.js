@@ -74,3 +74,12 @@ export async function createMakeThread(config, payload, accessToken) {
   const responseBody = await parseResponse(res);
   return normalizeMakeThread(responseBody?.data || responseBody);
 }
+
+export async function deleteMakeThread(config, threadId, accessToken) {
+  if (!accessToken || !threadId) return;
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads/${threadId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  await parseResponse(res);
+}

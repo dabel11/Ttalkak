@@ -4113,9 +4113,41 @@ function performDeleteComment(commentId) {
   }
 }
 
-function performDeleteThread(threadId) {
+function performDeleteThreadLocal(threadId) {
   deleteMakeThreadState(state, threadId);
   showNotice("대화를 삭제했습니다.");
+}
+
+async function performDeleteThread(threadId) {
+  const thread = state.recentThreads.find((item) => item.id === threadId || item.serverId === threadId);
+  const backendThreadId = thread?.serverId || (isBackendNumericId(threadId) ? threadId : "");
+  const api = getMakeApi();
+
+  if (!state.isLoggedIn || !backendThreadId || !api?.deleteMakeThread || !hasBackendAuthToken()) {
+    performDeleteThreadLocal(threadId);
+    render();
+    return;
+  }
+
+  try {
+    await api.deleteMakeThread(backendThreadId, getMakeApiToken());
+    deleteMakeThreadState(state, threadId);
+    showNotice("대화를 삭제했습니다.");
+    render();
+    refreshMakeThreadsFromBackend();
+  } catch (error) {
+    const status = Number(error?.status || error?.payload?.status || 0);
+    if (status === 404) {
+      showNotice("이미 삭제되었거나 접근할 수 없는 대화입니다.");
+      deleteMakeThreadState(state, threadId);
+      render();
+      refreshMakeThreadsFromBackend();
+      return;
+    }
+
+    handleBackendAccessError(error, "대화 삭제 요청에 실패했습니다.");
+    render();
+  }
 }
 
 function guardMakeFolderMutation(clearSelection) {
@@ -6933,6 +6965,19 @@ async function syncMakeThreadWithBackend(threadId) {
   if (!thread) return;
   const serverId = await createBackendMakeThread(thread);
   if (serverId) thread.serverId = serverId;
+}
+
+async function refreshMakeThreadsFromBackend() {
+  const api = getMakeApi();
+  if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
+
+  try {
+    const threads = await api.getMakeThreads(getMakeApiToken());
+    applyMakeThreadsResult(getBackendDataEffectContext(), threads);
+    render();
+  } catch (error) {
+    handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
+  }
 }
 
 function getBackendDataEffectContext() {

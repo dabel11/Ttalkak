@@ -107,7 +107,10 @@
     if (!Array.isArray(threads)) return false;
 
     const validThreads = threads.filter((thread) => thread.id);
-    if (!validThreads.length) return false;
+    if (!validThreads.length) {
+      state.recentThreads = [];
+      return true;
+    }
 
     state.recentThreads = validThreads.map((thread) => ({
       id: thread.id,
