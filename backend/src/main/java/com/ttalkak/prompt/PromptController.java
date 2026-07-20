@@ -3,6 +3,11 @@ package com.ttalkak.prompt;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.member.Member;
 import com.ttalkak.common.exception.ApiException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ttalkak.make.MakeThread;
+import com.ttalkak.make.MakeThreadRepository;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/prompts")
@@ -21,6 +27,8 @@ public class PromptController {
     private final TagRepository tagRepository;
     private final AuthService authService;
     private final WebClient webClient;
+    private final MakeThreadRepository makeThreadRepository;
+    private final ObjectMapper objectMapper;
 
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
@@ -30,12 +38,16 @@ public class PromptController {
                             PromptLikeRepository likeRepository,
                             TagRepository tagRepository,
                             AuthService authService,
+                            MakeThreadRepository makeThreadRepository,
+                            ObjectMapper objectMapper,
                             WebClient.Builder webClientBuilder) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
+        this.makeThreadRepository = makeThreadRepository;
+        this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
     }
 
@@ -241,44 +253,399 @@ public class PromptController {
         return pageResponse(prompts, page, resolvedSize, memberId);
     }
 
-    @PostMapping("/improve")
-    public Map<String, Object> improve(@RequestBody ImproveRequest request) {
+    private List<Map<String, Object>> copyHistory(
+            List<Map<String, String>> history
+    ) {
+        List<Map<String, Object>> copied =
+                new ArrayList<>();
+
+        if (history == null) {
+            return copied;
+        }
+
+        for (Map<String, String> item : history) {
+            if (item == null) {
+                continue;
+            }
+
+            String role = item.get("role");
+            String content = item.get("content");
+
+            if (role == null || content == null) {
+                continue;
+            }
+
+            Map<String, Object> message =
+                    new LinkedHashMap<>();
+
+            message.put("role", role);
+            message.put("content", content);
+
+            copied.add(message);
+        }
+
+        return copied;
+    }
+
+    private List<Map<String, String>> toRagHistory(
+            List<Map<String, Object>> messages
+    ) {
+        List<Map<String, String>> history =
+                new ArrayList<>();
+
+        for (Map<String, Object> message : messages) {
+            Object role = message.get("role");
+            Object content = message.get("content");
+
+            if (role == null || content == null) {
+                continue;
+            }
+
+            history.add(
+                    Map.of(
+                            "role", String.valueOf(role),
+                            "content", String.valueOf(content)
+                    )
+            );
+        }
+
+        return history;
+    }
+
+    private void appendMessages(
+            List<Map<String, Object>> messages,
+            String prompt,
+            Map<String, Object> response
+    ) {
+        String now = LocalDateTime.now().toString();
+
+        Map<String, Object> userMessage =
+                new LinkedHashMap<>();
+
+        userMessage.put(
+                "id",
+                "user-" + UUID.randomUUID()
+        );
+        userMessage.put("role", "user");
+        userMessage.put("content", prompt);
+        userMessage.put("createdAt", now);
+
+        Map<String, Object> assistantMessage =
+                new LinkedHashMap<>();
+
+        assistantMessage.put(
+                "id",
+                "assistant-" + UUID.randomUUID()
+        );
+        assistantMessage.put("role", "assistant");
+        assistantMessage.put(
+                "content",
+                response.get("answer")
+        );
+        assistantMessage.put(
+                "improvedPrompt",
+                response.get("improvedPrompt")
+        );
+        assistantMessage.put(
+                "sources",
+                response.get("sources")
+        );
+        assistantMessage.put(
+                "ragStatus",
+                response.get("ragStatus")
+        );
+        assistantMessage.put("createdAt", now);
+
+        messages.add(userMessage);
+        messages.add(assistantMessage);
+    }
+
+    private List<Map<String, Object>> readMessages(
+            String json
+    ) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+
         try {
-            Map<?, ?> ragResponse = webClient.post()
+            return objectMapper.readValue(
+                    json,
+                    new TypeReference<
+                            List<Map<String, Object>>
+                            >() {}
+            );
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private String writeMessages(
+            List<Map<String, Object>> messages
+    ) {
+        try {
+            return objectMapper.writeValueAsString(messages);
+        } catch (Exception e) {
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "THREAD_SAVE_FAILED",
+                    "대화 내용을 저장할 수 없습니다."
+            );
+        }
+    }
+
+    private String normalizeCategory(String category) {
+        return category == null || category.isBlank()
+                ? "prompt_techniques"
+                : category.trim();
+    }
+
+    private String makeThreadTitle(String prompt) {
+        String normalized =
+                prompt.replaceAll("\\s+", " ").trim();
+
+        if (normalized.length() <= 30) {
+            return normalized;
+        }
+
+        return normalized.substring(0, 30) + "...";
+    }
+
+    private String firstNonBlank(
+            Map<?, ?> source,
+            String... keys
+    ) {
+        if (source == null) {
+            return null;
+        }
+
+        for (String key : keys) {
+            Object value = source.get(key);
+
+            if (value == null) {
+                continue;
+            }
+
+            String text = String.valueOf(value).trim();
+
+            if (!text.isBlank()) {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    @PostMapping("/improve")
+    public Map<String, Object> improve(
+            @RequestBody ImproveRequest request,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
+        String prompt = request.prompt() == null
+                ? ""
+                : request.prompt().trim();
+
+        if (prompt.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "PROMPT_REQUIRED",
+                    "개선할 프롬프트를 입력해 주세요."
+            );
+        }
+
+        Long memberId =
+                authService.currentMemberIdOrNull(authorization);
+
+        Long requestedThreadId =
+                request.conversationId() != null
+                        ? request.conversationId()
+                        : request.threadId();
+
+        if (requestedThreadId != null && memberId == null) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "저장된 대화를 이어가려면 로그인이 필요합니다."
+            );
+        }
+
+        MakeThread thread = null;
+        List<Map<String, Object>> messages;
+
+        if (requestedThreadId != null) {
+            thread = makeThreadRepository
+                    .findByIdAndMemberId(
+                            requestedThreadId,
+                            memberId
+                    )
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.NOT_FOUND,
+                            "THREAD_NOT_FOUND",
+                            "대화를 찾을 수 없습니다."
+                    ));
+
+            messages = readMessages(
+                    thread.getMessagesJson()
+            );
+        } else {
+            messages = copyHistory(request.history());
+        }
+
+        List<Map<String, String>> ragHistory =
+                toRagHistory(messages);
+
+        Map<?, ?> ragResponse = Map.of();
+        boolean ragConnected = false;
+
+        try {
+            Map<String, Object> ragRequest =
+                    new LinkedHashMap<>();
+
+            ragRequest.put("query", prompt);
+            ragRequest.put(
+                    "collection_name",
+                    normalizeCategory(request.category())
+            );
+            ragRequest.put("top_k", 5);
+            ragRequest.put("history", ragHistory);
+
+            Map<?, ?> response = webClient.post()
                     .uri(ragServerUrl + "/query")
-                    .bodyValue(Map.of("query", request.prompt(), "top_k", 5))
+                    .bodyValue(ragRequest)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block();
-            if (ragResponse != null) {
-                return improveFallback(request.prompt(), ragResponse);
+
+            if (response != null) {
+                ragResponse = response;
+                ragConnected = true;
             }
         } catch (Exception ignored) {
-            // rag-server가 아직 없으면 데모 개선 결과 반환
+            // RAG 서버 연결 실패 시 fallback 결과를 반환한다.
         }
-        return improveFallback(request.prompt(), Map.of());
+
+        Map<String, Object> body =
+                buildImproveResponse(
+                        prompt,
+                        ragResponse,
+                        ragConnected
+                );
+
+        Long savedThreadId = null;
+
+        if (memberId != null) {
+            appendMessages(
+                    messages,
+                    prompt,
+                    body
+            );
+
+            String messagesJson = writeMessages(messages);
+
+            if (thread == null) {
+                thread = new MakeThread(
+                        memberId,
+                        makeThreadTitle(prompt),
+                        messagesJson,
+                        null
+                );
+            } else {
+                thread.update(
+                        thread.getTitle(),
+                        messagesJson,
+                        thread.getFolderId()
+                );
+            }
+
+            thread = makeThreadRepository.save(thread);
+            savedThreadId = thread.getId();
+        }
+
+        body.put("conversationId", savedThreadId);
+        body.put("threadId", savedThreadId);
+
+        return body;
     }
 
-    private Map<String, Object> improveFallback(String prompt, Map<?, ?> ragResponse) {
-        String improved = """
-                너는 사용자의 목적을 정확히 파악해 결과물을 만드는 AI 전문가다.
+    private Map<String, Object> buildImproveResponse(
+            String prompt,
+            Map<?, ?> ragResponse,
+            boolean ragConnected
+    ) {
+        String improvedPrompt = firstNonBlank(
+                ragResponse,
+                "improvedPrompt",
+                "improved_prompt",
+                "result",
+                "response",
+                "answer"
+        );
 
-                [사용자 요청]
-                %s
+        if (improvedPrompt == null) {
+            improvedPrompt = """
+                    당신은 사용자의 목적을 정확히 파악해 실행 가능한 결과물을 만드는 AI 전문가입니다.
 
-                [수행 방식]
-                1. 사용자의 목적을 먼저 분석한다.
-                2. 부족한 조건이 있으면 합리적으로 보완한다.
-                3. 결과는 바로 사용할 수 있는 형태로 작성한다.
-                4. 필요한 경우 예시와 출력 형식을 함께 제시한다.
-                """.formatted(prompt == null ? "" : prompt);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("conversationId", System.currentTimeMillis());
-        body.put("answer", "**개선된 프롬프트:**\n" + improved);
-        body.put("improvedPrompt", improved);
-        body.put("techniquesApplied", List.of("Role Prompting", "Specificity", "Output Format"));
-        body.put("changes", List.of("AI의 역할을 명확히 지정함", "요청 조건을 구조화함", "출력 형식을 구체화함"));
-        body.put("sources", ragResponse.containsKey("sources") ? ragResponse.get("sources") : List.of());
+                    [사용자 요청]
+                    %s
+
+                    [수행 방식]
+                    1. 사용자의 목적을 먼저 분석합니다.
+                    2. 부족한 조건은 합리적으로 보완합니다.
+                    3. 결과는 바로 사용할 수 있는 형태로 작성합니다.
+                    4. 필요한 경우 예시와 출력 형식을 함께 제시합니다.
+                    """.formatted(prompt);
+        }
+
+        String answer = firstNonBlank(
+                ragResponse,
+                "answer",
+                "response",
+                "result"
+        );
+
+        if (answer == null) {
+            answer = improvedPrompt;
+        }
+
+        List<?> sources =
+                ragResponse.get("sources") instanceof List<?> list
+                        ? list
+                        : List.of();
+
+        String ragStatus;
+
+        if (!ragConnected) {
+            ragStatus = "fallback";
+        } else if (sources.isEmpty()) {
+            ragStatus = "no_evidence";
+        } else {
+            ragStatus = "ok";
+        }
+
+        Map<String, Object> body =
+                new LinkedHashMap<>();
+
+        body.put("answer", answer);
+        body.put("improvedPrompt", improvedPrompt);
+        body.put("sources", sources);
+        body.put("ragStatus", ragStatus);
+        body.put(
+                "techniquesApplied",
+                List.of(
+                        "Role Prompting",
+                        "Specificity",
+                        "Output Format"
+                )
+        );
+        body.put(
+                "changes",
+                List.of(
+                        "AI의 역할을 명확하게 지정",
+                        "요청 조건을 구조화",
+                        "출력 형식을 구체화"
+                )
+        );
+
         return body;
     }
 
@@ -447,5 +814,11 @@ public class PromptController {
 
     public record SharePromptRequest(String title, String text, List<String> tags) {}
     public record VisibilityRequest(Boolean isShared) {}
-    public record ImproveRequest(String prompt, String category, Long conversationId, List<Map<String, String>> history) {}
+    public record ImproveRequest(
+            String prompt,
+            String category,
+            Long conversationId,
+            Long threadId,
+            List<Map<String, String>> history
+    ) {}
 }
