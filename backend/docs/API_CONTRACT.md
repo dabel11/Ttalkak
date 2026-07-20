@@ -1033,7 +1033,85 @@ TAG
 
 ---
 
-## 16. 프론트엔드 처리 권장 사항
+## 16. Make Thread 삭제
+
+웹 Make와 Chrome Extension의 최근 대화는 동일한 Make Thread를 사용합니다.
+
+### API
+
+```http
+DELETE /api/make/threads/{threadId}
+```
+
+### 요청 헤더
+
+```http
+Authorization: Bearer {accessToken}
+```
+
+### Path Parameter
+
+| 이름 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| threadId | Long | O | 삭제할 Make Thread의 서버 ID |
+
+※ threadId는 서버가 POST /api/make/threads 응답으로 반환한 숫자형 ID를 사용합니다.
+
+### 인증 및 권한
+
+- JWT 인증이 필요합니다.
+- 로그인한 사용자가 본인 소유의 Thread만 삭제할 수 있습니다.
+- 존재하지 않는 Thread와 다른 사용자의 Thread는 모두 404 Not Found로 처리합니다.
+
+### 삭제 범위
+
+Make Thread의 메시지는 별도 엔티티가 아니라 MakeThread.messagesJson 필드에 저장됩니다.
+
+따라서 Thread를 삭제하면 해당 Thread에 저장된 메시지도 함께 삭제됩니다.
+
+### 성공 응답
+
+```http
+HTTP/1.1 204 No Content
+```
+
+응답 본문은 없습니다.
+
+### 오류 응답
+
+인증되지 않은 요청
+
+```http
+HTTP/1.1 401 Unauthorized
+```
+
+```json
+{
+  "code": "LOGIN_REQUIRED",
+  "message": "로그인이 필요합니다."
+}
+```
+
+존재하지 않거나 본인 소유가 아닌 Thread
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+보안상 존재하지 않는 경우와 권한이 없는 경우를 구분하지 않습니다.
+
+### 프론트 처리 기준
+
+- 삭제 성공 시 화면에서 해당 Thread를 즉시 제거합니다.
+- 이후 GET /api/make/threads를 재조회하여 서버 상태와 동기화합니다.
+- 401 Unauthorized는 로그인 만료로 처리합니다.
+- 404 Not Found는 이미 삭제되었거나 접근할 수 없는 대화로 안내한 뒤 목록을 재조회합니다.
+- 그 외 오류에서는 삭제 성공처럼 화면에서 제거하지 않고 기존 목록을 유지합니다.
+- 웹 Make와 Chrome Extension은 동일한 삭제 API를 사용합니다.
+
+---
+
+## 17. 프론트엔드 처리 권장 사항
 
 프론트에서는 HTTP 상태만으로 처리하지 않고 `code`를 함께 확인하는 것을 권장합니다.
 
@@ -1061,7 +1139,7 @@ if (error.code === "ACCOUNT_BLOCKED") {
 
 ---
 
-## 17. 관리자 태그별 프롬프트 조회
+## 18. 관리자 태그별 프롬프트 조회
 
 관리자 태그 관리 화면에서 특정 태그가 실제로 사용된 프롬프트를 조회하기 위한 API입니다.
 
