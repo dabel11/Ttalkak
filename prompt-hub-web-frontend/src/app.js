@@ -4713,10 +4713,11 @@ async function submitMakePrompt(composer) {
   const now = Date.now();
   const threadId = state.activeThreadId || `thread-${now}`;
   const assistantMessageId = `make-${now}`;
+  const history = buildMakeImproveHistory(state.messages);
   appendMakeUserMessageState(state, threadId, { id: `user-${now}`, role: "user", content: value });
   let improvedPrompt = "";
   try {
-    improvedPrompt = await improvePromptWithBackend(value);
+    improvedPrompt = await improvePromptWithBackend(value, history);
   } catch (error) {
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
@@ -4770,10 +4771,11 @@ async function resendEditedMessage(messageId, value) {
 
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
+  const history = buildMakeImproveHistory(state.messages.slice(0, index));
   applyEditedMakeMessageState(state, index, cleanValue, now);
   let improvedPrompt = "";
   try {
-    improvedPrompt = await improvePromptWithBackend(cleanValue);
+    improvedPrompt = await improvePromptWithBackend(cleanValue, history);
   } catch (error) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
@@ -6896,7 +6898,16 @@ function isBackendNumericId(value) {
   return value !== null && value !== undefined && /^\d+$/.test(String(value));
 }
 
-async function improvePromptWithBackend(prompt) {
+function buildMakeImproveHistory(messages = state.messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => message && (message.role === "user" || message.role === "assistant") && String(message.content || "").trim())
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || ""),
+    }));
+}
+
+async function improvePromptWithBackend(prompt, history = buildMakeImproveHistory()) {
   const api = getMakeApi();
   if (!api?.improvePrompt) {
     if (canUseDemoFallback()) return polishPrompt(prompt);
@@ -6906,7 +6917,7 @@ async function improvePromptWithBackend(prompt) {
   }
 
   try {
-    const improved = await api.improvePrompt({ prompt }, getMakeApiToken());
+    const improved = await api.improvePrompt({ prompt, history }, getMakeApiToken());
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
     const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
