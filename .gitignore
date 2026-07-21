@@ -39,3 +39,5 @@ rag-server/eval/.gen_cache*.json
 
 docs/
 .gitignore
+
+extension/.env.production.local
