@@ -399,6 +399,23 @@ public class PromptController {
                 : category.trim();
     }
 
+	private Long resolveRequestedThreadId(ImproveRequest request) {
+		Long conversationId = request.conversationId();
+		Long threadId = request.threadId();
+
+		if (conversationId != null
+				&& threadId != null
+				&& !Objects.equals(conversationId, threadId)) {
+			throw new ApiException(
+					HttpStatus.BAD_REQUEST,
+					"THREAD_ID_MISMATCH",
+					"conversationId와 threadId가 서로 일치하지 않습니다."
+			);
+		}
+
+		return conversationId != null ? conversationId : threadId;
+	}
+
     private String makeThreadTitle(String prompt) {
         String normalized =
                 prompt.replaceAll("\\s+", " ").trim();
@@ -456,10 +473,7 @@ public class PromptController {
         Long memberId =
                 authService.currentMemberIdOrNull(authorization);
 
-        Long requestedThreadId =
-                request.conversationId() != null
-                        ? request.conversationId()
-                        : request.threadId();
+	Long requestedThreadId = resolveRequestedThreadId(request);
 
         if (requestedThreadId != null && memberId == null) {
             throw new ApiException(

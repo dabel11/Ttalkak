@@ -334,6 +334,84 @@ class PromptImproveConversationTest {
         );
     }
 
+	@Test
+	void conversationIdCanContinueExistingThread() throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		String originalMessages = objectMapper.writeValueAsString(
+				List.of(
+						Map.of(
+								"role", "user",
+								"content", "첫 번째 요청"
+						),
+						Map.of(
+								"role", "assistant",
+								"content", "첫 번째 답변"
+						)
+				)
+		);
+
+		MakeThread existingThread = new MakeThread(
+				7L,
+				"기존 대화",
+				originalMessages,
+				null
+		);
+
+		ReflectionTestUtils.setField(existingThread, "id", 42L);
+
+		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
+				.thenReturn(Optional.of(existingThread));
+
+		PromptController.ImproveRequest request =
+				new PromptController.ImproveRequest(
+						"conversationId로 이어가기",
+						"prompt_techniques",
+						42L,
+						null,
+						List.of()
+				);
+
+		Map<String, Object> response =
+				controller.improve(request, AUTHORIZATION);
+
+		assertEquals(42L, response.get("conversationId"));
+		assertEquals(42L, response.get("threadId"));
+
+		verify(makeThreadRepository)
+				.findByIdAndMemberId(42L, 7L);
+	}
+
+	@Test
+	void rejectsDifferentConversationIdAndThreadId() {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		PromptController.ImproveRequest request =
+				new PromptController.ImproveRequest(
+						"이어지는 요청",
+						"prompt_techniques",
+						41L,
+						42L,
+						List.of()
+				);
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(request, AUTHORIZATION)
+		);
+
+		assertEquals(400, exception.getStatusCode().value());
+		assertEquals("THREAD_ID_MISMATCH", exception.getCode());
+
+		verify(makeThreadRepository, never())
+				.findByIdAndMemberId(any(), any());
+
+		verify(makeThreadRepository, never())
+				.save(any(MakeThread.class));
+	}
+
     @Test
     void rejectsBlankPrompt() {
         ApiException exception =
