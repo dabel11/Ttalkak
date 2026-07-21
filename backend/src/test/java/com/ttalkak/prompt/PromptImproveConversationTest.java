@@ -413,6 +413,48 @@ class PromptImproveConversationTest {
 	}
 
     @Test
+    void rejectsCorruptedStoredThreadWithoutOverwritingIt() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION))
+                .thenReturn(7L);
+
+        MakeThread corruptedThread = new MakeThread(
+                7L,
+                "손상된 대화",
+                "{not-valid-json",
+                null
+        );
+
+        ReflectionTestUtils.setField(
+                corruptedThread,
+                "id",
+                42L
+        );
+
+        when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
+                .thenReturn(Optional.of(corruptedThread));
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> controller.improve(
+                        request("이어서 개선해줘", null, 42L),
+                        AUTHORIZATION
+                )
+        );
+
+        assertEquals(
+                500,
+                exception.getStatusCode().value()
+        );
+        assertEquals(
+                "THREAD_DATA_CORRUPTED",
+                exception.getCode()
+        );
+
+        verify(makeThreadRepository, never())
+                .save(any(MakeThread.class));
+    }
+
+    @Test
     void rejectsBlankPrompt() {
         ApiException exception =
                 assertThrows(

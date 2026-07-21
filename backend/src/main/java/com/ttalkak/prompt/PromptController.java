@@ -360,9 +360,7 @@ public class PromptController {
         messages.add(assistantMessage);
     }
 
-    private List<Map<String, Object>> readMessages(
-            String json
-    ) {
+    private List<Map<String, Object>> readMessages(String json) {
         if (json == null || json.isBlank()) {
             return new ArrayList<>();
         }
@@ -370,12 +368,14 @@ public class PromptController {
         try {
             return objectMapper.readValue(
                     json,
-                    new TypeReference<
-                            List<Map<String, Object>>
-                            >() {}
+                    new TypeReference<List<Map<String, Object>>>() {}
             );
         } catch (Exception e) {
-            return new ArrayList<>();
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "THREAD_DATA_CORRUPTED",
+                    "저장된 대화 내용을 불러올 수 없습니다."
+            );
         }
     }
 
