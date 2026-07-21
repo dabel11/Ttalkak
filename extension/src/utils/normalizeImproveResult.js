@@ -15,5 +15,12 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
     sources: result.sources || result.references || result.documents || [],
     ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(),
     ragMessage: result.ragMessage || result.rag_message || "",
+    threadId: String(
+      result.threadId ||
+        result.thread_id ||
+        payload?.threadId ||
+        payload?.thread_id ||
+        "",
+    ),
   };
 }

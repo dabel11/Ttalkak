@@ -390,6 +390,14 @@
         : Array.isArray(result?.documents)
           ? result.documents
           : [];
+    const threadId =
+      result?.threadId ||
+      result?.thread_id ||
+      data?.threadId ||
+      data?.thread_id ||
+      payload?.threadId ||
+      payload?.thread_id ||
+      "";
 
     if (String(result?.mode || result?.type || "").toLowerCase() === "question" && Array.isArray(questions) && questions.length) {
       return {
@@ -404,6 +412,7 @@
         sources,
         ragStatus,
         ragMessage,
+        threadId: threadId ? String(threadId) : "",
       };
     }
 
@@ -414,6 +423,7 @@
       sources,
       ragStatus,
       ragMessage,
+      threadId: threadId ? String(threadId) : "",
     };
   }
 

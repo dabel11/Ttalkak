@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createMakeThread, deleteMakeThread, requestMakeThreads } from "../api/make";
+import { deleteMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { EXAMPLE_QUERIES, STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
@@ -137,38 +137,10 @@ export function useConversation({
     }
   }
 
-  function toServerMakeMessages(items) {
-    return items.map((message) => ({
-      role: message.role,
-      content: message.content,
-      sourcePrompt: message.sourcePrompt || "",
-      executablePrompt: message.executablePrompt || "",
-    }));
-  }
-
-  async function saveServerThread(prompt, nextMessages) {
+  async function refreshServerThreadsAfterImprove() {
     if (!authSession?.accessToken) return;
     try {
-      const activeServerId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
-      const payload = {
-        title: makeTitle(prompt),
-        preview: makePreview(nextMessages[nextMessages.length - 1]?.content || ""),
-        messages: toServerMakeMessages(nextMessages),
-      };
-      if (activeServerId) {
-        payload.id = activeServerId;
-        payload.threadId = activeServerId;
-      }
-      const savedThread = await createMakeThread(
-        ragConfig,
-        payload,
-        authSession.accessToken
-      );
-      if (!savedThread) return;
-      activeThreadId.current = savedThread.id;
-      setServerRecentThreads((prev) =>
-        [savedThread, ...prev.filter((thread) => thread.id !== savedThread.id && thread.id !== String(activeServerId || ""))].slice(0, 30)
-      );
+      await refreshServerThreads();
     } catch (error) {
       if (isAuthExpiredError(error)) {
         await onAuthExpired?.();
@@ -217,6 +189,14 @@ export function useConversation({
     const history = messages
       .filter((m) => !m.isError && !m.excludeFromHistory)
       .map((m) => ({ role: m.role, content: m.content }));
+    const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
+    const improvePayload = {
+      prompt,
+      accessToken: authSession?.accessToken || "",
+      sessionUuid: guestSessionUuid,
+      ...(authSession?.accessToken && activeServerThreadId ? { threadId: activeServerThreadId } : {}),
+      ...(!authSession?.accessToken ? { history } : {}),
+    };
 
     setMessages((prev) => [...prev, userMsg]);
     setComposerValue("");
@@ -224,13 +204,11 @@ export function useConversation({
     setRagStatus("checking");
 
     try {
-      const data = await requestPromptImprove(ragConfig, {
-        prompt,
-        history,
-        accessToken: authSession?.accessToken || "",
-        sessionUuid: guestSessionUuid,
-      });
+      const data = await requestPromptImprove(ragConfig, improvePayload);
       setRagStatus("connected");
+      if (authSession?.accessToken && data.threadId) {
+        activeThreadId.current = String(data.threadId);
+      }
 
       if (data.ragStatus === "no_evidence") {
         const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
@@ -250,7 +228,7 @@ export function useConversation({
         const nextMessages = [...messages, userMsg, assistantMsg];
         setMessages((prev) => [...prev, assistantMsg]);
         if (isLoggedIn) {
-          await saveServerThread(prompt, nextMessages);
+          await refreshServerThreadsAfterImprove();
         } else {
           if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
           const threadId = activeThreadId.current;
@@ -275,7 +253,7 @@ export function useConversation({
       setMessages((prev) => [...prev, assistantMsg]);
 
       if (isLoggedIn) {
-        await saveServerThread(prompt, nextMessages);
+        await refreshServerThreadsAfterImprove();
         return;
       }
 

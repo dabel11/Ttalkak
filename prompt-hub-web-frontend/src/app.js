@@ -4717,7 +4717,7 @@ async function submitMakePrompt(composer) {
   appendMakeUserMessageState(state, threadId, { id: `user-${now}`, role: "user", content: value });
   let improvedPrompt = "";
   try {
-    improvedPrompt = await improvePromptWithBackend(value, history);
+    improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
   } catch (error) {
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
@@ -4734,7 +4734,8 @@ async function submitMakePrompt(composer) {
   });
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(threadId);
-  syncMakeThreadWithBackend(threadId);
+  applyPendingImproveThreadId(threadId);
+  if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
   render();
 }
 async function copyMakeMessage(messageId) {
@@ -4772,10 +4773,11 @@ async function resendEditedMessage(messageId, value) {
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
   const history = buildMakeImproveHistory(state.messages.slice(0, index));
+  const threadId = state.activeThreadId || `thread-${now}`;
   applyEditedMakeMessageState(state, index, cleanValue, now);
   let improvedPrompt = "";
   try {
-    improvedPrompt = await improvePromptWithBackend(cleanValue, history);
+    improvedPrompt = await improvePromptWithBackend(cleanValue, { history, threadId });
   } catch (error) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
@@ -4790,8 +4792,9 @@ async function resendEditedMessage(messageId, value) {
     sourcePrompt: cleanValue,
   });
   pendingLatestMessageScrollId = assistantMessageId;
-  updateRecentThread(state.activeThreadId || `thread-${now}`);
-  syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
+  updateRecentThread(threadId);
+  applyPendingImproveThreadId(threadId);
+  if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
   showNotice("수정한 메시지를 다시 개선했습니다.");
   render();
 }
@@ -6907,7 +6910,63 @@ function buildMakeImproveHistory(messages = state.messages) {
     }));
 }
 
-async function improvePromptWithBackend(prompt, history = buildMakeImproveHistory()) {
+function getMakeThreadById(threadId = state.activeThreadId) {
+  if (!threadId) return null;
+  return state.recentThreads.find((item) => item.id === threadId || item.serverId === threadId) || null;
+}
+
+function getMakeBackendThreadId(threadId = state.activeThreadId) {
+  const thread = getMakeThreadById(threadId);
+  const candidate = thread?.serverId || (isBackendNumericId(thread?.id) ? thread.id : "") || (isBackendNumericId(threadId) ? threadId : "");
+  return isBackendNumericId(candidate) ? String(candidate) : "";
+}
+
+function getImproveResultThreadId(result) {
+  if (!result || typeof result !== "object") return "";
+  const candidate =
+    result.threadId ||
+    result.thread_id ||
+    result.raw?.threadId ||
+    "";
+  return isBackendNumericId(candidate) ? String(candidate) : "";
+}
+
+function applyImproveThreadId(threadId, result) {
+  const backendThreadId = getImproveResultThreadId(result);
+  if (!backendThreadId) return "";
+
+  state.pendingMakeImproveThread = { localThreadId: String(threadId || ""), backendThreadId };
+  const thread = getMakeThreadById(threadId);
+  if (thread) thread.serverId = backendThreadId;
+  return backendThreadId;
+}
+
+function applyPendingImproveThreadId(threadId) {
+  const pending = state.pendingMakeImproveThread;
+  if (!pending?.backendThreadId || String(pending.localThreadId || "") !== String(threadId || "")) return;
+
+  const thread = getMakeThreadById(threadId);
+  if (thread) thread.serverId = pending.backendThreadId;
+  state.pendingMakeImproveThread = null;
+}
+
+function shouldUseImproveThreadSync() {
+  return state.isLoggedIn && hasBackendAuthToken();
+}
+
+function buildMakeImprovePayload(prompt, history, threadId) {
+  const payload = { prompt };
+  if (shouldUseImproveThreadSync()) {
+    const backendThreadId = getMakeBackendThreadId(threadId);
+    if (backendThreadId) payload.threadId = Number(backendThreadId);
+    return payload;
+  }
+
+  payload.history = history;
+  return payload;
+}
+
+async function improvePromptWithBackend(prompt, { history = buildMakeImproveHistory(), threadId = state.activeThreadId } = {}) {
   const api = getMakeApi();
   if (!api?.improvePrompt) {
     if (canUseDemoFallback()) return polishPrompt(prompt);
@@ -6917,7 +6976,8 @@ async function improvePromptWithBackend(prompt, history = buildMakeImproveHistor
   }
 
   try {
-    const improved = await api.improvePrompt({ prompt, history }, getMakeApiToken());
+    const improved = await api.improvePrompt(buildMakeImprovePayload(prompt, history, threadId), getMakeApiToken());
+    applyImproveThreadId(threadId, improved);
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
     const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
