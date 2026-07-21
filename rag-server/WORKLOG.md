@@ -708,3 +708,11 @@ eval/  run_eval.py(+__init__.py)
 - [x] **출력 구조화** — LLM JSON 응답 + 정규식 폴백으로 완료. mode_accuracy 1.00. (위 2026-07-05 항목)
 - [ ] **스트리밍(SSE)**: 설계 문서의 `/improve/stream` — 미착수.
 - [ ] **검색 추가 아이디어**: 기법 corpus가 동질적이라 sparse/쿼리변환이 안 통함. 코퍼스가 커지고 이질화되면 하이브리드 재평가 가치 있음. min_score(0.40)도 코퍼스 변경 시 `python -m eval.score_analysis`로 재측정.
+
+## [2026-07-20] DB 비밀번호 백엔드 기준(root) 통일
+**목적**: 브랜치 통합 과정에서 발견된 설정 불일치 해소 — docker-compose MySQL은 빈 비밀번호, Spring `application.yml` 기본값은 `root`라 기본 설정끼리 조합하면 백엔드가 DB 접속 실패. 백엔드 기본값(root/root)을 기준으로 전부 통일.
+**Before**: docker-compose `MYSQL_ALLOW_EMPTY_PASSWORD: yes`, rag-server `DB_PASSWORD` 기본 `""`(코드·compose·.env 모두 공백).
+**After**: docker-compose `MYSQL_ROOT_PASSWORD: root`(healthcheck에 `-uroot -proot` 반영), rag-server 컨테이너 env·코드 기본값·로컬 `.env` 모두 `DB_PASSWORD=root`. 기동 중이던 ttalkak-mysql 컨테이너는 `ALTER USER`로 비밀번호만 변경(데이터 보존).
+**변경 파일**: `../docker-compose.yml`(수정) · `app/core/db.py`(수정: 기본값·docstring) · `.env`(로컬, git 미추적)
+**검증**: 호스트에서 pymysql로 root/root 접속 → `rag_chunk` 134행 보존 확인. 컨테이너 내부 `mysql -uroot -proot SELECT 1` OK.
+**결정·근거**: 방향은 "백엔드 기준"(사용자 지시). 빈 비밀번호 쪽으로 맞추는 대안은 backend/compose.yaml(trytur)도 root를 쓰고 있어 배제. 기존 볼륨 재초기화(`down -v`) 대신 ALTER USER로 무중단 정합 — 코퍼스 재인덱싱 불필요.

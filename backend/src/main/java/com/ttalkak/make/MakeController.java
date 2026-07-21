@@ -3,6 +3,7 @@ package com.ttalkak.make;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,10 +33,25 @@ public class MakeController {
     }
 
     @GetMapping("/threads")
-    public List<Map<String, Object>> threads(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
-        return threadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId).stream().map(this::threadMap).toList();
+    public Map<String, Object> threads(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        Long memberId = requireMemberId(authorization);
+
+        List<Map<String, Object>> items =
+                threadRepository
+                        .findByMemberIdOrderByUpdatedAtDesc(memberId)
+                        .stream()
+                        .map(this::threadMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PostMapping("/threads")
@@ -71,11 +87,49 @@ public class MakeController {
         return threadMap(threadRepository.save(thread));
     }
 
+    @DeleteMapping("/threads/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteThread(
+            @PathVariable String id,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
+        Long memberId = requireMemberId(authorization);
+        Long threadId = parseNumericId(id, "thread id");
+
+        MakeThread thread =
+                threadRepository
+                        .findByIdAndMemberId(threadId, memberId)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "대화를 찾을 수 없습니다."
+                                )
+                        );
+
+        threadRepository.delete(thread);
+    }
+
     @GetMapping("/folders")
-    public List<Map<String, Object>> folders(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        Long memberId = authService.currentMemberIdOrNull(authorization);
-        if (memberId == null) return List.of();
-        return folderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).stream().map(this::folderMap).toList();
+    public Map<String, Object> folders(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        Long memberId = requireMemberId(authorization);
+
+        List<Map<String, Object>> items =
+                folderRepository
+                        .findByMemberIdOrderByCreatedAtDesc(memberId)
+                        .stream()
+                        .map(this::folderMap)
+                        .toList();
+
+        return pageResponse(items, page, size, pageSize);
     }
 
     @PostMapping("/folders")
@@ -84,7 +138,7 @@ public class MakeController {
         Long memberId = requireMemberId(authorization);
         validateFolderName(request.name());
         if (folderRepository.countByMemberId(memberId) >= 5) {
-            return ResponseEntity.badRequest().body(Map.of("message", "폴더는 최대 5개까지 만들 수 있습니다."));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "폴더는 최대 5개까지 만들 수 있습니다.");
         }
         MakeFolder folder = folderRepository.save(new MakeFolder(memberId, request.name().trim()));
         return ResponseEntity.ok(folderMap(folder));
@@ -133,6 +187,45 @@ public class MakeController {
         return ResponseEntity.ok(threadMap(thread));
     }
 
+    private Map<String, Object> pageResponse(
+            List<Map<String, Object>> allItems,
+            int page,
+            Integer size,
+            Integer pageSize
+    ) {
+        int resolvedSize = size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(resolvedSize, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<Map<String, Object>> items =
+                allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
+    }
+
     private Map<String, Object> threadMap(MakeThread thread) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", thread.getId());
@@ -156,7 +249,11 @@ public class MakeController {
     private Long requireMemberId(String authorization) {
         Long memberId = authService.currentMemberIdOrNull(authorization);
         if (memberId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 필요합니다."
+            );
         }
         return memberId;
     }
@@ -201,6 +298,48 @@ public class MakeController {
         } catch (Exception e) {
             return json;
         }
+    }
+
+    private int resolvePageSize(
+            Integer size,
+            Integer pageSize
+    ) {
+        return size != null
+                ? size
+                : (pageSize != null ? pageSize : 16);
+    }
+
+    private <T> Map<String, Object> pageResponse(
+            List<T> allItems,
+            int page,
+            int size
+    ) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        int total = allItems.size();
+        long offset = (long) (safePage - 1) * safeSize;
+        int from = (int) Math.min(offset, total);
+        int to = Math.min(from + safeSize, total);
+
+        List<T> items = allItems.subList(from, to);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", total);
+        body.put(
+                "totalPages",
+                total == 0
+                        ? 0
+                        : (int) Math.ceil(
+                                (double) total / safeSize
+                        )
+        );
+
+        return body;
     }
 
     public record SaveThreadRequest(Long id, Long threadId, String title, Object messages, Long folderId) {}

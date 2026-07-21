@@ -8,8 +8,42 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // 개발 중 API 실패 시 데모 데이터를 보고 싶을 때만 true로 바꾸세요.
+      // 통합 테스트와 시연 환경에서는 false를 유지해 실제 서버 연동 실패가 드러나게 합니다.
+      window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+    </script>
     <script defer src="./src/demo-data.js?v=20260617-demo-copy"></script>
-    <script defer src="./src/api.js?v=20260709-make-backend-smoke"></script>
+    <script defer src="./src/api/core-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/normalizers.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/auth-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/prompt-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/comment-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/mypage-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/make-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api/admin-api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/api.js?v=20260719-api-refactor"></script>
+    <script defer src="./src/utils.js?v=20260719-utils-refactor"></script>
+    <script defer src="./src/components.js?v=20260719-components-refactor"></script>
+    <script defer src="./src/events/app-events.js?v=20260719-events-refactor"></script>
+    <script defer src="./src/effects/backend-effects.js?v=20260719-effects-refactor"></script>
+    <script defer src="./src/effects/admin-effects.js?v=20260719-admin-effects-refactor"></script>
+    <script defer src="./src/effects/error-effects.js?v=20260719-error-effects-refactor"></script>
+    <script defer src="./src/state/app-state.js?v=20260719-state-refactor"></script>
+    <script defer src="./src/renderers/prompt-card.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/renderers/modal-renderers.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/renderers/prompt-modals.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/renderers/auth-modal.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/renderers/admin-revision-modal.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/renderers/shell-navigation.js?v=20260719-shell-refactor"></script>
+    <script defer src="./src/renderers/admin-panels.js?v=20260719-admin-panels-refactor"></script>
+    <script defer src="./src/renderers/pages/home-page.js?v=20260719-page-refactor"></script>
+    <script defer src="./src/renderers/pages/saved-page.js?v=20260719-page-refactor"></script>
+    <script defer src="./src/renderers/pages/share-page.js?v=20260719-page-refactor"></script>
+    <script defer src="./src/renderers/pages/make-page.js?v=20260719-page-refactor"></script>
+    <script defer src="./src/renderers/pages/admin-page.js?v=20260719-page-refactor"></script>
+    <script defer src="./src/renderers/app-shell.js?v=20260719-renderer-refactor"></script>
+    <script defer src="./src/routing/page-router.js?v=20260719-route-refactor"></script>
     <script defer src="./src/app.js?v=20260709-make-backend-smoke"></script>
   </body>
 </html>

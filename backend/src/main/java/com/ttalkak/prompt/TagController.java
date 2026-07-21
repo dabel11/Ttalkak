@@ -1,8 +1,9 @@
 package com.ttalkak.prompt;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/tags")
 public class TagController {
+
     private final TagRepository tagRepository;
 
     public TagController(TagRepository tagRepository) {
@@ -17,27 +19,58 @@ public class TagController {
     }
 
     @GetMapping("/popular")
-    public List<Map<String, Object>> popular(@RequestParam(defaultValue = "8") int limit) {
-        return tagRepository.findTop20ByOrderByUseCountDesc().stream()
-                .limit(limit)
+    public List<Map<String, Object>> popular(
+            @RequestParam(defaultValue = "8") int limit
+    ) {
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+
+        return tagRepository
+                .findByStatusOrderByUseCountDesc(
+                        TagStatus.APPROVED
+                )
+                .stream()
+                .limit(safeLimit)
                 .map(this::toMap)
                 .toList();
     }
 
     @GetMapping
-    public List<Map<String, Object>> search(@RequestParam(defaultValue = "") String query,
-                                            @RequestParam(defaultValue = "8") int limit) {
+    public List<Map<String, Object>> search(
+            @RequestParam(defaultValue = "") String query,
+            @RequestParam(defaultValue = "8") int limit
+    ) {
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
         String normalized = Tag.normalize(query);
-        return tagRepository.findByNameContainingIgnoreCaseOrderByUseCountDesc(normalized).stream()
-                .limit(limit)
+
+        return tagRepository
+                .findByNameContainingIgnoreCaseAndStatusOrderByUseCountDesc(
+                        normalized,
+                        TagStatus.APPROVED
+                )
+                .stream()
+                .limit(safeLimit)
                 .map(this::toMap)
                 .toList();
     }
 
     @PostMapping("/proposals")
-    public Map<String, Object> propose(@RequestBody TagProposalRequest request) {
+    public Map<String, Object> propose(
+            @RequestBody TagProposalRequest request
+    ) {
         String name = Tag.normalize(request.name());
-        Tag tag = tagRepository.findByName(name).orElseGet(() -> tagRepository.save(new Tag(name)));
+
+        if (name.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "태그 이름을 입력해 주세요."
+            );
+        }
+
+        Tag tag = tagRepository.findByName(name)
+                .orElseGet(() ->
+                        tagRepository.save(Tag.proposal(name))
+                );
+
         return toMap(tag);
     }
 
@@ -50,5 +83,6 @@ public class TagController {
         return map;
     }
 
-    public record TagProposalRequest(String name) {}
+    public record TagProposalRequest(String name) {
+    }
 }

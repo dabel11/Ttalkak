@@ -7,5 +7,13 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     List<Comment> findByPromptIdAndParentIdIsNullOrderByLikesDescCreatedAtAsc(Long promptId);
     List<Comment> findByParentIdOrderByLikesDescCreatedAtAsc(Long parentId);
     List<Comment> findByAuthorIdOrderByCreatedAtDesc(Long authorId);
+    List<Comment> findByAuthorIdAndParentIdIsNullOrderByCreatedAtDesc(
+            Long authorId
+    );
+
+    List<Comment> findByAuthorIdAndParentIdIsNotNullOrderByCreatedAtDesc(
+            Long authorId
+    );
+
     long countByParentId(Long parentId);
 }

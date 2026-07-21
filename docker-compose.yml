@@ -1,4 +1,5 @@
-# Ttalkak — RAG 스택 (MySQL + rag-server)
+# Ttalkak 통합 스택 (MySQL + rag-server)
+# MySQL 정의는 backend/compose.yaml(백엔드 팀 버전)을 기준으로 통합했다.
 # 사용:
 #   docker compose up -d mysql       # MySQL만
 #   docker compose up -d             # MySQL + rag-server 전체
@@ -7,36 +8,49 @@
 
 services:
   mysql:
-    image: mysql:8
+    image: mysql:8.0
     container_name: ttalkak-mysql
-    environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"   # root 비번 없음 (Spring 기본값과 동일)
-      MYSQL_DATABASE: ttalkak
-    ports:
-      - "3306:3306"
-    volumes:
-      - ttalkak-mysql-data:/var/lib/mysql   # 데이터 영속
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
     restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ttalkak}
+      TZ: Asia/Seoul
+
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    volumes:
+      - ttalkak_mysql_data:/var/lib/mysql   # 데이터 영속
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   rag-server:
     build: ./rag-server
     container_name: ttalkak-rag
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
     env_file:
-      - ./rag-server/.env   # GROQ_API_KEY 등 LLM 키
+      - ./rag-server/.env   # GROQ_API_KEY 등 LLM 키 (git 미추적)
     environment:
       DB_HOST: mysql          # 컨테이너 네트워크에선 호스트가 서비스명
       DB_PORT: "3306"
-      DB_NAME: ttalkak
+      DB_NAME: ${MYSQL_DATABASE:-ttalkak}
       DB_USER: root
-      DB_PASSWORD: ""
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}   # MySQL root 비밀번호와 동일 소스
     ports:
       - "8000:8000"
     volumes:
@@ -49,8 +63,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 300s
-    restart: unless-stopped
 
 volumes:
-  ttalkak-mysql-data:
+  ttalkak_mysql_data:
   hf-cache:

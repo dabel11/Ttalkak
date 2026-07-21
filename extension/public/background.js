@@ -46,7 +46,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       await sleep(120);
 
-      await insertTextWithDebugger(tab.id, promptForTarget);
+      await insertTextWithDebugger(tab.id, tab.url, promptForTarget);
 
       const verifyResult = await chrome.scripting.executeScript({
         target,
@@ -152,14 +152,37 @@ async function submitInPage(tabId, targetKind) {
   }
 }
 
-async function insertTextWithDebugger(tabId, text) {
+async function insertTextWithDebugger(tabId, tabUrl, text) {
+  if (!isDebuggerFallbackPage(tabUrl)) {
+    throw new Error("Debugger fallback is not allowed on this site.");
+  }
+
   const target = { tabId };
-  await chrome.debugger.attach(target, "1.3");
+  let attached = false;
+  try {
+    await chrome.debugger.attach(target, "1.3");
+    attached = true;
+  } catch (error) {
+    throw new Error(`Debugger attach failed: ${error?.message || error}`);
+  }
+
   try {
     await chrome.debugger.sendCommand(target, "Input.insertText", { text });
+  } catch (error) {
+    throw new Error(`Debugger text insertion failed: ${error?.message || error}`);
   } finally {
-    await chrome.debugger.detach(target);
+    if (attached) {
+      try {
+        await chrome.debugger.detach(target);
+      } catch (error) {
+        console.warn("[TTALKAK] debugger detach failed", error);
+      }
+    }
   }
+}
+
+function isDebuggerFallbackPage(url = "") {
+  return isChatGptPage(url) || isGeminiPage(url);
 }
 
 function focusPromptInput(targetKind = "generic") {

@@ -10,7 +10,7 @@ MySQL 8.0/9.x 어디서나 동작하며(벡터 인덱스 불필요), 현재 규�
 
 접속 정보는 .env 또는 환경변수로 받는다 (Spring 백엔드와 동일 ttalkak DB).
   DB_HOST(기본 127.0.0.1) / DB_PORT(3306) / DB_NAME(ttalkak)
-  DB_USER(root) / DB_PASSWORD(공백)
+  DB_USER(root) / DB_PASSWORD(root — Spring 백엔드 기본값과 동일)
 또는 단일 DSN: RAG_DB_URL=mysql+pymysql://user:pw@host:port/db
 """
 
@@ -56,7 +56,7 @@ def _build_url() -> str:
     port = os.environ.get("DB_PORT", "3306")
     name = os.environ.get("DB_NAME", "ttalkak")
     user = os.environ.get("DB_USER", "root")
-    pw   = os.environ.get("DB_PASSWORD", "")
+    pw   = os.environ.get("DB_PASSWORD", "root")
     pw_q = quote_plus(pw)
     return f"mysql+pymysql://{user}:{pw_q}@{host}:{port}/{name}?charset=utf8mb4"
 

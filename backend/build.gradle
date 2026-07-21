@@ -18,11 +18,15 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -36,4 +40,19 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+}
+
+tasks.withType(ProcessResources).configureEach {
+        filteringCharset = 'UTF-8'
+}
+
+tasks.named('test') {
+        jvmArgs '-Dfile.encoding=UTF-8'
+}
+
+tasks.named('bootRun') {
+        jvmArgs '-Dfile.encoding=UTF-8'
 }

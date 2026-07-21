@@ -1,4 +1,321 @@
-﻿const popularPrompts = [
+const {
+  normalizeSearchText,
+  normalizeTag,
+  isValidPhone,
+  isFutureDate,
+  escapeHtml,
+  escapeAttr,
+  getFinalPromptText,
+  formatNumber,
+  formatShortDate,
+  parseTimestamp,
+} = window.TtalkakUtils || {};
+
+if (
+  [
+    normalizeSearchText,
+    normalizeTag,
+    isValidPhone,
+    isFutureDate,
+    escapeHtml,
+    escapeAttr,
+    getFinalPromptText,
+    formatNumber,
+    formatShortDate,
+    parseTimestamp,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
+}
+
+const {
+  AdminUserBlockDialog,
+  ConfirmDialog,
+  Pagination: BasePagination,
+} = window.TtalkakComponents || {};
+
+if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
+  throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
+}
+
+const { bindAppEvents } = window.TtalkakEvents || {};
+
+if (typeof bindAppEvents !== "function") {
+  throw new Error("TTALKAK 이벤트 바인더를 불러오지 못했습니다.");
+}
+
+const {
+  applyBackendHomePromptsResult,
+  applyBackendHomeTagsResult,
+  applyLikedLibraryResult,
+  applyMakeFoldersResult,
+  applyMakeThreadsResult,
+  applyMyCommentsResult,
+  applyMyLibraryResult,
+  applyMyPromptsResult,
+  applyMyReportsResult,
+  getBackendErrorCode,
+  getBackendErrorCodeMessage,
+  getBackendErrorMessage,
+  hydrateBackendHomeDataEffect,
+  hydrateBackendMakeDataEffect,
+  hydrateBackendMyPageDataEffect,
+  refreshBackendHomePromptsEffect,
+} = window.TtalkakBackendEffects || {};
+
+if (
+  [
+    applyBackendHomePromptsResult,
+    applyBackendHomeTagsResult,
+    applyLikedLibraryResult,
+    applyMakeFoldersResult,
+    applyMakeThreadsResult,
+    applyMyCommentsResult,
+    applyMyLibraryResult,
+    applyMyPromptsResult,
+    applyMyReportsResult,
+    getBackendErrorCode,
+    getBackendErrorCodeMessage,
+    getBackendErrorMessage,
+    hydrateBackendHomeDataEffect,
+    hydrateBackendMakeDataEffect,
+    hydrateBackendMyPageDataEffect,
+    refreshBackendHomePromptsEffect,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK 백엔드 후처리 헬퍼를 불러오지 못했습니다.");
+}
+
+const {
+  canTransitionAdminTagStatus,
+  getAdminTagStatusClass,
+  getAdminTagStatusLabel,
+  getAdminTagStatusOrder,
+  hydrateBackendAdminData,
+  normalizeAdminSearchText,
+  refreshAdminAfterMutationEffect,
+  refreshAdminAuditLogsEffect,
+  resolveAdminTagStatus,
+} = window.TtalkakAdminEffects || {};
+
+if (
+  [
+    canTransitionAdminTagStatus,
+    getAdminTagStatusClass,
+    getAdminTagStatusLabel,
+    getAdminTagStatusOrder,
+    hydrateBackendAdminData,
+    normalizeAdminSearchText,
+    refreshAdminAfterMutationEffect,
+    refreshAdminAuditLogsEffect,
+    resolveAdminTagStatus,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK admin effects failed to load.");
+}
+
+const { handleBackendAccessErrorEffect } = window.TtalkakErrorEffects || {};
+
+if (typeof handleBackendAccessErrorEffect !== "function") {
+  throw new Error("TTALKAK error effects failed to load.");
+}
+
+const {
+  STORAGE_KEY,
+  AUTH_TOKEN_KEY,
+  DEMO_AUTH_TOKEN,
+  addCommentReplyState,
+  addPromptCommentState,
+  applyAdminPromptHiddenState,
+  applyAdminReportStatusState,
+  applyAdminRevisionRequestState,
+  applyAdminTagDecisionState,
+  applyAdminUserActivityRefreshState,
+  applyAdminUserBlockActivityState,
+  applyBackendPromptUnsavedState,
+  applyAuthenticatedIdentityState,
+  applyCommentReportedState,
+  applyHomeAuthorSearchState,
+  applyHomePageState,
+  applyHomeSearchQueryState,
+  applyHomeSearchScopeState,
+  applyHomeSortState,
+  applyHomeTagSearchState,
+  toggleReportedVisibilityState,
+  applyDeletedPromptState,
+  applyEditedPromptState,
+  deleteCommentState,
+  applyExistingPromptSavedState,
+  applyNewPromptSavedState,
+  applyPendingUnsavesState,
+  applyPublishedSavedPromptState,
+  applySharedPromptState,
+  applyPromptLikedState,
+  applyPromptReportedState,
+  applyPromptUnlikedState,
+  applyPromptUnsavedState,
+  applyUnsharedPromptState,
+  toggleCommentLikedState,
+  toggleEditCommentState,
+  toggleReplyCommentState,
+  appendMakeAssistantMessageState,
+  appendMakeUserMessageState,
+  applyEditedMakeMessageState,
+  clearAuthenticatedIdentityState,
+  clearAuthenticatedSessionState,
+  createInitialState,
+  closeTopModalState,
+  clearPersistedPayload,
+  clearSessionBackendDataState,
+  clearTransientSessionUiState: clearTransientSessionUiStateValue,
+  createLocalMakeFolderState,
+  deleteMakeFolderState,
+  deleteMakeThreadState,
+  finishAdminRevisionRequestState,
+  finishEditedMakeMessageState,
+  loadPersistedAppState,
+  openRecentMakeThreadState,
+  openSavedMakePromptState,
+  readStorageItem,
+  removeStorageItem,
+  removePromptByIdState,
+  removeLocalMakeFolderState,
+  restoreMakeThreadFolderState,
+  normalizeSavedPageState,
+  persistAppState,
+  resetSessionBackendState: resetSessionBackendStateValue,
+  resetHomeViewState,
+  startNewMakeChatState,
+  togglePendingUnsaveState,
+  toggleSavedMakeMessageState,
+  updateOwnCommentState,
+  updateRecentMakeThreadState,
+  writeStorageItem,
+} = window.TtalkakState || {};
+
+if (
+  !STORAGE_KEY ||
+  !AUTH_TOKEN_KEY ||
+  !DEMO_AUTH_TOKEN ||
+  [
+    createInitialState,
+    addCommentReplyState,
+    addPromptCommentState,
+    applyAdminPromptHiddenState,
+    applyAdminReportStatusState,
+    applyAdminRevisionRequestState,
+    applyAdminTagDecisionState,
+    applyAdminUserActivityRefreshState,
+    applyAdminUserBlockActivityState,
+    applyBackendPromptUnsavedState,
+    applyAuthenticatedIdentityState,
+    applyCommentReportedState,
+    applyHomeAuthorSearchState,
+    applyHomePageState,
+    applyHomeSearchQueryState,
+    applyHomeSearchScopeState,
+    applyHomeSortState,
+    applyHomeTagSearchState,
+    toggleReportedVisibilityState,
+    applyDeletedPromptState,
+    applyEditedPromptState,
+    deleteCommentState,
+    applyExistingPromptSavedState,
+    applyNewPromptSavedState,
+    applyPendingUnsavesState,
+    applyPublishedSavedPromptState,
+    applySharedPromptState,
+    applyPromptLikedState,
+    applyPromptReportedState,
+    applyPromptUnlikedState,
+    applyPromptUnsavedState,
+    applyUnsharedPromptState,
+    toggleCommentLikedState,
+    toggleEditCommentState,
+    toggleReplyCommentState,
+    appendMakeAssistantMessageState,
+    appendMakeUserMessageState,
+    applyEditedMakeMessageState,
+    clearAuthenticatedIdentityState,
+    clearAuthenticatedSessionState,
+    closeTopModalState,
+    clearPersistedPayload,
+    clearSessionBackendDataState,
+    clearTransientSessionUiStateValue,
+    createLocalMakeFolderState,
+    deleteMakeFolderState,
+    deleteMakeThreadState,
+    finishAdminRevisionRequestState,
+    finishEditedMakeMessageState,
+    loadPersistedAppState,
+    openRecentMakeThreadState,
+    openSavedMakePromptState,
+    readStorageItem,
+    removeStorageItem,
+    removePromptByIdState,
+    removeLocalMakeFolderState,
+    restoreMakeThreadFolderState,
+    normalizeSavedPageState,
+    persistAppState,
+    resetSessionBackendStateValue,
+    resetHomeViewState,
+    startNewMakeChatState,
+    togglePendingUnsaveState,
+    toggleSavedMakeMessageState,
+    updateOwnCommentState,
+    updateRecentMakeThreadState,
+    writeStorageItem,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw new Error("TTALKAK 상태 헬퍼를 불러오지 못했습니다.");
+}
+
+const {
+  AdminAuditPanelView,
+  AdminPromptsPanelView,
+  AdminRevisionRequestModalView,
+  AdminReportsPanelView,
+  AdminPageView,
+  AdminTagsPanelView,
+  AdminUsersPanelView,
+  AuthModalView,
+  ExecuteModalView,
+  HomePageView,
+  MakeComposerView,
+  MakeFeedView,
+  MakeFolderButtonView,
+  MakePageView,
+  MakeSidePanelView,
+  MakeTemplateBarView,
+  MessageBubbleView,
+  MyCommentsPanelView,
+  MyPromptsPanelView,
+  MyReportsPanelView,
+  PromptCardView,
+  PromptDetailModalView,
+  PromptEditModalView,
+  ReportModalView,
+  SavedLibraryPanelView,
+  SavedPageView,
+  SharePageView,
+  HeaderView,
+  SidebarView,
+  renderAppShell,
+} = window.TtalkakRenderers || {};
+
+if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+  throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
+}
+
+const { resolvePageView } = window.TtalkakRouting || {};
+
+if (typeof resolvePageView !== "function") {
+  throw new Error("TTALKAK 라우팅 헬퍼를 불러오지 못했습니다.");
+}
+
+const DEMO_FALLBACK_ENABLED = window.TTALKAK_DEMO_FALLBACK_ENABLED === true;
+
+const popularPrompts = [
   {
     id: "post-1",
     title: "전문적인 인스타그램 캡션 작성",
@@ -232,19 +549,9 @@ const demoCommentTextOverrides = {
 
 const promptTemplates = [
   {
-    id: "coding",
-    label: "코딩 질문",
-    prompt: "목적: 코딩 문제를 해결하고 싶습니다.\n사용 언어/프레임워크:\n현재 상황:\n문제 증상:\n시도해본 방법:\n에러 메시지/로그:\n원하는 결과:",
-  },
-  {
-    id: "email",
-    label: "이메일",
-    prompt: "목적: 이메일을 작성하고 싶습니다.\n받는 사람:\n상황:\n전달할 핵심 내용:\n원하는 톤:\n반드시 포함할 내용:\n원하는 결과:",
-  },
-  {
-    id: "blog",
-    label: "블로그",
-    prompt: "목적: 블로그 글을 작성하고 싶습니다.\n주제:\n타겟 독자:\n핵심 키워드:\n글의 톤:\n포함할 소제목/구성:\n원하는 분량:",
+    id: "writing",
+    label: "글쓰기",
+    prompt: "목적: 글을 더 명확하고 설득력 있게 작성하고 싶습니다.\n글의 주제:\n읽는 사람:\n핵심 메시지:\n원하는 톤:\n반드시 포함할 내용:\n출력 형식:",
   },
   {
     id: "summary",
@@ -252,16 +559,75 @@ const promptTemplates = [
     prompt: "목적: 내용을 요약하고 싶습니다.\n요약할 원문/자료:\n요약 대상 독자:\n원하는 요약 길이:\n반드시 남길 핵심:\n제외할 내용:\n출력 형식:",
   },
   {
+    id: "analysis",
+    label: "분석",
+    prompt: "목적: 자료나 상황을 분석하고 싶습니다.\n분석 대상:\n현재 상황:\n확인하고 싶은 관점:\n중요한 기준:\n이미 알고 있는 정보:\n원하는 결과 형식:",
+  },
+  {
+    id: "planning",
+    label: "기획",
+    prompt: "목적: 실행 가능한 기획안을 만들고 싶습니다.\n기획 주제:\n목표:\n대상 사용자/고객:\n제약 조건:\n필요한 구성 요소:\n원하는 결과 형식:",
+  },
+  {
+    id: "coding",
+    label: "코딩",
+    prompt: "목적: 개발 문제를 더 정확하게 질문하고 싶습니다.\n사용 언어/프레임워크:\n현재 상황:\n문제 증상:\n시도해본 방법:\n에러 메시지/로그:\n원하는 결과:",
+  },
+  {
     id: "marketing",
     label: "마케팅",
-    prompt: "목적: 마케팅 문구를 만들고 싶습니다.\n제품/서비스:\n타겟 고객:\n핵심 장점:\n고객의 고민:\n원하는 톤:\nCTA:\n사용 채널:",
+    prompt: "목적: 마케팅 전략이나 문구를 만들고 싶습니다.\n제품/서비스:\n타겟 고객:\n핵심 장점:\n고객의 고민:\n사용 채널:\n원하는 톤:\nCTA:",
+  },
+  {
+    id: "support",
+    label: "고객 응대",
+    prompt: "목적: 고객에게 답변할 내용을 만들고 싶습니다.\n고객 문의 내용:\n현재 상황:\n전달해야 할 사실:\n피해야 할 표현:\n원하는 톤:\n후속 안내:",
+  },
+  {
+    id: "learning",
+    label: "학습/설명",
+    prompt: "목적: 개념을 쉽게 설명하거나 학습 자료를 만들고 싶습니다.\n설명할 주제:\n대상 수준:\n이미 알고 있는 내용:\n어려워하는 부분:\n원하는 예시:\n출력 형식:",
+  },
+  {
+    id: "custom",
+    label: "직접 입력",
+    prompt: "",
   },
 ];
 
 const FREE_MAKE_LIMIT = 3;
-const STORAGE_KEY = "prompt_hub_web_state_v2";
-const AUTH_TOKEN_KEY = "ttalkak_access_token";
+const WITHDRAWN_AUTHOR_LABEL = "탈퇴한 사용자";
+const PROTECTED_BACKEND_ACTIONS = new Set([
+  "addComment",
+  "addReply",
+  "deleteComment",
+  "deleteAdminComment",
+  "deleteMakeFolder",
+  "deletePrompt",
+  "hideAdminComment",
+  "hideAdminPrompt",
+  "likeComment",
+  "likePrompt",
+  "reportComment",
+  "reportPrompt",
+  "requestAuthorRevision",
+  "requestPromptRevision",
+  "restoreAdminPrompt",
+  "savePrompt",
+  "unlikeComment",
+  "unlikePrompt",
+  "unhideAdminComment",
+  "unsavePrompt",
+  "unsharePrompt",
+  "updateAuthorRevisionRequest",
+  "updateAdminReportStatus",
+  "updateAdminRevisionRequestStatus",
+  "updateAdminTagStatus",
+  "updateComment",
+  "updateMakeFolder",
+]);
 const SAVED_PAGE_SIZE = 16;
+const HOME_PAGE_SIZE = 16;
 const SEARCH_DEBOUNCE_MS = 320;
 const MAX_CUSTOM_MAKE_FOLDERS = 5;
 const DEMO_EXISTING_NICKNAMES = ["Google닉네임", "태그지니", "콘텐츠랩", "카피메이커", "박민준", "김지수", "이서연", "나"];
@@ -323,96 +689,9 @@ const demoCommentBackfill = {
   ],
 };
 
-const state = {
-  route: "home",
-  authView: null,
-  detailPromptId: null,
-  detailHighlightCommentId: null,
-  reportPromptId: null,
-  reportCommentId: null,
-  editingPromptId: null,
-  adminRequestTargetKey: null,
-  editingMessageId: null,
-  executeMessageId: null,
-  executePromptId: null,
-  confirmAction: null,
-  hideReportedPrompts: false,
-  adminMode: false,
-  adminHiddenPromptIds: new Set(),
-  adminTagDecisions: {},
-  adminTab: "reports",
-  adminPromptQuery: "",
-  adminPromptFilter: "all",
-  adminTagQuery: "",
-  adminTagFilter: "all",
-  adminTagSort: "usage",
-  adminPromptRevisionRequests: {},
-  reportRecords: {},
-  isLoggedIn: false,
-  currentUser: null,
-  currentUserId: null,
-  currentUserRole: "user",
-  authToken: "",
-  token: "",
-  isComposingSearch: false,
-  isComposingShareTag: false,
-  isComposingAdminPromptSearch: false,
-  isComposingAdminTagSearch: false,
-  authDraft: {},
-  authDuplicateChecks: {},
-  authUserIdWarning: "",
-  libraryDemoSeeded: false,
-  userLibraryPromptIds: new Set(),
-  searchTipShown: false,
-  searchTipVisible: false,
-  openFolderMenuId: null,
-  openThreadMenuId: null,
-  creatingThreadFolderId: null,
-  openPromptCardMenuId: null,
-  searchScope: "all",
-  searchQuery: "",
-  backendPopularTags: [],
-  backendStatus: "checking",
-  backendStatusMessage: "백엔드 연결 확인 중",
-  myBackendStatus: "idle",
-  adminBackendStatus: "idle",
-  backendMyComments: [],
-  backendMyReports: [],
-  backendLibraryPromptIds: new Set(),
-  backendAdminReports: [],
-  backendAdminTags: [],
-  makeBackendStatus: "idle",
-  makeBackendMessage: "",
-  popularSort: "popular",
-  popularPage: 1,
-  savedPage: 1,
-  savedSort: "recent",
-  myPageTab: "library",
-  shareError: "",
-  shareTagQuery: "",
-  notice: "",
-  expandedComments: {},
-  replyingCommentId: null,
-  editingCommentId: null,
-  likedPromptIds: new Set(),
-  likedCommentIds: new Set(),
-  reportedPromptIds: new Set(),
-  reportedCommentIds: new Set(),
-  pendingUnsaveIds: new Set(),
-  composerDraft: "",
-  templateCollapsed: false,
-  guestImproveCount: 0,
-  shareDraft: null,
-  savedFilter: { community: true, mine: true, liked: false },
-  messages: [],
-  recentThreads: [],
-  makeFolders: [{ id: "uncategorized", name: "미분류" }],
-  activeFolderId: "all",
-  creatingFolder: false,
-  editingFolderId: null,
-  activeThreadId: null,
-  copiedMessageId: "",
-};
+const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
+
+let templateToggleTimer = null;
 
 let searchCommitTimer = null;
 let adminPromptSearchCommitTimer = null;
@@ -436,6 +715,8 @@ const icons = {
   flag: `<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-1 5 1 5H5"/></svg>`,
   user: `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.8-4 4.5-6 8-6s6.2 2 8 6"/></svg>`,
   shield: `<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  siren: `<svg viewBox="0 0 24 24"><path d="M7 15v-4a5 5 0 0 1 10 0v4"/><path d="M5 15h14l1 5H4z"/><path d="M12 2v3M4.5 5.5l2 2M19.5 5.5l-2 2"/></svg>`,
+  hash: `<svg viewBox="0 0 24 24"><path d="M8 3 6 21M18 3l-2 18M4 9h17M3 15h17"/></svg>`,
   bookmark: `<svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-3.8L6 21z"/></svg>`,
   send: `<svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>`,
   copy: `<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
@@ -447,32 +728,30 @@ const icons = {
 };
 
 function render() {
-  persistState();
-  document.querySelector("#app").innerHTML = `
-    <div class="app-shell">
-      ${Sidebar()}
-      <main class="main-area">
-        ${Header()}
-        <section class="content-area">${Page()}</section>
-      </main>
-      ${state.detailPromptId ? PromptDetailModal() : ""}
-      ${state.editingPromptId ? PromptEditModal() : ""}
-      ${state.adminRequestTargetKey ? AdminRevisionRequestModal() : ""}
-      ${state.authView ? AuthModal() : ""}
-      ${state.reportPromptId || state.reportCommentId ? ReportModal() : ""}
-      ${state.executeMessageId || state.executePromptId ? ExecuteModal() : ""}
-      ${state.confirmAction ? ConfirmModal() : ""}
-      ${state.notice ? `<div class="toast" role="status">${state.notice}</div>` : ""}
-    </div>
-  `;
-  bindEvents();
-  focusActiveModal();
-  restorePendingMessageScroll();
-  scrollToPendingLatestMessage();
-  scrollToHighlightedComment();
-  hydrateBackendMakeDataIfNeeded();
-  hydrateBackendMyPageDataIfNeeded();
-  hydrateBackendAdminDataIfNeeded();
+  return renderAppShell({
+    state,
+    escapeHtml,
+    persistState,
+    Sidebar,
+    Header,
+    Page,
+    PromptDetailModal,
+    PromptEditModal,
+    AdminRevisionRequestModal,
+    AuthModal,
+    ReportModal,
+    ExecuteModal,
+    ConfirmModal,
+    AdminUserBlockModal,
+    bindEvents,
+    focusActiveModal,
+    restorePendingMessageScroll,
+    scrollToPendingLatestMessage,
+    scrollToHighlightedComment,
+    hydrateBackendMakeDataIfNeeded,
+    hydrateBackendMyPageDataIfNeeded,
+    hydrateBackendAdminDataIfNeeded,
+  });
 }
 
 function scrollToHighlightedComment() {
@@ -522,6 +801,17 @@ function navigateTo(route) {
     return;
   }
 
+  if (isAdminAccount() && !["home", "admin"].includes(route)) {
+    state.route = "home";
+    showNotice("관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.");
+    render();
+    return;
+  }
+
+  if (isAdminAccount() && route === "admin") {
+    state.adminMode = true;
+  }
+
   if (route === "home" && state.route === "home") {
     resetHomeView();
     render();
@@ -550,91 +840,41 @@ function navigateTo(route) {
 
 function resetHomeView() {
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "all";
-  state.searchQuery = "";
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
+  resetHomeViewState(state);
+  if (state.backendStatus === "connected") refreshBackendHomePrompts();
 }
 
 function closeTopModal() {
-  if (state.confirmAction) {
-    state.confirmAction = null;
-  } else if (state.executeMessageId) {
-    state.executeMessageId = null;
-  } else if (state.executePromptId) {
-    state.executePromptId = null;
-  } else if (state.reportPromptId) {
-    state.reportPromptId = null;
-  } else if (state.reportCommentId) {
-    state.reportCommentId = null;
-  } else if (state.authView) {
-    state.authView = null;
-  } else if (state.adminRequestTargetKey) {
-    state.adminRequestTargetKey = null;
-  } else if (state.editingPromptId) {
-    state.editingPromptId = null;
-  } else if (state.detailPromptId) {
-    state.detailPromptId = null;
-    state.detailHighlightCommentId = null;
-  } else {
-    return;
-  }
-
-  render();
+  if (closeTopModalState(state)) render();
 }
 
 function focusActiveModal() {
   window.setTimeout(() => {
     const modals = document.querySelectorAll(".modal");
     const modal = modals[modals.length - 1];
+    if (modal?.classList.contains("prompt-detail-modal")) return;
+
     const focusable = modal?.querySelector("input, textarea, button, [href], [tabindex]:not([tabindex='-1'])");
     focusable?.focus();
   }, 0);
 }
 
 function Sidebar() {
-  const item = (route, label, icon) => `
-    <button class="nav-item ${state.route === route ? "active" : ""}" data-route="${route}">
-      <span class="nav-icon">${icon}</span>
-      <span>${label}</span>
-    </button>
-  `;
-  const adminTabs = state.adminMode ? getAdminTabs() : [];
-
-  return `
-    <aside class="sidebar" aria-label="주요 메뉴">
-      <nav class="nav-list">
-        ${
-          state.adminMode
-            ? `${item("admin", "Admin", icons.shield)}
-               <div class="admin-subnav" aria-label="관리자 하위 메뉴">
-                 ${adminTabs
-                   .map(
-                     (tab) => `
-                       <button class="${state.adminTab === tab.id ? "active" : ""}" type="button" data-admin-tab="${tab.id}">
-                         <span>${tab.label}</span>
-                         <em>${formatNumber(tab.count)}</em>
-                       </button>
-                     `,
-                   )
-                   .join("")}
-               </div>`
-            : `
-              ${item("home", "Home", icons.home)}
-              ${item("make", "Make", icons.make)}
-              ${state.isLoggedIn ? item("saved", "My page", icons.user) : ""}
-              ${item("share", "Share", icons.share)}
-            `
-        }
-      </nav>
-    </aside>
-  `;
+  return SidebarView(
+    { icons, state, escapeAttr, escapeHtml, formatNumber },
+    {
+      adminTabs: state.adminMode ? getAdminTabs() : [],
+      isAdminAccount: isAdminAccount(),
+    },
+  );
 }
 
 function getAdminTabs() {
+  const canShowAdminData = getAdminCanShowData();
   const reportRecords = getAdminReportRecords();
-  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const allPrompts = state.backendAdminPrompts.length
+    ? getUniquePrompts(state.backendAdminPrompts)
+    : getUniquePrompts([...popularPrompts, ...savedPrompts]);
   const adminPromptQuery = state.adminPromptQuery || "";
   const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
     ? state.adminPromptFilter
@@ -642,131 +882,151 @@ function getAdminTabs() {
   const filteredAdminPrompts = allPrompts
     .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
     .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
-  const adminTags = getAdminManagedTags();
+  const adminTags = canShowAdminData ? getAdminManagedTags() : [];
 
   return [
     { id: "reports", label: "신고 관리", count: reportRecords.length },
     { id: "prompts", label: "프롬프트 관리", count: filteredAdminPrompts.length },
     { id: "tags", label: "태그 관리", count: adminTags.length },
+    { id: "users", label: "사용자 활동", count: 0, hideCount: true },
+    { id: "audit", label: "감사 로그", count: state.backendAdminAuditLogs.length },
   ];
+}
+
+function getAdminCanShowData() {
+  return state.adminBackendStatus === "connected" || canUseDemoFallback();
+}
+
+function getAdminReportFilters(reportRecords) {
+  return [
+    { id: "all", label: "전체", count: reportRecords.length },
+    { id: "prompt", label: "프롬프트", count: reportRecords.filter((record) => record.type === "prompt").length },
+    { id: "comment", label: "댓글", count: reportRecords.filter((record) => record.type === "comment").length },
+  ];
+}
+
+function getAdminPromptFilters() {
+  return [
+    { id: "all", label: "전체" },
+    { id: "shared", label: "공개" },
+    { id: "private", label: "비공개" },
+    { id: "hidden", label: "숨김" },
+    { id: "reported", label: "신고됨" },
+  ];
+}
+
+function getAdminTagFilters() {
+  return [
+    { id: "all", label: "전체" },
+    { id: "pending", label: "검토 중" },
+    { id: "approved", label: "검토 완료" },
+    { id: "rejected", label: "반려" },
+    { id: "disabled", label: "추천 제외" },
+  ];
+}
+
+function getActiveAdminPanel(activeAdminTab, panels) {
+  if (activeAdminTab === "prompts") {
+    return panels.prompts;
+  }
+
+  if (activeAdminTab === "tags") {
+    return panels.tags;
+  }
+
+  if (activeAdminTab === "users") {
+    return panels.users;
+  }
+
+  if (activeAdminTab === "audit") {
+    return panels.audit;
+  }
+
+  return panels.reports;
 }
 
 function Header() {
   const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
-  const canUseReportTools = state.isLoggedIn || state.adminMode;
+  const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
-  const adminAccessButton = state.currentUserRole === "admin"
-    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-demo title="관리자 권한 화면입니다." aria-label="관리자 화면">${state.adminMode ? "Admin 종료" : "Admin"}</button>`
+  const adminAccessButton = isAdminAccount()
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-view title="${state.adminMode ? "일반 화면을 읽기 전용으로 확인합니다." : "관리자 운영 화면으로 이동합니다."}" aria-label="관리자 화면 전환">${state.adminMode ? "사용자 화면 보기" : "관리자 화면"}</button>`
     : "";
-  const authButton = state.isLoggedIn
-    ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
-    : `<button class="login-button" type="button" data-open-auth="login">로그인</button>`;
 
-  return `
-    <header class="topbar">
-      <button class="brand" data-route="home" aria-label="TTALKAK 홈">
-        <span class="brand-mark">T</span>
-        <span>TTALKAK</span>
-      </button>
-      <div class="topbar-auth">
-        ${authButton}
-        ${BackendStatusBadge()}
-        ${
-          showPromptTools
-            ? `<div class="topbar-tools">
-                <button class="topbar-tool ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고 숨김 해제" : "신고 숨김"}</button>
-                <button class="topbar-tool" type="button" data-reset-demo>데모 초기화</button>
-              </div>`
-            : ""
-        }
-        ${state.route === "make" && !state.isLoggedIn ? `<p class="make-auth-hint">비로그인 체험 ${remaining}/${FREE_MAKE_LIMIT}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.</p>` : ""}
-      </div>
-    </header>
-  `;
+  return HeaderView(
+    { icons, state, escapeHtml, BackendStatusBadge },
+    {
+      adminAccessButton,
+      authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
+      freeMakeLimit: FREE_MAKE_LIMIT,
+      hasReportedPrompts,
+      remaining,
+      showPromptTools,
+    },
+  );
 }
 
 function Page() {
-  if (state.adminMode) return AdminPage();
-  if (state.route === "make") return MakePage();
-  if (state.route === "saved") {
-    if (state.isLoggedIn) return SavedPage();
-    state.route = "home";
-    state.authView = "login";
-    return HomePage();
-  }
-  if (state.route === "share") return SharePage();
-  if (state.route === "admin") return AdminPage();
-  return HomePage();
+  return resolvePageView(getPageRouteContext());
+}
+
+function getPageRouteContext() {
+  return {
+    state,
+    isAdminAccount,
+    AdminPage,
+    HomePage,
+    MakePage,
+    SavedPage,
+    SharePage,
+  };
 }
 
 function HomePage() {
-  const prompts = applyReportedVisibility(getVisiblePopularPrompts());
+  const isBackendHome = state.backendStatus === "connected";
+  const canShowDemoHome = !isBackendHome && canUseDemoFallback();
+  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : canShowDemoHome ? getVisiblePopularPrompts() : []);
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
-  const displayTags = state.backendPopularTags.length ? state.backendPopularTags : popularTags.length ? popularTags : fallbackPopularTags;
+  const displayTags = isBackendHome ? state.backendPopularTags : canShowDemoHome ? popularTags.length ? popularTags : fallbackPopularTags : [];
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
-  const totalPages = getPopularTotalPages(prompts.length);
+  const totalPages = isBackendHome ? getBackendHomeTotalPages() : getPopularTotalPages(prompts.length);
   const currentPage = Math.min(state.popularPage, totalPages);
-  const pagePrompts = prompts.slice((currentPage - 1) * 16, currentPage * 16);
+  const pagePrompts = isBackendHome ? prompts : prompts.slice((currentPage - 1) * HOME_PAGE_SIZE, currentPage * HOME_PAGE_SIZE);
   const isSearching = state.searchQuery.trim().length > 0;
   const searchPlaceholder = getSearchPlaceholder(state.searchScope);
 
-  return `
-    <section class="home-page" aria-labelledby="popular-heading">
-      <label class="search-field">
-        <span>${icons.search}</span>
-        <span class="search-scope-select">
-          <select data-search-scope aria-label="검색 대상">
-            ${SearchScopeOption("all", "전체")}
-            ${SearchScopeOption("tag", "해시태그")}
-            ${SearchScopeOption("keyword", "키워드")}
-            ${SearchScopeOption("author", "작성자")}
-          </select>
-        </span>
-        <input type="search" data-tag-search value="${escapeHtml(state.searchQuery)}" placeholder="${searchPlaceholder}" aria-label="프롬프트 검색" />
-        <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
-          <span>${icons.bulb}</span>
-          <small role="tooltip">검색어는 쉼표로 구분해 여러 개를 함께 검색할 수 있습니다. 전체 검색에서는 태그, 키워드, 작성자를 함께 찾습니다.</small>
-        </button>
-      </label>
-      <div class="popular-tags" aria-label="인기 태그">
-        ${displayTags.map((tag) => `<button class="${searchCriteria.tagTokens.includes(normalizeTag(tag)) ? "active" : ""}" type="button" data-popular-tag="${tag}">#${tag}</button>`).join("")}
-      </div>
-      <div class="section-title">
-        <div class="section-title-main">
-          <span class="section-icon">↗</span>
-          <h1 id="popular-heading">${isSearching ? "검색 결과" : "인기 프롬프트"}</h1>
-        </div>
-        <label class="sort-select">
-          <span class="sr-only">정렬</span>
-          <select data-popular-sort aria-label="프롬프트 정렬 기준">
-            ${SortOption("popular", "인기")}
-            ${SortOption("saves", "저장")}
-            ${SortOption("comments", "댓글")}
-            ${SortOption("likes", "좋아요")}
-            ${SortOption("latest", "최신")}
-          </select>
-        </label>
-      </div>
-      ${
-        pagePrompts.length
-          ? `<div class="prompt-grid" aria-label="인기 프롬프트 목록">${pagePrompts.map((prompt) => PromptCard(prompt, { showStatus: false })).join("")}</div>
-             ${Pagination(totalPages, currentPage)}`
-          : `<div class="empty-state search-empty">
-              <span>${icons.search}</span>
-              <p>일치하는 프롬프트가 없습니다.</p>
-            </div>`
-      }
-    </section>
-  `;
+  return HomePageView(
+    {
+      icons,
+      state,
+      escapeAttr,
+      escapeHtml,
+      normalizeTag,
+      SearchScopeOption,
+      SortOption,
+      PromptCard,
+      Pagination,
+    },
+    {
+      displayTags,
+      searchCriteria,
+      totalPages,
+      currentPage,
+      pagePrompts,
+      isSearching,
+      searchPlaceholder,
+      canShowDemoFallback: canShowDemoHome,
+    },
+  );
 }
 
 function SortOption(value, label) {
-  return `<option value="${value}" ${state.popularSort === value ? "selected" : ""}>${label}</option>`;
+  return `<option value="${escapeAttr(value)}" ${state.popularSort === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function SearchScopeOption(value, label) {
-  return `<option value="${value}" ${state.searchScope === value ? "selected" : ""}>${label}</option>`;
+  return `<option value="${escapeAttr(value)}" ${state.searchScope === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function getSearchPlaceholder(scope) {
@@ -777,16 +1037,7 @@ function getSearchPlaceholder(scope) {
 }
 
 function Pagination(totalPages, currentPage) {
-  if (totalPages <= 1) return "";
-
-  return `
-    <nav class="pagination" aria-label="인기 프롬프트 페이지">
-      ${Array.from({ length: totalPages }, (_, index) => {
-        const page = index + 1;
-        return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" data-page="${page}" aria-label="${page}페이지">${page}</button>`;
-      }).join("")}
-    </nav>
-  `;
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-page", ariaLabel: "인기 프롬프트 페이지" });
 }
 
 function normalizeSavedPromptOwnership() {
@@ -826,103 +1077,58 @@ function isPromptPendingUnsave(promptId) {
 }
 
 function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myPageTab) {
-  const staysInLibrary = state.route === "saved" && nextRoute === "saved" && state.myPageTab === "library" && nextMyPageTab === "library";
-  if (state.route !== "saved" || staysInLibrary || state.pendingUnsaveIds.size === 0) return;
-
-  state.pendingUnsaveIds.forEach((promptId) => {
-    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
-    const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
-    if (savedIndex >= 0) {
-      if (savedPrompts[savedIndex].source === "mine") {
-        savedPrompts[savedIndex].savedByMe = false;
-      } else {
-        savedPrompts.splice(savedIndex, 1);
-      }
-      state.userLibraryPromptIds.delete(promptId);
-    }
-    if (state.detailPromptId === promptId && !findPromptById(promptId)) {
-      state.detailPromptId = null;
-    }
+  const promptIds = applyPendingUnsavesState(getPromptMutationStateContext(), {
+    nextRoute,
+    nextMyPageTab,
+    pageSize: SAVED_PAGE_SIZE,
   });
-
-  state.pendingUnsaveIds.clear();
-  normalizeSavedPage();
+  promptIds.forEach((promptId) => {
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
+  });
 }
 
 function PromptCard(prompt, options = {}) {
-  const isSaved = isPromptSaved(prompt.id);
-  const isPendingUnsave = isPromptPendingUnsave(prompt.id);
-  const isMine = state.isLoggedIn && prompt.source === "mine";
-  const canDelete = isMine;
-  const isLiked = state.likedPromptIds.has(prompt.id);
-  const isReported = canShowReportedState() && state.reportedPromptIds.has(prompt.id);
-  const isShared = prompt.isShared === true || prompt.source === "community";
-  const revisionRequest = canDelete ? getPromptRevisionRequest(prompt.id) : null;
-  const hasMakeHistory = isMine && Array.isArray(prompt.messages) && prompt.messages.length > 0;
-  const commentCount = getPromptCommentCount(prompt);
-  const showStatus = options.showStatus !== false;
-  const isCardMenuOpen = state.openPromptCardMenuId === prompt.id;
-  const previewTags = getPromptCardPreviewTags(prompt.tags || []);
-  const statusBadges = [
-    isMine
-      ? `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`
-      : "",
-    isMine && getPromptRevisionRequest(prompt.id) ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : "",
-    isPendingUnsave ? `<span class="status-badge pending-unsave">저장 취소 예정</span>` : "",
-  ].join("");
-
-  return `
-    <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${prompt.id}" tabindex="0" role="button" aria-label="${prompt.title} 전체 보기">
-      <div class="card-head">
-        <h2>${prompt.title}</h2>
-        <div class="card-actions">
-          ${
-            isMine
-              ? `<div class="prompt-card-menu-wrap">
-                  <button class="icon-button prompt-card-more" type="button" data-prompt-card-menu="${prompt.id}" aria-label="프롬프트 더보기" aria-expanded="${isCardMenuOpen ? "true" : "false"}">${icons.more}</button>
-                  ${
-                    isCardMenuOpen
-                      ? `<div class="prompt-card-menu" role="menu">
-                          <button type="button" data-edit-prompt="${prompt.id}" role="menuitem">${icons.edit}<span>수정</span></button>
-                          ${!isShared ? `<button type="button" data-share-saved="${prompt.id}" role="menuitem">${icons.share}<span>공유하기</span></button>` : ""}
-                          ${isShared ? `<button type="button" data-unshare-prompt="${prompt.id}" role="menuitem">${icons.share}<span>공유 취소</span></button>` : ""}
-                          <button type="button" data-delete-prompt="${prompt.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
-                        </div>`
-                      : ""
-                  }
-                </div>`
-              : ""
-          }
-          ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${prompt.id}" aria-label="Make 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
-          <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${prompt.id}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-          <button class="icon-button metric-action comment-card-button" data-open-comments="${prompt.id}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
-          <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-        </div>
-      </div>
-      ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}
-      <p>${prompt.text}</p>
-      <div class="tag-row card-tag-row">
-        ${previewTags.visibleTags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}
-        ${previewTags.hiddenCount > 0 ? `<span class="tag-more">+${previewTags.hiddenCount}</span>` : ""}
-      </div>
-      <footer class="card-meta">
-        <span>${icons.eye}${formatNumber(prompt.views)}</span>
-        <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
-      </footer>
-    </article>
-  `;
+  return PromptCardView(
+    {
+      state,
+      icons,
+      escapeAttr,
+      escapeHtml,
+      formatNumber,
+      canShowReportedState,
+      isPromptSaved,
+      isPromptPendingUnsave,
+      getPromptRevisionRequest,
+      getPromptCommentCount,
+      getPromptCardPreviewTags,
+      getPromptLikes,
+      getPromptSaveCount,
+      getPromptViewCount,
+      renderAuthorSearchControl,
+    },
+    prompt,
+    options,
+  );
 }
 
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const message = state.backendStatusMessage || "백엔드 연결 확인 중";
-  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? "Demo data 표시 중" : "Backend 확인 중";
+  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? canUseDemoFallback() ? "데모 데이터 표시 중" : "Backend 오류" : "Backend 확인 중";
   return `
     <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
       <span class="backend-status-dot" aria-hidden="true"></span>
       <span>${label}</span>
     </div>
   `;
+}
+
+function canUseDemoFallback() {
+  return DEMO_FALLBACK_ENABLED;
+}
+
+function getApiFailureMessage(areaLabel = "API") {
+  return `${areaLabel} 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 데이터를 표시하지 않습니다.`;
 }
 
 function getPromptCardPreviewTags(tags) {
@@ -950,6 +1156,9 @@ function PromptDetailModal() {
   const isAdminReview = Boolean(state.adminMode);
   const isHiddenByAdmin = state.adminHiddenPromptIds.has(prompt.id);
   const revisionRequest = canDelete || isAdminReview ? getPromptRevisionRequest(prompt.id) : null;
+  const safePromptId = escapeAttr(prompt.id);
+  const safeTitle = escapeHtml(prompt.title);
+  const safeText = escapeHtml(prompt.text);
   const adminStatusBadges = isAdminReview
     ? [
         `<span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>`,
@@ -959,126 +1168,53 @@ function PromptDetailModal() {
       ].join("")
     : "";
 
-  return `
-    <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-detail-title">
-      <article class="modal prompt-detail-modal ${isAdminReview ? "admin-review-modal" : ""}">
-        <div class="modal-head">
-          <h2 id="prompt-detail-title">${prompt.title}</h2>
-        </div>
-        <div class="prompt-detail-layout">
-          <section class="prompt-detail-main" aria-label="프롬프트 내용">
-            ${isAdminReview && adminStatusBadges ? `<div class="status-row admin-detail-status">${adminStatusBadges}</div>` : ""}
-            <p class="prompt-detail-text">${prompt.text}</p>
-            ${
-              revisionRequest
-                ? `<div class="revision-request-notice">
-                    <strong>수정 요청됨</strong>
-                    <p>${escapeHtml(revisionRequest.reason)}</p>
-                  </div>`
-                : ""
-            }
-            <div class="tag-row detail-tags">${prompt.tags.map((tag) => `<button type="button" data-search-tag="${escapeHtml(tag)}">#${tag}</button>`).join("")}</div>
-            <footer class="card-meta detail-meta">
-              <span>${icons.eye}${formatNumber(prompt.views)}</span>
-              <button class="author-search-button" type="button" data-search-author="${escapeHtml(getDisplayPromptAuthor(prompt))}">${escapeHtml(getDisplayPromptAuthor(prompt))}</button>
-              <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
-            </footer>
-          </section>
-          <section class="comments-panel" aria-label="댓글">
-            <div class="comments-head">
-              <h3>댓글</h3>
-              <div class="comments-head-actions">
-                <span>${formatNumber(commentCount)}개</span>
-                <button class="comment-panel-toggle" type="button" data-toggle-comments="${prompt.id}">${isCommentsExpanded ? "접기" : "펼치기"}</button>
-              </div>
-            </div>
-            ${
-              isCommentsExpanded
-                ? `<div class="comment-list">
-                    ${
-                      visibleComments.length
-                        ? visibleComments.map(CommentItem).join("")
-                        : `<p class="comment-empty">아직 표시할 댓글이 없습니다.</p>`
-                    }
-                  </div>
-                  ${
-                    isAdminReview
-                      ? `<p class="comment-empty">관리자 검토 모드에서는 댓글을 읽기 전용으로 확인합니다.</p>`
-                      : state.isLoggedIn
-                      ? `<form class="comment-form" data-comment-form="${prompt.id}">
-                          <input name="comment" type="text" placeholder="댓글을 입력하세요." autocomplete="off" />
-                          <button class="primary-button" type="submit">등록</button>
-                        </form>`
-                      : `<div class="comment-login">
-                          <span>댓글을 작성하려면 로그인이 필요합니다.</span>
-                          <button class="secondary-button" type="button" data-open-auth="login">로그인</button>
-                        </div>`
-                  }`
-                : ""
-            }
-          </section>
-        </div>
-        <div class="modal-actions detail-actions">
-          ${
-            isAdminReview
-              ? `<div class="detail-action-group manage-actions">
-                   <button class="secondary-button" type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
-                   <button class="secondary-button" type="button" data-admin-hide-prompt="${prompt.id}">${isHiddenByAdmin ? "게시물 숨김 해제" : "게시물 숨김"}</button>
-                   <button class="secondary-button danger-button" type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
-                 </div>
-                 <div class="detail-action-group use-actions">
-                   <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-                 </div>`
-              : `<div class="detail-action-group manage-actions">
-                   ${canDelete ? `<button class="secondary-button" type="button" data-edit-prompt="${prompt.id}">${icons.edit}<span>수정</span></button>` : ""}
-                   ${canDelete && !isShared ? `<button class="secondary-button" type="button" data-share-saved="${prompt.id}">${icons.share}<span>공유하기</span></button>` : ""}
-                   ${canDelete && isShared ? `<button class="secondary-button" type="button" data-unshare-prompt="${prompt.id}">${icons.share}<span>공유 취소</span></button>` : ""}
-                   ${canDelete ? `<button class="secondary-button danger-button" type="button" data-delete-prompt="${prompt.id}">${icons.trash}<span>삭제</span></button>` : ""}
-                 </div>
-                 <div class="detail-action-group use-actions">
-                   <button class="detail-action-button close-action" type="button" data-close-detail aria-label="닫기">${icons.close}</button>
-                   <button class="detail-action-button execute-action" type="button" data-execute-prompt="${prompt.id}" aria-label="AI 적용">${icons.play}<span>Execute</span></button>
-                   <button class="detail-action-button like-action ${isLiked ? "liked" : ""}" type="button" data-like-prompt="${prompt.id}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
-                   <button class="detail-action-button save-action ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" type="button" data-save-prompt="${prompt.id}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
-                   <button class="detail-action-button report-action report-state-button ${isReported ? "reported" : ""}" type="button" data-report-prompt="${prompt.id}" aria-label="${isReported ? "신고됨" : "신고"}">${icons.flag}</button>
-                 </div>`
-          }
-        </div>
-      </article>
-    </div>
-  `;
+  return PromptDetailModalView(
+    {
+      icons,
+      escapeAttr,
+      escapeHtml,
+      formatNumber,
+      formatShortDate,
+      getPromptViewCount,
+      getPromptCreatedAt,
+      getPromptLikes,
+      getPromptSaveCount,
+      renderAuthorSearchControl,
+      CommentItem,
+    },
+    {
+      prompt,
+      safePromptId,
+      safeTitle,
+      safeText,
+      isSaved,
+      isPendingUnsave,
+      canDelete,
+      commentCount,
+      isCommentsExpanded,
+      visibleComments,
+      isLiked,
+      isReported,
+      isShared,
+      isAdminReview,
+      isHiddenByAdmin,
+      revisionRequest,
+      adminStatusBadges,
+      isLoggedIn: state.isLoggedIn,
+    },
+  );
 }
 
 function PromptEditModal() {
   const prompt = findPromptById(state.editingPromptId);
   if (!prompt || prompt.source !== "mine") return "";
+  const revisionRequest = getPromptRevisionRequest(prompt.id);
+  const safePromptId = escapeAttr(prompt.id);
 
-  return `
-    <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title">
-      <form class="modal prompt-edit-modal" data-prompt-edit-form="${prompt.id}">
-        <div class="modal-head">
-          <h2 id="prompt-edit-title">프롬프트 수정</h2>
-          <button class="ghost-icon" type="button" data-close-prompt-edit aria-label="닫기">${icons.close}</button>
-        </div>
-        <label>
-          <span>제목</span>
-          <input name="title" type="text" value="${escapeHtml(prompt.title)}" />
-        </label>
-        <label>
-          <span>프롬프트</span>
-          <textarea name="text" rows="8">${escapeHtml(prompt.text)}</textarea>
-        </label>
-        <label>
-          <span>해시태그</span>
-          <input name="tags" type="text" value="${escapeHtml((prompt.tags || []).join(", "))}" />
-        </label>
-        <div class="form-actions">
-          <button class="secondary-button" type="button" data-close-prompt-edit>취소</button>
-          <button class="primary-button" type="submit">저장</button>
-        </div>
-      </form>
-    </div>
-  `;
+  return PromptEditModalView(
+    { icons, escapeAttr, escapeHtml },
+    { prompt, revisionRequest, safePromptId },
+  );
 }
 
 function AdminRevisionRequestModal() {
@@ -1086,33 +1222,26 @@ function AdminRevisionRequestModal() {
   if (!target || !state.adminMode) return "";
 
   const existingRequest = state.adminPromptRevisionRequests[target.key];
+  const isExistingRequest = Boolean(existingRequest);
+  const existingStatus = String(existingRequest?.status || "pending").toLowerCase();
+  const canEditExistingRequest = isExistingRequest && existingStatus === "pending" && existingRequest?.id;
+  const existingStatusLabel = getAuthorRevisionStatusLabel(existingStatus);
 
-  return `
-    <div class="modal-backdrop visible" role="dialog" aria-modal="true" aria-labelledby="revision-request-title">
-      <form class="modal prompt-edit-modal revision-request-modal" data-admin-revision-request-form="${target.key}">
-        <div class="modal-head">
-          <h2 id="revision-request-title">수정 요청</h2>
-          <button class="ghost-icon" type="button" data-close-revision-request aria-label="닫기">${icons.close}</button>
-        </div>
-        <div class="revision-request-target">
-          <strong>${escapeHtml(target.title)}</strong>
-          <p>${escapeHtml(truncateText(target.text, 120))}</p>
-        </div>
-        <label>
-          <span>작성자에게 전달할 요청 사유</span>
-          <textarea name="reason" rows="6" placeholder="예: 과장된 표현을 줄이고 출처나 조건을 명확히 적어주세요.">${escapeHtml(existingRequest?.reason || "")}</textarea>
-        </label>
-        <div class="form-actions">
-          <button class="secondary-button" type="button" data-close-revision-request>취소</button>
-          <button class="primary-button" type="submit">요청 보내기</button>
-        </div>
-      </form>
-    </div>
-  `;
+  return AdminRevisionRequestModalView(
+    { icons, escapeAttr, escapeHtml, truncateText },
+    {
+      target,
+      existingRequest,
+      isExistingRequest,
+      canEditExistingRequest,
+      existingStatusLabel,
+    },
+  );
 }
 
 function CommentItem(comment) {
   const isDeleted = Boolean(comment.deleted);
+  const isHidden = Boolean(comment.hidden || comment.isHidden);
   const canDelete = !isDeleted && canDeleteComment(comment);
   const isReported = canShowReportedState() && state.reportedCommentIds.has(comment.id);
   const isLiked = state.likedCommentIds.has(comment.id);
@@ -1121,33 +1250,41 @@ function CommentItem(comment) {
   const replies = getSortedCommentReplies(comment);
   const isReplying = !isDeleted && state.replyingCommentId === comment.id;
   const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === comment.id;
+  const safeCommentId = escapeAttr(comment.id);
+  const safeAuthor = escapeHtml(comment.author);
+  const safeText = escapeHtml(comment.text);
 
   return `
-    <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(comment.id)}">
+    <article class="comment-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-comment" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${safeCommentId}">
       <div class="comment-item-head">
-        <strong>${isDeleted ? "삭제된 댓글" : comment.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : safeAuthor}${isHidden ? `<span class="edited-mark">숨김</span>` : ""}</strong>
         ${
-          isAdminReview || isDeleted
+          isAdminReview && !isDeleted
+            ? `<div class="comment-actions">
+                <button class="comment-edit-button" type="button" data-admin-toggle-comment-hidden="${safeCommentId}:${isHidden ? "unhide" : "hide"}" title="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}" aria-label="${isHidden ? "댓글 숨김 해제" : "댓글 숨김"}">${isHidden ? icons.eye : icons.flag}</button>
+                <button class="comment-delete-button" type="button" data-delete-comment="${safeCommentId}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>
+              </div>`
+            : isDeleted
             ? ""
             : `<div class="comment-actions">
-                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${comment.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
-                <button class="comment-reply-button" type="button" data-reply-comment="${comment.id}" title="답글" aria-label="답글">${icons.comment}</button>
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${safeCommentId}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "댓글 좋아요 취소" : "댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(comment))}</span></button>`}
+                <button class="comment-reply-button" type="button" data-reply-comment="${safeCommentId}" title="답글" aria-label="답글">${icons.comment}</button>
                 ${
                   canDelete
-                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${comment.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                       <button class="comment-delete-button" type="button" data-delete-comment="${comment.id}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
-                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${comment.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${safeCommentId}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${safeCommentId}" title="삭제" aria-label="댓글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${safeCommentId}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "댓글 신고"}">${icons.flag}</button>`
                 }
               </div>`
         }
       </div>
       ${
         isEditing
-          ? `<form class="comment-edit-form" data-edit-comment-form="${comment.id}">
-              <input name="comment" type="text" value="${escapeHtml(comment.text)}" autocomplete="off" />
+          ? `<form class="comment-edit-form" data-edit-comment-form="${safeCommentId}">
+              <input name="comment" type="text" value="${escapeAttr(comment.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${isDeleted ? "삭제된 댓글입니다." : comment.text}${!isDeleted && comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : safeText}${!isDeleted && comment.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
       ${
         replies.length || (!isAdminReview && isReplying)
@@ -1155,7 +1292,7 @@ function CommentItem(comment) {
               ${replies.map(ReplyItem).join("")}
               ${
                 !isAdminReview && isReplying
-                  ? `<form class="reply-form" data-reply-form="${comment.id}">
+                  ? `<form class="reply-form" data-reply-form="${safeCommentId}">
                       <input name="reply" type="text" placeholder="답글을 입력하세요." autocomplete="off" />
                       <button class="primary-button" type="submit">등록</button>
                     </form>`
@@ -1176,32 +1313,35 @@ function ReplyItem(reply) {
   const isAdminReview = Boolean(state.adminMode);
   const isHighlighted = isAdminReview && state.detailHighlightCommentId === reply.id;
   const isEditing = !isDeleted && !isAdminReview && state.editingCommentId === reply.id;
+  const safeReplyId = escapeAttr(reply.id);
+  const safeAuthor = escapeHtml(reply.author);
+  const safeText = escapeHtml(reply.text);
 
   return `
-    <article class="reply-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${escapeHtml(reply.id)}">
+    <article class="reply-item ${isDeleted ? "deleted-comment" : ""} ${isReported ? "reported-reply" : ""} ${isHighlighted ? "admin-highlighted-comment" : ""}" data-comment-id="${safeReplyId}">
       <div class="reply-item-head">
-        <strong>${isDeleted ? "삭제된 댓글" : reply.author}</strong>
+        <strong>${isDeleted ? "삭제된 댓글" : safeAuthor}</strong>
         ${
           isAdminReview || isDeleted
             ? ""
             : `<div class="reply-actions">
-                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${reply.id}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
+                ${canDelete ? "" : `<button class="comment-like-button ${isLiked ? "liked" : ""}" type="button" data-like-comment="${safeReplyId}" title="${isLiked ? "좋아요 취소" : "좋아요"}" aria-label="${isLiked ? "대댓글 좋아요 취소" : "대댓글 좋아요"}">${icons.heart}<span>${formatNumber(getCommentLikes(reply))}</span></button>`}
                 ${
                   canDelete
-                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${reply.id}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
-                       <button class="comment-delete-button" type="button" data-delete-comment="${reply.id}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
-                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${reply.id}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
+                    ? `<button class="comment-edit-button" type="button" data-edit-comment="${safeReplyId}" title="${isEditing ? "수정 취소" : "수정"}" aria-label="${isEditing ? "수정 취소" : "수정"}">${isEditing ? icons.close : icons.edit}</button>
+                       <button class="comment-delete-button" type="button" data-delete-comment="${safeReplyId}" title="삭제" aria-label="답글 삭제">${icons.trash}</button>`
+                    : `<button class="comment-report-button ${isReported ? "reported" : ""}" type="button" data-report-comment="${safeReplyId}" title="${isReported ? "신고됨" : "신고"}" aria-label="${isReported ? "신고됨" : "대댓글 신고"}">${icons.flag}</button>`
                 }
               </div>`
         }
       </div>
       ${
         isEditing
-          ? `<form class="comment-edit-form" data-edit-comment-form="${reply.id}">
-              <input name="comment" type="text" value="${escapeHtml(reply.text)}" autocomplete="off" />
+          ? `<form class="comment-edit-form" data-edit-comment-form="${safeReplyId}">
+              <input name="comment" type="text" value="${escapeAttr(reply.text)}" autocomplete="off" />
               <button class="primary-button" type="submit">저장</button>
             </form>`
-          : `<p>${isDeleted ? "삭제된 댓글입니다." : reply.text}${!isDeleted && reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
+          : `<p>${isDeleted ? "삭제된 댓글입니다." : safeText}${!isDeleted && reply.edited ? `<span class="edited-mark">수정됨</span>` : ""}</p>`
       }
     </article>
   `;
@@ -1218,45 +1358,25 @@ function ReportModal() {
     ? "정말 이 프롬프트를 신고할까요? 신고 이유를 적어주시면 검토에 도움이 됩니다."
     : "정말 이 댓글을 신고할까요? 신고 이유를 적어주시면 검토에 도움이 됩니다.";
 
-  return `
-    <div class="modal-backdrop visible report-backdrop" role="dialog" aria-modal="true" aria-labelledby="report-title">
-      <form class="modal report-modal" data-report-form="${target.id}" data-report-type="${reportType}">
-        <div class="modal-head">
-          <h2 id="report-title">${title}</h2>
-          <button class="ghost-icon" type="button" data-close-report aria-label="닫기">${icons.close}</button>
-        </div>
-        <p class="auth-helper">${helper}</p>
-        <label>
-          <span>신고 이유</span>
-          <textarea name="reason" rows="5" placeholder="신고 이유를 입력해주세요."></textarea>
-        </label>
-        <div class="modal-actions">
-          <button class="secondary-button" type="button" data-close-report>취소</button>
-          <button class="primary-button" type="submit">신고하기</button>
-        </div>
-      </form>
-    </div>
-  `;
+  return ReportModalView({ icons, escapeAttr }, { target, reportType, title, helper });
 }
 
 function ConfirmModal() {
   const action = state.confirmAction;
   if (!action) return "";
 
-  return `
-    <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <article class="modal confirm-modal">
-        <div class="modal-head">
-          <h2 id="confirm-title">${escapeHtml(action.title)}</h2>
-        </div>
-        <p class="confirm-message">${escapeHtml(action.message)}</p>
-        <div class="modal-actions">
-          <button class="secondary-button" type="button" data-cancel-confirm>취소</button>
-          <button class="primary-button ${action.danger ? "danger-primary" : ""}" type="button" data-confirm-action>${escapeHtml(action.confirmLabel || "확인")}</button>
-        </div>
-      </article>
-    </div>
-  `;
+  return ConfirmDialog(action);
+}
+
+function AdminUserBlockModal() {
+  const target = state.adminBlockTarget;
+  if (!target?.memberId) return "";
+
+  return AdminUserBlockDialog({
+    memberId: target.memberId,
+    nickname: target.nickname,
+    closeIcon: icons.close,
+  });
 }
 
 function ExecuteModal() {
@@ -1271,55 +1391,52 @@ function ExecuteModal() {
     { id: "claude", name: "Claude", url: "https://claude.ai/" },
   ];
 
-  return `
-    <div class="modal-backdrop visible execute-backdrop" role="dialog" aria-modal="true" aria-labelledby="execute-title">
-      <article class="modal execute-modal">
-        <div class="modal-head">
-          <h2 id="execute-title">AI 도구 선택</h2>
-          <button class="ghost-icon" type="button" data-close-execute aria-label="닫기">${icons.close}</button>
-        </div>
-        <p class="confirm-message">AI 사이트를 선택하면 개선된 최종 프롬프트가 복사되고 선택한 사이트가 열립니다. 열린 사이트의 입력창을 클릭한 뒤 붙여넣기(Ctrl+V)해서 실행해주세요.</p>
-        <div class="execute-targets">
-          ${targets.map((target) => `<button type="button" data-execute-target="${target.id}">${target.name}</button>`).join("")}
-        </div>
-      </article>
-    </div>
-  `;
+  return ExecuteModalView({ icons, escapeAttr }, { targets });
 }
 
 function MakePage() {
   const hasMessages = state.messages.length > 0;
 
-  return `
-    <section class="make-page" aria-label="프롬프트 첨삭">
-      ${MakeSidePanel()}
-      <div class="chat-feed">
-        <div class="make-template-bar ${state.templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-          <button class="template-toggle" type="button" data-toggle-templates aria-label="${state.templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}">${state.templateCollapsed ? "&gt;" : "&lt;"}</button>
-          ${
-            state.templateCollapsed
-              ? ""
-              : `<div class="template-list">
-                  ${promptTemplates.map((template) => `<button type="button" data-template="${template.id}">${template.label}</button>`).join("")}
-                </div>`
-          }
-        </div>
-        ${
-          hasMessages
-            ? state.messages.map(MessageBubble).join("")
-            : `<div class="empty-state make-empty">
-                <div class="spark-badge">${icons.make}</div>
-                <h1>프롬프트 첨삭 도우미</h1>
-                <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
-              </div>`
-        }
-      </div>
-      <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
-        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요...">${escapeHtml(state.composerDraft)}</textarea>
-        <button class="send-button" type="submit" aria-label="보내기">${icons.send}</button>
-      </form>
-    </section>
-  `;
+  return MakePageView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      composerHtml: MakeComposer(hasMessages),
+      feedHtml: MakeFeed(hasMessages),
+      sidePanelHtml: MakeSidePanel(),
+    },
+  );
+}
+
+function MakeFeed(hasMessages) {
+  return MakeFeedView(
+    { icons },
+    {
+      hasMessages,
+      messages: state.messages,
+      renderMessageBubble: MessageBubble,
+      templateBarHtml: MakeTemplateBar(),
+    },
+  );
+}
+
+function MakeTemplateBar() {
+  return MakeTemplateBarView(
+    { escapeAttr, escapeHtml },
+    {
+      promptTemplates,
+      templateCollapsed: state.templateCollapsed,
+    },
+  );
+}
+
+function MakeComposer(hasMessages) {
+  return MakeComposerView(
+    { icons, escapeHtml },
+    {
+      composerDraft: state.composerDraft,
+      hasMessages,
+    },
+  );
 }
 
 function MakeSidePanel() {
@@ -1336,78 +1453,28 @@ function MakeSidePanel() {
       ? state.recentThreads
       : state.recentThreads.filter((thread) => (thread.folderId || "uncategorized") === state.activeFolderId);
 
-  return `
-    <aside class="make-side-panel" aria-label="Make 최근 대화">
-      <section class="make-folder-section">
-        <div class="make-side-head">
-          <strong>폴더</strong>
-          <button type="button" data-show-folder-form ${canCreateFolder ? "" : "disabled"} title="${canManageFolders ? (canCreateFolder ? "새 폴더 만들기" : `폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`) : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">새 폴더</button>
-        </div>
-        ${!canManageFolders ? `<p class="make-folder-limit">로그인하면 대화를 폴더로 정리할 수 있습니다.</p>` : ""}
-        ${canManageFolders && !canCreateFolder ? `<p class="make-folder-limit">폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.</p>` : ""}
-        ${state.makeBackendMessage ? `<p class="make-backend-note">${escapeHtml(state.makeBackendMessage)}</p>` : ""}
-        ${
-          state.creatingFolder
-            ? `<form class="make-folder-form" data-folder-create-form>
-                <input name="folderName" type="text" placeholder="폴더 이름" autocomplete="off" />
-                <button type="submit">추가</button>
-                <button type="button" data-cancel-folder-create>취소</button>
-              </form>`
-            : ""
-        }
-        <div class="make-folder-list">
-          ${MakeFolderButton("all", "전체", state.recentThreads.length)}
-          ${visibleFolders.map((folder) => MakeFolderButton(folder.id, folder.name, countThreadsInFolder(folder.id))).join("")}
-        </div>
-      </section>
-      <div class="make-side-head">
-        <strong>${escapeHtml(getActiveFolderName())}</strong>
-        <button type="button" data-new-chat>새 대화</button>
-      </div>
-      ${
-        visibleThreads.length
-          ? `<div class="recent-thread-list">
-              ${visibleThreads.map((thread) => `
-                <article class="recent-thread ${state.activeThreadId === thread.id ? "active" : ""} ${state.openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${thread.id}">
-                  <button class="recent-thread-main" type="button" data-open-thread="${thread.id}">
-                    <strong>${escapeHtml(thread.title)}</strong>
-                    <span>${escapeHtml(thread.preview)}</span>
-                    <small>${formatShortDate(thread.createdAt)}</small>
-                  </button>
-                  <div class="recent-thread-menu-wrap">
-                    <button class="recent-thread-more" type="button" data-thread-menu="${thread.id}" aria-label="대화 더보기" aria-expanded="${state.openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
-                    ${
-                      state.openThreadMenuId === thread.id
-                        ? `<div class="recent-thread-menu" role="menu">
-                            <label class="recent-thread-folder-field">
-                              <span>폴더 이동</span>
-                              <select class="thread-folder-select" data-thread-folder="${thread.id}" aria-label="대화 폴더" ${canManageFolders ? "" : "disabled"} title="${canManageFolders ? "대화 폴더 이동" : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">
-                                ${state.makeFolders.map((folder) => `<option value="${folder.id}" ${getThreadFolderId(thread) === folder.id ? "selected" : ""}>${escapeHtml(folder.name)}</option>`).join("")}
-                              </select>
-                            </label>
-                            ${
-                              state.creatingThreadFolderId === thread.id
-                                ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${thread.id}">
-                                    <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
-                                    <div>
-                                      <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
-                                      <button type="button" data-cancel-thread-folder-create>취소</button>
-                                    </div>
-                                  </form>`
-                                : `<button type="button" data-start-thread-folder-create="${thread.id}" ${canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS ? "" : "disabled"} role="menuitem"><span>+</span><span>새 폴더로 이동...</span></button>`
-                            }
-                            <button type="button" data-delete-thread="${thread.id}" role="menuitem">${icons.trash}<span>삭제</span></button>
-                          </div>`
-                        : ""
-                    }
-                  </div>
-                </article>
-              `).join("")}
-            </div>`
-          : `<p class="recent-empty">아직 저장된 대화가 없습니다.</p>`
-      }
-    </aside>
-  `;
+  return MakeSidePanelView(
+    { icons, escapeAttr, escapeHtml, formatShortDate },
+    {
+      activeFolderName: getActiveFolderName(),
+      activeThreadId: state.activeThreadId,
+      canCreateFolder,
+      canManageFolders,
+      canStartThreadFolderCreate: canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS,
+      creatingFolder: state.creatingFolder,
+      creatingThreadFolderId: state.creatingThreadFolderId,
+      customFolderCount,
+      folders: state.makeFolders,
+      getThreadFolderId,
+      makeBackendMessage: state.makeBackendMessage,
+      maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS,
+      openThreadMenuId: state.openThreadMenuId,
+      renderFolderButton: MakeFolderButton,
+      threadCount: state.recentThreads.length,
+      visibleFolders: visibleFolders.map((folder) => ({ ...folder, threadCount: countThreadsInFolder(folder.id) })),
+      visibleThreads,
+    },
+  );
 }
 
 function MakeFolderButton(folderId, name, count) {
@@ -1415,78 +1482,36 @@ function MakeFolderButton(folderId, name, count) {
   const canManage = state.isLoggedIn && isUserFolder;
   const isEditing = canManage && state.editingFolderId === folderId;
   const isMenuOpen = canManage && state.openFolderMenuId === folderId;
-  if (isEditing) {
-    return `
-      <form class="make-folder-edit-form" data-folder-edit-form="${folderId}">
-        <input name="folderName" value="${escapeHtml(name)}" />
-        <button type="submit">저장</button>
-        <button type="button" data-cancel-folder-edit>취소</button>
-      </form>
-    `;
-  }
 
-  return `
-    <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${state.activeFolderId === folderId ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${folderId}">
-      <button type="button" data-open-folder="${folderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
-      ${
-        canManage
-          ? `<div class="make-folder-menu-wrap">
-              <button class="make-folder-more" type="button" data-folder-menu="${folderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
-              ${
-                isMenuOpen
-                  ? `<div class="make-folder-menu" role="menu">
-                      <button type="button" data-edit-folder="${folderId}" role="menuitem">${icons.edit}<span>이름 변경</span></button>
-                      <button type="button" data-delete-folder="${folderId}" role="menuitem">${icons.trash}<span>삭제</span></button>
-                    </div>`
-                  : ""
-              }
-            </div>`
-          : ""
-      }
-    </div>
-  `;
+  return MakeFolderButtonView(
+    { icons, escapeAttr, escapeHtml, formatNumber },
+    {
+      canManage,
+      count,
+      folderId,
+      isActive: state.activeFolderId === folderId,
+      isEditing,
+      isMenuOpen,
+      isUserFolder,
+      name,
+    },
+  );
 }
 
 function MessageBubble(message) {
   const isAssistant = message.role === "assistant";
-  const isSaved = isAssistant && isPromptSaved(message.id);
 
-  if (isAssistant) {
-    return `
-      <div class="message-group assistant-group" data-message-id="${escapeHtml(message.id)}">
-        <article class="message assistant">
-          <p>${message.content}</p>
-        </article>
-        <footer class="message-actions">
-          <button type="button" data-copy-message="${message.id}">${state.copiedMessageId === message.id ? icons.check : icons.copy}<span>${state.copiedMessageId === message.id ? "Copied" : "Copy"}</span></button>
-          <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${message.id}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-          <button type="button" data-share-message="${message.id}">${icons.share}<span>Share</span></button>
-          <button type="button" data-execute-message="${message.id}">${icons.play}<span>Execute</span></button>
-        </footer>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="message-group user-group" data-message-id="${escapeHtml(message.id)}">
-      ${
-        state.editingMessageId === message.id
-          ? `<form class="message-edit-form" data-edit-message-form="${message.id}">
-              <textarea name="message" rows="3">${escapeHtml(message.content)}</textarea>
-              <div class="message-edit-actions">
-                <button type="button" data-cancel-message-edit>취소</button>
-                <button type="submit">다시 전송</button>
-              </div>
-            </form>`
-          : `<article class="message ${message.role}">
-              <p>${message.content}</p>
-              <div class="user-message-actions">
-                <button class="user-message-edit-button" type="button" data-edit-message="${message.id}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
-              </div>
-            </article>`
-      }
-    </div>
-  `;
+  return MessageBubbleView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      content: message.content,
+      id: message.id,
+      isCopied: state.copiedMessageId === message.id,
+      isEditing: !isAssistant && state.editingMessageId === message.id,
+      isSaved: isAssistant && isPromptSaved(message.id),
+      role: message.role,
+    },
+  );
 }
 
 function SavedPage() {
@@ -1497,29 +1522,10 @@ function SavedPage() {
     { id: "reports", label: "신고 내역", count: getMyReports().length },
   ];
 
-  return `
-    <section class="saved-page my-page" aria-labelledby="my-page-heading">
-      <div class="page-head my-page-head">
-        <div class="page-title">
-          <span>${icons.user}</span>
-          <h1 id="my-page-heading">My page</h1>
-        </div>
-      </div>
-      <nav class="my-page-tabs" aria-label="My page tabs">
-        ${tabs
-          .map(
-            (tab) => `
-              <button class="${state.myPageTab === tab.id ? "active" : ""}" type="button" data-my-tab="${tab.id}">
-                ${tab.label}<span>${formatNumber(tab.count)}</span>
-              </button>
-            `,
-          )
-          .join("")}
-      </nav>
-      ${DemoLibraryPrompt()}
-      ${MyPagePanel()}
-    </section>
-  `;
+  return SavedPageView(
+    { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel },
+    { tabs },
+  );
 }
 
 function DemoLibraryPrompt() {
@@ -1527,8 +1533,19 @@ function DemoLibraryPrompt() {
     return `
       <div class="demo-library-prompt">
         <div>
-          <strong>현재: 서버 보관함 기준</strong>
-          <p>내 보관함, 내가 만든 프롬프트, 댓글 관리, 신고 내역은 백엔드 API 응답을 우선 반영합니다.</p>
+          <strong>현재: 서버 응답 우선 + 최근 활동 즉시 반영</strong>
+          <p>백엔드 API 응답을 우선 반영하고, 방금 저장·댓글·신고한 활동은 즉시 함께 표시합니다.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 응답 실패</strong>
+          <p>My page API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 보관함을 표시하지 않습니다.</p>
         </div>
       </div>
     `;
@@ -1541,7 +1558,7 @@ function DemoLibraryPrompt() {
         <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
         <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
       </div>
-      <button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>
+      ${canUseDemoFallback() ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
     </div>
   `;
 }
@@ -1564,194 +1581,95 @@ function SavedLibraryPanel() {
   const currentPage = state.savedPage;
   const pagePrompts = filtered.slice((currentPage - 1) * SAVED_PAGE_SIZE, currentPage * SAVED_PAGE_SIZE);
 
-  return `
-    <div class="my-page-panel" aria-labelledby="saved-heading">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.bookmark}</span>
-          <h1 id="saved-heading">내 보관함</h1>
-        </div>
-        <div class="filter-groups" aria-label="저장 목록 필터">
-          <label class="sort-select saved-sort-select" aria-label="내 보관함 정렬">
-            <select data-saved-sort>
-              <option value="recent" ${state.savedSort === "recent" ? "selected" : ""}>최신</option>
-              <option value="saves" ${state.savedSort === "saves" ? "selected" : ""}>저장</option>
-              <option value="comments" ${state.savedSort === "comments" ? "selected" : ""}>댓글</option>
-              <option value="likes" ${state.savedSort === "likes" ? "selected" : ""}>좋아요</option>
-              <option value="views" ${state.savedSort === "views" ? "selected" : ""}>조회</option>
-            </select>
-          </label>
-          <div class="filter-group" role="group" aria-label="소유자 필터">
-            <label><input type="checkbox" data-filter="community" ${state.savedFilter.community ? "checked" : ""} /> 다른 사용자</label>
-            <label><input type="checkbox" data-filter="mine" ${state.savedFilter.mine ? "checked" : ""} /> 내 프롬프트</label>
-          </div>
-          <div class="filter-group" role="group" aria-label="상태 필터">
-            <label class="toggle-filter">
-              <input type="checkbox" data-filter="liked" ${state.savedFilter.liked ? "checked" : ""} />
-              <span class="toggle-track" aria-hidden="true"><span></span></span>
-              <span>좋아요만 보기</span>
-            </label>
-          </div>
-        </div>
-      </div>
-      ${
-        pendingUnsaveCount
-          ? `<p class="saved-pending-hint">저장 취소 예정 ${pendingUnsaveCount}개가 있습니다. 같은 저장 아이콘을 다시 누르면 되돌릴 수 있고, Home, Make, Share로 이동하면 목록에서 제거됩니다.</p>`
-          : ""
-      }
-      ${
-        filtered.length
-          ? `<div class="prompt-grid saved-grid">${pagePrompts.map(PromptCard).join("")}</div>
-             ${SavedPagination(totalPages, currentPage)}`
-          : `<div class="empty-state saved-empty">
-              <span>${state.savedFilter.liked ? icons.heart : icons.bookmark}</span>
-              <p>${SavedEmptyMessage()}</p>
-            </div>`
-      }
-    </div>
-  `;
+  return SavedLibraryPanelView(
+    { icons, state, PromptCard, SavedPagination, SavedEmptyMessage },
+    { filtered, pagePrompts, pendingUnsaveCount, totalPages, currentPage },
+  );
 }
 
 function SavedPagination(totalPages, currentPage) {
-  if (totalPages <= 1) return "";
-
-  return `
-    <nav class="pagination" aria-label="저장한 프롬프트 페이지">
-      ${Array.from({ length: totalPages }, (_, index) => {
-        const page = index + 1;
-        return `<button class="page-button ${page === currentPage ? "active" : ""}" type="button" data-saved-page="${page}" aria-label="저장 목록 ${page}페이지">${page}</button>`;
-      }).join("")}
-    </nav>
-  `;
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-saved-page", ariaLabel: "저장한 프롬프트 페이지" });
 }
 
 function MyPromptsPanel() {
   const prompts = getMyPrompts().sort(getSavedSorter());
 
-  return `
-    <div class="my-page-panel">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.edit}</span>
-          <h1>내가 만든 프롬프트</h1>
-        </div>
-      </div>
-      ${
-        prompts.length
-          ? `<div class="prompt-grid saved-grid">${prompts.map(PromptCard).join("")}</div>`
-          : `<div class="empty-state saved-empty"><span>${icons.edit}</span><p>아직 직접 만든 프롬프트가 없습니다.</p></div>`
-      }
-    </div>
-  `;
+  return MyPromptsPanelView(
+    { icons, PromptCard },
+    { prompts },
+  );
 }
 
 function MyCommentsPanel() {
-  const comments = getMyComments();
+  const comments = getMyComments().map((item) => ({
+    item,
+    isEditing: state.editingCommentId === item.comment.id,
+    revisionRequest: state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)],
+  }));
 
-  return `
-    <div class="my-page-panel">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.comment}</span>
-          <h1>댓글 관리</h1>
-        </div>
-      </div>
-      ${
-        comments.length
-          ? `<div class="activity-list">
-              ${comments
-                .map(
-                  (item) => {
-                    const isEditing = state.editingCommentId === item.comment.id;
-                    const revisionRequest = state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)];
-                    return `
-                    <article class="activity-item">
-                      <div>
-                        <strong>${escapeHtml(item.prompt?.title || "삭제된 프롬프트")}</strong>
-                        ${
-                          isEditing
-                            ? `<form class="comment-edit-form my-comment-edit-form" data-edit-comment-form="${item.comment.id}">
-                                <textarea name="comment" rows="3">${escapeHtml(item.comment.text)}</textarea>
-                                <button class="primary-button" type="submit">저장</button>
-                              </form>`
-                            : `<p>${escapeHtml(item.comment.text)}${item.comment.edited ? `<span class="activity-edited-mark">수정됨</span>` : ""}</p>`
-                        }
-                        ${
-                          revisionRequest
-                            ? `<div class="revision-request-notice activity-revision-notice">
-                                <strong>수정 요청됨</strong>
-                                <p>${escapeHtml(revisionRequest.reason)}</p>
-                              </div>`
-                            : ""
-                        }
-                      </div>
-                      <div class="activity-actions">
-                        <button type="button" data-open-prompt="${item.promptId}">원문 보기</button>
-                        <button type="button" data-edit-comment="${item.comment.id}">${isEditing ? "취소" : "수정"}</button>
-                        <button type="button" data-delete-comment="${item.comment.id}">삭제</button>
-                      </div>
-                    </article>
-                  `;
-                  },
-                )
-                .join("")}
-            </div>`
-          : `<div class="empty-state saved-empty"><span>${icons.comment}</span><p>작성한 댓글이 아직 없습니다.</p></div>`
-      }
-    </div>
-  `;
+  return MyCommentsPanelView(
+    { icons, escapeAttr, escapeHtml },
+    { comments },
+  );
 }
 
 function MyReportsPanel() {
   const reports = getMyReports();
 
-  return `
-    <div class="my-page-panel">
-      <div class="page-head">
-        <div class="page-title">
-          <span>${icons.flag}</span>
-          <h1>신고 내역</h1>
-        </div>
-      </div>
-      ${
-        reports.length
-          ? `<div class="activity-list">
-              ${reports
-                .map(
-                  (report) => `
-                    <article class="activity-item reported-activity">
-                      <div>
-                        <strong>${escapeHtml(report.title)}</strong>
-                        <p>${escapeHtml(report.label)}</p>
-                        ${report.reason ? `<p class="activity-reason">${escapeHtml(report.reason)}</p>` : ""}
-                      </div>
-                      <span class="status-badge ${report.status === "resolved" ? "public" : report.status === "dismissed" ? "private" : "pending-unsave"}">${getReportStatusLabel(report.status)}</span>
-                    </article>
-                  `,
-                )
-                .join("")}
-            </div>`
-          : `<div class="empty-state saved-empty"><span>${icons.flag}</span><p>신고 내역이 아직 없습니다.</p></div>`
-      }
-    </div>
-  `;
+  return MyReportsPanelView(
+    { icons, escapeAttr, escapeHtml, formatShortDate, getReportStatusLabel },
+    { reports },
+  );
+}
+
+function getAdminPanelRendererContext() {
+  return {
+    AdminTagPromptUsagePanel,
+    AdminUserActivitySummary,
+    escapeHtml,
+    formatNumber,
+    formatShortDate,
+    getAdminAuditActionLabel,
+    getAdminAuditTargetLabel,
+    getAdminTagStatusClass,
+    getAdminTagStatusLabel,
+    getAdminUserActivity,
+    getPromptCommentCount,
+    getPromptCreatedAt,
+    getPromptLikes,
+    getPromptRevisionRequest,
+    getPromptSaveCount,
+    getPromptViewCount,
+    getReportStatusLabel,
+    icons,
+    isFinalReportStatus,
+    makePreview,
+    renderAdminInlineAuthorControl,
+    state,
+  };
 }
 
 function AdminPage() {
   if (!state.adminMode) {
-    return `
-      <section class="admin-page">
-        <div class="empty-state saved-empty">
-          <span>${icons.shield}</span>
-          <p>${state.isLoggedIn ? "관리자 데모를 켜야 Admin 페이지를 볼 수 있습니다." : "관리자 데모는 로그인 후 사용할 수 있습니다."}</p>
-        </div>
-      </section>
-    `;
+    return AdminPageView(
+      { icons, escapeHtml },
+      {
+        adminMode: false,
+        unavailableMessage: state.isLoggedIn ? "관리자 권한 계정으로 로그인해야 Admin 페이지를 볼 수 있습니다." : "Admin 페이지는 로그인 후 사용할 수 있습니다.",
+      },
+    );
   }
 
-  const reportedPrompts = [...state.reportedPromptIds].map((id) => findPromptById(id)).filter(Boolean);
-  const reportRecords = getAdminReportRecords();
-  const allPrompts = getUniquePrompts([...popularPrompts, ...savedPrompts]);
+  const canShowAdminData = getAdminCanShowData();
+  const reportRecords = canShowAdminData ? getAdminReportRecords() : [];
+  const adminReportFilter = ["all", "prompt", "comment"].includes(state.adminReportFilter) ? state.adminReportFilter : "all";
+  const filteredReportRecords = reportRecords.filter((record) => adminReportFilter === "all" || record.type === adminReportFilter);
+  const adminReportFilters = getAdminReportFilters(reportRecords);
+  const allPrompts = !canShowAdminData
+    ? []
+    : state.backendAdminPrompts.length
+    ? getUniquePrompts(state.backendAdminPrompts)
+    : getUniquePrompts([...popularPrompts, ...savedPrompts]);
   const adminPromptQuery = state.adminPromptQuery || "";
   const adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(state.adminPromptFilter)
     ? state.adminPromptFilter
@@ -1759,202 +1677,229 @@ function AdminPage() {
   const filteredAdminPrompts = allPrompts
     .filter((prompt) => matchesAdminPromptFilter(prompt, adminPromptFilter))
     .filter((prompt) => matchesAdminPromptQuery(prompt, adminPromptQuery));
-  const adminPromptFilters = [
-    { id: "all", label: "전체" },
-    { id: "shared", label: "공개" },
-    { id: "private", label: "비공개" },
-    { id: "hidden", label: "숨김" },
-    { id: "reported", label: "신고됨" },
-  ];
+  const adminPromptFilters = getAdminPromptFilters();
   const adminTags = getAdminManagedTags();
-  const adminTagFilter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const adminTagFilter = ["all", "pending", "approved", "rejected", "disabled"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const adminTagSort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
-  const adminTagFilters = [
-    { id: "all", label: "전체" },
-    { id: "pending", label: "검토 중" },
-    { id: "approved", label: "검토 완료" },
-    { id: "rejected", label: "추천 제외" },
-  ];
+  const adminTagFilters = getAdminTagFilters();
   const adminTabs = getAdminTabs();
   const activeAdminTab = adminTabs.some((tab) => tab.id === state.adminTab) ? state.adminTab : "reports";
-  const reportsPanel = `
-    <section class="admin-panel">
-      <h2>신고 관리</h2>
-      <p class="admin-panel-note">접수된 신고는 검토 완료 또는 기각할 수 있고, 완료/기각 후에도 다시 접수 상태로 재처리할 수 있습니다.</p>
-      ${
-        reportRecords.length
-          ? reportRecords
-              .map(
-                (record) => `
-                  <article class="admin-row admin-report-row report-status-${record.status}">
-                    <div>
-                      <strong>${escapeHtml(record.title)}</strong>
-                      ${record.contextTitle ? `<p class="admin-report-context">게시물: ${escapeHtml(record.contextTitle)}</p>` : ""}
-                      ${record.targetPreview ? `<p class="admin-report-target">${escapeHtml(record.targetPreview)}</p>` : ""}
-                      <p>${escapeHtml(record.summary)}</p>
-                      <span class="status-badge ${record.status === "dismissed" ? "private" : record.status === "resolved" ? "public" : "pending-unsave"}">${getReportStatusLabel(record.status)}</span>
-                      ${record.promptAuthor ? `<span class="status-badge private">게시물 작성자 ${escapeHtml(record.promptAuthor)}</span>` : ""}
-                      ${record.commentAuthor ? `<span class="status-badge private">댓글 작성자 ${escapeHtml(record.commentAuthor)}</span>` : ""}
-                      ${state.adminPromptRevisionRequests[record.key] ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
-                    </div>
-                    <div class="admin-actions">
-                      ${
-                        record.promptId
-                          ? `<button type="button" data-open-prompt="${record.promptId}" ${record.type === "comment" ? `data-highlight-comment="${record.targetId}"` : ""}>원문 보기</button>`
-                          : ""
-                      }
-                      <button type="button" data-admin-request-revision="${record.key}">수정 요청</button>
-                      ${record.promptId ? `<button type="button" data-admin-hide-prompt="${record.promptId}">${state.adminHiddenPromptIds.has(record.promptId) ? "게시물 숨김 해제" : "게시물 숨김"}</button>` : ""}
-                      ${record.status !== "resolved" ? `<button type="button" data-admin-report-status="${record.key}:resolved">검토 완료</button>` : ""}
-                      ${record.status !== "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:dismissed">기각</button>` : ""}
-                      ${record.status === "resolved" ? `<button type="button" data-admin-report-status="${record.key}:pending">재처리</button>` : ""}
-                      ${record.status === "dismissed" ? `<button type="button" data-admin-report-status="${record.key}:pending">기각 취소</button>` : ""}
-                      ${
-                        record.type === "comment"
-                          ? `<button type="button" data-delete-comment="${record.targetId}">댓글 삭제</button>`
-                          : record.promptId
-                            ? `<button type="button" data-admin-delete-prompt="${record.promptId}">대상 삭제</button>`
-                            : ""
-                      }
-                    </div>
-                  </article>
-                `,
-              )
-              .join("")
-          : `<p class="admin-empty">접수된 신고가 없습니다.</p>`
-      }
-    </section>
-  `;
-  const promptsPanel = `
-    <section class="admin-panel">
-      <h2>프롬프트 관리</h2>
-      <p class="admin-panel-note">관리자는 사용자 프롬프트를 직접 수정하지 않고, 수정 요청, 게시물 숨김, 삭제 같은 운영 조치만 수행합니다.</p>
-      <div class="admin-filter-list" aria-label="프롬프트 분류">
-        ${adminPromptFilters
-          .map(
-            (filter) =>
-              `<button class="${adminPromptFilter === filter.id ? "active" : ""}" type="button" data-admin-prompt-filter="${filter.id}">${filter.label}</button>`,
-          )
-          .join("")}
-      </div>
-      <label class="admin-search-field">
-        <span>${icons.search}</span>
-        <input type="search" data-admin-prompt-search value="${escapeHtml(adminPromptQuery)}" placeholder="제목, 본문, 해시태그, 작성자, 상태로 검색" autocomplete="off" />
-      </label>
-      ${filteredAdminPrompts.length ? filteredAdminPrompts
-        .slice(0, 8)
-        .map(
-          (prompt) => {
-            const isShared = prompt.isShared || prompt.source === "community";
-            const isHidden = state.adminHiddenPromptIds.has(prompt.id);
-            const isReported = state.reportedPromptIds.has(prompt.id);
-            const revisionRequest = getPromptRevisionRequest(prompt.id);
-            return `
-              <article class="admin-row admin-prompt-row">
-                <div>
-                  <strong>${escapeHtml(prompt.title)}</strong>
-                  <p class="admin-prompt-preview">${escapeHtml(makePreview(prompt.text))}</p>
-                  <div class="admin-prompt-meta">
-                    <span>${icons.eye}${formatNumber(prompt.views || 0)}</span>
-                    <span>${icons.heart}${formatNumber(getPromptLikes(prompt))}</span>
-                    <span>${icons.comment}${formatNumber(getPromptCommentCount(prompt))}</span>
-                    <span>${icons.bookmark}${formatNumber(getPromptSaveCount(prompt))}</span>
-                    <span>작성자 ${escapeHtml(getDisplayPromptAuthor(prompt))}</span>
-                    <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
-                  </div>
-                  <div class="tag-row admin-prompt-tags">${(prompt.tags || []).map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}</div>
-                  <div class="status-row">
-                    <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
-                    ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
-                    ${isReported ? `<span class="status-badge pending-unsave">신고됨</span>` : ""}
-                    ${revisionRequest ? `<span class="status-badge pending-unsave">수정 요청됨</span>` : ""}
-                  </div>
-                  ${
-                    revisionRequest
-                      ? `<div class="revision-request-notice admin-revision-summary">
-                          <strong>수정 요청 사유</strong>
-                          <p>${escapeHtml(revisionRequest.reason)}</p>
-                        </div>`
-                      : ""
-                  }
-                </div>
-                <div class="admin-actions">
-                  <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
-                  <button type="button" data-admin-request-revision="prompt:${prompt.id}">수정 요청</button>
-                  <button type="button" data-admin-hide-prompt="${prompt.id}">${isHidden ? "게시물 숨김 해제" : "게시물 숨김"}</button>
-                  <button type="button" data-admin-delete-prompt="${prompt.id}">삭제</button>
-                </div>
-              </article>
-            `;
-          },
-        )
-        .join("") : `<p class="admin-empty">검색 결과가 없습니다.</p>`}
-    </section>
-  `;
-  const tagsPanel = `
-    <section class="admin-panel">
-      <h2>태그 관리</h2>
-      <p class="admin-panel-note">태그는 검토 중, 검토 완료, 추천 제외 상태로 관리하며 승인/제외 후에도 재검토할 수 있습니다.</p>
-      <div class="admin-filter-list" aria-label="태그 상태 분류">
-        ${adminTagFilters
-          .map(
-            (filter) =>
-              `<button class="${adminTagFilter === filter.id ? "active" : ""}" type="button" data-admin-tag-filter="${filter.id}">${filter.label}</button>`,
-          )
-          .join("")}
-      </div>
-      <div class="admin-search-toolbar">
-        <label class="admin-search-field">
-          <span>${icons.search}</span>
-          <input type="search" data-admin-tag-search value="${escapeHtml(state.adminTagQuery || "")}" placeholder="태그명을 검색" autocomplete="off" />
-        </label>
-        <select class="admin-sort-select" data-admin-tag-sort aria-label="태그 정렬">
-          <option value="usage" ${adminTagSort === "usage" ? "selected" : ""}>사용량</option>
-          <option value="recent" ${adminTagSort === "recent" ? "selected" : ""}>최신</option>
-        </select>
-      </div>
-      ${
-        adminTags.length
-          ? adminTags
-              .map(
-                (tag) => `
-                  <article class="admin-row tag-status-${tag.status}">
-                    <div>
-                      <strong>#${escapeHtml(tag.label)}</strong>
-                      <span class="status-badge ${getAdminTagStatusClass(tag.status)}">${getAdminTagStatusLabel(tag.status)}</span>
-                      <span class="admin-tag-usage">사용 ${formatNumber(tag.count)}회</span>
-                    </div>
-                    <div class="admin-actions">
-                      ${tag.status !== "approved" ? `<button type="button" data-admin-tag-action="approved:${escapeHtml(tag.key)}">검토 완료</button>` : ""}
-                      ${tag.status !== "rejected" ? `<button type="button" data-admin-tag-action="rejected:${escapeHtml(tag.key)}">추천 제외</button>` : ""}
-                      ${tag.status === "approved" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">검토 완료 취소</button>` : ""}
-                      ${tag.status === "rejected" ? `<button type="button" data-admin-tag-action="pending:${escapeHtml(tag.key)}">재검토</button>` : ""}
-                    </div>
-                  </article>
-                `,
-              )
-              .join("")
-          : `<p class="admin-empty">관리할 태그가 없습니다.</p>`
-      }
-    </section>
-  `;
-  const activePanel = activeAdminTab === "prompts" ? promptsPanel : activeAdminTab === "tags" ? tagsPanel : reportsPanel;
+  const adminPanelCtx = getAdminPanelRendererContext();
+  const reportsPanel = AdminReportsPanelView(adminPanelCtx, {
+    adminReportFilter,
+    adminReportFilters,
+    filteredReportRecords,
+    reportRecords,
+  });
+  const promptsPanel = AdminPromptsPanelView(adminPanelCtx, {
+    adminPromptFilter,
+    adminPromptFilters,
+    adminPromptQuery,
+    filteredAdminPrompts,
+  });
+  const tagsPanel = AdminTagsPanelView(adminPanelCtx, {
+    adminTagFilter,
+    adminTagFilters,
+    adminTagSort,
+    adminTags,
+  });
+  const usersPanel = AdminUsersPanelView(adminPanelCtx);
+  const auditPanel = AdminAuditPanelView(adminPanelCtx);
+  const activePanel = getActiveAdminPanel(activeAdminTab, {
+    audit: auditPanel,
+    prompts: promptsPanel,
+    reports: reportsPanel,
+    tags: tagsPanel,
+    users: usersPanel,
+  });
+
+  return AdminPageView(
+    { icons, escapeHtml },
+    {
+      activePanel,
+      adminMode: true,
+      notice: getAdminModeNotice(),
+    },
+  );
+}
+
+function AdminTagPromptUsagePanel(tag) {
+  const prompts = getAdminPromptsByTag(tag.key);
+  const visiblePrompts = prompts.slice(0, 5);
+  const remainingCount = Math.max(0, prompts.length - visiblePrompts.length);
 
   return `
-    <section class="admin-page" aria-labelledby="admin-heading">
-      <div class="page-head admin-head">
-        <div class="page-title">
-          <span>${icons.shield}</span>
-          <h1 id="admin-heading">Admin</h1>
+    <section class="admin-tag-usage-panel" aria-label="#${escapeHtml(tag.label)} 사용 게시물">
+      <div class="admin-tag-usage-head">
+        <div>
+          <h3>#${escapeHtml(tag.label)} 사용 게시물</h3>
+          <p>태그 검토를 위해 이 태그가 붙은 게시물 맥락을 확인합니다.</p>
         </div>
-        <p class="admin-demo-note">프론트엔드 검수용 관리자 화면입니다. 관리자 모드에서는 사용자 상호작용 없이 수정 요청, 숨김, 삭제, 검토 상태 변경만 수행합니다.</p>
+        <span>${formatNumber(prompts.length)}개</span>
       </div>
-      <div class="admin-workspace">
-        <div class="admin-content-panel">
-          ${activePanel}
-        </div>
-      </div>
+      ${
+        visiblePrompts.length
+          ? visiblePrompts
+              .map((prompt) => {
+                const isShared = prompt.isShared || prompt.source === "community";
+                const isHidden = state.adminHiddenPromptIds.has(prompt.id);
+                return `
+                  <article class="admin-tag-prompt-item">
+                    <div>
+                      <strong>${escapeHtml(prompt.title)}</strong>
+                      <p>${escapeHtml(makePreview(prompt.text))}</p>
+                      <div class="admin-prompt-meta">
+                        <span>작성자 ${renderAdminInlineAuthorControl(prompt)}</span>
+                        <span>${formatShortDate(getPromptCreatedAt(prompt))}</span>
+                        <span class="status-badge ${isShared ? "public" : "private"}">${isShared ? "공유됨" : "비공개"}</span>
+                        ${isHidden ? `<span class="status-badge private">숨김</span>` : ""}
+                      </div>
+                    </div>
+                    <div class="admin-actions">
+                      <button type="button" data-open-prompt="${prompt.id}">원문 보기</button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<p class="admin-empty">이 태그가 붙은 게시물이 없습니다.</p>`
+      }
+      ${remainingCount ? `<p class="admin-panel-note">먼저 5개만 표시합니다. 나머지 ${formatNumber(remainingCount)}개는 백엔드 페이지네이션 API 연결 후 이어서 확인할 수 있습니다.</p>` : ""}
     </section>
+  `;
+}
+
+function getAdminAuditActionLabel(action) {
+  const normalized = String(action || "").trim().toLowerCase();
+  const labels = {
+    block_user: "회원 차단",
+    user_block: "회원 차단",
+    member_block: "회원 차단",
+    user_blocked: "회원 차단",
+    member_blocked: "회원 차단",
+    block_member: "회원 차단",
+    unblock_user: "회원 차단 해제",
+    user_unblock: "회원 차단 해제",
+    member_unblock: "회원 차단 해제",
+    user_unblocked: "회원 차단 해제",
+    member_unblocked: "회원 차단 해제",
+    unblock_member: "회원 차단 해제",
+    report_status: "신고 상태 변경",
+    report_status_changed: "신고 상태 변경",
+    report_status_change: "신고 상태 변경",
+    report_status_update: "신고 상태 변경",
+    update_report_status: "신고 상태 변경",
+    prompt_hide: "게시물 숨김",
+    hide_prompt: "게시물 숨김",
+    prompt_hidden: "게시물 숨김",
+    prompt_restore: "게시물 숨김 해제",
+    restore_prompt: "게시물 숨김 해제",
+    prompt_restored: "게시물 숨김 해제",
+    hide_comment: "댓글 숨김",
+    comment_hide: "댓글 숨김",
+    comment_hidden: "댓글 숨김",
+    unhide_comment: "댓글 숨김 해제",
+    comment_unhide: "댓글 숨김 해제",
+    comment_restore: "댓글 숨김 해제",
+    comment_unhidden: "댓글 숨김 해제",
+    delete_comment: "댓글 삭제",
+    comment_delete: "댓글 삭제",
+    comment_deleted: "댓글 삭제",
+    tag_status: "태그 상태 변경",
+    tag_status_changed: "태그 상태 변경",
+    tag_status_change: "태그 상태 변경",
+    revision_request: "수정 요청",
+    revision_request_create: "수정 요청 생성",
+    revision_request_status_change: "수정 요청 상태 변경",
+    author_revision_request_create: "작성자 수정 요청 생성",
+    author_revision_request_update: "작성자 수정 요청 사유 수정",
+    author_revision_request_status_change: "작성자 수정 요청 상태 변경",
+  };
+  return labels[normalized] || action || "관리자 작업";
+}
+
+function getAdminAuditTargetLabel(log) {
+  const targetType = String(log?.targetType || "").trim();
+  const targetId = String(log?.targetId || "").trim();
+  if (!targetType && !targetId) return "대상 정보 없음";
+  if (!targetId) return targetType;
+  if (!targetType) return `대상 ${targetId}`;
+  return `${targetType} #${targetId}`;
+}
+
+function getAdminModeNotice() {
+  if (state.adminBackendStatus === "fallback" && !canUseDemoFallback()) {
+    return "관리자 API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 관리자 데이터를 표시하지 않습니다.";
+  }
+  if (state.adminBackendStatus === "demo") {
+    return "데모 관리자 데이터를 표시 중입니다. 실제 운영 검수는 관리자 토큰으로 백엔드 API 연결 상태에서 확인해주세요.";
+  }
+  return "프론트엔드 검수용 관리자 화면입니다. 댓글은 별도 메뉴로 분리하지 않고 신고 관리, 프롬프트 원문 보기, 사용자 활동 안에서 게시물 맥락과 함께 확인합니다.";
+}
+
+function AdminUserActivitySummary(activity) {
+  const memberId = String(activity.memberId || getAdminKnownMemberId(activity.nickname) || "").trim();
+  const isBlocked = Boolean(activity.blocked);
+  const groups = [
+    { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
+    { id: "comments", title: "작성한 댓글", items: activity.comments, empty: "작성한 댓글이 없습니다." },
+    { id: "replies", title: "작성한 답글", items: activity.replies, empty: "작성한 답글이 없습니다." },
+    { id: "reports-made", title: "신고한 내역", items: activity.reportsMade, empty: "신고한 내역은 아직 확인할 수 없습니다." },
+    { id: "reports-received", title: "신고당한 내역", items: activity.reportsReceived, empty: "신고당한 내역이 없습니다." },
+  ];
+
+  return `
+    <div class="admin-user-activity-result">
+      <div class="admin-user-activity-title">
+        <div>
+          <strong>${escapeHtml(activity.nickname)}</strong>
+          <span>프롬프트 ${formatNumber(activity.prompts.length)}개 · 댓글 ${formatNumber(activity.comments.length)}개 · 답글 ${formatNumber(activity.replies.length)}개</span>
+          ${isBlocked ? `<span class="status-badge private">차단됨</span>` : ""}
+        </div>
+        ${
+          memberId
+            ? `<div class="admin-user-activity-actions">
+                ${
+                  isBlocked
+                    ? `<button type="button" data-admin-user-unblock="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단 해제</button>`
+                    : `<button type="button" data-admin-user-block="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단</button>`
+                }
+              </div>`
+            : `<span class="status-badge pending-unsave">샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.</span>`
+        }
+      </div>
+      <div class="admin-user-activity-grid">
+        ${groups
+          .map(
+            (group) => `
+              <section class="admin-user-activity-card">
+                <h4>${group.title}<small>${formatNumber(group.items.length)}</small></h4>
+                ${
+                  group.items.length
+                    ? group.items
+                        .slice(0, 4)
+                        .map(
+                          (item) => `
+                            <article>
+                              <strong>${escapeHtml(item.title)}</strong>
+                              <p>${escapeHtml(item.preview)}</p>
+                              ${
+                                item.promptId
+                                  ? `<button type="button" data-open-prompt="${escapeHtml(item.promptId)}" ${item.commentId ? `data-highlight-comment="${escapeHtml(item.commentId)}"` : ""}>원문 보기</button>`
+                                  : ""
+                              }
+                            </article>
+                          `,
+                        )
+                        .join("")
+                    : `<p class="admin-user-activity-empty">${group.empty}</p>`
+                }
+              </section>
+            `,
+          )
+          .join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -1965,98 +1910,23 @@ function SavedEmptyMessage() {
 }
 
 function SharePage() {
-  if (!state.isLoggedIn) {
-    return `
-      <section class="share-page login-required" aria-labelledby="share-required-title">
-        <div class="empty-state share-required-card">
-          <span>${icons.share}</span>
-          <h1 id="share-required-title">로그인이 필요합니다</h1>
-          <p>프롬프트를 공유하려면 먼저 로그인해주세요.</p>
-          <button class="primary-button" type="button" data-open-auth="login">로그인</button>
-        </div>
-      </section>
-    `;
-  }
   const draft = state.shareDraft || {};
   const draftTags = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
   const selectedTags = parseSharedTags(draftTags);
   const suggestedTags = getShareTagSuggestions(state.shareTagQuery, selectedTags);
 
-  return `
-    <section class="share-page" aria-labelledby="share-title">
-      <div class="share-shell">
-        <div class="page-title share-title">
-          <span>${icons.share}</span>
-          <h1 id="share-title">프롬프트 공유하기</h1>
-        </div>
-        <p class="share-policy">공유되는 내용은 제목, 최종 프롬프트, 해시태그입니다. Make에서 작성한 개인 대화 기록은 공유되지 않습니다.</p>
-        <form class="share-form">
-          <label>
-            <span>제목</span>
-            <input name="title" type="text" value="${escapeHtml(draft.title || "")}" placeholder="예: SEO 블로그 포스팅 프롬프트" />
-          </label>
-          <label>
-          <span>프롬프트</span>
-          <textarea name="prompt" rows="8" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요...">${escapeHtml(draft.text || "")}</textarea>
-          </label>
-          <label>
-            <span>해시태그</span>
-            <input name="tagSearch" type="text" value="${escapeHtml(state.shareTagQuery)}" placeholder="기존 태그를 검색해 선택하거나 새 태그를 입력하세요" autocomplete="off" />
-            <input name="tags" type="hidden" value="${escapeHtml(draftTags)}" />
-            <div class="share-tag-suggestions" aria-label="해시태그 검색 결과">
-              ${
-                suggestedTags.length
-                  ? suggestedTags.map((tag) => `<button type="button" data-add-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`).join("")
-                  : state.shareTagQuery.trim()
-                    ? `<button type="button" data-add-share-tag="${escapeHtml(state.shareTagQuery.trim())}">새 태그로 추가: #${escapeHtml(state.shareTagQuery.trim())}</button>`
-                    : `<span>기존 해시태그를 검색해 선택할 수 있습니다.</span>`
-              }
-            </div>
-            <div class="tag-chip-list" data-share-tag-chips>
-              ${
-                selectedTags.length
-                  ? selectedTags
-                      .map((tag) => `<button class="tag-chip" type="button" data-remove-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)} <span aria-hidden="true">×</span></button>`)
-                      .join("")
-                  : `<span class="tag-chip-empty">선택한 해시태그가 없습니다.</span>`
-              }
-            </div>
-            <p class="field-hint">검색 결과가 없으면 입력한 값을 새 태그로 추가할 수 있습니다.</p>
-          </label>
-          <div class="share-helper">
-            <span>${state.shareError || "공유 후 Home으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다."}</span>
-          </div>
-          <div class="form-actions">
-            <button class="primary-button" type="submit">공유하기</button>
-          </div>
-        </form>
-        ${SharePreview(draft, draftTags)}
-      </div>
-    </section>
-  `;
-}
-
-function SharePreview(draft, draftTags) {
-  const tags = parseSharedTags(draftTags || "").slice(0, 4);
-  const previewTags = tags.length ? tags : ["미리보기", "공유", "프롬프트"];
-
-  return `
-    <aside class="share-preview" aria-label="공유 미리보기">
-      <div class="share-preview-head">
-        <strong>Home 카드 미리보기</strong>
-        <span>공유 후 노출되는 모습</span>
-      </div>
-      <article class="prompt-card share-preview-card">
-        <div class="card-head">
-          <h2 data-share-preview-title>${escapeHtml(draft.title || "프롬프트 제목 미리보기")}</h2>
-        </div>
-        <p data-share-preview-text>${escapeHtml(draft.text || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.")}</p>
-        <div class="tag-row" data-share-preview-tags>
-          ${previewTags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")}
-        </div>
-      </article>
-    </aside>
-  `;
+  return SharePageView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      isLoggedIn: state.isLoggedIn,
+      draft,
+      draftTags,
+      selectedTags,
+      suggestedTags,
+      shareTagQuery: state.shareTagQuery,
+      shareError: state.shareError,
+    },
+  );
 }
 
 function AuthModal() {
@@ -2065,6 +1935,7 @@ function AuthModal() {
   const isFindPassword = state.authView === "find-password";
   const isWithdraw = state.authView === "withdraw";
   const title = isFindId ? "아이디 찾기" : isFindPassword ? "비밀번호 찾기" : isWithdraw ? "회원탈퇴" : isSignup ? "회원가입" : "로그인";
+  const authError = escapeHtml(state.authError || "");
   const nicknameChecked = state.authDuplicateChecks.nickname && state.authDuplicateChecks.nickname === String(state.authDraft.nickname || "").trim();
   const userIdChecked = state.authDuplicateChecks.userId && state.authDuplicateChecks.userId === String(state.authDraft.userId || "").trim();
 
@@ -2073,114 +1944,23 @@ function AuthModal() {
     return AuthModal();
   }
 
-  if (isWithdraw) {
-    return `
-      <div class="modal-backdrop visible auth-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <form class="modal auth-modal" data-auth-form>
-          <div class="modal-head">
-            <h2 id="auth-title">${title}</h2>
-            <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
-          </div>
-          <p class="auth-helper">회원탈퇴를 진행하면 계정이 비활성화되고 기존 토큰으로 다시 사용할 수 없습니다. 본인 확인을 위해 비밀번호를 입력해주세요.</p>
-          <label class="password-field">
-            <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />
-            <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
-          </label>
-          <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
-          <button class="primary-button danger-primary full" type="submit">회원탈퇴</button>
-          <button class="text-button" type="button" data-close-auth>취소</button>
-        </form>
-      </div>
-    `;
-  }
-
-  if (isFindId || isFindPassword) {
-    return `
-      <div class="modal-backdrop visible auth-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <form class="modal auth-modal" data-auth-form>
-          <div class="modal-head">
-            <h2 id="auth-title">${title}</h2>
-            <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
-          </div>
-          <p class="auth-helper">${isFindId ? "이름과 이메일로 아이디 찾기 데모를 진행합니다. 전화번호는 선택 보조 정보입니다." : "아이디와 이메일로 비밀번호 재설정 데모를 진행합니다. 전화번호는 선택 보조 정보입니다."}</p>
-          ${
-            isFindId
-              ? `<input name="name" placeholder="이름" autocomplete="name" />`
-              : `<input name="userId" placeholder="아이디" autocomplete="username" />
-                 <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>`
-          }
-          <input name="email" type="email" placeholder="이메일" autocomplete="email" />
-          <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" />
-          <button class="primary-button full" type="submit">${isFindId ? "아이디 찾기" : "비밀번호 재설정 요청"}</button>
-          <div class="auth-link-row">
-            <button class="text-button inline" type="button" data-open-auth="login">로그인으로 돌아가기</button>
-            <button class="text-button inline" type="button" data-open-auth="${isFindId ? "find-password" : "find-id"}">${isFindId ? "비밀번호 찾기" : "아이디 찾기"}</button>
-          </div>
-        </form>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="modal-backdrop visible auth-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-      <form class="modal auth-modal" data-auth-form>
-        <div class="modal-head">
-          <h2 id="auth-title">${title}</h2>
-          <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
-        </div>
-        <button class="google-auth-button" type="button" data-google-auth><span>G</span>${isSignup ? "Google로 회원가입" : "Google로 로그인"}</button>
-        <div class="auth-divider"><span>또는</span></div>
-        ${
-          isSignup
-            ? `<div class="auth-check-row">
-                <input name="nickname" placeholder="닉네임" value="${escapeHtml(state.authDraft.nickname || "")}" />
-                <button type="button" data-check-duplicate="nickname" ${nicknameChecked ? "disabled" : ""}>${nicknameChecked ? "확인 완료" : "중복 확인"}</button>
-              </div>
-              <input name="name" placeholder="이름" value="${escapeHtml(state.authDraft.name || "")}" />
-              <div class="auth-check-row">
-                <input name="userId" placeholder="아이디" autocomplete="username" value="${escapeHtml(state.authDraft.userId || "")}" />
-                <button type="button" data-check-duplicate="userId" ${userIdChecked ? "disabled" : ""}>${userIdChecked ? "확인 완료" : "중복 확인"}</button>
-              </div>
-              <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>
-              <input name="email" type="email" placeholder="이메일" autocomplete="email" value="${escapeHtml(state.authDraft.email || "")}" />
-              <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" value="${escapeHtml(state.authDraft.phone || "")}" />
-              <label class="date-field ${state.authDraft.birth ? "has-value" : ""}">
-                <input name="birth" type="date" aria-label="생년월일 선택" value="${escapeHtml(state.authDraft.birth || "")}" />
-                <span>생년월일</span>
-              </label>`
-            : `<input name="userId" placeholder="아이디" autocomplete="username" />
-               <p class="auth-field-warning" data-user-id-warning>${escapeHtml(state.authUserIdWarning || "")}</p>`
-        }
-        <label class="password-field">
-          <input name="password" type="password" placeholder="비밀번호" autocomplete="${isSignup ? "new-password" : "current-password"}" value="${isSignup ? escapeHtml(state.authDraft.password || "") : ""}" />
-          <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
-        </label>
-        <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
-        ${
-          isSignup
-            ? `<label class="password-field">
-                <input name="passwordConfirm" type="password" placeholder="비밀번호 확인" autocomplete="new-password" value="${escapeHtml(state.authDraft.passwordConfirm || "")}" />
-                <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
-              </label>
-              <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
-              <label class="agreement-row"><input type="checkbox" name="terms" ${state.authDraft.terms ? "checked" : ""} /> 사이트 이용 약관에 동의합니다</label>
-              <label class="agreement-row"><input type="checkbox" name="privacy" ${state.authDraft.privacy ? "checked" : ""} /> 개인정보 수집 및 이용에 동의합니다</label>`
-            : ""
-        }
-        <button class="primary-button full" type="submit">${isSignup ? "가입하기" : "로그인"}</button>
-        ${
-          isSignup
-            ? ""
-            : `<div class="auth-link-row">
-                <button class="text-button inline" type="button" data-open-auth="find-id">아이디 찾기</button>
-                <button class="text-button inline" type="button" data-open-auth="find-password">비밀번호 찾기</button>
-                <button class="text-button inline" type="button" data-open-auth="signup">회원가입</button>
-              </div>`
-        }
-        ${isSignup ? `<button class="text-button" type="button" data-open-auth="login">이미 계정이 있어요</button>` : state.isLoggedIn ? `<button class="text-button" type="button" data-open-auth="withdraw">회원탈퇴</button>` : ""}
-      </form>
-    </div>
-  `;
+  return AuthModalView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      title,
+      authError,
+      isSignup,
+      isFindId,
+      isFindPassword,
+      isWithdraw,
+      isLoggedIn: state.isLoggedIn,
+      hasGoogleCredential: Boolean(window.TTALKAK_GOOGLE_CREDENTIAL),
+      nicknameChecked,
+      userIdChecked,
+      authDraft: state.authDraft,
+      authUserIdWarning: state.authUserIdWarning,
+    },
+  );
 }
 
 function saveAuthDraftFromForm() {
@@ -2200,6 +1980,34 @@ function saveAuthDraftFromForm() {
     terms: formData.has("terms"),
     privacy: formData.has("privacy"),
   };
+}
+
+function clearAuthFormError() {
+  state.authError = "";
+  const errorElement = document.querySelector("[data-auth-error]");
+  if (errorElement) {
+    errorElement.textContent = "";
+    errorElement.hidden = true;
+  }
+}
+
+function setAuthFormError(message) {
+  const text = String(message || "요청을 처리하지 못했습니다.").trim();
+  state.authError = text;
+  const form = document.querySelector("[data-auth-form]");
+  let errorElement = form?.querySelector("[data-auth-error]");
+  if (!errorElement && form) {
+    errorElement = document.createElement("p");
+    errorElement.className = "auth-form-error";
+    errorElement.setAttribute("role", "alert");
+    errorElement.dataset.authError = "";
+    const anchor = form.querySelector(".auth-divider") || form.querySelector(".auth-helper") || form.querySelector(".modal-head");
+    anchor?.insertAdjacentElement("afterend", errorElement);
+  }
+  if (errorElement) {
+    errorElement.textContent = text;
+    errorElement.hidden = false;
+  }
 }
 
 function isDuplicateAuthValue(field, value) {
@@ -2240,63 +2048,120 @@ function normalizeAuthResult(payload, fallbackUserId = "") {
   };
 }
 
+function getCurrentAccountScopeKey() {
+  if (!state.isLoggedIn) return "guest";
+  const id = state.currentUserId || "";
+  const role = String(state.currentUserRole || "user").toLowerCase();
+  const nickname = String(state.currentUser || "").trim();
+  return `${role}:${id || nickname || "unknown"}`;
+}
+
+function snapshotCurrentAccountScope() {
+  return {
+    userLibraryPromptIds: [...state.userLibraryPromptIds],
+    likedPromptIds: [...state.likedPromptIds],
+    likedCommentIds: [...state.likedCommentIds],
+    reportedPromptIds: [...state.reportedPromptIds],
+    reportedCommentIds: [...state.reportedCommentIds],
+    hideReportedPrompts: state.hideReportedPrompts,
+  };
+}
+
+function saveCurrentAccountScope() {
+  const key = getCurrentAccountScopeKey();
+  if (!key) return;
+  state.accountScopes = {
+    ...(state.accountScopes || {}),
+    [key]: snapshotCurrentAccountScope(),
+  };
+}
+
+function applyAccountScope(scope = {}) {
+  state.userLibraryPromptIds = new Set(Array.isArray(scope.userLibraryPromptIds) ? scope.userLibraryPromptIds : []);
+  state.likedPromptIds = new Set(Array.isArray(scope.likedPromptIds) ? scope.likedPromptIds : []);
+  state.likedCommentIds = new Set(Array.isArray(scope.likedCommentIds) ? scope.likedCommentIds : []);
+  state.reportedPromptIds = new Set(Array.isArray(scope.reportedPromptIds) ? scope.reportedPromptIds : []);
+  state.reportedCommentIds = new Set(Array.isArray(scope.reportedCommentIds) ? scope.reportedCommentIds : []);
+  state.hideReportedPrompts = Boolean(scope.hideReportedPrompts);
+  normalizePersistedLikeCounts();
+}
+
+function restoreCurrentAccountScope() {
+  const scopes = state.accountScopes && typeof state.accountScopes === "object" ? state.accountScopes : {};
+  applyAccountScope(scopes[getCurrentAccountScopeKey()] || {});
+}
+
 function applyAuthenticatedUser(authResult) {
-  state.isLoggedIn = true;
-  state.currentUser = authResult.user.nickname;
-  state.currentUserId = authResult.user.id;
-  state.currentUserRole = authResult.user.role || "user";
-  state.authToken = authResult.token;
-  state.token = authResult.token;
-  state.adminMode = state.currentUserRole === "admin";
-  if (state.adminMode) state.route = "admin";
-  state.myBackendStatus = "idle";
-  state.adminBackendStatus = "idle";
-  state.makeBackendStatus = "idle";
-  try {
-    localStorage.setItem(AUTH_TOKEN_KEY, authResult.token);
-  } catch (_error) {
-    // Local preview can still run if browser storage is blocked.
-  }
+  saveCurrentAccountScope();
+  applyAuthenticatedIdentity(authResult);
+  resetSessionBackendState();
+  restoreCurrentAccountScope();
+  writeStorageItem(AUTH_TOKEN_KEY, authResult.token);
+}
+
+function applyAuthenticatedIdentity(authResult) {
+  applyAuthenticatedIdentityState(state, authResult);
+}
+
+function resetSessionBackendState() {
+  resetSessionBackendStateValue(state);
+}
+
+function clearSessionBackendData() {
+  clearSessionBackendDataState(state);
+}
+
+function clearTransientSessionUiState() {
+  clearTransientSessionUiStateValue(state);
 }
 
 function clearAuthenticatedSession({ keepRoute = false } = {}) {
-  state.isLoggedIn = false;
-  state.currentUser = null;
-  state.currentUserId = null;
-  state.currentUserRole = "user";
-  state.authToken = "";
-  state.token = "";
-  state.adminMode = false;
-  state.authView = null;
-  state.myBackendStatus = "idle";
-  state.adminBackendStatus = "idle";
-  state.makeBackendStatus = "idle";
-  state.backendMyComments = [];
-  state.backendMyReports = [];
-  state.backendLibraryPromptIds = new Set();
-  state.backendAdminReports = [];
-  state.backendAdminTags = [];
-  state.creatingFolder = false;
-  state.editingFolderId = null;
-  state.openFolderMenuId = null;
-  state.creatingThreadFolderId = null;
-  state.openThreadMenuId = null;
-  state.openPromptCardMenuId = null;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
-  state.reportPromptId = null;
-  state.reportCommentId = null;
-  state.editingPromptId = null;
-  state.adminRequestTargetKey = null;
-  state.editingMessageId = null;
-  state.executeMessageId = null;
-  state.executePromptId = null;
-  if (!keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
-  try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch (_error) {
-    // Local preview can continue if browser storage is unavailable.
-  }
+  saveCurrentAccountScope();
+  clearAuthenticatedSessionState(state, { keepRoute });
+  restoreCurrentAccountScope();
+  removeStorageItem(AUTH_TOKEN_KEY);
+}
+
+function clearAuthenticatedIdentity() {
+  clearAuthenticatedIdentityState(state);
+}
+
+function getPromptMutationStateContext() {
+  return {
+    findPromptById,
+    getSavedFilteredCount,
+    makePreview,
+    popularPrompts,
+    savedPrompts,
+    state,
+    updatePromptField,
+    upsertPrompt,
+  };
+}
+
+function getCommentMutationStateContext() {
+  return {
+    commentsByPrompt,
+    getSavedFilteredCount,
+    popularPrompts,
+    savedPrompts,
+    state,
+    upsertPrompt,
+  };
+}
+
+function getSavedFilteredCount() {
+  return getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
+}
+
+function getMakeMutationStateContext() {
+  return {
+    makePreview,
+    makePromptTitle,
+    savedPrompts,
+    state,
+    updateRecentThread,
+  };
 }
 
 function normalizeUserIdInput(input) {
@@ -2322,6 +2187,30 @@ function updateCapsLockWarning(input, event) {
 }
 
 function bindEvents() {
+  bindAppEvents({
+    bindCoreEvents,
+    bindMakeEvents,
+  });
+}
+
+function bindCoreEvents() {
+  bindGlobalNavigationEvents();
+  bindDiscoveryEvents();
+  bindAuthControlEvents();
+  bindModalControlEvents();
+  bindPromptInteractionEvents();
+  bindHomeSearchEvents();
+  bindAdminControlEvents();
+  bindFormSubmitEvents();
+}
+
+function bindGlobalNavigationEvents() {
+  bindGlobalMenuDismissEvents();
+  bindRouteNavigationEvents();
+  bindGlobalActionEvents();
+}
+
+function bindGlobalMenuDismissEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
     const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
     const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
@@ -2341,18 +2230,20 @@ function bindEvents() {
       closeTopModal();
     }
   };
+}
 
+function bindRouteNavigationEvents() {
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
       navigateTo(button.dataset.route);
     });
   });
+}
 
+function bindGlobalActionEvents() {
   document.querySelectorAll("[data-toggle-reported]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.hideReportedPrompts = !state.hideReportedPrompts;
-      state.popularPage = 1;
-      state.savedPage = 1;
+      toggleReportedVisibilityState(state);
       render();
     });
   });
@@ -2362,7 +2253,7 @@ function bindEvents() {
       openConfirmAction({
         type: "reset-demo",
         title: "데모 초기화",
-        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 데모 상태를 모두 초기화할까요?",
+        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 화면 상태를 모두 초기화할까요? 서버 DB 데이터는 삭제하지 않습니다.",
         confirmLabel: "초기화",
         danger: true,
       });
@@ -2379,6 +2270,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.authView = button.dataset.openAuth;
       state.authUserIdWarning = "";
+      state.authError = "";
       render();
     });
   });
@@ -2394,20 +2286,22 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-toggle-admin-demo]").forEach((button) => {
+  document.querySelectorAll("[data-toggle-admin-view]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!state.isLoggedIn) {
         state.adminMode = false;
         state.route = state.route === "admin" ? "home" : state.route;
-        showNotice("관리자 데모는 로그인 후 사용할 수 있습니다.");
+        showNotice("Admin 페이지는 로그인 후 사용할 수 있습니다.");
         return;
       }
       state.adminMode = !state.adminMode;
       state.route = state.adminMode ? "admin" : "home";
-      showNotice(state.adminMode ? "관리자 데모 UI를 켰습니다." : "관리자 데모 UI를 껐습니다.");
+      showNotice(state.adminMode ? "관리자 운영 화면으로 이동했습니다." : "사용자 화면을 읽기 전용으로 확인합니다.");
     });
   });
+}
 
+function bindDiscoveryEvents() {
   document.querySelectorAll("[data-popular-tag]").forEach((button) => {
     button.addEventListener("click", () => {
       searchByTag(button.dataset.popularTag);
@@ -2426,10 +2320,69 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      searchByAuthor(button.dataset.searchAuthor);
+      const author = button.dataset.searchAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      searchByAuthor(author);
     });
   });
 
+  document.querySelectorAll("[data-admin-user-author]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const author = button.dataset.adminUserAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      openAdminUserActivity(author, { memberId: button.dataset.adminUserId });
+    });
+  });
+
+  const adminUserSearchForm = document.querySelector("[data-admin-user-search-form]");
+  const adminUserSearchInput = adminUserSearchForm?.querySelector('input[name="nickname"]');
+  adminUserSearchInput?.addEventListener("input", () => {
+    const nickname = String(adminUserSearchInput.value || "").trim();
+    const previousSelectedNickname = state.adminUserActivityNickname;
+    const hadSearchResults = state.adminUserSearchResults.length > 0;
+    state.adminUserQuery = adminUserSearchInput.value;
+    state.adminUserSearchMessage = "";
+    if (hadSearchResults) {
+      state.adminUserSearchResults = [];
+    }
+    if (!nickname || normalizeAdminSearchText(nickname) !== normalizeAdminSearchText(previousSelectedNickname)) {
+      state.adminUserActivityNickname = "";
+    }
+    if (!nickname || previousSelectedNickname || hadSearchResults) {
+      state.adminUserSearchResults = [];
+      render();
+    }
+  });
+  adminUserSearchForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nickname = String(new FormData(adminUserSearchForm).get("nickname") || "").trim();
+    if (!nickname) {
+      state.adminUserQuery = "";
+      state.adminUserActivityNickname = "";
+      state.adminUserSearchResults = [];
+      state.adminUserSearchMessage = "";
+      render();
+      return;
+    }
+    searchAdminUserCandidates(nickname);
+  });
+
+  document.querySelectorAll("[data-admin-user-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const memberId = String(button.dataset.adminUserSelect || "").trim();
+      const nickname = String(button.dataset.adminUserName || "").trim();
+      if (!memberId) {
+        showNotice("회원 ID를 확인할 수 없어 활동 조회를 열 수 없습니다.");
+        return;
+      }
+      openAdminUserActivity(nickname, { memberId, keepQuery: true });
+    });
+  });
+}
+
+function bindAuthControlEvents() {
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
     button.addEventListener("click", () => {
       togglePasswordVisibility(button);
@@ -2437,11 +2390,45 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-google-auth]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.isLoggedIn = true;
-      state.currentUser = "Google닉네임";
+    button.addEventListener("click", async () => {
+      const credential = String(button.dataset.googleCredential || window.TTALKAK_GOOGLE_CREDENTIAL || "").trim();
+      const api = window.TTALKAK_API;
+
+      if (credential && api?.googleLogin) {
+        try {
+          button.disabled = true;
+          const authResponse = await api.googleLogin(credential);
+          const authResult = normalizeAuthResult(authResponse, "google");
+          if (!authResult.token) {
+            throw new Error("Google 로그인 응답에 accessToken이 없습니다.");
+          }
+          applyAuthenticatedUser(authResult);
+          state.authView = null;
+          state.authError = "";
+          showNotice("Google 계정으로 로그인했습니다.");
+          render();
+          return;
+        } catch (error) {
+          setAuthFormError(error?.message || "Google 로그인에 실패했습니다.");
+        } finally {
+          button.disabled = false;
+        }
+      } else {
+        showNotice("Google OAuth credential이 없어 데모 Google 계정으로 전환합니다. 실제 연동은 Google Client ID 설정 후 확인하세요.");
+      }
+
+      applyAuthenticatedUser({
+        token: DEMO_AUTH_TOKEN,
+        user: {
+          id: "demo-google-user",
+          userId: "google",
+          nickname: "Google닉네임",
+          role: "user",
+        },
+      });
       state.authView = null;
-      showNotice("Google 계정으로 로그인했습니다.");
+      state.authError = "";
+      render();
     });
   });
 
@@ -2454,13 +2441,13 @@ function bindEvents() {
       const value = String(input?.value || "").trim();
       saveAuthDraftFromForm();
       if (!value) {
-        window.alert("중복 확인할 값을 입력해주세요.");
+        setAuthFormError("중복 확인할 값을 입력해주세요.");
         return;
       }
       if (field === "userId") {
         const warning = updateUserIdWarning(input);
         if (warning) {
-          window.alert(warning);
+          setAuthFormError(warning);
           return;
         }
       }
@@ -2479,7 +2466,7 @@ function bindEvents() {
       }
       if (isDuplicate) {
         delete state.authDuplicateChecks[field];
-        window.alert(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
+        setAuthFormError(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
         render();
         return;
       }
@@ -2487,10 +2474,20 @@ function bindEvents() {
       showNotice("사용 가능한 값입니다.");
     });
   });
+}
 
+function bindModalControlEvents() {
   document.querySelectorAll("[data-close-auth]").forEach((button) => {
     button.addEventListener("click", () => {
       state.authView = null;
+      state.authError = "";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-close-admin-user-block]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminBlockTarget = null;
       render();
     });
   });
@@ -2552,7 +2549,9 @@ function bindEvents() {
       await runConfirmedAction();
     });
   });
+}
 
+function bindPromptInteractionEvents() {
   document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2668,13 +2667,14 @@ function bindEvents() {
       deleteOwnPrompt(button.dataset.deletePrompt);
     });
   });
+}
 
+function bindHomeSearchEvents() {
   const searchInput = document.querySelector("[data-tag-search]");
   const searchScopeSelect = document.querySelector("[data-search-scope]");
   if (searchScopeSelect) {
     searchScopeSelect.addEventListener("change", () => {
-      state.searchScope = getValidSearchScope(searchScopeSelect.value);
-      state.popularPage = 1;
+      applyHomeSearchScopeState(state, getValidSearchScope(searchScopeSelect.value));
       refreshBackendHomePrompts();
       render();
       restoreSearchFocus();
@@ -2716,8 +2716,7 @@ function bindEvents() {
   const popularSortSelect = document.querySelector("[data-popular-sort]");
   if (popularSortSelect) {
     popularSortSelect.addEventListener("change", () => {
-      state.popularSort = popularSortSelect.value;
-      state.popularPage = 1;
+      applyHomeSortState(state, popularSortSelect.value);
       refreshBackendHomePrompts();
       render();
     });
@@ -2725,7 +2724,10 @@ function bindEvents() {
 
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.popularPage = Number(button.dataset.page);
+      applyHomePageState(state, button.dataset.page);
+      if (state.backendStatus === "connected") {
+        refreshBackendHomePrompts();
+      }
       render();
     });
   });
@@ -2736,124 +2738,22 @@ function bindEvents() {
       render();
     });
   });
+}
 
-  const composer = document.querySelector("[data-composer]");
-  if (composer) {
-    const composerTextarea = composer.querySelector("[data-autosize-textarea]");
-    if (composerTextarea) {
-      autosizeTextarea(composerTextarea);
-      composerTextarea.addEventListener("input", () => {
-        state.composerDraft = composerTextarea.value;
-        autosizeTextarea(composerTextarea);
-      });
-      composerTextarea.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-        event.preventDefault();
-        if (typeof composer.requestSubmit === "function") {
-          composer.requestSubmit();
-        } else {
-          composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-        }
-      });
-    }
+function bindAdminControlEvents() {
+  bindAdminPromptEvents();
+  bindAdminReportEvents();
+  bindAdminTagEvents();
+  bindAdminUserEvents();
+  bindAdminTabEvents();
+  bindAdminRevisionEvents();
+  bindPromptEditAndExecuteEvents();
+}
 
-    composer.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const value = new FormData(composer).get("prompt").trim();
-      if (!value) return;
-      if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
-        state.authView = "login";
-        render();
-        return;
-      }
-      if (!state.isLoggedIn) {
-        state.guestImproveCount += 1;
-      }
-      const now = Date.now();
-      const threadId = state.activeThreadId || `thread-${now}`;
-      const assistantMessageId = `make-${now}`;
-      state.activeThreadId = threadId;
-      state.messages.push({ id: `user-${now}`, role: "user", content: value });
-      const improvedPrompt = await improvePromptWithBackend(value);
-      state.messages.push({
-        id: assistantMessageId,
-        role: "assistant",
-        content: improvedPrompt,
-        sourcePrompt: value,
-      });
-      state.composerDraft = "";
-      pendingLatestMessageScrollId = assistantMessageId;
-      updateRecentThread(threadId);
-      syncMakeThreadWithBackend(threadId);
-      render();
-    });
-  }
-
-  document.querySelectorAll("[data-template]").forEach((button) => {
-    button.addEventListener("click", () => {
-      applyTemplate(button.dataset.template);
-    });
-  });
-
-  document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.templateCollapsed = !state.templateCollapsed;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-copy-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      copyMakeMessage(button.dataset.copyMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingMessageId = button.dataset.editMessage;
-      pendingMessageScrollId = button.dataset.editMessage;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const form = button.closest("[data-edit-message-form]");
-      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
-      state.editingMessageId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
-    });
-  });
-
-  document.querySelectorAll("[data-save-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      saveMakeMessage(button.dataset.saveMessage);
-    });
-  });
-
+function bindAdminPromptEvents() {
   document.querySelectorAll("[data-admin-hide-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       toggleAdminPromptHidden(button.dataset.adminHidePrompt);
-    });
-  });
-
-  document.querySelectorAll("[data-admin-delete-prompt]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openConfirmAction({
-        type: "delete-prompt",
-        targetId: button.dataset.adminDeletePrompt,
-        title: "관리자 삭제",
-        message: "관리자 권한으로 이 프롬프트를 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
     });
   });
 
@@ -2878,7 +2778,28 @@ function bindEvents() {
       render();
     });
   });
+}
 
+function bindAdminReportEvents() {
+  document.querySelectorAll("[data-admin-report-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminReportFilter = button.dataset.adminReportFilter || "all";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-report-status]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = String(button.dataset.adminReportStatus || "");
+      const separatorIndex = value.lastIndexOf(":");
+      const key = value.slice(0, separatorIndex);
+      const status = value.slice(separatorIndex + 1);
+      updateReportRecordStatus(key, status);
+    });
+  });
+}
+
+function bindAdminTagEvents() {
   document.querySelectorAll("[data-admin-tag-search]").forEach((input) => {
     input.addEventListener("compositionstart", () => {
       state.isComposingAdminTagSearch = true;
@@ -2908,24 +2829,17 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.adminTab = button.dataset.adminTab || "reports";
-      render();
-    });
-  });
-
   document.querySelectorAll("[data-admin-tag-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const [decision, tag] = String(button.dataset.adminTagAction || "").split(":");
       if (!tag) return;
-      if (decision === "rejected") {
+      if (decision === "disabled") {
         openConfirmAction({
           type: "admin-tag-status",
           targetId: tag,
           value: decision,
           title: "태그 추천 제외",
-          message: "이 태그를 추천 태그 목록에서 제외할까요? 제외 후에도 태그 관리에서 재검토할 수 있습니다.",
+          message: "이 태그를 추천 태그 목록에서 제외할까요? 필요하면 태그 관리에서 추천 복구할 수 있습니다.",
           confirmLabel: "추천 제외",
           danger: true,
         });
@@ -2936,16 +2850,44 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-report-status]").forEach((button) => {
+  document.querySelectorAll("[data-admin-tag-prompts]").forEach((button) => {
     button.addEventListener("click", () => {
-      const value = String(button.dataset.adminReportStatus || "");
-      const separatorIndex = value.lastIndexOf(":");
-      const key = value.slice(0, separatorIndex);
-      const status = value.slice(separatorIndex + 1);
-      updateReportRecordStatus(key, status);
+      const tag = button.dataset.adminTagPrompts || "";
+      state.adminTagPromptKey = state.adminTagPromptKey === tag ? "" : tag;
+      render();
     });
   });
 
+}
+
+function bindAdminUserEvents() {
+  document.querySelectorAll("[data-admin-user-block]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminBlockTarget = {
+        memberId: button.dataset.adminUserBlock,
+        nickname: button.dataset.adminUserName || state.adminUserActivityNickname || "사용자",
+      };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-user-unblock]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateAdminUserBlockState(button.dataset.adminUserUnblock, false, button.dataset.adminUserName);
+    });
+  });
+}
+
+function bindAdminTabEvents() {
+  document.querySelectorAll("[data-admin-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.adminTab = button.dataset.adminTab || "reports";
+      render();
+    });
+  });
+}
+
+function bindAdminRevisionEvents() {
   document.querySelectorAll("[data-admin-request-revision]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2954,7 +2896,9 @@ function bindEvents() {
       render();
     });
   });
+}
 
+function bindPromptEditAndExecuteEvents() {
   document.querySelectorAll("[data-edit-prompt]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2971,18 +2915,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-share-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openShareFromMakeMessage(button.dataset.shareMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-execute-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openExecuteModal(button.dataset.executeMessage);
-    });
-  });
-
   document.querySelectorAll("[data-execute-prompt]").forEach((button) => {
     button.addEventListener("click", () => {
       openPromptExecuteModal(button.dataset.executePrompt);
@@ -2994,184 +2926,21 @@ function bindEvents() {
       executeMakeMessage(state.executeMessageId, button.dataset.executeTarget);
     });
   });
+}
 
-  document.querySelectorAll("[data-new-chat]").forEach((button) => {
-    button.addEventListener("click", startNewChat);
-  });
+function bindFormSubmitEvents() {
+  bindAuthFormEvents();
+  bindShareFormEvents();
+  bindReportAndCommentFormEvents();
+}
 
-  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const threadId = button.dataset.threadMenu;
-      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
-      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      state.creatingFolder = true;
-      render();
-      window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-create]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.creatingFolder = false;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolder(new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-open-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.activeFolderId = button.dataset.openFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      const folderId = button.dataset.folderMenu;
-      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.editingFolderId = button.dataset.editFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-delete-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openFolderMenuId = null;
-      openConfirmAction({
-        type: "delete-folder",
-        targetId: button.dataset.deleteFolder,
-        title: "폴더 삭제",
-        message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder]").forEach((select) => {
-    select.addEventListener("change", () => {
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        render();
-        return;
-      }
-      state.openThreadMenuId = null;
-      moveThreadToFolder(select.dataset.threadFolder, select.value);
-    });
-  });
-
-  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
-        return;
-      }
-      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
-      render();
-      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-folder-edit-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-open-thread]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.openThreadMenuId = null;
-      openRecentThread(button.dataset.openThread);
-    });
-  });
-
-  document.querySelectorAll("[data-delete-thread]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openThreadMenuId = null;
-      openConfirmAction({
-        type: "delete-thread",
-        targetId: button.dataset.deleteThread,
-        title: "대화 삭제",
-        message: "이 대화를 최근 대화 목록에서 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-
+function bindAuthFormEvents() {
   const authForm = document.querySelector("[data-auth-form]");
   if (authForm) {
     authForm.addEventListener("input", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLInputElement)) return;
+      clearAuthFormError();
 
       if (target.name === "userId") {
         normalizeUserIdInput(target);
@@ -3211,7 +2980,7 @@ function bindEvents() {
 
       if (isWithdraw) {
         if (!password) {
-          window.alert("회원탈퇴를 위해 비밀번호를 입력해주세요.");
+          setAuthFormError("회원탈퇴를 위해 비밀번호를 입력해주세요.");
           return;
         }
         openConfirmAction({
@@ -3230,15 +2999,15 @@ function bindEvents() {
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
         if (!name || !email) {
-          window.alert("이름과 이메일을 입력해주세요.");
+          setAuthFormError("이름과 이메일을 입력해주세요.");
           return;
         }
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
         try {
@@ -3248,7 +3017,7 @@ function bindEvents() {
           showNotice(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
         } catch (error) {
           const backendMessage = error?.payload?.message || error?.message || "";
-          window.alert(backendMessage || "아이디 찾기 요청에 실패했습니다.");
+          setAuthFormError(backendMessage || "아이디 찾기 요청에 실패했습니다.");
           return;
         }
         state.authView = "login";
@@ -3259,19 +3028,19 @@ function bindEvents() {
         const phone = String(formData.get("phone") || "").trim();
         const email = String(formData.get("email") || "").trim();
         if (!userId || !email) {
-          window.alert("아이디와 이메일을 입력해주세요.");
+          setAuthFormError("아이디와 이메일을 입력해주세요.");
           return;
         }
         if (userIdWarning) {
-          window.alert(userIdWarning);
+          setAuthFormError(userIdWarning);
           return;
         }
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
         try {
@@ -3280,7 +3049,7 @@ function bindEvents() {
           showNotice("비밀번호 재설정 요청을 보냈습니다.");
         } catch (error) {
           const backendMessage = error?.payload?.message || error?.message || "";
-          window.alert(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
+          setAuthFormError(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
           return;
         }
         state.authView = "login";
@@ -3302,66 +3071,66 @@ function bindEvents() {
           .map(([, label]) => label);
 
         if (missingFields.length > 0) {
-          window.alert(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
+          setAuthFormError(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
           return;
         }
         if (userIdWarning) {
-          window.alert(userIdWarning);
+          setAuthFormError(userIdWarning);
           return;
         }
         const email = String(formData.get("email") || "").trim();
         const phone = String(formData.get("phone") || "").trim();
         if (!isValidEmail(email)) {
-          window.alert("이메일 형식을 확인해주세요.");
+          setAuthFormError("이메일 형식을 확인해주세요.");
           return;
         }
         if (phone && !isValidPhone(phone)) {
-          window.alert("전화번호 형식을 확인해주세요.");
+          setAuthFormError("전화번호 형식을 확인해주세요.");
           return;
         }
 
         if (isDuplicateAuthValue("nickname", nickname)) {
-          window.alert("이미 사용 중인 닉네임입니다.");
+          setAuthFormError("이미 사용 중인 닉네임입니다.");
           return;
         }
         if (isDuplicateAuthValue("userId", userId)) {
-          window.alert("이미 사용 중인 아이디입니다.");
+          setAuthFormError("이미 사용 중인 아이디입니다.");
           return;
         }
         if (state.authDuplicateChecks.nickname !== nickname || state.authDuplicateChecks.userId !== userId) {
-          window.alert("닉네임과 아이디 중복 확인을 완료해주세요.");
+          setAuthFormError("닉네임과 아이디 중복 확인을 완료해주세요.");
           return;
         }
 
         const birth = String(formData.get("birth") || "").trim();
         if (isFutureDate(birth)) {
-          window.alert("생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
+          setAuthFormError("생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
           return;
         }
         if (password.length < 8) {
-          window.alert("비밀번호는 8자 이상 입력해주세요.");
+          setAuthFormError("비밀번호는 8자 이상 입력해주세요.");
           return;
         }
         if (formData.get("terms") !== "on" || formData.get("privacy") !== "on") {
-          window.alert("사이트 이용 약관과 개인정보 수집 및 이용에 동의해주세요.");
+          setAuthFormError("사이트 이용 약관과 개인정보 수집 및 이용에 동의해주세요.");
           return;
         }
       } else if (!userId || !password) {
-        window.alert("아이디와 비밀번호를 모두 입력해주세요.");
+        setAuthFormError("아이디와 비밀번호를 모두 입력해주세요.");
         return;
       } else if (userIdWarning) {
-        window.alert(userIdWarning);
+        setAuthFormError(userIdWarning);
         return;
       }
 
       if (isSignup && formData.get("password") !== formData.get("passwordConfirm")) {
-        window.alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
+        setAuthFormError("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
         return;
       }
 
       const api = window.TTALKAK_API;
       if (!api?.login) {
-        window.alert("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
+        setAuthFormError("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
         return;
       }
 
@@ -3384,7 +3153,7 @@ function bindEvents() {
         const authResult = normalizeAuthResult(authResponse, userId);
 
         if (!authResult.token) {
-          window.alert("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
+          setAuthFormError("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
           return;
         }
 
@@ -3393,16 +3162,19 @@ function bindEvents() {
         state.authDraft = {};
         state.authDuplicateChecks = {};
         state.authUserIdWarning = "";
+        state.authError = "";
         showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
         await loadMakeBackendData({ shouldRender: false });
         render();
       } catch (error) {
         const backendMessage = error?.payload?.message || error?.message || "";
-        window.alert(backendMessage || "로그인 요청에 실패했습니다.");
+        setAuthFormError(backendMessage || "로그인 요청에 실패했습니다.");
       }
     });
   }
+}
 
+function bindShareFormEvents() {
   const shareForm = document.querySelector(".share-form");
   if (shareForm) {
     shareForm.addEventListener("input", () => {
@@ -3448,12 +3220,28 @@ function bindEvents() {
       addShareTag(button.dataset.addShareTag);
     });
   });
+}
 
+function bindReportAndCommentFormEvents() {
   const reportForm = document.querySelector("[data-report-form]");
   if (reportForm) {
     reportForm.addEventListener("submit", (event) => {
       event.preventDefault();
       submitReport(reportForm.dataset.reportType, reportForm.dataset.reportForm, new FormData(reportForm).get("reason"));
+    });
+  }
+
+  const adminUserBlockForm = document.querySelector("[data-admin-user-block-form]");
+  if (adminUserBlockForm) {
+    adminUserBlockForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const formData = new FormData(adminUserBlockForm);
+      updateAdminUserBlockState(
+        adminUserBlockForm.dataset.adminUserBlockForm,
+        true,
+        adminUserBlockForm.dataset.adminUserName,
+        formData.get("reason")
+      );
     });
   }
 
@@ -3520,6 +3308,18 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-toggle-comment-hidden]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const value = String(button.dataset.adminToggleCommentHidden || "");
+      const separatorIndex = value.lastIndexOf(":");
+      const commentId = value.slice(0, separatorIndex);
+      const mode = value.slice(separatorIndex + 1);
+      updateAdminCommentHiddenState(commentId, mode !== "unhide");
+    });
+  });
+
   document.querySelectorAll("[data-edit-comment]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3547,7 +3347,9 @@ function bindEvents() {
   });
 }
 
-function toggleSavedPrompt(promptId) {
+async function toggleSavedPrompt(promptId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 저장할 수 있습니다.");
@@ -3555,6 +3357,7 @@ function toggleSavedPrompt(promptId) {
   }
 
   const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
+  const mutationContext = getPromptMutationStateContext();
 
   if (savedIndex >= 0) {
     const savedPrompt = savedPrompts[savedIndex];
@@ -3562,43 +3365,35 @@ function toggleSavedPrompt(promptId) {
     const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
 
     if (!isSavedByMe || wasHiddenDemoPrompt) {
-      savedPrompt.savedByMe = true;
-      state.userLibraryPromptIds.add(promptId);
-      state.pendingUnsaveIds.delete(promptId);
-      updatePromptField(promptId, "saves", 1);
-      if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
+      if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
+      applyExistingPromptSavedState(mutationContext, promptId, savedPrompt);
+      refreshMyPageDataAfterMutation();
       showNotice("저장했습니다.");
       return;
     }
 
-    if (state.route === "saved") {
-      const wasPending = state.pendingUnsaveIds.has(promptId);
-
-      if (wasPending) {
-        state.pendingUnsaveIds.delete(promptId);
-        updatePromptField(promptId, "saves", 1);
-        showNotice("저장 취소를 되돌렸습니다.");
-      } else {
-        state.pendingUnsaveIds.add(promptId);
-        updatePromptField(promptId, "saves", -1);
-        showNotice("다른 화면으로 이동하면 저장 목록에서 사라집니다.");
-      }
-
+    if (state.route === "saved" && state.myBackendStatus === "connected" && isBackendNumericId(promptId)) {
+      if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
+      applyBackendPromptUnsavedState(mutationContext, promptId, savedPrompt);
+      refreshMyPageDataAfterMutation();
+      showNotice("저장을 해제했습니다.");
       return;
     }
 
-    if (savedPrompt.source === "mine") {
-      savedPrompt.savedByMe = false;
-    } else {
-      savedPrompts.splice(savedIndex, 1);
+    if (state.route === "saved") {
+      const pendingState = togglePendingUnsaveState(mutationContext, promptId);
+      showNotice(
+        pendingState === "restored"
+          ? "저장 해제를 취소했습니다."
+          : "페이지를 벗어나면 보관함에서 제거됩니다."
+      );
+      return;
     }
-    state.userLibraryPromptIds.delete(promptId);
-    updatePromptField(promptId, "saves", -1);
-    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId);
-    if (state.detailPromptId === promptId && !findPromptById(promptId)) {
-      state.detailPromptId = null;
-    }
-    showNotice("저장을 취소했습니다.");
+
+    if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
+    applyPromptUnsavedState(mutationContext, promptId, savedPrompt, savedIndex);
+    refreshMyPageDataAfterMutation();
+    showNotice("저장을 해제했습니다.");
     return;
   }
 
@@ -3606,27 +3401,19 @@ function toggleSavedPrompt(promptId) {
   if (!prompt) return;
 
   if (state.pendingUnsaveIds.has(promptId)) {
-    state.pendingUnsaveIds.delete(promptId);
-    updatePromptField(promptId, "saves", 1);
-    showNotice("저장 취소를 되돌렸습니다.");
+    togglePendingUnsaveState(mutationContext, promptId);
+    showNotice("저장 해제를 취소했습니다.");
     return;
   }
 
-  updatePromptField(promptId, "saves", 1);
-  const updatedPrompt = findPromptById(promptId) || prompt;
-
-  savedPrompts.unshift({
-    ...updatedPrompt,
-    source: prompt.source === "mine" ? "mine" : "community",
-    savedByMe: true,
-  });
-  state.userLibraryPromptIds.add(promptId);
-  if (isBackendNumericId(promptId)) callBackendApi("savePrompt", promptId);
-
+  if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
+  applyNewPromptSavedState(mutationContext, promptId, prompt);
+  refreshMyPageDataAfterMutation();
   showNotice("저장했습니다.");
 }
+async function toggleLikePrompt(promptId) {
+  if (guardAdminUserAction()) return;
 
-function toggleLikePrompt(promptId) {
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 좋아요를 누를 수 있습니다.");
@@ -3634,20 +3421,22 @@ function toggleLikePrompt(promptId) {
   }
 
   const isLiked = state.likedPromptIds.has(promptId);
+  const mutationContext = getPromptMutationStateContext();
   if (isLiked) {
-    state.likedPromptIds.delete(promptId);
-    updatePromptField(promptId, "likes", -1);
-    if (isBackendNumericId(promptId)) callBackendApi("unlikePrompt", promptId);
+    if (!(await runPromptStateMutation("unlikePrompt", promptId, "좋아요 취소 요청에 실패했습니다."))) return;
+    applyPromptUnlikedState(mutationContext, promptId);
+    refreshMyPageDataAfterMutation();
   } else {
-    state.likedPromptIds.add(promptId);
-    updatePromptField(promptId, "likes", 1);
-    if (isBackendNumericId(promptId)) callBackendApi("likePrompt", promptId);
+    if (!(await runPromptStateMutation("likePrompt", promptId, "좋아요 요청에 실패했습니다."))) return;
+    applyPromptLikedState(mutationContext, promptId, findPromptById(promptId));
+    refreshMyPageDataAfterMutation();
   }
   showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
 }
-
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 신고할 수 있습니다.");
@@ -3665,6 +3454,8 @@ function openReportPrompt(promptId) {
 
 function openReportComment(commentId) {
   if (!findCommentById(commentId)) return;
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 신고할 수 있습니다.");
@@ -3688,54 +3479,61 @@ function submitReport(type, targetId, reason) {
   reportPrompt(targetId, reason);
 }
 
-function reportPrompt(promptId, reason) {
+async function reportPrompt(promptId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    window.alert("신고 이유를 입력해주세요.");
+    showNotice("신고 사유를 입력해주세요.");
     return;
   }
 
-  state.reportedPromptIds.add(promptId);
-  state.reportRecords[`prompt:${promptId}`] = {
-    type: "prompt",
-    targetId: promptId,
-    status: "pending",
-    reason: content,
-    createdAt: Date.now(),
-  };
-  state.reportPromptId = null;
-  if (isBackendNumericId(promptId)) {
-    callBackendApi("reportPrompt", promptId, { reason: content });
+  if (isBackendNumericId(promptId) && state.backendStatus === "connected") {
+    const token = getAuthToken();
+    if (!token || isDemoAuthToken(token)) {
+      showNotice("실제 로그인 후 프롬프트를 신고할 수 있습니다.");
+      openAuth("login");
+      return;
+    }
+    try {
+      await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
+    } catch (error) {
+      handleBackendAccessError(error, "신고 요청에 실패했습니다.");
+      return;
+    }
   }
-  showNotice("신고가 접수되었습니다.");
-}
 
-function reportComment(commentId, reason) {
+  applyPromptReportedState(getPromptMutationStateContext(), promptId, content);
+  showNotice("신고가 접수되었습니다.");
+  refreshMyPageDataAfterMutation();
+  render();
+}
+async function reportComment(commentId, reason) {
   const content = String(reason || "").trim();
   if (!content) {
-    window.alert("신고 이유를 입력해주세요.");
+    showNotice("댓글 신고 사유를 입력해주세요.");
     return;
   }
 
   const context = findCommentContextById(commentId);
-  state.reportedCommentIds.add(commentId);
-  state.reportRecords[`comment:${commentId}`] = {
-    type: "comment",
-    targetId: commentId,
-    promptId: context?.promptId || "",
-    targetAuthor: context?.comment?.author || context?.comment?.owner || "",
-    targetPreview: makePreview(context?.comment?.text || ""),
-    status: "pending",
-    reason: content,
-    createdAt: Date.now(),
-  };
-  state.reportCommentId = null;
-  if (isBackendNumericId(commentId)) {
-    callBackendApi("reportComment", commentId, { reason: content });
+  if (isBackendNumericId(commentId) && state.backendStatus === "connected") {
+    const token = getAuthToken();
+    if (!token || isDemoAuthToken(token)) {
+      showNotice("실제 로그인 후 댓글을 신고할 수 있습니다.");
+      openAuth("login");
+      return;
+    }
+    try {
+      await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
+    } catch (error) {
+      handleBackendAccessError(error, "댓글 신고 요청에 실패했습니다.");
+      return;
+    }
   }
-  showNotice("댓글 신고가 접수되었습니다.");
-}
 
+  applyCommentReportedState(getPromptMutationStateContext(), commentId, content, context);
+  showNotice("댓글 신고가 접수되었습니다.");
+  refreshMyPageDataAfterMutation();
+  render();
+}
 function openShareFromSaved(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt) return;
@@ -3795,10 +3593,10 @@ function renderShareTagSuggestions() {
 
   if (suggestions.length > 0) {
     suggestionBox.innerHTML = suggestions
-      .map((tag) => `<button type="button" data-add-share-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`)
+      .map((tag) => `<button type="button" data-add-share-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`)
       .join("");
   } else if (query) {
-    suggestionBox.innerHTML = `<button class="new-tag-suggestion" type="button" data-add-share-tag="${escapeHtml(query)}">새 태그로 추가: #${escapeHtml(query)}</button>`;
+    suggestionBox.innerHTML = `<button class="new-tag-suggestion" type="button" data-add-share-tag="${escapeAttr(query)}">새 태그로 추가: #${escapeHtml(query)}</button>`;
   } else {
     suggestionBox.innerHTML = `<span>기존 해시태그를 검색해 선택할 수 있습니다.</span>`;
   }
@@ -3833,7 +3631,6 @@ function updateSharePreview(formData) {
   const title = String(formData.get("title") || "").trim() || "프롬프트 제목 미리보기";
   const text = String(formData.get("prompt") || "").trim() || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.";
   const tags = parseSharedTags(String(formData.get("tags") || "")).slice(0, 4);
-  const previewTags = tags.length ? tags : ["미리보기", "공유", "프롬프트"];
   const previewTitle = document.querySelector("[data-share-preview-title]");
   const previewText = document.querySelector("[data-share-preview-text]");
   const previewTagRow = document.querySelector("[data-share-preview-tags]");
@@ -3841,7 +3638,9 @@ function updateSharePreview(formData) {
   if (previewTitle) previewTitle.textContent = title;
   if (previewText) previewText.textContent = text;
   if (previewTagRow) {
-    previewTagRow.innerHTML = previewTags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("");
+    previewTagRow.innerHTML = tags.length
+      ? tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")
+      : `<span class="tag-chip-empty">태그 없음</span>`;
   }
 }
 
@@ -3877,19 +3676,47 @@ function openPromptComments(promptId) {
   render();
 }
 
-async function hydratePromptComments(promptId) {
+async function hydratePromptComments(promptId, options = {}) {
   const api = window.TTALKAK_API;
-  if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return;
+  if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return false;
 
   try {
-    const comments = await api.getPromptComments(promptId, state.authToken || state.token || undefined);
+    const comments = await api.getPromptComments(promptId, getAuthToken() || undefined);
     if (Array.isArray(comments)) {
       commentsByPrompt[promptId] = comments;
-      if (state.detailPromptId === promptId) render();
+      syncPromptCommentCount(promptId);
+      if (options.render !== false && state.detailPromptId === promptId) render();
+      return true;
     }
   } catch (error) {
     console.warn("[TTALKAK] /api/prompts/{id}/comments 호출에 실패해 데모 댓글을 유지합니다.", error);
   }
+
+  return false;
+}
+
+function syncPromptCommentCount(promptId) {
+  const comments = commentsByPrompt[promptId];
+  if (!Array.isArray(comments)) return;
+
+  const commentCount = countCommentThread(comments);
+  const updated = new Set();
+
+  for (const list of [popularPrompts, savedPrompts]) {
+    const prompt = list.find((item) => item.id === promptId);
+    if (!prompt || updated.has(prompt)) continue;
+    prompt.comments = commentCount;
+    prompt.commentCount = commentCount;
+    updated.add(prompt);
+  }
+}
+
+function findPromptIdByCommentId(commentId) {
+  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
+    if (findCommentInList(comments, commentId)) return promptId;
+  }
+
+  return "";
 }
 
 function shouldOpenCommentsByDefault() {
@@ -3903,7 +3730,7 @@ function incrementPromptViews(promptId) {
   for (const list of [popularPrompts, savedPrompts]) {
     const prompt = list.find((item) => item.id === promptId);
     if (!prompt || updated.has(prompt)) continue;
-    prompt.views += 1;
+    prompt.views = getPromptViewCount(prompt) + 1;
     updated.add(prompt);
   }
 }
@@ -3956,6 +3783,8 @@ function getCommentLikes(comment) {
 }
 
 function toggleLikeComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 댓글에 좋아요를 누를 수 있습니다.");
@@ -3971,13 +3800,10 @@ function toggleLikeComment(commentId) {
   }
 
   const isLiked = state.likedCommentIds.has(commentId);
+  toggleCommentLikedState(state, commentId, comment, getCommentLikes);
   if (isLiked) {
-    state.likedCommentIds.delete(commentId);
-    comment.likes = Math.max(0, getCommentLikes(comment) - 1);
     callBackendApi("unlikeComment", commentId);
   } else {
-    state.likedCommentIds.add(commentId);
-    comment.likes = getCommentLikes(comment) + 1;
     callBackendApi("likeComment", commentId);
   }
 
@@ -3989,9 +3815,17 @@ function getPromptCommentCount(prompt) {
   return threadCount || Number(prompt.comments || prompt.commentCount || 0);
 }
 
+function normalizeAuthorName(value) {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return String(value.nickname || value.name || value.userId || value.username || "").trim();
+  }
+  return String(value).trim();
+}
+
 function getDisplayPromptAuthor(prompt) {
-  const author = String(prompt?.author || prompt?.owner || "").trim();
-  const owner = String(prompt?.owner || prompt?.author || "").trim();
+  const author = normalizeAuthorName(prompt?.author || prompt?.authorNickname || prompt?.nickname || prompt?.raw?.author);
+  const owner = normalizeAuthorName(prompt?.owner || prompt?.ownerNickname || prompt?.raw?.owner);
   const currentUser = String(state.currentUser || "").trim();
 
   if (state.isLoggedIn && currentUser && (owner === currentUser || author === currentUser || author === "나")) {
@@ -4001,6 +3835,41 @@ function getDisplayPromptAuthor(prompt) {
   if (author && author !== "나") return author;
   if (owner && owner !== "나") return owner;
   return "익명 사용자";
+}
+
+function isWithdrawnAuthorName(value) {
+  return String(value || "").trim() === WITHDRAWN_AUTHOR_LABEL;
+}
+
+function renderAuthorSearchControl(prompt, options = {}) {
+  const author = getDisplayPromptAuthor(prompt);
+  const safeAuthor = escapeHtml(author);
+  const safeAuthorAttr = escapeAttr(author);
+  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
+  if (isWithdrawnAuthorName(author)) {
+    return `<span class="author-search-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
+  }
+
+  if (options.admin) {
+    return `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
+  }
+
+  return `<button class="author-search-button" type="button" data-search-author="${safeAuthorAttr}">${safeAuthor}</button>`;
+}
+
+function renderAdminInlineAuthorControl(prompt) {
+  const author = getDisplayPromptAuthor(prompt);
+  const safeAuthor = escapeHtml(author);
+  const safeAuthorAttr = escapeAttr(author);
+  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
+  if (isWithdrawnAuthorName(author)) {
+    return `<span class="admin-inline-author-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
+  }
+  return `<button class="admin-inline-author-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
+}
+
+function getPromptAuthorId(prompt) {
+  return String(prompt?.authorId || prompt?.author?.id || prompt?.raw?.author?.id || prompt?.raw?.authorId || prompt?.raw?.memberId || "");
 }
 
 function stampCurrentUserOwnedPrompts() {
@@ -4019,110 +3888,91 @@ function stampCurrentUserOwnedPrompts() {
 function addPromptComment(promptId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("댓글을 작성하려면 로그인이 필요합니다.");
+    showNotice("\uB313\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
     render();
     return;
   }
 
-  if (!commentsByPrompt[promptId]) {
-    commentsByPrompt[promptId] = [];
-  }
-
-  commentsByPrompt[promptId].push({
-    id: `comment-${Date.now()}`,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    text: content,
-    likes: 0,
-    replies: [],
+  addPromptCommentState(getCommentMutationStateContext(), promptId, content);
+  callBackendApi("addComment", promptId, { text: content }).then(() => {
+    if (hasBackendAuthToken()) hydratePromptComments(promptId);
   });
-
-  state.expandedComments[promptId] = true;
-  incrementPromptComments(promptId);
-  callBackendApi("addComment", promptId, { text: content });
   render();
 }
 
 function toggleReplyForm(commentId) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     return render();
   }
 
-  state.replyingCommentId = state.replyingCommentId === commentId ? null : commentId;
+  toggleReplyCommentState(state, commentId);
   render();
 }
 
 function addCommentReply(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
-    showNotice("답글을 작성하려면 로그인이 필요합니다.");
+    showNotice("\uB2F5\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
     render();
     return;
   }
 
   const parentComment = findCommentById(commentId);
   if (!parentComment) return;
+  const promptId = findPromptIdByCommentId(commentId);
 
-  if (!Array.isArray(parentComment.replies)) {
-    parentComment.replies = [];
-  }
-
-  parentComment.replies.push({
-    id: `reply-${Date.now()}`,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    text: content,
-    likes: 0,
-    replies: [],
+  addCommentReplyState(getCommentMutationStateContext(), parentComment, promptId, content);
+  callBackendApi("addReply", commentId, { text: content }).then(() => {
+    if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
   });
-
-  state.replyingCommentId = null;
-  callBackendApi("addReply", commentId, { text: content });
-  showNotice("답글을 등록했습니다.");
+  showNotice("\uB2F5\uAE00\uC744 \uB4F1\uB85D\uD588\uC2B5\uB2C8\uB2E4.");
+  render();
 }
 
 function toggleEditComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
 
-  state.editingCommentId = state.editingCommentId === commentId ? null : commentId;
-  state.replyingCommentId = null;
+  toggleEditCommentState(state, commentId);
   render();
 }
 
 function updateOwnComment(commentId, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  if (guardAdminUserAction()) return;
 
   const comment = findCommentById(commentId);
   if (!comment || !canDeleteComment(comment)) return;
-
-  if (comment.text !== content) {
-    comment.text = content;
-    comment.edited = true;
-    if (isBackendNumericId(commentId)) {
-      callBackendApi("updateComment", commentId, { text: content });
-    }
-  }
-
+  const promptId = findPromptIdByCommentId(commentId);
   const revisionKey = makeRevisionRequestKey("comment", commentId);
-  if (state.adminPromptRevisionRequests[revisionKey]) {
-    const { [revisionKey]: _resolvedRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
-    state.adminPromptRevisionRequests = remainingRequests;
+  const changed = updateOwnCommentState(state, comment, commentId, content, revisionKey);
+
+  if (changed && isBackendNumericId(commentId)) {
+    callBackendApi("updateComment", commentId, { text: content }).then(() => {
+      if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
+    });
   }
 
-  state.editingCommentId = null;
-  showNotice("댓글을 수정했습니다.");
+  showNotice("\uB313\uAE00\uC744 \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.");
 }
 
 function deleteOwnComment(commentId) {
+  if (guardAdminUserAction()) return;
+
   for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
     const comment = findCommentInList(comments, commentId);
     if (!comment || !canDeleteComment(comment)) continue;
@@ -4137,6 +3987,35 @@ function deleteOwnComment(commentId) {
     });
     return;
   }
+}
+
+async function updateAdminCommentHiddenState(commentId, shouldHide) {
+  if (!state.adminMode || !commentId) return;
+  const context = findCommentContextById(commentId);
+  const comment = context?.comment;
+  if (!comment || comment.deleted) return;
+
+  const apiName = shouldHide ? "hideAdminComment" : "unhideAdminComment";
+  if (!isBackendNumericId(commentId) || !hasBackendAuthToken() || !window.TTALKAK_API?.[apiName]) {
+    comment.hidden = shouldHide;
+    showNotice(shouldHide ? "댓글을 숨김 처리했습니다." : "댓글 숨김을 해제했습니다.");
+    render();
+    return;
+  }
+
+  try {
+    const updated = await window.TTALKAK_API[apiName](commentId, getAuthToken() || undefined);
+    comment.hidden = Boolean(updated?.hidden || updated?.isHidden || shouldHide);
+    if (!shouldHide) comment.hidden = false;
+    if (updated?.text || updated?.content) comment.text = updated.text || updated.content;
+    showNotice(shouldHide ? "댓글을 숨김 처리했습니다." : "댓글 숨김을 해제했습니다.");
+    if (context.promptId) await hydratePromptComments(context.promptId);
+    await refreshAdminAfterMutation({ auditReason: shouldHide ? "댓글 숨김 후" : "댓글 숨김 해제 후" });
+  } catch (error) {
+    handleBackendAccessError(error, shouldHide ? "댓글 숨김 요청에 실패했습니다." : "댓글 숨김 해제 요청에 실패했습니다.");
+  }
+
+  render();
 }
 
 function canDeleteComment(comment) {
@@ -4186,7 +4065,7 @@ async function runConfirmedAction() {
     stampCurrentUserOwnedPrompts();
     const wasAdminMode = state.adminMode;
     clearAuthenticatedSession();
-    showNotice(wasAdminMode ? "로그아웃하여 관리자 데모를 종료했습니다." : "로그아웃했습니다.");
+    showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
   }
 
   if (action.type === "withdraw") {
@@ -4199,7 +4078,7 @@ async function runConfirmedAction() {
     }
     try {
       if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
-      const result = await api.withdrawAccount({ password: action.password || "" }, state.authToken || state.token);
+      const result = await api.withdrawAccount({ password: action.password || "" }, getAuthToken());
       clearAuthenticatedSession();
       showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
     } catch (error) {
@@ -4219,101 +4098,159 @@ async function runConfirmedAction() {
 
 function performDeleteComment(commentId) {
   for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    const removed = removeCommentFromList(comments, commentId);
+    const removed = deleteCommentState(getCommentMutationStateContext(), promptId, comments, commentId, canDeleteComment);
     if (!removed) continue;
 
     if (isBackendNumericId(commentId)) {
-      callBackendApi("deleteComment", commentId);
+      const apiName = state.adminMode && window.TTALKAK_API?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
+      callBackendApi(apiName, commentId).then(() => {
+        if (hasBackendAuthToken()) hydratePromptComments(promptId);
+        if (state.adminMode) refreshAdminAfterMutation({ auditReason: "\uB313\uAE00 \uC0AD\uC81C \uD6C4" });
+      });
     }
-    decrementPromptComments(promptId);
-    state.likedCommentIds.delete(commentId);
-    state.reportedCommentIds.delete(commentId);
-    if (state.replyingCommentId === commentId) state.replyingCommentId = null;
-    if (state.editingCommentId === commentId) state.editingCommentId = null;
-    showNotice("댓글을 삭제했습니다.");
+    showNotice("\uB313\uAE00\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
     return;
   }
 }
 
-function performDeleteThread(threadId) {
-  state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
-  if (state.activeThreadId === threadId) {
-    state.activeThreadId = null;
-    state.messages = [];
-    state.composerDraft = "";
-  }
+function performDeleteThreadLocal(threadId) {
+  deleteMakeThreadState(state, threadId);
   showNotice("대화를 삭제했습니다.");
 }
 
-async function createMakeFolder(folderName) {
+async function performDeleteThread(threadId) {
+  const thread = state.recentThreads.find((item) => item.id === threadId || item.serverId === threadId);
+  const backendThreadId = thread?.serverId || (isBackendNumericId(threadId) ? threadId : "");
+  const api = getMakeApi();
+
+  if (!state.isLoggedIn || !backendThreadId || !api?.deleteMakeThread || !hasBackendAuthToken()) {
+    performDeleteThreadLocal(threadId);
+    render();
+    return;
+  }
+
+  try {
+    await api.deleteMakeThread(backendThreadId, getMakeApiToken());
+    deleteMakeThreadState(state, threadId);
+    showNotice("대화를 삭제했습니다.");
+    render();
+    refreshMakeThreadsFromBackend();
+  } catch (error) {
+    const status = Number(error?.status || error?.payload?.status || 0);
+    if (status === 404) {
+      showNotice("이미 삭제되었거나 접근할 수 없는 대화입니다.");
+      deleteMakeThreadState(state, threadId);
+      render();
+      refreshMakeThreadsFromBackend();
+      return;
+    }
+
+    handleBackendAccessError(error, "대화 삭제 요청에 실패했습니다.");
+    render();
+  }
+}
+
+function guardMakeFolderMutation(clearSelection) {
+  if (guardAdminUserAction()) {
+    clearSelection?.();
+    render();
+    return true;
+  }
+
   if (!state.isLoggedIn) {
-    state.creatingFolder = false;
+    clearSelection?.();
     showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
     render();
-    return;
+    return true;
   }
 
+  return false;
+}
+
+function normalizeMakeFolderName(name) {
+  return String(name || "").trim();
+}
+
+function hasMakeFolderName(name) {
+  return state.makeFolders.some((folder) => folder.name === name);
+}
+
+function createLocalMakeFolder(name) {
+  return createLocalMakeFolderState(state, name);
+}
+
+function removeLocalMakeFolder(folderId) {
+  removeLocalMakeFolderState(state, folderId);
+}
+
+function restoreThreadFolder(thread, folderId) {
+  restoreMakeThreadFolderState(thread, folderId);
+}
+
+async function createMakeFolder(folderName) {
+  if (guardMakeFolderMutation(() => { state.creatingFolder = false; })) return;
+
   if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
     state.creatingFolder = false;
     render();
     return;
   }
 
-  const cleanName = String(folderName || "").trim();
+  const cleanName = normalizeMakeFolderName(folderName);
   if (!cleanName) {
-    window.alert("폴더 이름을 입력해주세요.");
+    showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
-  const exists = state.makeFolders.some((folder) => folder.name === cleanName);
-  if (exists) {
-    window.alert("이미 같은 이름의 폴더가 있습니다.");
+  if (hasMakeFolderName(cleanName)) {
+    showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
-  const folder = { id: `folder-${Date.now()}`, name: cleanName };
-  state.makeFolders.push(folder);
+  const folder = createLocalMakeFolder(cleanName);
   state.activeFolderId = folder.id;
   state.creatingFolder = false;
   const backendFolderId = await createBackendMakeFolder({ name: cleanName });
-  if (backendFolderId) folder.serverId = backendFolderId;
+  if (backendFolderId) {
+    folder.serverId = backendFolderId;
+  } else if (!canUseDemoFallback()) {
+    removeLocalMakeFolder(folder.id);
+    state.activeFolderId = "all";
+    showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
+    render();
+    return;
+  }
   showNotice("폴더를 추가했습니다.");
   render();
 }
 
 async function createMakeFolderAndMoveThread(threadId, folderName) {
-  if (!state.isLoggedIn) {
-    state.creatingThreadFolderId = null;
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation(() => { state.creatingThreadFolderId = null; })) return;
 
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
 
   if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    window.alert(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
     state.creatingThreadFolderId = null;
     render();
     return;
   }
 
-  const cleanName = String(folderName || "").trim();
+  const cleanName = normalizeMakeFolderName(folderName);
   if (!cleanName) {
-    window.alert("폴더 이름을 입력해주세요.");
+    showNotice("폴더 이름을 입력해주세요.");
     return;
   }
 
-  const exists = state.makeFolders.some((folder) => folder.name === cleanName);
-  if (exists) {
-    window.alert("이미 같은 이름의 폴더가 있습니다.");
+  if (hasMakeFolderName(cleanName)) {
+    showNotice("이미 같은 이름의 폴더가 있습니다.");
     return;
   }
 
-  const folder = { id: `folder-${Date.now()}`, name: cleanName };
-  state.makeFolders.push(folder);
+  const previousFolderId = thread.folderId;
+  const folder = createLocalMakeFolder(cleanName);
   thread.folderId = folder.id;
   state.activeFolderId = folder.id;
   state.openThreadMenuId = null;
@@ -4323,7 +4260,15 @@ async function createMakeFolderAndMoveThread(threadId, folderName) {
     folder.serverId = backendFolderId;
     await moveThreadToFolderOnBackend(thread, backendFolderId);
   } else {
-    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
+    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다.");
+    if (!canUseDemoFallback()) {
+      removeLocalMakeFolder(folder.id);
+      restoreThreadFolder(thread, previousFolderId);
+      state.activeFolderId = thread.folderId;
+      showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
+      render();
+      return;
+    }
   }
   showNotice("새 폴더를 만들고 대화를 이동했습니다.");
   render();
@@ -4334,81 +4279,91 @@ function getCustomMakeFolderCount() {
 }
 
 async function renameMakeFolder(folderId, name) {
-  if (!state.isLoggedIn) {
-    state.editingFolderId = null;
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+  if (guardMakeFolderMutation(() => { state.editingFolderId = null; })) return;
+
+  const folder = state.makeFolders.find((item) => item.id === folderId);
+  const cleanName = normalizeMakeFolderName(name);
+  if (!folder || !cleanName) return;
+
+  state.editingFolderId = null;
+  const backendUpdated = await updateBackendMakeFolderName(folderId, cleanName);
+  if (!backendUpdated && !canUseDemoFallback()) {
+    showNotice("폴더 이름 수정 요청에 실패했습니다.");
     render();
     return;
   }
-
-  const folder = state.makeFolders.find((item) => item.id === folderId);
-  const cleanName = String(name || "").trim();
-  if (!folder || !cleanName) return;
-
   folder.name = cleanName;
-  state.editingFolderId = null;
-  const backendFolderId = getBackendFolderId(folderId);
-  if (backendFolderId) {
-    callBackendApi("updateMakeFolder", backendFolderId, { name: cleanName });
-  }
   showNotice("폴더 이름을 수정했습니다.");
   render();
 }
 
-function performDeleteFolder(folderId) {
-  if (!state.isLoggedIn) {
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+async function performDeleteFolder(folderId) {
+  if (guardMakeFolderMutation()) return;
+
+  if (!folderId || folderId === "uncategorized") return;
+  const previousFolders = state.makeFolders.map((folder) => ({ ...folder }));
+  const previousThreadFolders = state.recentThreads.map((thread) => ({ id: thread.id, folderId: thread.folderId }));
+  const previousActiveFolderId = state.activeFolderId;
+  const backendDeleted = await deleteBackendMakeFolder(folderId);
+  if (!backendDeleted && !canUseDemoFallback()) {
+    state.makeFolders = previousFolders;
+    previousThreadFolders.forEach((previous) => {
+      const thread = state.recentThreads.find((item) => item.id === previous.id);
+      restoreThreadFolder(thread, previous.folderId);
+    });
+    state.activeFolderId = previousActiveFolderId;
+    showNotice("폴더 삭제 요청에 실패했습니다.");
     render();
     return;
   }
-
-  if (!folderId || folderId === "uncategorized") return;
-  const backendFolderId = getBackendFolderId(folderId);
-  state.makeFolders = state.makeFolders.filter((folder) => folder.id !== folderId);
-  state.recentThreads.forEach((thread) => {
-    if (thread.folderId === folderId) thread.folderId = "uncategorized";
-  });
-  if (state.activeFolderId === folderId) state.activeFolderId = "all";
-  if (backendFolderId) {
-    callBackendApi("deleteMakeFolder", backendFolderId);
-  }
+  deleteMakeFolderState(getMakeMutationStateContext(), folderId);
   showNotice("폴더를 삭제했습니다.");
+  render();
 }
 
 async function moveThreadToFolder(threadId, folderId) {
-  if (!state.isLoggedIn) {
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return;
-  }
+  if (guardMakeFolderMutation()) return;
 
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
+  const previousFolderId = thread.folderId;
   thread.folderId = folderId || "uncategorized";
-  await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
+  const backendMoved = await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
+  if (!backendMoved && !canUseDemoFallback()) {
+    restoreThreadFolder(thread, previousFolderId);
+    showNotice("대화 폴더 이동 요청에 실패해 변경을 취소했습니다.");
+    render();
+    return;
+  }
   showNotice("대화 폴더를 변경했습니다.");
   render();
 }
 
 async function moveThreadToFolderOnBackend(thread, backendFolderId) {
-  const api = window.TTALKAK_API;
-  if (!api?.moveMakeThread) return;
+  const api = getMakeApi();
+  if (!api?.moveMakeThread) return canUseDemoFallback();
 
   const backendThreadId = await ensureBackendMakeThreadId(thread);
   if (!backendThreadId) {
-    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다. 로컬 데모 상태만 유지합니다.");
-    return;
+    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다.");
+    return canUseDemoFallback();
   }
 
   try {
     await api.moveMakeThread(
       backendThreadId,
       { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
-      state.authToken || state.token || undefined,
+      getMakeApiToken(),
     );
+    return true;
   } catch (error) {
-    handleBackendAccessError(error, "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.");
-    console.warn("[TTALKAK] /api/make/threads/{id}/folder 호출에 실패해 로컬 데모 상태만 유지합니다.", error);
+    handleMakeBackendSyncError(
+      error,
+      "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "대화 폴더 이동 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/threads/{id}/folder 호출에 실패했습니다.",
+    );
+    return false;
   }
 }
 
@@ -4425,35 +4380,10 @@ function getActiveFolderName() {
   return state.makeFolders.find((folder) => folder.id === state.activeFolderId)?.name || "최근 대화";
 }
 
-function removeCommentFromList(comments, commentId) {
-  for (let index = 0; index < comments.length; index += 1) {
-    const comment = comments[index];
-    if (comment.id === commentId && canDeleteComment(comment)) {
-      if ((comment.replies || []).length > 0) {
-        comment.deleted = true;
-        comment.text = "삭제된 댓글입니다.";
-        comment.author = "삭제된 댓글";
-        comment.owner = null;
-        comment.likes = 0;
-        comment.edited = false;
-        return true;
-      }
-
-      comments.splice(index, 1);
-      return true;
-    }
-
-    if (removeCommentFromList(comment.replies || [], commentId)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function resetDemoState() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    clearPersistedPayload();
+    removeStorageItem(AUTH_TOKEN_KEY);
   } catch (_error) {
     // Ignore storage failures in preview mode.
   }
@@ -4461,44 +4391,358 @@ function resetDemoState() {
 }
 
 function toggleLibraryDemoData() {
+  if (!canUseDemoFallback()) {
+    showNotice("현재 환경에서는 데모 데이터 fallback이 비활성화되어 있습니다.");
+    return;
+  }
   state.libraryDemoSeeded = !state.libraryDemoSeeded;
   state.savedPage = 1;
   showNotice(state.libraryDemoSeeded ? "보관함 데모 데이터를 표시합니다." : "보관함 데모 데이터를 숨겼습니다.");
   render();
 }
 
-function incrementPromptComments(promptId) {
-  const updated = new Set();
-
-  for (const list of [popularPrompts, savedPrompts]) {
-    const prompt = list.find((item) => item.id === promptId);
-    if (!prompt || updated.has(prompt)) continue;
-    prompt.comments += 1;
-    updated.add(prompt);
-  }
+function bindMakeEvents() {
+  bindMakeComposerEvents();
+  bindMakeTemplateEvents();
+  bindMakeMessageActionEvents();
+  bindMakeThreadEvents();
+  bindMakeFolderEvents();
 }
 
-function decrementPromptComments(promptId) {
-  const updated = new Set();
+function bindMakeComposerEvents() {
+  const composer = document.querySelector("[data-composer]");
+  if (!composer) return;
 
-  for (const list of [popularPrompts, savedPrompts]) {
-    const prompt = list.find((item) => item.id === promptId);
-    if (!prompt || updated.has(prompt)) continue;
-    prompt.comments = Math.max(0, prompt.comments - 1);
-    updated.add(prompt);
+  const composerTextarea = composer.querySelector("[data-autosize-textarea]");
+  if (composerTextarea) {
+    autosizeTextarea(composerTextarea);
+    composerTextarea.addEventListener("input", () => {
+      state.composerDraft = composerTextarea.value;
+      autosizeTextarea(composerTextarea);
+    });
+    composerTextarea.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      submitMakeComposer(composer);
+    });
   }
+
+  composer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitMakePrompt(composer);
+  });
 }
 
+function bindMakeTemplateEvents() {
+  document.querySelectorAll("[data-template]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyTemplate(button.dataset.template);
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleTemplateBar(button);
+    });
+  });
+}
+
+function bindMakeMessageActionEvents() {
+  document.querySelectorAll("[data-copy-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      copyMakeMessage(button.dataset.copyMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-edit-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingMessageId = button.dataset.editMessage;
+      pendingMessageScrollId = button.dataset.editMessage;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest("[data-edit-message-form]");
+      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
+      state.editingMessageId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
+    bindMakeMessageEditForm(form);
+  });
+
+  document.querySelectorAll("[data-save-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      saveMakeMessage(button.dataset.saveMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-share-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openShareFromMakeMessage(button.dataset.shareMessage);
+    });
+  });
+
+  document.querySelectorAll("[data-execute-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openExecuteModal(button.dataset.executeMessage);
+    });
+  });
+}
+
+function bindMakeMessageEditForm(form) {
+  const textarea = form.querySelector('textarea[name="message"]');
+  textarea?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    submitMakeComposer(form);
+  });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
+  });
+}
+
+function bindMakeThreadEvents() {
+  document.querySelectorAll("[data-new-chat]").forEach((button) => {
+    button.addEventListener("click", startNewChat);
+  });
+
+  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const threadId = button.dataset.threadMenu;
+      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
+      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-open-thread]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.openThreadMenuId = null;
+      openRecentThread(button.dataset.openThread);
+    });
+  });
+
+  document.querySelectorAll("[data-delete-thread]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openThreadMenuId = null;
+      openConfirmAction({
+        type: "delete-thread",
+        targetId: button.dataset.deleteThread,
+        title: "대화 삭제",
+        message: "이 대화를 최근 대화 목록에서 삭제할까요?",
+        confirmLabel: "삭제",
+        danger: true,
+      });
+    });
+  });
+}
+
+function bindMakeFolderEvents() {
+  document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      state.creatingFolder = true;
+      render();
+      window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-folder-create]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.creatingFolder = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-folder-create-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      createMakeFolder(new FormData(form).get("folderName"));
+    });
+  });
+
+  document.querySelectorAll("[data-open-folder]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeFolderId = button.dataset.openFolder;
+      state.openFolderMenuId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      const folderId = button.dataset.folderMenu;
+      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-folder]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.editingFolderId = button.dataset.editFolder;
+      state.openFolderMenuId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-folder-edit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.editingFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-delete-folder]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openFolderMenuId = null;
+      openConfirmAction({
+        type: "delete-folder",
+        targetId: button.dataset.deleteFolder,
+        title: "폴더 삭제",
+        message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?",
+        confirmLabel: "삭제",
+        danger: true,
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-thread-folder]").forEach((select) => {
+    select.addEventListener("change", () => {
+      if (guardAdminUserAction()) {
+        render();
+        return;
+      }
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        render();
+        return;
+      }
+      state.openThreadMenuId = null;
+      moveThreadToFolder(select.dataset.threadFolder, select.value);
+    });
+  });
+
+  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (guardAdminUserAction()) return;
+      if (!state.isLoggedIn) {
+        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
+        return;
+      }
+      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
+        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
+        return;
+      }
+      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
+      render();
+      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
+    });
+  });
+
+  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.creatingThreadFolderId = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
+    });
+  });
+
+  document.querySelectorAll("[data-folder-edit-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName"));
+    });
+  });
+}
+
+function submitMakeComposer(composer) {
+  if (typeof composer.requestSubmit === "function") {
+    composer.requestSubmit();
+    return;
+  }
+  composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+async function submitMakePrompt(composer) {
+  if (guardAdminUserAction()) return;
+  const value = String(new FormData(composer).get("prompt") || "").trim();
+  if (!value) return;
+  if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
+    state.authView = "login";
+    render();
+    return;
+  }
+  if (!state.isLoggedIn) {
+    state.guestImproveCount += 1;
+  }
+  const now = Date.now();
+  const threadId = state.activeThreadId || `thread-${now}`;
+  const assistantMessageId = `make-${now}`;
+  const history = buildMakeImproveHistory(state.messages);
+  appendMakeUserMessageState(state, threadId, { id: `user-${now}`, role: "user", content: value });
+  let improvedPrompt = "";
+  try {
+    improvedPrompt = await improvePromptWithBackend(value, history);
+  } catch (error) {
+    if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
+    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
+    render();
+    return;
+  }
+  appendMakeAssistantMessageState(state, {
+    id: assistantMessageId,
+    role: "assistant",
+    content: improvedPrompt,
+    sourcePrompt: value,
+  });
+  pendingLatestMessageScrollId = assistantMessageId;
+  updateRecentThread(threadId);
+  syncMakeThreadWithBackend(threadId);
+  render();
+}
 async function copyMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
 
-  try {
-    await navigator.clipboard.writeText(finalPrompt);
-  } catch (_error) {
-    fallbackCopyText(finalPrompt);
-  }
+  await copyTextToClipboard(finalPrompt);
 
   state.copiedMessageId = messageId;
   showNotice("프롬프트를 복사했습니다.");
@@ -4510,70 +4754,51 @@ async function copyMakeMessage(messageId) {
 }
 
 function saveMakeMessage(messageId) {
+  if (guardAdminUserAction()) return;
+
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
   const finalPrompt = getFinalPromptText(message);
-
-  const savedIndex = savedPrompts.findIndex((item) => item.id === messageId);
-  if (savedIndex >= 0) {
-    savedPrompts.splice(savedIndex, 1);
-    state.userLibraryPromptIds.delete(messageId);
-    state.savedPage = 1;
-    showNotice("저장한 프롬프트에서 제거했습니다.");
-    render();
-    return;
-  }
-
-  savedPrompts.unshift({
-    id: message.id,
-    title: makePromptTitle(message.sourcePrompt || finalPrompt),
-    text: finalPrompt,
-    tags: ["내프롬프트", "Make", "첨삭"],
-    views: 0,
-    comments: 0,
-    saves: 1,
-    author: state.currentUser || "나",
-    owner: state.currentUser || "나",
-    source: "mine",
-    isShared: false,
-    savedByMe: true,
-    sourcePrompt: message.sourcePrompt || finalPrompt,
-    messages: state.messages.map((item) => ({ ...item })),
-  });
-  state.userLibraryPromptIds.add(message.id);
-
-  state.savedPage = 1;
-  showNotice("저장한 프롬프트에 추가했습니다.");
+  const result = toggleSavedMakeMessageState(getMakeMutationStateContext(), message, finalPrompt);
+  showNotice(result === "removed" ? "메시지 저장을 해제했습니다." : "메시지를 저장했습니다.");
   render();
 }
-
 async function resendEditedMessage(messageId, value) {
   const cleanValue = String(value || "").trim();
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
+  if (guardAdminUserAction()) return;
 
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
-  state.messages = state.messages.slice(0, index + 1);
-  state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
-  const improvedPrompt = await improvePromptWithBackend(cleanValue);
-  state.messages.push({
+  const history = buildMakeImproveHistory(state.messages.slice(0, index));
+  applyEditedMakeMessageState(state, index, cleanValue, now);
+  let improvedPrompt = "";
+  try {
+    improvedPrompt = await improvePromptWithBackend(cleanValue, history);
+  } catch (error) {
+    state.makeBackendStatus = "fallback";
+    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
+    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
+    render();
+    return;
+  }
+  finishEditedMakeMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
     content: improvedPrompt,
     sourcePrompt: cleanValue,
   });
-  state.editingMessageId = null;
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(state.activeThreadId || `thread-${now}`);
   syncMakeThreadWithBackend(state.activeThreadId || `thread-${now}`);
-  showNotice("수정한 메시지로 다시 전송했습니다.");
+  showNotice("수정한 메시지를 다시 개선했습니다.");
   render();
 }
-
 function openShareFromMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4586,7 +4811,7 @@ function openShareFromMakeMessage(messageId) {
     promptId: `make-share-${message.id}`,
     title: makePromptTitle(message.sourcePrompt || finalPrompt),
     text: finalPrompt,
-    tags: ["내프롬프트", "Make", "첨삭"],
+    tags: [],
   };
   state.shareError = "";
   state.route = "share";
@@ -4614,17 +4839,18 @@ async function executeMakeMessage(messageId, targetId) {
   if (!finalPrompt) return;
   const target = getExecuteTarget(targetId);
   if (!target) return;
-  window.open(target.url, "_blank", "noopener,noreferrer");
-
-  try {
-    await navigator.clipboard.writeText(finalPrompt);
-  } catch (_error) {
-    fallbackCopyText(finalPrompt);
-  }
+  const copied = await copyTextToClipboard(finalPrompt);
+  const opened = window.open(target.url, "_blank", "noopener,noreferrer");
 
   state.executeMessageId = null;
   state.executePromptId = null;
-  showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
+  if (!opened) {
+    showNotice(`${target.name} 팝업이 차단되었습니다. 프롬프트는 복사했으니 새 탭에서 직접 열어 붙여넣어 주세요.`);
+  } else if (copied) {
+    showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
+  } else {
+    showNotice(`${target.name}로 이동합니다. 복사가 제한되면 Make의 Copy 버튼으로 다시 복사해주세요.`);
+  }
   render();
 }
 
@@ -4639,54 +4865,27 @@ function getExecuteTarget(targetId) {
 }
 
 function updateRecentThread(threadId) {
-  const lastUser = [...state.messages].reverse().find((message) => message.role === "user");
-  const firstUser = state.messages.find((message) => message.role === "user");
-  const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
-  const existingThread = state.recentThreads.find((item) => item.id === threadId);
-  const thread = {
-    id: threadId,
-    dedupeKey: threadId,
-    title: makePromptTitle(lastUser?.content || "새 대화"),
-    preview: makePreview(lastAssistant?.content || lastUser?.content || ""),
-    createdAt: existingThread?.createdAt || Date.now(),
-    folderId: existingThread?.folderId || (state.activeFolderId !== "all" ? state.activeFolderId : "uncategorized"),
-    serverId: existingThread?.serverId || "",
-    messages: state.messages.map((item) => ({ ...item })),
-  };
-
-  state.recentThreads = [thread, ...state.recentThreads.filter((item) => item.id !== threadId)].slice(0, 8);
+  updateRecentMakeThreadState(getMakeMutationStateContext(), threadId);
 }
 
 function openRecentThread(threadId) {
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
 
-  state.activeThreadId = thread.id;
-  state.messages = thread.messages.map((item) => ({ ...item }));
-  state.route = "make";
+  openRecentMakeThreadState(state, thread);
   render();
 }
-
 function openSavedMakePrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt?.messages?.length) return;
 
-  const threadId = `saved-thread-${promptId}`;
-  state.activeThreadId = threadId;
-  state.messages = prompt.messages.map((item) => ({ ...item }));
-  updateRecentThread(threadId);
-  state.route = "make";
+  openSavedMakePromptState(getMakeMutationStateContext(), promptId, prompt);
   render();
 }
-
 function startNewChat() {
-  state.activeThreadId = null;
-  state.messages = [];
-  state.copiedMessageId = "";
-  state.composerDraft = "";
+  startNewMakeChatState(state);
   render();
 }
-
 function getRecentThreadKeyFromThread(thread) {
   return thread.id || thread.dedupeKey || "";
 }
@@ -4714,6 +4913,41 @@ function applyTemplate(templateId) {
   }, 0);
 }
 
+function toggleTemplateBar(button) {
+  window.clearTimeout(templateToggleTimer);
+
+  if (state.templateCollapsed) {
+    state.templateCollapsed = false;
+    render();
+    return;
+  }
+
+  const templateBar = button.closest(".make-template-bar");
+  if (!templateBar) {
+    state.templateCollapsed = true;
+    render();
+    return;
+  }
+
+  templateBar.classList.add("collapsing");
+  button.setAttribute("aria-label", "분야 버튼 펼치기");
+  button.setAttribute("aria-expanded", "false");
+  button.innerHTML = "&gt;";
+  templateToggleTimer = window.setTimeout(() => {
+    state.templateCollapsed = true;
+    render();
+  }, 190);
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_error) {
+    return fallbackCopyText(text);
+  }
+}
+
 function fallbackCopyText(text) {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -4722,8 +4956,9 @@ function fallbackCopyText(text) {
   textarea.style.left = "-9999px";
   document.body.appendChild(textarea);
   textarea.select();
-  document.execCommand("copy");
+  const copied = document.execCommand("copy");
   textarea.remove();
+  return copied;
 }
 
 function makePromptTitle(text) {
@@ -4751,6 +4986,8 @@ function autosizeTextarea(textarea) {
 
 function deleteOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 본인 프롬프트만 삭제할 수 있습니다.");
@@ -4770,6 +5007,8 @@ function deleteOwnPrompt(promptId) {
 
 function unshareOwnPrompt(promptId) {
   const prompt = findPromptById(promptId);
+  if (guardAdminUserAction()) return;
+
   if (!state.adminMode && !state.isLoggedIn) {
     state.authView = "login";
     showNotice("로그인 후 본인 프롬프트만 공유 취소할 수 있습니다.");
@@ -4790,6 +5029,7 @@ function unshareOwnPrompt(promptId) {
 async function publishSavedPrompt(promptId) {
   const prompt = savedPrompts.find((item) => item.id === promptId);
   if (!prompt || prompt.source !== "mine") return;
+  if (guardAdminUserAction()) return;
 
   if (!state.isLoggedIn) {
     state.authView = "login";
@@ -4798,41 +5038,16 @@ async function publishSavedPrompt(promptId) {
   }
 
   let backendPrompt = null;
-  if (isBackendNumericId(promptId) && window.TTALKAK_API?.shareExistingPrompt) {
+  if (isBackendNumericId(promptId) && hasBackendAuthToken() && window.TTALKAK_API?.shareExistingPrompt) {
     try {
-      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, state.authToken || state.token || undefined);
+      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, getAuthToken() || undefined);
     } catch (error) {
       handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
       return;
     }
   }
 
-  if (backendPrompt) {
-    Object.assign(prompt, backendPrompt, {
-      source: "mine",
-      isShared: true,
-      savedByMe: prompt.savedByMe,
-      author: state.currentUser || backendPrompt.author,
-      owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
-    });
-  }
-
-  prompt.isShared = true;
-  prompt.source = "mine";
-  prompt.author = state.currentUser || prompt.author || "나";
-  prompt.owner = state.currentUser || prompt.owner || prompt.author;
-  prompt.createdAt = prompt.createdAt || Date.now();
-
-  const popularIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
-  if (popularIndex >= 0) {
-    popularPrompts[popularIndex] = { ...popularPrompts[popularIndex], ...prompt, isShared: true, source: "mine" };
-  } else {
-    popularPrompts.unshift({ ...prompt, isShared: true, source: "mine" });
-  }
-
-  state.popularSort = "latest";
-  state.popularPage = 1;
-  state.userLibraryPromptIds.add(prompt.id);
+  applyPublishedSavedPromptState(getCommentMutationStateContext(), prompt, backendPrompt);
   showNotice("프롬프트를 공유됨 상태로 전환했습니다.");
   render();
 }
@@ -4840,13 +5055,14 @@ async function publishSavedPrompt(promptId) {
 async function updateOwnPrompt(promptId, formData) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
+  if (guardAdminUserAction()) return;
 
   const title = String(formData.get("title") || "").trim();
   const text = String(formData.get("text") || "").trim();
   const tags = parseSharedTags(String(formData.get("tags") || ""));
 
-  if (!title || !text || tags.length === 0) {
-    window.alert("제목, 프롬프트, 해시태그를 모두 입력해주세요.");
+  if (!title || !text) {
+    showNotice("제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.");
     return;
   }
 
@@ -4856,7 +5072,7 @@ async function updateOwnPrompt(promptId, formData) {
       backendPrompt = await window.TTALKAK_API.updatePrompt(
         promptId,
         { title, text, tags },
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
       );
     } catch (error) {
       handleBackendAccessError(error, "프롬프트 수정 요청에 실패했습니다.");
@@ -4868,20 +5084,9 @@ async function updateOwnPrompt(promptId, formData) {
     ? { ...backendPrompt, source: "mine", savedByMe: prompt.savedByMe, isShared: prompt.isShared }
     : { title, text, tags, updatedAt: Date.now() };
 
-  [popularPrompts, savedPrompts].forEach((list) => {
-    const item = list.find((entry) => entry.id === promptId);
-    if (!item) return;
-    Object.assign(item, nextValues);
-  });
-
-  const revisionKey = makeRevisionRequestKey("prompt", promptId);
-  if (state.adminPromptRevisionRequests[revisionKey] || state.adminPromptRevisionRequests[promptId]) {
-    const { [revisionKey]: _resolvedRequest, [promptId]: _legacyRequest, ...remainingRequests } = state.adminPromptRevisionRequests;
-    state.adminPromptRevisionRequests = remainingRequests;
-  }
-
-  state.editingPromptId = null;
+  applyEditedPromptState(getCommentMutationStateContext(), promptId, nextValues, makeRevisionRequestKey("prompt", promptId));
   showNotice("프롬프트를 수정했습니다.");
+  await refreshMyPageDataAfterMutation();
   render();
 }
 
@@ -4889,30 +5094,19 @@ function performDeletePrompt(promptId) {
   if (isBackendNumericId(promptId)) {
     callBackendApi("deletePrompt", promptId);
   }
-  removePromptById(popularPrompts, promptId);
-  removePromptById(savedPrompts, promptId);
-  state.userLibraryPromptIds.delete(promptId);
-  state.backendLibraryPromptIds.delete(promptId);
-  state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
-  normalizeSavedPage();
-  showNotice("프롬프트를 삭제했습니다.");
+  applyDeletedPromptState(
+    getPromptMutationStateContext(),
+    promptId,
+    SAVED_PAGE_SIZE,
+  );
+  showNotice("\uD504\uB86C\uD504\uD2B8\uB97C \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
 }
 
 function performUnsharePrompt(promptId) {
   const prompt = findPromptById(promptId);
   if (!prompt || prompt.source !== "mine") return;
 
-  removePromptById(popularPrompts, promptId);
-  const savedPrompt = savedPrompts.find((item) => item.id === promptId);
-  if (savedPrompt) {
-    savedPrompt.isShared = false;
-    savedPrompt.source = "mine";
-  } else {
-    savedPrompts.unshift({ ...prompt, isShared: false, source: "mine" });
-  }
-
-  state.popularPage = 1;
-  state.detailPromptId = state.detailPromptId === promptId ? null : state.detailPromptId;
+  applyUnsharedPromptState(getCommentMutationStateContext(), promptId, prompt);
   if (isBackendNumericId(promptId)) {
     callBackendApi("unsharePrompt", promptId);
   }
@@ -4920,14 +5114,11 @@ function performUnsharePrompt(promptId) {
 }
 
 function removePromptById(list, promptId) {
-  const index = list.findIndex((item) => item.id === promptId);
-  if (index >= 0) list.splice(index, 1);
+  removePromptByIdState(list, promptId);
 }
 
 function normalizeSavedPage() {
-  const filteredCount = getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
-  const totalPages = Math.max(1, Math.ceil(filteredCount / SAVED_PAGE_SIZE));
-  state.savedPage = Math.min(state.savedPage, totalPages);
+  normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
 }
 
 function togglePasswordVisibility(button) {
@@ -4943,21 +5134,34 @@ function togglePasswordVisibility(button) {
 }
 
 function restoreSearchFocus() {
+  if (state.detailPromptId || state.authView || state.reportPromptId || state.reportCommentId || state.confirmAction) return;
+
   const nextInput = document.querySelector("[data-tag-search]");
   if (!nextInput) return;
+
+  const activeElement = document.activeElement;
+  const isEditingField =
+    activeElement &&
+    activeElement !== document.body &&
+    activeElement !== nextInput &&
+    activeElement.matches?.("input, textarea, select, [contenteditable='true']");
+  if (isEditingField) return;
 
   nextInput.focus();
   nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
 }
 
 function getSavedPagePrompts() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
+  const localSavedPrompts = getLocalSavedPagePrompts();
   if (state.myBackendStatus === "connected") {
-    return savedPrompts.filter((prompt) => {
-      if (!state.backendLibraryPromptIds.has(prompt.id)) return false;
-      return prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id);
-    });
+    return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts, ...localSavedPrompts]);
   }
 
+  return localSavedPrompts;
+}
+
+function getLocalSavedPagePrompts() {
   const merged = savedPrompts.filter(
     (prompt) =>
       !isHiddenDemoLibraryPrompt(prompt) &&
@@ -5013,7 +5217,7 @@ function showSearchTipOnce() {
   searchTipTimer = window.setTimeout(() => {
     state.searchTipVisible = false;
     document.querySelector("[data-search-help]")?.classList.remove("show-tip");
-  }, 2200);
+  }, 2000);
 }
 
 function scheduleSearchCommit(value) {
@@ -5024,12 +5228,9 @@ function scheduleSearchCommit(value) {
 }
 
 function commitSearchQuery(value) {
-  const nextQuery = String(value || "");
   window.clearTimeout(searchCommitTimer);
-  if (state.searchQuery === nextQuery) return;
+  if (!applyHomeSearchQueryState(state, value)) return;
 
-  state.searchQuery = nextQuery;
-  state.popularPage = 1;
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
@@ -5090,11 +5291,7 @@ function searchByTag(tag) {
   if (!cleanTag) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "tag";
-  state.searchQuery = cleanTag;
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.route = "home";
+  applyHomeTagSearchState(state, cleanTag);
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
@@ -5105,22 +5302,373 @@ function searchByAuthor(author) {
   if (!cleanAuthor) return;
 
   window.clearTimeout(searchCommitTimer);
-  state.searchScope = "author";
-  state.searchQuery = cleanAuthor;
-  state.popularPage = 1;
-  state.detailPromptId = null;
-  state.detailHighlightCommentId = null;
-  state.route = "home";
+  applyHomeAuthorSearchState(state, cleanAuthor);
   refreshBackendHomePrompts();
   render();
   restoreSearchFocus();
 }
 
+async function searchAdminUserCandidates(nickname) {
+  const cleanNickname = String(nickname || "").trim();
+  if (!cleanNickname) return;
+
+  state.adminUserQuery = cleanNickname;
+  state.adminUserActivityNickname = "";
+  state.adminUserSearchResults = [];
+  state.adminUserSearchMessage = "사용자를 검색하는 중입니다.";
+  state.adminTab = "users";
+  state.route = "admin";
+  render();
+
+  const api = window.TTALKAK_API;
+  const token = getAuthToken() || undefined;
+  if (api?.searchAdminUsers && hasBackendAuthToken()) {
+    try {
+      const users = await api.searchAdminUsers({ nickname: cleanNickname, page: 1, pageSize: 20 }, token);
+      state.adminUserSearchResults = users;
+      state.adminUserSearchMessage = users.length
+        ? "조회할 사용자를 선택해주세요."
+        : "일치하는 사용자를 찾지 못했습니다.";
+      render();
+      return;
+    } catch (error) {
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      if (!canUseDemoFallback()) {
+        state.adminUserSearchResults = [];
+        state.adminUserSearchMessage = "사용자 검색 API 호출에 실패했습니다.";
+        render();
+        return;
+      }
+    }
+  }
+
+  const normalizedQuery = normalizeAdminSearchText(cleanNickname);
+  const localUsers = getAdminKnownNicknames()
+    .filter((knownNickname) => normalizeAdminSearchText(knownNickname).includes(normalizedQuery))
+    .slice(0, 20)
+    .map((knownNickname, index) => {
+      const memberId = getAdminKnownMemberId(knownNickname);
+      const activity = getAdminUserActivity(knownNickname) || {};
+      return {
+        id: memberId || "",
+        nickname: knownNickname,
+        blocked: Boolean(activity.blocked),
+        active: true,
+        localOnly: true,
+        index,
+      };
+    });
+  state.adminUserSearchResults = localUsers;
+  state.adminUserSearchMessage = localUsers.length
+    ? "서버 검색 대신 로컬 후보를 표시합니다. 조회할 사용자를 선택해주세요."
+    : "일치하는 사용자를 찾지 못했습니다.";
+  render();
+}
+
+async function openAdminUserActivity(nickname, options = {}) {
+  const cleanNickname = String(nickname || "").trim();
+  if (!cleanNickname) return;
+  let resolvedNickname = resolveAdminUserNickname(cleanNickname);
+
+  state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
+  state.adminUserActivityNickname = resolvedNickname;
+  state.adminUserSearchMessage = "";
+  state.adminTab = "users";
+  state.route = "admin";
+  state.detailPromptId = null;
+  state.detailHighlightCommentId = null;
+  showNotice(`${resolvedNickname}님의 활동을 조회합니다.`);
+  render();
+
+  const api = window.TTALKAK_API;
+  const token = getAuthToken() || undefined;
+  let memberId = String(options.memberId || getAdminKnownMemberId(resolvedNickname) || "").trim();
+  if (!memberId && api?.searchAdminUsers && hasBackendAuthToken()) {
+    try {
+      const users = await api.searchAdminUsers({ nickname: cleanNickname, page: 1, pageSize: 10 }, token);
+      const normalizedQuery = normalizeAdminSearchText(cleanNickname);
+      const selectedUser =
+        users.find((user) => normalizeAdminSearchText(user.nickname) === normalizedQuery) ||
+        users.find((user) => normalizeAdminSearchText(user.nickname).includes(normalizedQuery)) ||
+        users[0];
+      if (selectedUser?.id) {
+        memberId = String(selectedUser.id);
+        resolvedNickname = selectedUser.nickname || resolvedNickname;
+        state.adminUserActivityNickname = resolvedNickname;
+        state.adminUserQuery = options.keepQuery ? cleanNickname : resolvedNickname;
+      } else {
+        showNotice("일치하는 사용자를 찾지 못했습니다.");
+      }
+    } catch (error) {
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      if (!canUseDemoFallback()) return;
+    }
+  }
+
+  if (memberId && window.TTALKAK_API?.getAdminUserActivity) {
+    try {
+      const activity = await window.TTALKAK_API.getAdminUserActivity(memberId, { page: 1, pageSize: 20 }, token);
+      state.backendAdminUserActivities = {
+        ...state.backendAdminUserActivities,
+        [normalizeAdminSearchText(resolvedNickname)]: {
+          ...activity,
+          nickname: activity.nickname || resolvedNickname,
+          memberId: activity.memberId || memberId,
+        },
+      };
+      render();
+    } catch (error) {
+      handleBackendAccessError(
+        error,
+        canUseDemoFallback() ? "사용자 활동 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 활동 API 조회에 실패했습니다.",
+      );
+      console.warn("[TTALKAK] /api/admin/users/{memberId}/activity 계열 호출에 실패했습니다.", error);
+    }
+  }
+}
+
+function validateAdminUserBlockInput(memberId, shouldBlock, blockReason = "") {
+  const cleanMemberId = String(memberId || "").trim();
+  if (!cleanMemberId) {
+    showNotice("샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.");
+    return null;
+  }
+  if (!getAdminApiAction("blockAdminUser") || !getAdminApiAction("unblockAdminUser")) {
+    showNotice("회원 차단 API가 아직 연결되지 않았습니다.");
+    return null;
+  }
+
+  const reason = shouldBlock ? String(blockReason || "").trim() : "";
+  if (shouldBlock && !reason) {
+    showNotice("차단 사유가 필요합니다.");
+    return null;
+  }
+
+  return { memberId: cleanMemberId, reason };
+}
+
+function getAdminUserBlockAction(shouldBlock) {
+  return shouldBlock ? "blockAdminUser" : "unblockAdminUser";
+}
+
+function getAdminUserBlockArgs(memberId, shouldBlock, reason) {
+  return shouldBlock ? [memberId, { reason }] : [memberId];
+}
+
+function applyAdminUserBlockActivity({ activity, memberId, shouldBlock, nickname }) {
+  return applyAdminUserBlockActivityState(
+    { getAdminUserActivity, normalizeAdminSearchText, state },
+    { activity, memberId, shouldBlock, nickname },
+  );
+}
+
+function refreshAdminUserActivityAfterBlock(memberId, normalizedNickname, displayNickname, shouldBlock) {
+  const api = window.TTALKAK_API;
+  if (!api?.getAdminUserActivity) return;
+
+  api
+    .getAdminUserActivity(memberId, { page: 1, pageSize: 20 }, getAuthToken() || undefined)
+    .then((refreshedActivity) => {
+      applyAdminUserActivityRefreshState(state, { refreshedActivity, normalizedNickname, displayNickname, memberId, shouldBlock });
+      if (normalizeAdminSearchText(state.adminUserActivityNickname) === normalizedNickname) {
+        render();
+      }
+    })
+    .catch((refreshError) => {
+      console.warn("[TTALKAK] Failed to refresh admin user activity after block state change.", refreshError);
+    });
+}
+
+async function updateAdminUserBlockState(memberId, shouldBlock, nickname = "", blockReason = "") {
+  const input = validateAdminUserBlockInput(memberId, shouldBlock, blockReason);
+  if (!input) return;
+
+  const action = getAdminUserBlockAction(shouldBlock);
+  const result = await runAdminApiMutation(action, getAdminUserBlockArgs(input.memberId, shouldBlock, input.reason), {
+    fallbackMessage: shouldBlock ? "회원 차단 요청에 실패했습니다." : "회원 차단 해제 요청에 실패했습니다.",
+  });
+  if (!result.ok) return;
+
+  const { displayNickname, normalizedNickname } = applyAdminUserBlockActivity({
+    activity: result.value,
+    memberId: input.memberId,
+    shouldBlock,
+    nickname,
+  });
+  showNotice(shouldBlock ? "회원 차단을 처리했습니다." : "회원 차단을 해제했습니다.");
+  render();
+
+  refreshAdminUserActivityAfterBlock(input.memberId, normalizedNickname, displayNickname, shouldBlock);
+}
+
+function getAdminApiAction(action) {
+  const handler = window.TTALKAK_API?.[action];
+  return typeof handler === "function" ? handler : null;
+}
+
+function canUseAdminApiAction(action) {
+  return hasBackendAuthToken() && Boolean(getAdminApiAction(action));
+}
+
+async function runAdminApiMutation(action, args = [], options = {}) {
+  const handler = getAdminApiAction(action);
+  if (!handler) return { ok: false, missing: true, value: null };
+
+  try {
+    const value = await handler(...args, getAuthToken() || undefined);
+    return { ok: true, missing: false, value };
+  } catch (error) {
+    if (typeof options.onError === "function" && options.onError(error)) {
+      if (options.logMessage) console.warn(options.logMessage, error);
+      return { ok: false, missing: false, error, value: null };
+    }
+    handleBackendAccessError(error, options.fallbackMessage || "관리자 요청 처리에 실패했습니다.");
+    if (options.logMessage) console.warn(options.logMessage, error);
+    if (options.refreshOnFailure) await hydrateBackendAdminDataIfNeeded({ force: true });
+    return { ok: false, missing: false, error, value: null };
+  }
+}
+
+function shouldUseBackendAuthorRevisionRequest(target) {
+  return target?.type === "prompt" && isBackendNumericId(target.id) && state.backendStatus === "connected";
+}
+
+function setAdminRevisionRequestState(target, request, fallback = {}) {
+  applyAdminRevisionRequestState(state, target, request, fallback);
+}
+
+async function finishAdminRevisionRequestMutation(notice, auditReason, backendChanged) {
+  finishAdminRevisionRequestState(state);
+  showNotice(notice);
+  if (backendChanged) await refreshAdminAfterMutation({ auditReason });
+  render();
+}
+
+function handleAuthorRevisionCreateError(error) {
+  const status = Number(error?.status || error?.payload?.status || 0);
+  const code = getBackendErrorCode(error);
+  if (code === "AUTHOR_REVISION_REQUEST_ALREADY_ACTIVE") {
+    showNotice("이미 처리 중인 수정 요청이 있습니다. 기존 요청의 상태에 따라 사유를 수정할 수 있습니다.");
+    return true;
+  }
+  if (status === 409 || code === "CONFLICT" || code === "INVALID_STATE") {
+    showNotice("이미 처리 중인 수정 요청이 있습니다.");
+    return true;
+  }
+  return false;
+}
+
+function handleAuthorRevisionUpdateError(error) {
+  const code = getBackendErrorCode(error);
+  if (code === "REVISION_REQUEST_NOT_EDITABLE") {
+    showNotice("작성자가 이미 확인했거나 처리가 끝난 수정 요청은 사유를 변경할 수 없습니다.");
+    return true;
+  }
+  if (Number(error?.status || error?.payload?.status || 0) === 409) {
+    showNotice("현재 상태에서는 수정 요청 사유를 변경할 수 없습니다.");
+    return true;
+  }
+  return false;
+}
+
+function resolveAdminUserNickname(value) {
+  const cleanValue = String(value || "").trim();
+  const normalizedValue = normalizeAdminSearchText(cleanValue);
+  if (!normalizedValue) return cleanValue;
+
+  const nicknames = getAdminKnownNicknames();
+  const exactMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname) === normalizedValue);
+  if (exactMatch) return exactMatch;
+
+  const startsWithMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname).startsWith(normalizedValue));
+  if (startsWithMatch) return startsWithMatch;
+
+  const includesMatch = nicknames.find((nickname) => normalizeAdminSearchText(nickname).includes(normalizedValue));
+  return includesMatch || cleanValue;
+}
+
+function getAdminKnownNicknames() {
+  const nicknameMap = new Map();
+  const addNickname = (nickname) => {
+    const cleanNickname = String(nickname || "").trim();
+    const normalizedNickname = normalizeAdminSearchText(cleanNickname);
+    if (!normalizedNickname || nicknameMap.has(normalizedNickname)) return;
+    nicknameMap.set(normalizedNickname, cleanNickname);
+  };
+
+  getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+    addNickname(getDisplayPromptAuthor(prompt));
+    getSortedPromptComments(prompt.id).forEach((comment) => {
+      addNickname(comment.author || comment.owner);
+      (comment.replies || []).forEach((reply) => addNickname(reply.author || reply.owner));
+    });
+  });
+  getAdminReportRecords().forEach((record) => {
+    addNickname(record.reporter);
+    addNickname(record.promptAuthor);
+    addNickname(record.commentAuthor);
+  });
+
+  return Array.from(nicknameMap.values()).sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+function getAdminKnownMemberId(nickname) {
+  const normalizedNickname = normalizeAdminSearchText(nickname);
+  if (!normalizedNickname || normalizedNickname === normalizeAdminSearchText("탈퇴한 사용자")) return "";
+
+  const fromActivity = state.backendAdminUserActivities[normalizedNickname]?.memberId;
+  if (fromActivity) return String(fromActivity);
+
+  for (const prompt of getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts])) {
+    if (normalizeAdminSearchText(getDisplayPromptAuthor(prompt)) === normalizedNickname) {
+      const authorId = getPromptAuthorId(prompt);
+      if (authorId) return authorId;
+    }
+    for (const comment of getSortedPromptComments(prompt.id)) {
+      if (normalizeAdminSearchText(comment.author || comment.owner) === normalizedNickname) {
+        const commentAuthorId = comment.authorId || comment.memberId || comment.raw?.author?.id || comment.raw?.authorId || comment.raw?.memberId;
+        if (commentAuthorId) return String(commentAuthorId);
+      }
+      for (const reply of comment.replies || []) {
+        if (normalizeAdminSearchText(reply.author || reply.owner) === normalizedNickname) {
+          const replyAuthorId = reply.authorId || reply.memberId || reply.raw?.author?.id || reply.raw?.authorId || reply.raw?.memberId;
+          if (replyAuthorId) return String(replyAuthorId);
+        }
+      }
+    }
+  }
+
+  for (const record of getAdminReportRecords()) {
+    if (normalizeAdminSearchText(record.promptAuthor) === normalizedNickname && record.promptAuthorId) return String(record.promptAuthorId);
+    if (normalizeAdminSearchText(record.commentAuthor) === normalizedNickname && record.commentAuthorId) return String(record.commentAuthorId);
+    if (normalizeAdminSearchText(record.reporter) === normalizedNickname && record.reporterId) return String(record.reporterId);
+  }
+
+  return "";
+}
+
 function findPromptById(promptId) {
-  return savedPrompts.find((item) => item.id === promptId) || popularPrompts.find((item) => item.id === promptId);
+  return getUniquePrompts([
+    ...state.backendMyPrompts,
+    ...state.backendLibraryPrompts,
+    ...state.backendLikedPrompts,
+    ...state.backendAdminPrompts,
+    ...savedPrompts,
+    ...popularPrompts,
+  ]).find((item) => item.id === promptId);
 }
 
 async function sharePrompt(formData) {
+  if (guardAdminUserAction()) return;
+
   if (!state.isLoggedIn) {
     state.authView = "login";
     render();
@@ -5131,8 +5679,8 @@ async function sharePrompt(formData) {
   const text = formData.get("prompt").trim();
   const tags = parseSharedTags(formData.get("tags"));
 
-  if (!title || !text || tags.length === 0) {
-    state.shareError = "제목, 프롬프트, 해시태그를 모두 입력해주세요.";
+  if (!title || !text) {
+    state.shareError = "제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.";
     render();
     return;
   }
@@ -5162,7 +5710,7 @@ async function sharePrompt(formData) {
 
   let finalPrompt = prompt;
   const api = window.TTALKAK_API;
-  if (api?.sharePrompt) {
+  if (api?.sharePrompt && hasBackendAuthToken()) {
     try {
       const backendPrompt = await api.sharePrompt(
         {
@@ -5171,7 +5719,7 @@ async function sharePrompt(formData) {
           tags: prompt.tags,
           isShared: true,
         },
-        state.authToken || state.token || undefined,
+        getAuthToken() || undefined,
       );
       finalPrompt = {
         ...backendPrompt,
@@ -5191,19 +5739,7 @@ async function sharePrompt(formData) {
     }
   }
 
-  upsertPrompt(popularPrompts, finalPrompt);
-  upsertPrompt(savedPrompts, finalPrompt);
-  state.userLibraryPromptIds.add(finalPrompt.id);
-  state.backendLibraryPromptIds.add(finalPrompt.id);
-  if (!commentsByPrompt[finalPrompt.id]) {
-    commentsByPrompt[finalPrompt.id] = [];
-  }
-  state.searchQuery = "";
-  state.popularSort = "latest";
-  state.popularPage = 1;
-  state.shareError = "";
-  state.shareDraft = null;
-  state.route = "home";
+  applySharedPromptState({ ...getCommentMutationStateContext(), existingPrompt }, prompt, finalPrompt);
   showNotice("최종 프롬프트가 공유되었습니다. Home 최신 목록에서 확인할 수 있습니다.");
 }
 
@@ -5314,7 +5850,7 @@ function getKnownTags() {
 function getAdminManagedTags() {
   const stats = getTagStats();
   const query = normalizeTag(state.adminTagQuery || "");
-  const filter = ["all", "pending", "approved", "rejected"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
+  const filter = ["all", "pending", "approved", "rejected", "disabled"].includes(state.adminTagFilter) ? state.adminTagFilter : "all";
   const sort = ["usage", "recent"].includes(state.adminTagSort) ? state.adminTagSort : "usage";
 
   const backendTags = (state.backendAdminTags || []).map((tag) => ({
@@ -5354,6 +5890,15 @@ function getAdminManagedTags() {
     .slice(0, 16);
 }
 
+function getAdminPromptsByTag(tagKey) {
+  const normalizedTag = normalizeTag(tagKey || "");
+  if (!normalizedTag) return [];
+
+  return getUniquePrompts([...popularPrompts, ...savedPrompts])
+    .filter((prompt) => (prompt.tags || []).some((tag) => normalizeTag(tag) === normalizedTag))
+    .sort((a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a));
+}
+
 function getTagStats() {
   const stats = new Map();
 
@@ -5375,23 +5920,35 @@ function getTagStats() {
 }
 
 function getMyPrompts() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   if (state.myBackendStatus === "connected") {
-    return getUniquePrompts(
-      savedPrompts.filter((prompt) => state.backendLibraryPromptIds.has(prompt.id) && prompt.source === "mine"),
-    );
+    const localMinePrompts = savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt));
+    return getUniquePrompts([...state.backendMyPrompts, ...localMinePrompts]);
   }
   return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt)));
 }
 
 function getMyComments() {
-  if (state.backendMyComments.length) {
-    return state.backendMyComments.map((comment) => ({
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
+  const localComments = getLocalMyCommentItems();
+  if (state.myBackendStatus === "connected") {
+    const backendComments = state.backendMyComments.map((comment) => ({
       promptId: String(comment.promptId || ""),
-      prompt: findPromptById(String(comment.promptId || "")),
+      prompt: comment.prompt || findPromptById(String(comment.promptId || "")) || {
+        id: String(comment.promptId || ""),
+        title: comment.promptTitle || "삭제된 프롬프트",
+        text: "",
+        author: "",
+      },
       comment,
     }));
+    return getUniqueMyCommentItems([...backendComments, ...localComments]);
   }
 
+  return localComments;
+}
+
+function getLocalMyCommentItems() {
   const owner = state.currentUser || "나";
   const items = [];
 
@@ -5400,6 +5957,17 @@ function getMyComments() {
   });
 
   return items;
+}
+
+function getUniqueMyCommentItems(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const comment = item.comment || {};
+    const key = String(comment.id || `${item.promptId}:${comment.text || ""}:${comment.createdAt || ""}`);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function collectOwnedComments(items, promptId, comments, owner) {
@@ -5412,15 +5980,26 @@ function collectOwnedComments(items, promptId, comments, owner) {
 }
 
 function getMyReports() {
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
   const backendReports = state.backendMyReports.map((report) => ({
     type: report.type,
     title: report.type === "comment" ? "댓글 신고" : "프롬프트 신고",
     id: report.targetId,
     label: report.reason || report.raw?.targetPreview || report.raw?.promptTitle || "신고 내역",
     reason: report.reason,
+    memo: report.memo || "",
+    reviewedAt: report.reviewedAt || 0,
     status: mapBackendReportStatus(report.status),
     requestedAt: report.createdAt,
   }));
+  const localReports = getLocalMyReportItems();
+  const reports = state.myBackendStatus === "connected"
+    ? getUniqueMyReports([...backendReports, ...localReports])
+    : getUniqueMyReports([...localReports, ...backendReports]);
+  return reports.sort((a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0));
+}
+
+function getLocalMyReportItems() {
   const promptReports = [...state.reportedPromptIds].map((promptId) => {
     const prompt = findPromptById(promptId);
     const record = getReportRecord(`prompt:${promptId}`);
@@ -5429,7 +6008,11 @@ function getMyReports() {
       title: "프롬프트 신고",
       id: promptId,
       label: prompt?.title || "삭제된 프롬프트",
+      reason: record.reason || "",
+      memo: record.memo || "",
+      reviewedAt: record.reviewedAt || 0,
       status: record.status,
+      requestedAt: record.createdAt,
     };
   });
   const commentReports = [...state.reportedCommentIds].map((commentId) => {
@@ -5440,7 +6023,11 @@ function getMyReports() {
       title: "댓글 신고",
       id: commentId,
       label: comment?.text || "삭제된 댓글",
+      reason: record.reason || "",
+      memo: record.memo || "",
+      reviewedAt: record.reviewedAt || 0,
       status: record.status,
+      requestedAt: record.createdAt,
     };
   });
 
@@ -5452,6 +6039,7 @@ function getMyReports() {
         type: target.type,
         title: `${target.type === "prompt" ? "프롬프트" : "댓글"} 수정 요청`,
         id: target.id,
+        editPromptId: target.type === "prompt" ? target.id : "",
         label: target.type === "comment" ? target.text : target.title,
         reason: request.reason,
         status: "revision-requested",
@@ -5460,9 +6048,89 @@ function getMyReports() {
     })
     .filter(Boolean);
 
-  return [...revisionRequests, ...backendReports, ...promptReports, ...commentReports].sort(
+  return [...revisionRequests, ...promptReports, ...commentReports].sort(
     (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
   );
+}
+
+function getUniqueMyReports(reports) {
+  const seen = new Set();
+  return reports.filter((report) => {
+    const key = `${report.title || report.status || "report"}:${report.type}:${report.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getAdminUserActivity(nickname) {
+  const cleanNickname = String(nickname || "").trim();
+  const normalizedNickname = normalizeAdminSearchText(cleanNickname);
+  const backendActivity = state.backendAdminUserActivities[normalizedNickname];
+  if (backendActivity) return backendActivity;
+  const prompts = getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts])
+    .filter((prompt) => normalizeAdminSearchText(getDisplayPromptAuthor(prompt)) === normalizedNickname)
+    .map((prompt) => ({
+      title: prompt.title,
+      preview: makePreview(prompt.text),
+      promptId: prompt.id,
+    }));
+
+  const comments = [];
+  const replies = [];
+  getUniquePrompts([...state.backendAdminPrompts, ...popularPrompts, ...savedPrompts]).forEach((prompt) => {
+    getSortedPromptComments(prompt.id).forEach((comment) => {
+      if (normalizeAdminSearchText(comment.author || comment.owner) === normalizedNickname) {
+        comments.push({
+          title: prompt.title,
+          preview: comment.deleted ? "삭제된 댓글입니다." : makePreview(comment.text),
+          promptId: prompt.id,
+          commentId: comment.id,
+        });
+      }
+      (comment.replies || []).forEach((reply) => {
+        if (normalizeAdminSearchText(reply.author || reply.owner) === normalizedNickname) {
+          replies.push({
+            title: prompt.title,
+            preview: reply.deleted ? "삭제된 댓글입니다." : makePreview(reply.text),
+            promptId: prompt.id,
+            commentId: reply.id,
+          });
+        }
+      });
+    });
+  });
+
+  const reportRecords = getAdminReportRecords();
+  const reportsMade = reportRecords
+    .filter((record) => normalizeAdminSearchText(record.reporter) === normalizedNickname)
+    .map((record) => ({
+      title: record.type === "comment" ? `댓글 신고 · ${record.contextTitle || "게시물 확인 필요"}` : record.title,
+      preview: record.summary || record.targetPreview || "신고 내용 확인 필요",
+      promptId: record.promptId,
+      commentId: record.type === "comment" ? record.targetId : "",
+    }));
+  const reportsReceived = reportRecords
+    .filter((record) => {
+      const promptAuthor = normalizeAdminSearchText(record.promptAuthor);
+      const commentAuthor = normalizeAdminSearchText(record.commentAuthor);
+      return promptAuthor === normalizedNickname || commentAuthor === normalizedNickname;
+    })
+    .map((record) => ({
+      title: record.type === "comment" ? `댓글 신고 · ${record.contextTitle || "게시물 확인 필요"}` : record.title,
+      preview: record.targetPreview || record.summary || "신고 대상 확인 필요",
+      promptId: record.promptId,
+      commentId: record.type === "comment" ? record.targetId : "",
+    }));
+
+  return {
+    nickname: cleanNickname,
+    prompts,
+    comments,
+    replies,
+    reportsMade,
+    reportsReceived,
+  };
 }
 
 function getReportRecord(key) {
@@ -5471,15 +6139,17 @@ function getReportRecord(key) {
 
 function mapBackendReportStatus(status) {
   const normalized = String(status || "pending").toLowerCase();
-  if (["reviewed", "resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
+  if (normalized === "reviewed") return "reviewed";
+  if (["resolved", "done", "completed", "complete"].includes(normalized)) return "resolved";
   if (["dismissed", "rejected", "reject"].includes(normalized)) return "dismissed";
   return "pending";
 }
 
 function mapFrontendReportStatus(status) {
-  if (status === "resolved") return "REVIEWED";
-  if (status === "dismissed") return "DISMISSED";
-  return "PENDING";
+  if (status === "reviewed") return "reviewed";
+  if (status === "resolved") return "resolved";
+  if (status === "dismissed") return "dismissed";
+  return "pending";
 }
 
 function makeRevisionRequestKey(type, id) {
@@ -5528,7 +6198,7 @@ function isRevisionTargetOwnedByCurrentUser(target) {
 }
 
 function getAdminReportRecords() {
-  if (state.backendAdminReports.length) {
+  if (state.backendAdminReportsLoaded) {
     return state.backendAdminReports.map((report) => {
       const prompt = report.promptId ? findPromptById(report.promptId) : report.type === "prompt" ? findPromptById(report.targetId) : null;
       const record = getReportRecord(report.key);
@@ -5538,12 +6208,13 @@ function getAdminReportRecords() {
         targetId: report.targetId,
         promptId: report.promptId || prompt?.id || "",
         status: record.status || mapBackendReportStatus(report.status),
-        title: report.type === "comment" ? "댓글 신고" : (prompt?.title || report.raw?.promptTitle || "프롬프트 신고"),
-        contextTitle: prompt?.title || report.raw?.promptTitle || "게시물 확인 필요",
-        promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : report.raw?.promptAuthorNickname || "",
-        commentAuthor: report.raw?.commentAuthorNickname || "",
-        targetPreview: report.raw?.targetPreview || report.raw?.commentText || makePreview(prompt?.text || ""),
-        summary: report.reason ? `신고 사유: ${report.reason}` : "신고 사유 없음",
+        title: report.type === "comment" ? "댓글 신고" : (report.title || prompt?.title || "프롬프트 신고"),
+        contextTitle: report.contextTitle || prompt?.title || "게시물 확인 필요",
+        reporter: report.reporter || report.raw?.reporterNickname || report.raw?.reporter?.nickname || record.reporter || "",
+        promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : report.promptAuthor || "",
+        commentAuthor: report.commentAuthor || report.targetAuthor || "",
+        targetPreview: report.targetPreview || makePreview(prompt?.text || ""),
+        summary: report.reason ? `신고 사유: ${report.reason}` : report.summary || "신고 사유 없음",
       };
     }).sort((a, b) => Number(getReportRecord(b.key).createdAt || 0) - Number(getReportRecord(a.key).createdAt || 0));
   }
@@ -5560,6 +6231,7 @@ function getAdminReportRecords() {
       promptId,
       status: record.status || "pending",
       title: prompt?.title || "삭제된 프롬프트",
+      reporter: record.reporter || "",
       promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
       summary: record.reason || makePreview(prompt?.text || ""),
     });
@@ -5578,6 +6250,7 @@ function getAdminReportRecords() {
       status: record.status || "pending",
       title: "댓글 신고",
       contextTitle: prompt?.title || "삭제된 게시물",
+      reporter: record.reporter || "",
       promptAuthor: prompt ? getDisplayPromptAuthor(prompt) : "",
       commentAuthor: record.targetAuthor || comment?.author || comment?.owner || "",
       targetPreview: record.targetPreview || makePreview(comment?.text || "삭제된 댓글"),
@@ -5590,8 +6263,20 @@ function getAdminReportRecords() {
 function getReportStatusLabel(status) {
   if (status === "revision-requested") return "수정 요청됨";
   if (status === "dismissed") return "기각";
-  if (status === "resolved") return "검토 완료";
+  if (status === "reviewed") return "검토 완료";
+  if (status === "resolved") return "처리 완료";
   return "접수";
+}
+
+function isFinalReportStatus(status) {
+  return ["resolved", "dismissed"].includes(String(status || "").toLowerCase());
+}
+
+function getAuthorRevisionStatusLabel(status) {
+  if (status === "acknowledged") return "작성자 확인됨";
+  if (status === "completed") return "수정 완료";
+  if (status === "rejected") return "작성자 거절";
+  return "대기 중";
 }
 
 function matchesAdminPromptQuery(prompt, query) {
@@ -5622,119 +6307,156 @@ function matchesAdminPromptFilter(prompt, filter) {
   return true;
 }
 
-function normalizeAdminSearchText(value) {
-  return String(value || "")
-    .replace(/^#+/, "")
-    .replace(/[#,]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
 function getAdminTagStatus(tag) {
-  const decision = state.adminTagDecisions[normalizeTag(tag)];
-  if (decision === "approved" || decision === "rejected") return decision;
-  return "pending";
-}
-
-function getAdminTagStatusLabel(status) {
-  if (status === "approved") return "검토 완료";
-  if (status === "rejected") return "추천 제외";
-  return "검토 중";
-}
-
-function getAdminTagStatusClass(status) {
-  if (status === "approved") return "public";
-  if (status === "rejected") return "private";
-  return "pending-unsave";
-}
-
-function getAdminTagStatusOrder(status) {
-  if (status === "pending") return 0;
-  if (status === "approved") return 1;
-  return 2;
+  return resolveAdminTagStatus(state.adminTagDecisions, tag, normalizeTag);
 }
 
 async function updateAdminTagDecision(tag, decision) {
-  if (!tag || !["pending", "approved", "rejected"].includes(decision)) return;
+  if (!tag || !["pending", "approved", "rejected", "disabled"].includes(decision)) return;
 
+  let backendChanged = false;
+  let updated = null;
   const backendTag = state.backendAdminTags.find((item) => item.key === tag || normalizeTag(item.label) === tag || item.id === tag);
-  if (backendTag?.id && window.TTALKAK_API?.updateAdminTagStatus) {
-    try {
-      const updated = await window.TTALKAK_API.updateAdminTagStatus(backendTag.id, decision.toUpperCase(), state.authToken || state.token || undefined);
-      state.backendAdminTags = state.backendAdminTags.map((item) =>
-        item.id === backendTag.id ? { ...item, ...updated, status: updated.status || decision } : item,
-      );
-    } catch (error) {
-      handleBackendAccessError(error, "태그 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/tags/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
-    }
+  const currentStatus = backendTag?.status || state.adminTagDecisions[tag] || "pending";
+  if (!canTransitionAdminTagStatus(currentStatus, decision)) {
+    showNotice("현재 태그 상태에서는 이 변경을 할 수 없습니다.");
+    return;
+  }
+  if (backendTag?.id && canUseAdminApiAction("updateAdminTagStatus")) {
+    const result = await runAdminApiMutation("updateAdminTagStatus", [backendTag.id, decision], {
+      fallbackMessage: "태그 상태 변경 요청에 실패했습니다.",
+      logMessage: "[TTALKAK] /api/admin/tags/{id}/status failed; cancelling local status change.",
+      refreshOnFailure: true,
+    });
+    if (!result.ok) return;
+
+    updated = result.value;
+    backendChanged = true;
   }
 
-  if (decision === "pending") {
-    const nextDecisions = { ...state.adminTagDecisions };
-    delete nextDecisions[tag];
-    state.adminTagDecisions = nextDecisions;
-  } else {
-    state.adminTagDecisions = { ...state.adminTagDecisions, [tag]: decision };
-  }
-
-  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}으로 변경했습니다.`);
+  applyAdminTagDecisionState(state, { tag, decision, backendTag, updated, normalizeTag });
+  showNotice(`태그 상태를 ${getAdminTagStatusLabel(decision)}(으)로 변경했습니다.`);
+  if (backendChanged) await refreshAdminAfterMutation({ auditReason: "태그 상태 변경 후" });
 }
 
 async function updateReportRecordStatus(key, status) {
-  if (!key || !["pending", "dismissed", "resolved"].includes(status)) return;
+  if (!key || !["pending", "reviewed", "dismissed", "resolved"].includes(status)) return;
   const record = getReportRecord(key);
-  if (record.backendId && window.TTALKAK_API?.updateAdminReportStatus) {
-    try {
-      const updated = await window.TTALKAK_API.updateAdminReportStatus(
-        record.backendId,
-        mapFrontendReportStatus(status),
-        state.authToken || state.token || undefined,
-      );
-      const backendStatus = mapBackendReportStatus(updated?.status || status);
-      state.backendAdminReports = state.backendAdminReports.map((report) =>
-        report.id === record.backendId ? { ...report, ...updated, status: updated?.status || status } : report,
-      );
-      status = backendStatus;
-    } catch (error) {
-      handleBackendAccessError(error, "신고 상태 변경 요청에 실패했습니다.");
-      console.warn("[TTALKAK] /api/admin/reports/{id}/status 호출에 실패해 데모 상태만 변경합니다.", error);
-    }
+  if (isFinalReportStatus(record.status) && status !== record.status) {
+    showNotice("처리 완료 또는 기각된 신고의 상태를 다시 변경할 수 없습니다.");
+    return;
   }
-  state.reportRecords[key] = { ...getReportRecord(key), status, updatedAt: Date.now() };
-  showNotice(`신고 상태를 ${getReportStatusLabel(status)}로 변경했습니다.`);
+  if (status === "pending" && ["reviewed", "resolved", "dismissed"].includes(record.status)) {
+    showNotice("완료 또는 기각된 신고는 다시 접수 상태로 되돌릴 수 없습니다.");
+    return;
+  }
+  let backendChanged = false;
+  let updated = null;
+  if (record.backendId && canUseAdminApiAction("updateAdminReportStatus")) {
+    const result = await runAdminApiMutation(
+      "updateAdminReportStatus",
+      [record.backendId, mapFrontendReportStatus(status), `${getReportStatusLabel(status)} 처리`],
+      {
+        fallbackMessage: "신고 상태 변경 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/reports/{id}/status failed; cancelling local status change.",
+        refreshOnFailure: true,
+      },
+    );
+    if (!result.ok) return;
+
+    updated = result.value;
+    backendChanged = true;
+  }
+  const nextStatus = applyAdminReportStatusState(state, { key, record, status, updated, mapBackendReportStatus, getReportRecord });
+  showNotice(`신고 상태를 ${getReportStatusLabel(nextStatus)}로 변경했습니다.`);
+  if (backendChanged) await refreshAdminAfterMutation({ auditReason: "신고 상태 변경 후" });
 }
 
-function requestPromptRevision(targetKey, reason) {
+async function requestPromptRevision(targetKey, reason) {
   const target = getRevisionRequestTarget(targetKey);
   const content = String(reason || "").trim();
 
   if (!target || !state.adminMode) return;
   if (!content) {
-    window.alert("작성자에게 전달할 수정 요청 사유를 입력해주세요.");
+    showNotice("작성자에게 전달할 수정 요청 사유를 입력해주세요.");
     return;
   }
 
-  state.adminPromptRevisionRequests = {
-    ...state.adminPromptRevisionRequests,
-    [target.key]: {
-      type: target.type,
-      targetId: target.id,
-      reason: content,
-      requestedAt: Date.now(),
-      status: "requested",
-    },
-  };
-  state.adminRequestTargetKey = null;
-  showNotice("작성자에게 수정 요청을 보냈습니다.");
+  const existingRequest = state.adminPromptRevisionRequests[target.key];
+  if (existingRequest) {
+    await updateAuthorRevisionRequest(target, existingRequest, content);
+    return;
+  }
+
+  let backendRequest = null;
+  let backendChanged = false;
+  const shouldUseBackendRevisionRequest = shouldUseBackendAuthorRevisionRequest(target);
+  if (shouldUseBackendRevisionRequest && !canUseAdminApiAction("requestAuthorRevision")) {
+    showNotice("실제 관리자 토큰과 수정 요청 API가 필요합니다.");
+    return;
+  }
+
+  if (shouldUseBackendRevisionRequest) {
+    const result = await runAdminApiMutation("requestAuthorRevision", [target.id, { message: content, reason: content, memo: content }], {
+      fallbackMessage: "수정 요청 API 호출에 실패했습니다.",
+      logMessage: "[TTALKAK] /api/admin/prompts/{id}/author-revision-requests failed.",
+      onError: handleAuthorRevisionCreateError,
+    });
+    if (!result.ok) return;
+    backendRequest = result.value;
+    backendChanged = true;
+  }
+
+  setAdminRevisionRequestState(target, backendRequest, { reason: content });
+  await finishAdminRevisionRequestMutation("작성자에게 수정 요청을 보냈습니다.", "수정 요청 후", backendChanged);
 }
 
-function findPromptIdByCommentId(commentId) {
-  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    if (findCommentInList(comments, commentId)) return promptId;
+async function updateAuthorRevisionRequest(target, existingRequest, reason) {
+  const status = String(existingRequest?.status || "pending").toLowerCase();
+
+  if (status !== "pending") {
+    showNotice(`${getAuthorRevisionStatusLabel(status)} 상태에서는 수정 요청 사유를 변경할 수 없습니다.`);
+    return;
   }
-  return "";
+
+  if (!existingRequest?.id) {
+    showNotice("수정 요청 ID가 없어 사유를 변경할 수 없습니다.");
+    return;
+  }
+
+  if (String(existingRequest.reason || "").trim() === reason) {
+    showNotice("수정 요청 사유가 변경되지 않았습니다.");
+    return;
+  }
+
+  const shouldUseBackendRevisionRequest = shouldUseBackendAuthorRevisionRequest(target);
+  if (shouldUseBackendRevisionRequest && !canUseAdminApiAction("updateAuthorRevisionRequest")) {
+    showNotice("실제 관리자 토큰과 수정 요청 사유 수정 API가 필요합니다.");
+    return;
+  }
+
+  let backendRequest = null;
+  let backendChanged = false;
+
+  if (shouldUseBackendRevisionRequest) {
+    const result = await runAdminApiMutation("updateAuthorRevisionRequest", [existingRequest.id, { message: reason }], {
+      fallbackMessage: "수정 요청 사유 변경에 실패했습니다.",
+      logMessage: "[TTALKAK] /api/admin/author-revision-requests/{id} failed.",
+      onError: handleAuthorRevisionUpdateError,
+    });
+    if (!result.ok) return;
+    backendRequest = result.value;
+    backendChanged = true;
+  }
+
+  setAdminRevisionRequestState(target, backendRequest, {
+    previousRequest: existingRequest,
+    id: existingRequest.id,
+    reason,
+    requestedAt: existingRequest.requestedAt,
+    status: existingRequest.status || "pending",
+  });
+  await finishAdminRevisionRequestMutation("수정 요청 사유를 변경했습니다.", "수정 요청 사유 변경 후", backendChanged);
 }
 
 function findCommentContextById(commentId) {
@@ -5752,23 +6474,34 @@ function findCommentContextById(commentId) {
 }
 
 function sortPopularPrompts(prompts) {
+  const byViews = (a, b) => getPromptViewCount(b) - getPromptViewCount(a);
+  const bySaves = (a, b) => getPromptSaveCount(b) - getPromptSaveCount(a);
+  const byComments = (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a);
+  const byLikes = (a, b) => getPromptLikes(b) - getPromptLikes(a);
   const sorters = {
-    popular: (a, b) => b.views - a.views || b.comments - a.comments || b.saves - a.saves,
-    saves: (a, b) => b.saves - a.saves || b.views - a.views || b.comments - a.comments,
-    comments: (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a) || b.views - a.views || b.saves - a.saves,
-    likes: (a, b) => getPromptLikes(b) - getPromptLikes(a) || b.views - a.views || b.saves - a.saves,
-    latest: (a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a) || b.views - a.views,
+    popular: (a, b) => byViews(a, b) || byComments(a, b) || bySaves(a, b),
+    saves: (a, b) => bySaves(a, b) || byViews(a, b) || byComments(a, b),
+    comments: (a, b) => byComments(a, b) || byViews(a, b) || bySaves(a, b),
+    likes: (a, b) => byLikes(a, b) || byViews(a, b) || bySaves(a, b),
+    latest: (a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a) || byViews(a, b),
   };
 
   return [...prompts].sort(sorters[state.popularSort] || sorters.popular);
 }
 
 function getPromptLikes(prompt) {
-  return prompt.likes ?? Math.round(getPromptSaveCount(prompt) / 3);
+  const likes = Number(prompt?.likes);
+  return Number.isFinite(likes) ? likes : Math.round(getPromptSaveCount(prompt) / 3);
+}
+
+function getPromptViewCount(prompt) {
+  const views = Number(prompt?.views);
+  return Number.isFinite(views) ? views : 0;
 }
 
 function getPromptCreatedAt(prompt) {
-  if (Number.isFinite(prompt.createdAt)) return prompt.createdAt;
+  const createdAt = parseTimestamp(prompt?.createdAt || prompt?.updatedAt || prompt?.publishedAt);
+  if (createdAt) return createdAt;
   const sharedTimestamp = String(prompt.id || "").match(/^shared-(\d+)$/)?.[1];
   if (sharedTimestamp) return Number(sharedTimestamp);
   const demoIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
@@ -5800,33 +6533,79 @@ function canShowReportedState() {
 
 async function toggleAdminPromptHidden(promptId) {
   if (!promptId) return;
-  if (state.adminHiddenPromptIds.has(promptId)) {
-    if (window.TTALKAK_API?.restoreAdminPrompt && isBackendNumericId(promptId)) {
-      try {
-        await window.TTALKAK_API.restoreAdminPrompt(promptId, state.authToken || state.token || undefined);
-      } catch (error) {
-        handleBackendAccessError(error, "게시글 숨김 해제 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/restore 호출에 실패해 데모 상태만 변경합니다.", error);
-      }
+  let backendChanged = false;
+  const canUseBackendPromptAction = hasBackendAuthToken() && isBackendNumericId(promptId);
+
+  if (!canUseBackendPromptAction) {
+    showNotice("서버 프롬프트 ID와 관리자 토큰이 있어야 게시물 숨김 감사 로그를 남길 수 있습니다.");
+    return;
+  }
+
+  const shouldRestore = state.adminHiddenPromptIds.has(promptId);
+  if (shouldRestore) {
+    if (canUseAdminApiAction("restoreAdminPrompt")) {
+      const result = await runAdminApiMutation("restoreAdminPrompt", [promptId], {
+        fallbackMessage: "게시글 숨김 해제 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/prompts/{id}/restore failed; aborting prompt restore.",
+      });
+      if (!result.ok) return;
+      backendChanged = true;
+    } else {
+      showNotice("게시글 숨김 해제 API가 연결되어 있지 않습니다.");
+      return;
     }
-    state.adminHiddenPromptIds.delete(promptId);
+    applyAdminPromptHiddenState(state, promptId, false);
     showNotice("관리자 숨김을 해제했습니다.");
   } else {
-    if (window.TTALKAK_API?.hideAdminPrompt && isBackendNumericId(promptId)) {
-      try {
-        await window.TTALKAK_API.hideAdminPrompt(promptId, state.authToken || state.token || undefined);
-      } catch (error) {
-        handleBackendAccessError(error, "게시글 숨김 요청에 실패했습니다.");
-        console.warn("[TTALKAK] /api/admin/prompts/{id}/hide 호출에 실패해 데모 상태만 변경합니다.", error);
-      }
+    if (canUseAdminApiAction("hideAdminPrompt")) {
+      const result = await runAdminApiMutation("hideAdminPrompt", [promptId], {
+        fallbackMessage: "게시글 숨김 요청에 실패했습니다.",
+        logMessage: "[TTALKAK] /api/admin/prompts/{id}/hide failed; aborting prompt hide.",
+      });
+      if (!result.ok) return;
+      backendChanged = true;
+    } else {
+      showNotice("게시글 숨김 API가 연결되어 있지 않습니다.");
+      return;
     }
-    state.adminHiddenPromptIds.add(promptId);
+    applyAdminPromptHiddenState(state, promptId, true);
     showNotice("관리자 숨김 처리했습니다.");
   }
+  if (backendChanged) await refreshAdminAfterMutation({ auditReason: "게시물 숨김/해제 후" });
 }
 
 function getPopularTotalPages(count) {
-  return Math.max(1, Math.ceil(count / 16));
+  return Math.max(1, Math.ceil(count / HOME_PAGE_SIZE));
+}
+
+function getBackendHomeTotalPages() {
+  const totalPages = Number(state.backendHomePage?.totalPages);
+  return Number.isFinite(totalPages) && totalPages > 0 ? Math.floor(totalPages) : 1;
+}
+
+function updateBackendHomePageMeta(payload = {}, fallbackPage = state.popularPage) {
+  const rawPage = Number(payload.page ?? payload.currentPage ?? payload.pageNumber ?? fallbackPage);
+  const rawSize = Number(payload.size ?? payload.pageSize ?? HOME_PAGE_SIZE);
+  const rawTotalPages = Number(payload.totalPages ?? payload.total_pages ?? payload.page?.totalPages ?? payload.page?.total_pages);
+  const rawTotalElements = Number(
+    payload.totalElements ??
+      payload.total_elements ??
+      payload.total ??
+      payload.totalCount ??
+      payload.page?.totalElements ??
+      payload.page?.total_elements,
+  );
+
+  const totalPages = Number.isFinite(rawTotalPages) && rawTotalPages > 0 ? Math.floor(rawTotalPages) : 1;
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : fallbackPage;
+
+  state.backendHomePage = {
+    page: Math.min(page, totalPages),
+    size: Number.isFinite(rawSize) && rawSize > 0 ? Math.floor(rawSize) : HOME_PAGE_SIZE,
+    totalPages,
+    totalElements: Number.isFinite(rawTotalElements) && rawTotalElements >= 0 ? Math.floor(rawTotalElements) : popularPrompts.length,
+  };
+  state.popularPage = state.backendHomePage.page;
 }
 
 function parsePromptSearchQuery(query, scope = "all") {
@@ -5871,70 +6650,8 @@ function getValidSearchScope(scope) {
   return ["all", "tag", "keyword", "author"].includes(scope) ? scope : "all";
 }
 
-function normalizeSearchText(value) {
-  return String(value || "")
-    .replace(/^#+/, "")
-    .replace(/[#,]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeTag(value) {
-  return value.replace(/^#+/, "").trim().toLowerCase();
-}
-
-function isValidPhone(value) {
-  return /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(value || "").trim());
-}
-
-function isFutureDate(value) {
-  if (!value) return false;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date > today;
-}
-
-function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 function polishPrompt(prompt) {
   return `역할: 당신은 해당 분야의 전문 어시스턴트입니다.\n\n목표: ${prompt}\n\n요구사항:\n- 요청의 목적을 먼저 파악하고 필요한 경우 합리적인 가정을 명시하세요.\n- 구체적인 단계, 출력 형식, 확인 기준을 포함해 답변하세요.\n- 모호한 표현은 명확한 기준과 예시로 바꿔 설명하세요.\n- 바로 사용할 수 있는 형태로 결과물을 작성하세요.\n\n출력 형식:\n1. 최종 답변\n2. 핵심 근거\n3. 필요 시 다음 액션`;
-}
-
-function getFinalPromptText(message) {
-  const content = String(message?.content || "");
-  const marker = "역할:";
-  const markerIndex = content.indexOf(marker);
-
-  if (markerIndex > 0 && content.slice(0, markerIndex).includes("개선")) {
-    return content.slice(markerIndex).trim();
-  }
-
-  return content.trim();
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("ko-KR").format(value);
-}
-
-function formatShortDate(value) {
-  const time = Number(value || 0);
-  if (!time) return "방금 생성";
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(time));
 }
 
 function showNotice(message) {
@@ -5947,68 +6664,169 @@ function showNotice(message) {
   }, 1700);
 }
 
-function getBackendErrorMessage(error) {
-  const payload = error?.payload;
-  return String(
-    payload?.message ||
-      payload?.error ||
-      payload?.code ||
-      error?.message ||
-      "",
-  ).trim();
+function getAuthToken() {
+  const storedToken = readStorageItem(AUTH_TOKEN_KEY);
+  return String(state.authToken || state.token || storedToken || "").trim();
 }
 
-function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.") {
-  const status = Number(error?.status || error?.payload?.status || 0);
-  const backendMessage = getBackendErrorMessage(error);
+function isDemoAuthToken(token = getAuthToken()) {
+  return String(token || "").trim() === DEMO_AUTH_TOKEN;
+}
 
-  if (status === 401) {
-    clearAuthenticatedSession({ keepRoute: true });
-    state.authView = "login";
-    showNotice("로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
-    return true;
-  }
+function hasBackendAuthToken() {
+  const token = getAuthToken();
+  return Boolean(token) && !isDemoAuthToken(token);
+}
 
-  if (status === 403) {
-    showNotice(backendMessage || "이 작업을 수행할 권한이 없습니다.");
-    return true;
-  }
+function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.", options = {}) {
+  return handleBackendAccessErrorEffect(getBackendAccessErrorContext(), error, fallbackMessage, options);
+}
 
-  if (backendMessage || fallbackMessage) {
-    showNotice(backendMessage || fallbackMessage);
-    return true;
-  }
+function getBackendAccessErrorContext() {
+  return {
+    clearAuthenticatedSession,
+    getAuthToken,
+    getBackendErrorCode,
+    getBackendErrorMessage,
+    isDemoAuthToken,
+    showNotice,
+    state,
+  };
+}
+function isAdminAccount() {
+  return state.isLoggedIn && String(state.currentUserRole || "").toLowerCase() === "admin";
+}
 
-  return false;
+function guardAdminUserAction() {
+  if (!isAdminAccount() || state.adminMode) return false;
+
+  showNotice("관리자 계정은 운영 기능만 사용할 수 있습니다.");
+  return true;
 }
 
 function callBackendApi(action, ...args) {
   const api = window.TTALKAK_API;
   const handler = api?.[action];
-  if (typeof handler !== "function") return;
+  if (typeof handler !== "function") return Promise.resolve(null);
 
-  Promise.resolve(handler(...args, state.authToken || state.token || undefined)).catch((error) => {
-    handleBackendAccessError(error, "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다.");
-    console.warn(`[TTALKAK] ${action} API 호출에 실패해 데모 상태만 유지합니다.`, error);
+  const token = getAuthToken();
+  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+    console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다.`);
+    return Promise.resolve(null);
+  }
+
+  return Promise.resolve(handler(...args, token || undefined)).catch((error) => {
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback()
+        ? "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다."
+        : "백엔드 요청에 실패했습니다.",
+    );
+    console.warn(`[TTALKAK] ${action} API 호출에 실패했습니다.`, error);
+    return null;
   });
 }
 
-async function createBackendMakeFolder(payload) {
+async function runPromptStateMutation(action, promptId, fallbackMessage) {
+  if (!isBackendNumericId(promptId) || state.backendStatus !== "connected") return true;
+
   const api = window.TTALKAK_API;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return true;
+
+  const token = getAuthToken();
+  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+    openAuth("login");
+    showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
+    return false;
+  }
+
+  try {
+    await handler(promptId, token || undefined);
+    return true;
+  } catch (error) {
+    handleBackendAccessError(error, fallbackMessage);
+    await Promise.allSettled([refreshBackendHomePrompts(), refreshMyPageDataAfterMutation()]);
+    render();
+    return false;
+  }
+}
+
+function getMakeApi() {
+  return window.TTALKAK_API || {};
+}
+
+function getMakeApiToken() {
+  return getAuthToken() || undefined;
+}
+
+function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
+  handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
+  if (logMessage) console.warn(logMessage, error);
+}
+
+async function createBackendMakeFolder(payload) {
+  const api = getMakeApi();
   if (!api?.createMakeFolder) return "";
 
   try {
-    const result = await api.createMakeFolder(payload, state.authToken || state.token || undefined);
+    const result = await api.createMakeFolder(payload, getMakeApiToken());
     return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
   } catch (error) {
-    handleBackendAccessError(error, "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.");
-    console.warn("[TTALKAK] /api/make/folders 생성 호출에 실패해 로컬 데모 폴더만 유지합니다.", error);
+    handleMakeBackendSyncError(
+      error,
+      "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.",
+      "폴더 생성 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.",
+    );
     return "";
   }
 }
 
+async function updateBackendMakeFolderName(folderId, name) {
+  const backendFolderId = getBackendFolderId(folderId);
+  if (!backendFolderId) return true;
+
+  const api = getMakeApi();
+  if (!api?.updateMakeFolder) return canUseDemoFallback();
+
+  try {
+    await api.updateMakeFolder(backendFolderId, { name }, getMakeApiToken());
+    return true;
+  } catch (error) {
+    handleMakeBackendSyncError(
+      error,
+      "폴더 이름 수정 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "폴더 이름 수정 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders/{id} 수정 호출에 실패했습니다.",
+    );
+    return false;
+  }
+}
+
+async function deleteBackendMakeFolder(folderId) {
+  const backendFolderId = getBackendFolderId(folderId);
+  if (!backendFolderId) return true;
+
+  const api = getMakeApi();
+  if (!api?.deleteMakeFolder) return canUseDemoFallback();
+
+  try {
+    await api.deleteMakeFolder(backendFolderId, getMakeApiToken());
+    return true;
+  } catch (error) {
+    handleMakeBackendSyncError(
+      error,
+      "폴더 삭제 요청에 실패해 로컬 데모 상태만 유지합니다.",
+      "폴더 삭제 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/folders/{id} 삭제 호출에 실패했습니다.",
+    );
+    return false;
+  }
+}
+
 async function createBackendMakeThread(thread) {
-  const api = window.TTALKAK_API;
+  const api = getMakeApi();
   if (!api?.createMakeThread || !thread) return "";
 
   const messages = Array.isArray(thread.messages) && thread.messages.length
@@ -6038,12 +6856,17 @@ async function createBackendMakeThread(thread) {
 
     const result = await api.createMakeThread(
       payload,
-      state.authToken || state.token || undefined,
+      getMakeApiToken(),
     );
     return String(result?.id || result?.threadId || result?.data?.id || result?.data?.threadId || "");
   } catch (error) {
-    handleBackendAccessError(error, "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.");
-    console.warn("[TTALKAK] /api/make/threads 저장 호출에 실패해 로컬 데모 대화만 유지합니다.", error);
+    handleMakeBackendSyncError(
+      error,
+      "대화 저장 요청에 실패해 로컬 데모 대화만 유지합니다.",
+      "대화 저장 요청에 실패했습니다.",
+      "[TTALKAK] /api/make/threads 저장 호출에 실패했습니다.",
+      { keepSession: true },
+    );
     return "";
   }
 }
@@ -6075,18 +6898,75 @@ function isBackendNumericId(value) {
   return value !== null && value !== undefined && /^\d+$/.test(String(value));
 }
 
-async function improvePromptWithBackend(prompt) {
-  const api = window.TTALKAK_API;
-  if (!api?.improvePrompt) return polishPrompt(prompt);
+function buildMakeImproveHistory(messages = state.messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => message && (message.role === "user" || message.role === "assistant") && String(message.content || "").trim())
+    .map((message) => ({
+      role: message.role,
+      content: String(message.content || ""),
+    }));
+}
+
+async function improvePromptWithBackend(prompt, history = buildMakeImproveHistory()) {
+  const api = getMakeApi();
+  if (!api?.improvePrompt) {
+    if (canUseDemoFallback()) return polishPrompt(prompt);
+    const error = new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다.");
+    error.code = "API_NOT_CONFIGURED";
+    throw error;
+  }
 
   try {
-    const improved = await api.improvePrompt({ prompt }, state.authToken || state.token || undefined);
-    state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
-    return improved || polishPrompt(prompt);
+    const improved = await api.improvePrompt({ prompt, history }, getMakeApiToken());
+    const improvedText = typeof improved === "string" ? improved : improved?.text || "";
+    const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
+    const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
+    if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
+      state.makeBackendMessage =
+        ragMessage || "Make API 연결됨: 관련 프롬프팅 기법 근거가 없어 기본 첨삭 결과를 반영했습니다.";
+    } else {
+      state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
+    }
+    return improvedText || polishPrompt(prompt);
   } catch (error) {
-    state.makeBackendMessage = "Make demo data 표시 중: /api/prompts/improve 호출 실패로 데모 첨삭을 표시합니다.";
-    handleBackendAccessError(error, "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다.");
-    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패해 데모 첨삭을 유지합니다.", error);
+    const status = Number(error?.status || error?.payload?.status || 0);
+    const code = String(error?.payload?.code || error?.code || "").toUpperCase();
+    let fallbackMessage = canUseDemoFallback()
+      ? "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다."
+      : "프롬프트 첨삭 요청에 실패했습니다.";
+    if (status === 404) {
+      fallbackMessage = canUseDemoFallback()
+        ? "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다."
+        : "요청한 프롬프트 또는 리소스를 찾지 못했습니다.";
+    } else if (status === 429) {
+      if (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED") {
+        fallbackMessage = canUseDemoFallback()
+          ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다."
+          : "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
+      } else {
+        fallbackMessage = canUseDemoFallback()
+          ? "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+          : "요청이 많습니다. 잠시 후 다시 시도해주세요.";
+      }
+    } else if (status === 500) {
+      fallbackMessage = canUseDemoFallback()
+        ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+    } else if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
+      fallbackMessage = canUseDemoFallback()
+        ? "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+    } else if (status === 504 || code === "AI_TIMEOUT") {
+      fallbackMessage = canUseDemoFallback()
+        ? "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
+        : "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+    }
+    state.makeBackendMessage = canUseDemoFallback()
+      ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
+      : getApiFailureMessage("Make 첨삭 API");
+    handleBackendAccessError(error, fallbackMessage);
+    console.warn("[TTALKAK] /api/prompts/improve 연동에 실패했습니다.", error);
+    if (!canUseDemoFallback()) throw error;
     return polishPrompt(prompt);
   }
 }
@@ -6098,209 +6978,97 @@ async function syncMakeThreadWithBackend(threadId) {
   if (serverId) thread.serverId = serverId;
 }
 
-async function hydrateBackendMakeDataIfNeeded() {
-  if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+async function refreshMakeThreadsFromBackend() {
+  const api = getMakeApi();
+  if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
 
-  const api = window.TTALKAK_API;
-  if (!api?.getMakeThreads && !api?.getMakeFolders) {
-    state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = "Make demo data 표시 중: Make API wrapper가 없어 데모 대화를 표시합니다.";
+  try {
+    const threads = await api.getMakeThreads(getMakeApiToken());
+    applyMakeThreadsResult(getBackendDataEffectContext(), threads);
     render();
-    return;
+  } catch (error) {
+    handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
   }
-
-  state.makeBackendStatus = "checking";
-  state.makeBackendMessage = "Make API 연결 확인 중";
-
-  const [threadsResult, foldersResult] = await Promise.allSettled([
-    api.getMakeThreads?.(state.authToken || state.token || undefined),
-    api.getMakeFolders?.(state.authToken || state.token || undefined),
-  ]);
-
-  let shouldRender = false;
-
-  if (foldersResult.status === "fulfilled" && Array.isArray(foldersResult.value)) {
-    const folders = foldersResult.value.filter((folder) => folder.id && folder.name);
-    if (folders.length) {
-      state.makeFolders = normalizeMakeFolders(folders);
-      shouldRender = true;
-    }
-  } else if (foldersResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/folders 연동에 실패해 데모 폴더를 유지합니다.", foldersResult.reason);
-  }
-
-  if (threadsResult.status === "fulfilled" && Array.isArray(threadsResult.value)) {
-    const threads = threadsResult.value.filter((thread) => thread.id);
-    if (threads.length) {
-      state.recentThreads = threads.map((thread) => ({
-        id: thread.id,
-        dedupeKey: thread.id,
-        serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
-        title: thread.title || "새 대화",
-        preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
-        folderId: thread.folderId || "uncategorized",
-        createdAt: thread.createdAt || Date.now(),
-        messages: Array.isArray(thread.messages) ? thread.messages : [],
-      }));
-      normalizeRecentThreads();
-      shouldRender = true;
-    }
-  } else if (threadsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/make/threads 연동에 실패해 데모 대화를 유지합니다.", threadsResult.reason);
-  }
-
-  const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
-  state.makeBackendStatus = anyConnected ? "connected" : "fallback";
-  state.makeBackendMessage = anyConnected
-    ? "Make API 연결됨: GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
-    : "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 대화를 표시합니다.";
-
-  if (shouldRender || state.route === "make") render();
 }
 
-async function hydrateBackendMyPageDataIfNeeded() {
-  if (state.route !== "saved" || !state.isLoggedIn || state.myBackendStatus !== "idle") return;
-  const api = window.TTALKAK_API;
-  if (!api?.getMyLibrary) return;
-
-  state.myBackendStatus = "checking";
-  const token = state.authToken || state.token || undefined;
-  const [libraryResult, commentsResult, reportsResult] = await Promise.allSettled([
-    api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
-    api.getMyComments?.(token),
-    api.getMyReports?.(token),
-  ]);
-
-  let shouldRender = false;
-  if (libraryResult.status === "fulfilled" && Array.isArray(libraryResult.value?.items)) {
-    state.backendLibraryPromptIds = new Set();
-    libraryResult.value.items.forEach((prompt) => {
-      const normalized = {
-        ...prompt,
-        source: prompt.source || (prompt.isMine ? "mine" : "community"),
-        savedByMe: Boolean(prompt.savedByMe || prompt.raw?.isSaved),
-      };
-      upsertPrompt(savedPrompts, normalized);
-      if (normalized.isShared) upsertPrompt(popularPrompts, normalized);
-      state.userLibraryPromptIds.add(normalized.id);
-      state.backendLibraryPromptIds.add(normalized.id);
-    });
-    shouldRender = true;
-  } else if (libraryResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/me/library 연동에 실패해 데모 보관함을 유지합니다.", libraryResult.reason);
-  }
-
-  if (commentsResult.status === "fulfilled" && Array.isArray(commentsResult.value)) {
-    state.backendMyComments = commentsResult.value;
-    shouldRender = true;
-  }
-
-  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
-    state.backendMyReports = reportsResult.value;
-    shouldRender = true;
-  }
-
-  state.myBackendStatus = "connected";
-  if (shouldRender) render();
+function getBackendDataEffectContext() {
+  return {
+    isBackendNumericId,
+    makePreview,
+    normalizeMakeFolders,
+    normalizePersistedLikeCounts,
+    normalizeRecentThreads,
+    popularPrompts,
+    savedPrompts,
+    state,
+    updateBackendHomePageMeta,
+    upsertPrompt,
+  };
 }
 
-async function hydrateBackendAdminDataIfNeeded() {
-  if (state.route !== "admin" || !state.adminMode || state.adminBackendStatus !== "idle") return;
-  const api = window.TTALKAK_API;
-  if (!api?.getAdminReports && !api?.getAdminTags) return;
+function getBackendHydrationEffectContext() {
+  return {
+    api: window.TTALKAK_API,
+    applyContext: getBackendDataEffectContext,
+    canUseDemoFallback,
+    getApiFailureMessage,
+    getAuthToken,
+    getMakeApi,
+    getMakeApiToken,
+    getValidSearchScope,
+    homePageSize: HOME_PAGE_SIZE,
+    render,
+    state,
+  };
+}
 
-  state.adminBackendStatus = "checking";
-  const token = state.authToken || state.token || undefined;
-  const [reportsResult, tagsResult] = await Promise.allSettled([
-    api.getAdminReports?.({}, token),
-    api.getAdminTags?.({}, token),
-  ]);
+async function hydrateBackendMakeDataIfNeeded() {
+  return hydrateBackendMakeDataEffect(getBackendHydrationEffectContext());
+}
+function refreshMyPageDataAfterMutation() {
+  if (!state.isLoggedIn || state.myBackendStatus !== "connected") return Promise.resolve();
+  state.myBackendStatus = "idle";
+  return hydrateBackendMyPageDataIfNeeded({ force: true });
+}
 
-  let shouldRender = false;
-  if (reportsResult.status === "fulfilled" && Array.isArray(reportsResult.value)) {
-    state.backendAdminReports = reportsResult.value;
-    reportsResult.value.forEach((report) => {
-      state.reportRecords[report.key] = {
-        ...getReportRecord(report.key),
-        backendId: report.id,
-        status: mapBackendReportStatus(report.status),
-        reason: report.reason || getReportRecord(report.key).reason || "",
-        createdAt: report.createdAt || Date.now(),
-      };
-      if (report.type === "prompt") state.reportedPromptIds.add(report.targetId);
-      if (report.type === "comment") state.reportedCommentIds.add(report.targetId);
-    });
-    shouldRender = true;
-  } else if (reportsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/admin/reports 연동에 실패해 데모 신고 데이터를 유지합니다.", reportsResult.reason);
-  }
+async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
+  return hydrateBackendMyPageDataEffect(getBackendHydrationEffectContext(), { force });
+}
+function getAdminHydrationEffectContext() {
+  return {
+    api: window.TTALKAK_API,
+    canUseDemoFallback,
+    formatShortDate,
+    getAuthToken,
+    getReportRecord,
+    hasBackendAuthToken,
+    mapBackendReportStatus,
+    render,
+    state,
+  };
+}
 
-  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
-    state.backendAdminTags = tagsResult.value;
-    tagsResult.value.forEach((tag) => {
-      if (!tag.key) return;
-      state.adminTagDecisions = { ...state.adminTagDecisions, [tag.key]: tag.status };
-    });
-    shouldRender = true;
-  } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/admin/tags 연동에 실패해 데모 태그 데이터를 유지합니다.", tagsResult.reason);
-  }
+async function hydrateBackendAdminDataIfNeeded(options = {}) {
+  return hydrateBackendAdminData(getAdminHydrationEffectContext(), options);
+}
 
-  state.adminBackendStatus = "connected";
-  if (shouldRender) render();
+async function refreshAdminAuditLogs(options = {}) {
+  return refreshAdminAuditLogsEffect(getAdminHydrationEffectContext(), options);
+}
+
+async function refreshAdminAfterMutation({ auditReason = "", shouldRender = true } = {}) {
+  return refreshAdminAfterMutationEffect(getAdminHydrationEffectContext(), { auditReason, shouldRender });
 }
 
 function persistState() {
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        popularPrompts,
-        savedPrompts: savedPrompts
-          .filter((prompt) => !state.pendingUnsaveIds.has(prompt.id) || prompt.source === "mine")
-          .map((prompt) =>
-            state.pendingUnsaveIds.has(prompt.id) && prompt.source === "mine" ? { ...prompt, savedByMe: false } : prompt,
-          ),
-        commentsByPrompt,
-        state: {
-          isLoggedIn: state.isLoggedIn,
-          currentUser: state.currentUser,
-          currentUserId: state.currentUserId,
-          currentUserRole: state.currentUserRole,
-          authToken: state.authToken,
-          token: state.token,
-          libraryDemoSeeded: state.libraryDemoSeeded,
-          userLibraryPromptIds: [...state.userLibraryPromptIds],
-          likedPromptIds: [...state.likedPromptIds],
-          likedCommentIds: [...state.likedCommentIds],
-          reportedPromptIds: [...state.reportedPromptIds],
-          reportedCommentIds: [...state.reportedCommentIds],
-          hideReportedPrompts: state.hideReportedPrompts,
-          adminMode: state.adminMode,
-          adminHiddenPromptIds: [...state.adminHiddenPromptIds],
-          adminTagDecisions: state.adminTagDecisions,
-          adminTab: state.adminTab,
-          adminPromptQuery: state.adminPromptQuery,
-          adminPromptFilter: state.adminPromptFilter,
-          adminTagQuery: state.adminTagQuery,
-          adminTagFilter: state.adminTagFilter,
-          adminTagSort: state.adminTagSort,
-          adminPromptRevisionRequests: state.adminPromptRevisionRequests,
-          reportRecords: state.reportRecords,
-          searchScope: state.searchScope,
-          popularSort: state.popularSort,
-          savedSort: state.savedSort,
-          guestImproveCount: state.guestImproveCount,
-          recentThreads: state.recentThreads,
-          makeFolders: state.makeFolders,
-          activeFolderId: state.activeFolderId,
-          activeThreadId: state.activeThreadId,
-          messages: state.messages,
-          composerDraft: state.composerDraft,
-          templateCollapsed: state.templateCollapsed,
-        },
-      }),
-    );
+    persistAppState({
+      commentsByPrompt,
+      popularPrompts,
+      saveCurrentAccountScope,
+      savedPrompts,
+      state,
+    });
   } catch (_error) {
     // Local preview can still run if browser storage is blocked.
   }
@@ -6308,75 +7076,20 @@ function persistState() {
 
 function loadPersistedState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.popularPrompts)) {
-      popularPrompts.splice(0, popularPrompts.length, ...parsed.popularPrompts);
-    }
-    if (Array.isArray(parsed.savedPrompts)) {
-      savedPrompts.splice(0, savedPrompts.length, ...parsed.savedPrompts);
-      normalizeSavedPromptOwnership();
-    }
-    if (parsed.commentsByPrompt && typeof parsed.commentsByPrompt === "object") {
-      Object.keys(commentsByPrompt).forEach((key) => delete commentsByPrompt[key]);
-      Object.assign(commentsByPrompt, parsed.commentsByPrompt);
-    }
-
-    const savedState = parsed.state || {};
-    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY) || "";
-    const restoredToken = storedToken || savedState.authToken || savedState.token || "";
-    state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);
-    state.currentUser = state.isLoggedIn ? savedState.currentUser || null : null;
-    state.currentUserId = state.isLoggedIn ? savedState.currentUserId || null : null;
-    state.currentUserRole = state.isLoggedIn ? savedState.currentUserRole || "user" : "user";
-    state.authToken = state.isLoggedIn ? restoredToken : "";
-    state.token = state.isLoggedIn ? restoredToken : "";
-    state.libraryDemoSeeded = Boolean(savedState.libraryDemoSeeded);
-    state.userLibraryPromptIds = new Set(Array.isArray(savedState.userLibraryPromptIds) ? savedState.userLibraryPromptIds : []);
-    state.likedPromptIds = new Set(Array.isArray(savedState.likedPromptIds) ? savedState.likedPromptIds : []);
-    state.likedCommentIds = new Set(Array.isArray(savedState.likedCommentIds) ? savedState.likedCommentIds : []);
-    state.reportedPromptIds = new Set(Array.isArray(savedState.reportedPromptIds) ? savedState.reportedPromptIds : []);
-    state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
-    state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
-    state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && savedState.adminMode);
-    if (state.adminMode) state.route = "admin";
-    state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
-    state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
-    state.adminTab = ["reports", "prompts", "tags"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
-    state.adminPromptQuery = savedState.adminPromptQuery || "";
-    state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
-      ? savedState.adminPromptFilter
-      : "all";
-    state.adminTagQuery = savedState.adminTagQuery || "";
-    state.adminTagFilter = ["all", "pending", "approved", "rejected"].includes(savedState.adminTagFilter)
-      ? savedState.adminTagFilter
-      : "all";
-    state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
-    state.adminPromptRevisionRequests =
-      savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
-        ? savedState.adminPromptRevisionRequests
-        : {};
-    state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
-    state.searchScope = getValidSearchScope(savedState.searchScope);
-    state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(savedState.popularSort)
-      ? savedState.popularSort
-      : "popular";
-    state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(savedState.savedSort)
-      ? savedState.savedSort
-      : "recent";
-    state.guestImproveCount = Number(savedState.guestImproveCount || 0);
-    state.recentThreads = Array.isArray(savedState.recentThreads) ? savedState.recentThreads : [];
-    state.makeFolders = normalizeMakeFolders(savedState.makeFolders);
-    state.activeFolderId = state.makeFolders.some((folder) => folder.id === savedState.activeFolderId) || savedState.activeFolderId === "all" ? savedState.activeFolderId : "all";
-    state.activeThreadId = savedState.activeThreadId || null;
-    state.messages = Array.isArray(savedState.messages) ? savedState.messages : [];
-    state.composerDraft = savedState.composerDraft || "";
-    state.templateCollapsed = Boolean(savedState.templateCollapsed);
-    normalizePersistedLikeCounts();
+    loadPersistedAppState({
+      commentsByPrompt,
+      getCurrentAccountScopeKey,
+      getValidSearchScope,
+      normalizeMakeFolders,
+      normalizePersistedLikeCounts,
+      normalizeSavedPromptOwnership,
+      popularPrompts,
+      restoreCurrentAccountScope,
+      savedPrompts,
+      state,
+    });
   } catch (_error) {
-    localStorage.removeItem(STORAGE_KEY);
+    clearPersistedPayload();
   }
 }
 
@@ -6465,98 +7178,12 @@ function normalizeDemoCopy() {
 }
 
 async function hydrateBackendHomeData() {
-  const api = window.TTALKAK_API;
-  if (!api?.getCommunityPosts) {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다.";
-    render();
-    return;
-  }
-
-  const [promptsResult, tagsResult] = await Promise.allSettled([
-    api.getCommunityPosts({ page: 1, size: 64, sort: state.popularSort }),
-    api.getPopularTags?.({ limit: 8 }),
-  ]);
-
-  let shouldRender = false;
-
-  if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value?.items)) {
-    popularPrompts.splice(
-      0,
-      popularPrompts.length,
-      ...promptsResult.value.items.map((prompt) => ({
-        ...prompt,
-        source: prompt.source || "community",
-        isShared: prompt.isShared ?? true,
-      })),
-    );
-    normalizePersistedLikeCounts();
-    state.backendStatus = "connected";
-    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
-    shouldRender = true;
-  } else if (promptsResult.status === "rejected") {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다.";
-    console.warn("[TTALKAK] /api/prompts 연동에 실패해 데모 데이터를 유지합니다.", promptsResult.reason);
-  }
-
-  if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
-    state.backendPopularTags = tagsResult.value.slice(0, 8);
-    if (state.backendStatus === "connected") {
-      state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
-    }
-    shouldRender = true;
-  } else if (tagsResult.status === "rejected") {
-    console.warn("[TTALKAK] /api/tags/popular 연동에 실패해 데모 태그를 유지합니다.", tagsResult.reason);
-  }
-
-  if (shouldRender) render();
+  return hydrateBackendHomeDataEffect(getBackendHydrationEffectContext());
 }
 
 async function refreshBackendHomePrompts() {
-  const api = window.TTALKAK_API;
-  if (!api?.searchCommunityPosts) return;
-
-  const query = String(state.searchQuery || "").trim();
-  const scope = getValidSearchScope(state.searchScope);
-  const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort });
-  state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
-
-  try {
-    const result = await api.searchCommunityPosts({
-      scope,
-      query,
-      page: 1,
-      size: 64,
-      sort: state.popularSort,
-    });
-    if (requestSignature !== JSON.stringify({ query: String(state.searchQuery || "").trim(), scope: getValidSearchScope(state.searchScope), sort: state.popularSort })) {
-      return;
-    }
-    if (Array.isArray(result?.items)) {
-      popularPrompts.splice(
-        0,
-        popularPrompts.length,
-        ...result.items.map((prompt) => ({
-          ...prompt,
-          source: prompt.source || (prompt.isMine ? "mine" : "community"),
-          isShared: prompt.isShared ?? true,
-        })),
-      );
-      state.backendStatus = "connected";
-      state.backendStatusMessage = query
-        ? `GET /api/prompts?scope=${scope}&query=... 검색 결과를 Home에 반영 중입니다.`
-        : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
-      normalizePersistedLikeCounts();
-      render();
-    }
-  } catch (error) {
-    state.backendStatus = "fallback";
-    state.backendStatusMessage = "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다.";
-    console.warn("[TTALKAK] /api/prompts 검색 호출에 실패해 로컬 필터를 유지합니다.", error);
-  }
+  return refreshBackendHomePromptsEffect(getBackendHydrationEffectContext());
 }
-
 loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
