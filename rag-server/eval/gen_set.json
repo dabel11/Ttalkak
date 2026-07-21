@@ -1,0 +1,54 @@
+{
+  "collection": "prompt_techniques",
+  "note": "생성(G) 평가용 — 거친 사용자 프롬프트. expected_mode 는 우리의 기대(judge가 적절성을 채점). improve=정보 충분→개선안, ask=정보 부족→질문 모드여야 적절.",
+  "items": [
+    {
+      "query": "임영웅 콘서트 마케팅 인스타 카드뉴스 문구 만들어줘. 일시 2026년 7월 15일, 티켓 45,000원(공식 사이트), 새 앨범 수록곡 위주로 흥미진진한 단문 톤.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "신입 백엔드 개발자 채용 공고를 작성하는 프롬프트 만들어줘. 회사는 핀테크 스타트업, Java/Spring, 경력 무관, 재택 가능, 지원 마감 7월 말.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "아래 파이썬 함수를 성능과 가독성 관점에서 코드리뷰하는 프롬프트로 만들어줘: def add(a,b): return a+b",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "이 회의록을 핵심만 3줄로 요약하는 프롬프트 만들어줘. 결정사항과 액션아이템 위주로.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "초등학교 4학년도 이해할 수 있게 광합성을 설명하는 프롬프트를 만들어줘. 비유를 들고 5문장 이내.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "고객의 환불 요청을 정중하게 거절하는 이메일을 쓰는 프롬프트. 구매 후 7일이 지나 정책상 불가하지만 대안(교환/포인트)을 제시.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "2박 3일 부산 여행 일정표를 표로 정리하는 프롬프트. 맛집과 관광지를 시간대별로, 이동수단 포함.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "영어 이메일을 한국어로 번역하되 비즈니스 격식체로 바꾸는 프롬프트 만들어줘.",
+      "expected_mode": "improve"
+    },
+    {
+      "query": "글 써줘",
+      "expected_mode": "ask"
+    },
+    {
+      "query": "마케팅 좀 도와줘",
+      "expected_mode": "ask"
+    },
+    {
+      "query": "이거 좀 개선해줘",
+      "expected_mode": "ask"
+    },
+    {
+      "query": "기획안 만들어줘",
+      "expected_mode": "ask"
+    }
+  ]
+}

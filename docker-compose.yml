@@ -1,0 +1,103 @@
+# Ttalkak 통합 스택 (MySQL + backend + rag-server + web)
+# MySQL 정의는 backend/compose.yaml(백엔드 팀 버전)을 기준으로 통합했다.
+# 사용:
+#   docker compose up -d mysql          # MySQL만
+#   docker compose up -d mysql backend  # DB + 백엔드(8080)
+#   docker compose up -d                # 전체 (rag 첫 기동은 모델 다운로드로 오래 걸림)
+#   docker compose down                 # 중지 (데이터는 볼륨에 보존)
+#   docker compose down -v              # 데이터까지 삭제
+#
+# 사전 준비: backend/.env 와 rag-server/.env 를 각 .env.example 기준으로 만든다.
+#   backend/.env 에는 최소 JWT_SECRET_BASE64(32바이트 Base64) 가 필요하다.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ttalkak-mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ttalkak}
+      TZ: Asia/Seoul
+
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    volumes:
+      - ttalkak_mysql_data:/var/lib/mysql   # 데이터 영속
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  backend:
+    build: ./backend
+    container_name: ttalkak-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env   # JWT_SECRET_BASE64, ADMIN_*, GOOGLE_CLIENT_ID (git 미추적)
+    environment:
+      # 컨테이너 네트워크: DB 호스트=서비스명 mysql, RAG=서비스명 rag-server
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ttalkak}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      RAG_SERVER_URL: http://rag-server:8000
+    ports:
+      - "8080:8080"
+
+  rag-server:
+    build: ./rag-server
+    container_name: ttalkak-rag
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - ./rag-server/.env   # GROQ_API_KEY 등 LLM 키 (git 미추적)
+    environment:
+      DB_HOST: mysql          # 컨테이너 네트워크에선 호스트가 서비스명
+      DB_PORT: "3306"
+      DB_NAME: ${MYSQL_DATABASE:-ttalkak}
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}   # MySQL root 비밀번호와 동일 소스
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface   # bge-m3 모델 캐시(재다운로드 방지)
+    healthcheck:
+      # /health 응답 확인. 첫 기동은 모델 다운로드+로드로 오래 걸릴 수 있어 start_period 여유
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
+
+  web:
+    # 웹 프론트는 순수 정적 파일 → nginx 로 서빙(빌드 불필요). 브라우저에서 8080 백엔드 호출.
+    image: nginx:alpine
+    container_name: ttalkak-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./prompt-hub-web-frontend:/usr/share/nginx/html:ro
+    ports:
+      - "4173:80"
+
+volumes:
+  ttalkak_mysql_data:
+  hf-cache:

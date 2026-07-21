@@ -1,0 +1,43 @@
+# ── Claude Code ─────────────────────────────────────────────
+.claude/
+
+# ── OS / IDE ────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# ── Secrets ─────────────────────────────────────────────────
+**/.env
+**/.env.local
+*.pem
+*.key
+
+# ── Java / Gradle (backend) ─────────────────────────────────
+.gradle/
+build/
+bin/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── Node (extension) ────────────────────────────────────────
+extension/node_modules/
+extension/dist/
+
+# ── Python (rag-server) ─────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ── RAG data / vector DB (대용량, 재생성 가능) ───────────────
+rag-server/chroma_db/
+rag-server/data/
+
+# ── 평가 응답 캐시 (재생성 가능) ─────────────────────────────
+rag-server/eval/.uplift_cache.json
+rag-server/eval/.gen_cache*.json
+
+docs/
+.gitignore
+
+extension/.env.production.local

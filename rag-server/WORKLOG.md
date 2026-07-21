@@ -1,0 +1,718 @@
+# RAG 서버 작업 기록 (WORKLOG)
+
+이 문서는 rag-server에 가한 변경을 **추적 가능하게(전/후 비교)** 남기는 기록이다.
+새 작업은 맨 아래 "다음 작업" 아래에 같은 템플릿으로 **시간 역순 아님 — 진행 순서대로** 추가한다.
+
+> 작성 규칙: 한 작업 = 한 섹션. 반드시 **Before / After / 변경 파일 / 검증 / 결정·근거**를 채운다.
+> 수치가 있으면 표로. 되돌리기 어려운 삭제는 무엇을 왜 지웠는지 명시.
+
+---
+
+## 작업 항목 템플릿 (복사해서 사용)
+
+```
+## [YYYY-MM-DD] 제목
+**목적**: (왜)
+**Before**: (이전 상태)
+**After**: (이후 상태)
+**변경 파일**: (경로 나열, 신규/수정/삭제 표시)
+**검증**: (어떻게 확인했는가 + 결과)
+**결정·근거**: (선택한 이유, 트레이드오프, 보류한 것)
+```
+
+---
+
+# 진행 기록 (2026-06 작업 세션)
+
+## [2026-06-19] 벡터 저장소: ChromaDB → MySQL 교체
+**목적**: 설계 문서의 "동일 DB 사용" 원칙에 맞춰 RAG 벡터를 Spring 백엔드와 같은 `ttalkak` MySQL에 저장. 별도 벡터 DB 제거로 배포 단순화.
+
+**Before**
+- 저장소: ChromaDB (`chroma_db/`, HNSW 인덱스)
+- `indexer.py`·`retriever.py`가 각각 `chromadb.PersistentClient` 사용
+- 임베딩 모델(bge-m3)을 Indexer·Retriever가 **각각 로드** → 메모리 2배
+- 컬렉션: `prompt_techniques`(100청크) + `papers`(쓰레기 1건 `"string"`)
+
+**After**
+- 저장소: MySQL `rag_chunk` 테이블 (collection_name, chunk_id, document, metadata(JSON), embedding(JSON), created_at)
+- 접속: SQLAlchemy + PyMySQL, `.env`로 설정(기본값이 Spring과 동일: root/공백/ttalkak)
+- 유사도: MySQL엔 ANN 인덱스가 없어 **numpy 코사인(brute-force)**. 100청크 기준 1ms 수준
+- 임베딩 모델: `embeddings.py`로 **프로세스당 1회 로드·공유**
+- `papers` 쓰레기 컬렉션 제외(이관 시 스킵)
+
+**변경 파일**
+- 신규: `db.py`, `embeddings.py`, `migrate_chroma_to_mysql.py`(후속 작업에서 삭제됨)
+- 수정: `indexer.py`, `retriever.py`, `main.py`(chroma_path 제거), `requirements.txt`(−chromadb, +SQLAlchemy/PyMySQL/numpy), `README.md`, `python-reg-server/.env`(DB 설정 추가)
+
+**검증**
+- 기존 100청크 무손실 이관(임베딩 재계산 없이) 확인
+- 검색 정상(코드리뷰 쿼리 → Code Review Prompting), 빈 컬렉션 `[]` 처리
+- upsert 멱등성: 재인덱싱해도 100개 유지(중복 없음)
+- `main` 임포트 + `/query` 인프로세스 호출 성공
+
+**결정·근거**
+- MySQL은 벡터 인덱스가 없지만 현 규모(100~수천)에서 brute-force로 충분 → RAG 구조(bge-m3/top_k/메타데이터) 유지하며 저장 백엔드만 교체.
+- `rag_chunk`는 Python(SQLAlchemy)이 소유. Spring 엔티티로 만들지 않으면 JPA `ddl-auto`와 충돌 없음 → 웹 커뮤니티와 동일 DB 공유 OK.
+
+---
+
+## [2026-06-20] 미사용 자산 정리·압축 (280M → 316K)
+**목적**: RAG가 실제로 쓰는 것만 남겨 군더더기 제거.
+
+**Before**: rag-server 약 280M. `data/downloaded_pdfs/`(arxiv 논문 273M, 미사용 `papers`용), `data/prompt_data/`(연구 JSON), 구버전 PDF, `chroma_db/`(2.9M), 중복 인덱싱 스크립트 3종, `__pycache__`/`.DS_Store`.
+
+**After**: 316K. 인덱싱 스크립트를 `index_pdf_direct.py` **1개로 통합**(PDF 파싱 + MySQL 직접 적재 자체 포함).
+
+**변경 파일**
+- 삭제: `data/downloaded_pdfs/`, `data/prompt_data/`, `data/rag_prompt_engineering_chunks_v1.pdf`(구버전), `chroma_db/`, `migrate_chroma_to_mysql.py`, `index_pdf_techniques.py`, `index_parsey.py`, `__pycache__/`, `.DS_Store`
+- 수정: `index_pdf_direct.py`(파싱 로직 내재화), `.dockerignore`, `README.md`
+- 유지: `data/rag_prompt_engineering_100_chunks_v1.pdf`(재인덱싱 소스), `spring-integration-example/`, `python-reg-server/.env`
+
+**검증**: 통합 스크립트 파싱 100청크 정상, `main` 임포트·검색 정상(MySQL 데이터 유지).
+
+**결정·근거**: `papers`(논문) 워크플로우는 미사용 → 관련 데이터·스크립트 전부 제거. ChromaDB는 MySQL 이관 완료라 백업 불필요.
+
+---
+
+## [2026-06-20] Docker 구성 (로컬/배포 일관성)
+**목적**: MySQL(및 rag-server)을 컨테이너로 띄워 재현성·배포(Railway) 일관성 확보.
+
+**Before**: Homebrew MySQL(`brew services`)로 로컬 구동. Docker 미사용.
+
+**After**: `docker compose up -d`로 MySQL(+rag-server) 기동. MySQL 데이터는 영속 볼륨(`ttalkak-mysql-data`)에 보존, bge-m3 캐시는 `hf-cache` 볼륨.
+
+**변경 파일**
+- 신규: `../docker-compose.yml`(mysql + rag-server), `Dockerfile`, `.dockerignore`
+
+**검증**: Docker MySQL 8.4 healthy, `ttalkak` 자동 생성, 100청크 이관, 검색 정상.
+
+**결정·근거**: 컨테이너 내부에선 DB 호스트가 서비스명 `mysql`(compose가 `DB_HOST` 주입), 로컬 실행 시 `127.0.0.1`. rag-server 이미지는 torch+모델로 무거워 첫 빌드만 느림(이후 hf-cache 재사용).
+
+---
+
+## [2026-06-21] 검색 품질 개선 (평가셋 · 리랭커 · 하이브리드 · 쿼리변환 · 청킹)
+**목적**: dense 단일 검색의 정밀도를 검증된 기법으로 끌어올리되, **개선 효과를 수치로 측정**하며 진행.
+
+**Before**
+- 검색: bge-m3 **dense 단일** + numpy 코사인, 상위 top_k를 그대로 사용(리랭킹 없음)
+- 사용자 원본 프롬프트를 그대로 검색 쿼리로 사용
+- 검색 품질을 측정할 평가 수단 없음
+
+**After**
+- **2단계 검색**: 후보 추리기(dense 또는 dense+BM25 RRF 하이브리드) → cross-encoder 리랭크(`bge-reranker-v2-m3`)
+- 기본값 = **하이브리드 + 리랭커**(평가상 최적 조합), 쿼리 변환은 실험적 opt-in(기본 off)
+- 평가셋 + 러너로 변형 비교 가능
+- 신규 자유형식 문서용 시맨틱 청킹 유틸
+
+**변경 파일**
+- 신규: `query_transform.py`, `chunking.py`, `eval/qa_set.json`(기법셋 40), `eval/qa_set_realistic.json`(현실셋 40), `eval/run_eval.py`
+- 수정: `embeddings.py`(`get_reranker`), `retriever.py`(2단계+BM25/RRF), `main.py`(`use_reranker`/`use_hybrid`/`use_query_transform` 노출, 기본 하이브리드+리랭커), `requirements.txt`(+rank-bm25), `README.md`
+
+**검증 — 측정 결과**
+
+쉬운 기법셋(`qa_set.json`, 40문항): dense가 이미 Recall@5 0.975로 **포화 → 변별 불가**.
+| 변형 | Hit@1 | Recall@5 | MRR@10 |
+|---|---|---|---|
+| dense | 0.925 | 0.975 | 0.949 |
+| +리랭커 | 0.925 | 0.975 | 0.949 |
+| +쿼리변환 | 0.300 | 0.400 | 0.329 |
+
+현실셋(`qa_set_realistic.json`, 40문항, 원시 사용자 프롬프트):
+| 변형 | Hit@1 | Recall@5 | MRR@10 |
+|---|---|---|---|
+| dense (기준) | 0.675 | 0.950 | 0.795 |
+| +하이브리드 | 0.650 | 0.800 | 0.732 |
+| +리랭커 | 0.725 | 0.950 | 0.824 |
+| **+하이브리드+리랭커 (기본)** | **0.750** | **0.975** | **0.838** |
+
+→ 기본값 채택. 기준 대비 **Hit@1 +7.5%p(상대 +11%), MRR +0.043, Recall@5 +2.5%p**.
+
+추가 검증: end-to-end `/query` 정상("지원자 중 누구 뽑을지"→Decision Matrix, "전문 변호사 입장"→Role Prompting), 전 모듈 syntax OK.
+
+**결정·근거**
+- **리랭커 ON**: 현실셋에서 명확히 개선(Hit@1·MRR↑). `bge-reranker-v2-m3`는 sentence-transformers에 포함(신규 의존성 0), ~2.1GB.
+- **하이브리드 ON(리랭커와 함께만)**: 하이브리드 단독은 한국어 BM25 토큰화가 거칠어 악화(Recall 0.95→0.80). 그러나 리랭커가 후보를 정리하면 최고 → 둘 다 기본 on. ⚠️ 리랭커 off + 하이브리드 on은 최악 조합(문서에 경고).
+- **쿼리 변환 OFF**: 키워드 확장이 *기법 코퍼스*와 개념적 미스매치(8b·70b 모두 도메인 키워드를 생성). 모델 크기 문제 아님 → 기본 비활성, 코드는 opt-in 실험으로 보존.
+- **하위호환**: 응답 스키마(`answer`/`improved_prompt`/`sources`) 불변 → Spring·익스텐션 무변경.
+
+**운영 메모**
+- HuggingFace Xet 백엔드가 연결 리셋 유발 → 리랭커는 `HF_HUB_DISABLE_XET=1`로 다운로드. 이후 실행은 `HF_HUB_OFFLINE=1`로 HEAD 재시도 회피(빠름).
+- 평가 실행: `python eval/run_eval.py --all --qa qa_set_realistic.json`
+
+---
+
+## [2026-06-21] `.env` 위치 정리 (python-reg-server 폴더 제거)
+**목적**: `.env` 하나만 담고 이름도 오타(`reg`←`rag`)인 중첩 폴더 제거로 구조 단순화.
+
+**Before**: `rag-server/python-reg-server/.env` — 코드 3곳·docker-compose·.dockerignore가 이 경로 참조.
+**After**: `rag-server/.env`로 이동, `python-reg-server/` 폴더 삭제.
+
+**변경 파일**
+- 이동: `python-reg-server/.env` → `.env` (폴더 삭제)
+- 수정: `main.py`·`db.py`·`ingest_knowledge.py`(load_dotenv 경로), `.dockerignore`, `../docker-compose.yml`(env_file 경로)
+
+**검증**: 새 경로에서 GROQ_API_KEY·DB 설정 로드 OK, `rag_chunk` 100행 조회 성공, `python-reg-server` 참조 0건. `.env`는 `.gitignore`의 `**/.env`로 계속 보호.
+
+**결정·근거**: 단순 위치 정리. `.env`는 untracked라 git 이력엔 경로 변경만 코드/설정 쪽에 반영됨.
+
+---
+
+## [2026-06-21] 한국어 BM25 · HyDE · 평가셋 확장 · 기법 카드 추출기(의미 중복제거)
+**목적**: 백로그의 검색품질 레버 4종을 구현하고 **측정으로 채택 여부 결정**.
+
+**Before**
+- 평가셋 현실셋 40문항, BM25 토큰화=공백/음절 정규식, 쿼리변환=키워드형(off)
+- 기법 카드 추출기(ingest_knowledge.py)는 이름 기준 중복제거만
+
+**After (구현물)**
+- **평가셋 확장**: 현실셋 40 → 59문항(원시 사용자 프롬프트, 다양한 기법 커버)
+- **한국어 BM25**: `kiwipiepy` 형태소 분석으로 내용 형태소만 토큰화(`retriever.py`), BM25 코퍼스 토큰화 캐시(컬렉션별, id 정렬)
+- **HyDE**: `query_transform.hyde()` — 기법 카드형 가상문서 생성(70b) 후 원본+가상문서로 검색
+- **기법 카드 추출기**: `ingest_knowledge.py`에 **임베딩 기반 의미 중복제거**(기존 코퍼스+배치 내부, 코사인≥`--sim-threshold` 0.90 폐기) 추가
+- `main.py`에 `use_hyde` 옵션 노출, `eval/run_eval.py`에 `--hyde`/`--qa` 지원
+
+**검증 — 측정 (현실셋 59문항)**
+| 변형 | Hit@1 | Recall@5 | MRR@10 |
+|---|---|---|---|
+| dense | 0.661 | 0.915 | 0.771 |
+| +하이브리드(한국어 BM25) | 0.593 | 0.814 | 0.687 |
+| **+리랭커 (단독, 기본값)** | **0.695** | **0.949** | **0.801** |
+| +하이브리드+리랭커 | 0.678 | 0.949 | 0.792 |
+| dense+HyDE | 0.475 | 0.763 | 0.590 |
+| 리랭커+HyDE | 0.610 | 0.847 | 0.717 |
+
+**결정·근거 (측정으로 뒤집힌 결론)**
+- **기본값 = 리랭커 단독.** 이전 40문항에선 "하이브리드+리랭커"가 근소 우위였으나, 59문항+한국어 BM25로 재측정하니 **리랭커 단독이 전 지표 최고**. 표본↑·토큰화↑가 노이즈를 걷어냄.
+- **하이브리드는 한국어 형태소 BM25로도 악화.** 원인: 기법 청크들이 공통 형태소(작성·생성·지시·프롬프트…)를 공유 → sparse 신호가 노이즈. → 코드는 opt-in으로 보존, 기본 off.
+- **HyDE도 악화**(폴백 0회의 실측). 키워드 변환과 동일하게, 원본 프롬프트가 이미 기법 "Use When"과 잘 매칭돼 쿼리 변환이 정밀 신호를 희석. → 기본 off, 실험용 보존.
+- **기법 카드 추출기 의미중복제거**는 검색지표가 아니라 *코퍼스 품질*용(새 자료 적재 시 중복 카드 방지). 기능 검증으로 충분.
+
+**산출물/변경 파일**
+- 신규: (없음, 기존 파일 확장)
+- 수정: `retriever.py`(kiwi 토큰화·BM25 캐시), `query_transform.py`(hyde), `main.py`(use_hyde, 기본값 리랭커 단독), `ingest_knowledge.py`(semantic_dedupe), `eval/run_eval.py`(--hyde/--qa), `eval/qa_set_realistic.json`(59문항), `requirements.txt`(+kiwipiepy)
+
+---
+
+## [2026-06-22] 폴더 구조 리팩토링 (평면 → 논리 단위 패키지)
+**목적**: 루트에 11개 `.py`가 런타임·적재·크롤러·평가가 섞여 평면으로 흩어져 있어 역할 파악이 어려움. 논리 단위(서버 런타임 / 오프라인 적재 / 평가)로 패키지화.
+
+**Before**
+- `rag-server/` 루트에 평면 배치: `main.py db.py embeddings.py retriever.py indexer.py generator.py query_transform.py chunking.py index_pdf_direct.py ingest_knowledge.py pdf_crawler.py`
+- 임포트 전부 평면(`from db import …`, `from retriever import …`); `eval/run_eval.py`는 `sys.path.insert` 해킹으로 루트 주입
+- `.env` 로드가 `db.py`/`main.py`/`ingest_knowledge.py` 3곳에 중복(각자 `__file__` 기준)
+- 실행: `python main.py`, `python index_pdf_direct.py`, `python eval/run_eval.py`
+
+**After**
+```
+app/                     # 서버 런타임
+  __init__.py            #   PROJECT_ROOT/DATA_DIR + .env 단일 로드
+  main.py
+  core/  db.py, embeddings.py
+  rag/   retriever.py, indexer.py, generator.py, query_transform.py
+ingestion/               # 오프라인 적재
+  chunking.py, pdf_indexer.py(←index_pdf_direct.py), ingest_knowledge.py, pdf_crawler.py
+eval/  run_eval.py(+__init__.py)
+```
+- 임포트 패키지 절대경로(`from app.core.db import …`, `from app.rag.retriever import …`)로 통일, `sys.path` 해킹 제거
+- `.env` 로드 **`app/__init__.py` 1곳**으로 일원화(다른 모듈 import 시 패키지 init 선실행으로 보장). `data/` 경로도 `app.DATA_DIR` 단일 출처
+- 실행: `uvicorn app.main:app` / `python -m ingestion.<모듈>` / `python -m eval.run_eval` (전부 `rag-server/`에서)
+- Docker: `CMD`를 `uvicorn app.main:app`로, `WORKDIR /code`(패키지 `app/`와 혼동 방지), `.dockerignore`에 `data/`(282M)·`eval/`·`ingestion/` 추가해 이미지 경량화
+
+**변경 파일**
+- 이동(git mv): 위 11개 → `app/**`·`ingestion/**` (`index_pdf_direct.py`→`ingestion/pdf_indexer.py`)
+- 신규: `app/__init__.py`, `app/core/__init__.py`, `app/rag/__init__.py`, `ingestion/__init__.py`, `eval/__init__.py`
+- 수정: 이동 파일들의 import·경로·docstring 명령 예시; `Dockerfile`, `.dockerignore`, `README.md`
+- 변경 없음: 응답 스키마(`answer/improved_prompt/sources`), DB 스키마(`rag_chunk`), Spring 연동, `docker-compose.yml`(`build: ./rag-server` 유지), `data/` 내용
+
+**검증**
+- `py_compile` 전 파일 통과
+- 경량 import: `app`/`app.core.db`/`app.rag.*`/`ingestion.*` 정상, `DATA_DIR`·`DEFAULT_PDF` 경로 해석 OK, `.env`(GROQ_API_KEY) 로드 OK
+- 런타임 체인: `Retriever` 단일 검색 — 리팩토링 전과 **동일 결과**(Ranking/Decision Matrix/Clarification Prompting)
+- `app.main` import 시 FastAPI 앱·라우트(`/query`,`/index`,`/health`)·3컴포넌트 초기화 정상
+- `python -m eval.run_eval --help` 진입점 정상
+
+**결정·근거**
+- `python -m` 패키지 실행으로 통일 → import 경로가 실행 위치와 무관하게 일관(평면 배치의 취약점 제거). 실행 명령이 바뀌지만 표준 방식이라 장기적으로 명확.
+- 런타임(`app`)과 오프라인 적재(`ingestion`) 분리 → 배포 이미지에서 적재/평가/데이터 제외 가능(경량화). 서버는 `app/`만 있으면 동작.
+- `.env`/경로 단일 출처화로 "어디서 로드되나" 혼란 제거. db.py가 import 시점에 엔진을 만들므로 `app/__init__.py` 선로드가 필수.
+
+---
+
+## [2026-06-22] 평가 강화 — 검색 지표 교체 + 생성(G) LLM-judge 도입 (P0)
+**목적**: rag-quality-optimizer 에이전트 진단의 P0 두 가지. "개선 효과를 잴 수 없으면 어떤 개선도 무의미" — (1) 검색 지표의 천장(saturation) 제거, (2) 한 번도 측정한 적 없는 생성(G) 품질 측정.
+
+**Before**
+- `run_eval.py`: Hit@1 / Recall@5 / MRR@10 만. 그런데 'Recall@5'가 실제로는 "top5에 정답 하나라도 있으면 hit"(=Hit@5) → **0.915~0.949로 천장**, 리랭커 효과가 0.034밖에 안 보여 변별 불가.
+- 생성(G) 평가 **전무**. 딸각의 실제 사용자 가치인 `improved_prompt` 품질이 미측정.
+
+**After**
+- `run_eval.py`: 진짜 지표로 교체·확장 — Hit@1 / **Recall@1·3·5(정답∩topk/정답수)** / **Precision@5** / MRR@10 / **NDCG@5**. 천장 제거로 변별력 확보.
+  | 변형 | Recall@3 | Recall@5(진짜) | NDCG@5 | (구)Recall@5 |
+  |---|---|---|---|---|
+  | dense | 0.695 | 0.777 | 0.710 | 0.915 |
+  | +리랭커 | 0.737 | **0.847** | 0.757 | 0.949 |
+  - 리랭커 Δ가 (구)0.034 → (신)Recall@5 +0.070·NDCG +0.047 로 또렷해짐.
+- 신규 `eval/gen_eval.py` + `eval/gen_set.json`(12문항, improve/ask 혼합): **운영과 동일한 파이프라인**(`app.main`의 retriever·generator·extract_improved_prompt)으로 검색+생성 후, 별도 LLM(judge, llama-3.3-70b)이 4개 기준(mode_fit / technique_grounding / instruction_form / intent_preservation, 1~5)을 채점. 탐지 모드 vs 기대 라벨 **mode_accuracy**(결정론적)도 보고. 429 재시도 + 항목 간 throttle 내장.
+
+**변경 파일**
+- 수정: `eval/run_eval.py`(지표 교체)
+- 신규: `eval/gen_eval.py`, `eval/gen_set.json`
+- 수정: `README.md`(평가 명령·지표 설명)
+
+**검증 / 핵심 발견**
+- 검색: dense vs 리랭커가 새 지표에서 명확히 갈림(위 표). 천장 해소 확인.
+- 생성(첫 측정 베이스라인, 12문항): mode_fit 4.91 / technique_grounding 4.00 / intent 5.00 / **mode_accuracy 0.27(3/11)**.
+  - 🔴 **과잉 질문**: 정보를 충분히 준 8개 프롬프트 **전부**가 개선안 대신 질문 모드로 빠짐 → 첫 턴 `improved_prompt` 0건(Execute 버튼 안 뜸). 검색보다 큰 UX 문제로 드러남.
+  - 🟡 **judge 관대함**: "충분한데 또 물으면 mode_fit≤2" 명시해도 judge가 과잉질문을 대부분 5점 처리 → judge의 mode_fit보다 결정론적 **mode_accuracy 가 더 신뢰할 모드 신호**. (LLM-judge는 검증 보조, 모드 판정은 라벨 비교로.)
+  - 🟡 생성 출력에 깨진/혼합언어 토큰(`图片`, `_highlight`) 관측 — Groq 70b 출력 품질 이슈.
+
+**결정·근거**
+- (구)Recall@5는 다중 정답(항목당 1~3개)에서 "하나라도 맞으면 만점"이라 의미가 왜곡. 진짜 Recall@k·NDCG로 교체해 다중 정답·순위를 제대로 반영.
+- 생성 평가는 **운영 객체 재사용**(별도 재구현 X)으로 실제 파이프라인을 측정. judge는 보조 지표, mode_accuracy를 1차 신호로 삼음.
+- 발견된 '과잉 질문'은 별도 개선 항목(generator 체크리스트 완화)으로 백로그에 등록 — 본 작업은 '측정 도구' 범위까지.
+
+---
+
+## [2026-06-22] 생성기 과잉 질문 완화 (gen_eval 발견 → 수정 → 재측정)
+**목적**: 직전 생성 평가에서 드러난 최우선 문제 — 정보를 충분히 준 프롬프트도 첫 턴에 전부 질문 모드로 빠져 `improved_prompt`가 0건(Execute 버튼 안 뜸). 검색보다 큰 UX 문제.
+
+**Before** (`app/rag/generator.py` SYSTEM_PROMPT)
+- [충분한 컨텍스트 체크리스트] 7개 항목 + "반드시 점검"·"특히 주제 모호하면 반드시 질문"·"계속 추가 질문" 프레이밍. 명목상 "2개 이상 비면 질문"이나 실제로는 보조 정보(대상 독자 등) 1개만 비어도 심문.
+- gen_eval: mode_accuracy 0.27, 상세 프롬프트 8개 중 개선 모드 **0건**.
+
+**After**
+- [모드 선택 — 기본은 '개선', 질문은 예외]로 재작성. 필수 판정 항목을 **(A) 작업 종류 + (B) 핵심 주제·소재 단 둘**로 축소. (A)/(B)가 특정되면 보조 항목이 비어도 **바로 개선 모드**(합리적 가정 후 '개선 포인트'에 명시). 질문 모드는 (A)/(B)가 통째로 없거나 추상적일 때만(예: "글 써줘"). 판정 예시 3개 명시.
+- [개선 모드] 섹션 헤더도 "기본 모드 ((A)와 (B)가 특정되면 바로 여기)"로 변경.
+
+**검증 (재측정)**
+| 케이스 | Before | After |
+|---|---|---|
+| 정보 충분(상세) | 0/8 개선(전부 질문) | **7/8 개선**, instruction_form 5.00 |
+| 정보 부족(vague) | 정상 질문 | **4/4 질문 유지** |
+| mode_accuracy | 0.27 | **≈0.92 (11/12)** |
+- 상세 8개는 운영 모델(llama-3.3-70b)로 측정(Groq 일일 토큰 한도로 8개까지). vague 4개는 모드 판정만 8b로 sanity check(전부 ask 유지 — 과잉 교정 없음).
+- gen_eval 지표(완료 8개): mode_fit 4.50 / technique_grounding 4.50 / instruction_form 5.00 / intent 5.00.
+
+**결정·근거**
+- 잔여 1건(채용 공고가 질문 모드로 빠짐, judge fit=1)은 모델 변동 범위로 판단 — 추가 강제는 vague 케이스 과잉 교정 위험. (A)/(B) 2-항목 게이트가 단순·견고.
+- 측정→수정→재측정 루프가 P0 평가 도구로 바로 돌아간 첫 사례. 향후 generator 프롬프트 변경 시 `python -m eval.gen_eval` 회귀로 확인.
+- ⚠️ 미해결: Groq 무료 티어 **일일** 토큰 한도(TPD 100k)로 12문항 1회도 빠듯 → 평가 운용 시 모델/쿼터 고려 필요. 출력 토큰 깨짐(`紹介`,`詳細` 등 한자 혼입)은 별도 백로그.
+
+---
+
+## [2026-06-26] 결과 상향(uplift) 평가 도구 — RAG 프롬프트 엔지니어링의 '실효용' A/B 측정
+**목적**: 사용자 질문 "RAG로 프롬프트 엔지니어링한 **결과값이 어느정도 상향되는지** 판별할 도구". 기존 평가는 검색(R)과 개선프롬프트의 *지시문 품질*(gen_eval)까지만 잼 — 정작 "그 프롬프트로 만든 **최종 결과물**이 raw 프롬프트를 그냥 LLM에 넣은 것보다 좋아지는가"는 측정 수단이 없었다.
+
+**Before**
+- `run_eval.py`(검색) · `gen_eval.py`(개선프롬프트 자체 품질) 2종.
+- 딸각의 실제 사용자 가치 = "개선프롬프트의 **결과물**"인데, 이 end-to-end 효용은 한 번도 측정 안 됨.
+
+**After**
+- 신규 `eval/uplift_eval.py` + `eval/uplift_set.json`(거친 '결과물 요청' 8문항).
+- 흐름: 항목마다 ① raw→**순수 LLM**(딸각 시스템프롬프트 없음)=결과 A, ② raw→딸각 RAG 파이프라인(`app.main`의 retriever/generator/extract_improved_prompt 재사용)→개선프롬프트→같은 순수 LLM=결과 B, ③ judge LLM이 A·B 비교 — **순서 swap 2회로 위치 편향 제거**(양쪽 일치해야 승부 인정), ④ **개선 승률 + 평균 점수 Δ(1~5)** 집계.
+- 공정성: A·B 모두 **같은 실행 모델·같은 작업**, 차이는 '딸각을 거쳤는가' 하나. ask 모드(개선프롬프트 없음)는 비교 제외.
+- 비용 관리: 결과물 캐시(`eval/.uplift_cache.json`, gitignore) — 재실행 시 judge만 재호출. `--no-swap`/`--limit`/`--target-model`/`--judge-model` 옵션.
+
+**검증 — 첫 측정 (uplift_set 8문항, 실행·채점 llama-3.3-70b, swap on)**
+| | raw(기준) | 딸각 개선 | Δ |
+|---|---|---|---|
+| 평균 점수(1~5) | 4.75 | 3.50 | **−1.25 (−26%)**, 개선 승률 0% (개선 0/무 4/raw 4) |
+
+🔴 **도구가 즉시 잡아낸 회귀**: "사용자가 변환할 **원문을 직접 준** 작업"에서 개선 결과 폭락 —
+  - 회의록 요약(4번)·영어 이메일 번역(8번): 개선 결과 **1.0점**. 캐시 확인 결과 개선 버전 출력이 *"회의록 내용이 제공되지 않았습니다"* → **generator가 지시문으로 재작성하며 user-provided 원문(회의록 텍스트·영어 이메일)을 개선프롬프트에서 누락**.
+  - 순수 생성 작업(카피·채용공고)에선 강한 70b 실행모델 기준 개선 효과 미미~소폭(–): 모델이 이미 거친 요청을 잘 처리해 프롬프트 엔지니어링의 한계효용이 작음.
+
+**변경 파일**
+- 신규: `eval/uplift_eval.py`, `eval/uplift_set.json`
+- 수정: `README.md`(결과 상향 섹션·구조도), `../.gitignore`(평가 캐시 2종)
+
+**결정·근거**
+- 측정 도구가 본연의 목적대로 **실효용 회귀를 정량 포착**. "개선프롬프트가 좋은 지시문이다"(gen_eval은 통과)와 "결과물이 실제로 좋아진다"가 **다른 축**임을 데이터로 분리.
+- 발견된 **원문 페이로드 누락**은 generator 수정 항목으로 백로그 등록(본 작업은 '측정 도구' 범위). 수정 후 `python -m eval.uplift_eval`로 회귀 확인 루프 가능.
+- judge·실행 모델을 동일 70b로 둬 자기참조 우려가 있으나, swap 편향제거 + 점수가 객관적 결함(원문 누락)을 정확히 1.0으로 잡음 → 1차 신호로 신뢰 가능. 더 엄밀히는 judge를 별도 계열로 교체(옵션 제공).
+
+---
+
+## [2026-06-26] generator 원문 페이로드 누락 수정 — 사용자가 준 원문을 개선프롬프트에 verbatim 포함
+**목적**: 직전 uplift_eval이 잡아낸 회귀 수정. 사용자가 **변환·가공할 원문을 직접 준** 요청(회의록 요약·이메일 번역·코드 리뷰 등)에서, generator가 거친 요청을 '지시문'으로 재작성하며 그 **원문을 개선프롬프트에서 누락** → 실행 결과가 "회의록 내용이 제공되지 않았습니다"로 폭락(1.0점).
+
+**Before**
+- `SYSTEM_PROMPT`의 "사용자가 준 정보는 조건·재료로 넣는다" 원칙이 **사실 나열형(일시·가격 등)** 위주로만 작동. 변환할 **원문 텍스트 블록**(회의록 본문·영어 이메일 원문)은 지시문화 과정에서 빠지거나 "(아래 회의록을 요약하라)"처럼 본문 없이 지시만 남음.
+- uplift_set 8문항(실행·채점 llama-3.3-70b, swap on) 측정:
+
+| | raw(기준) | 딸각 개선 | Δ |
+|---|---|---|---|
+| 평균 점수(1~5) | 4.75 | 3.50 | **−1.25 (−26%)**, 개선 승률 0% |
+
+  - 회의록 요약(4)·영어 이메일 번역(8) 개선 결과 **각 1.0점**(캐시 확인: 개선 출력이 *"회의록 내용이 제공되지 않았습니다"*, 번역 대신 빈 플레이스홀더 신규 이메일 생성).
+
+**After**
+- `app/rag/generator.py` `SYSTEM_PROMPT`에 규칙 2건 추가:
+  1. **원문 verbatim 포함** — 변환·가공할 원문/자료(요약할 회의록, 번역할 문장·이메일, 리뷰할 코드, 분석할 데이터)를 받으면 그 원문을 개선프롬프트 안에 **원문 그대로** 조건·재료로 반드시 포함. 요약·바꿔쓰기·생략·플레이스홀더 대체 금지. ❌/✅ 예시(회의록) 동봉. "원문 인용 ≠ 결과물 직접 작성"임을 명시해 기존 '지시문이지 결과물이 아니다' 원칙과 양립.
+  2. **모드 선택 보강** — 변환할 원문이 주어진 요청은 (A)작업종류+(B)대상내용이 이미 갖춰진 것 → 보조 항목 캐묻지 말고 곧바로 [개선 모드]로(첫 70b 시도에서 회의록이 ask 모드로 빠지는 변동 완화).
+- [개선 모드] 출력 스펙 줄에도 "사용자가 준 원문은 빠짐없이 그대로 인용(생략·플레이스홀더 금지)" 재명시.
+
+**검증 — 재측정**
+- ⚠️ **Groq llama-3.3-70b TPD 100k 소진**(97,092/100,000) → 70b 전체 재측정 불가. `llama-3.1-8b-instant`(별도 쿼터)로 확인 측정.
+- **회의록(4) [8b]**: 개선프롬프트가 회의록 내용 포함 → 실행 결과 정상 요약. judge **개선 5.0 vs raw 4.0(개선 승)** — 이전 1.0 → 5.0.
+- **영어 이메일(8) [70b 프롬프트 검사]**: 개선프롬프트가 원문 영어 이메일 3/3 조각 **verbatim 포함** 확인(이전엔 원문 누락 → 빈 이메일 생성). (8b 실행 시엔 ask 모드로 빠져 비교 제외 — 8b의 과잉질문 성향, 별도 이슈.)
+- **결론**: 두 변환-원문 항목 모두 **개선프롬프트에 원문 포함 → 결과물 1.0점 소멸**. −26% 회귀의 주원인(전환-원문 1.0점 2건) 제거. 8b 축소셋(ask 모드 5건 제외)의 잔여 −8%는 순수 생성 작업(채용공고·환불메일)에서 강한 실행모델의 한계효용이 작은 기존 효과로, 본 회귀와 무관.
+
+**변경 파일**
+- 수정: `app/rag/generator.py`(`SYSTEM_PROMPT`만)
+
+**결정·근거**
+- 수정은 **프롬프트 규칙 1곳**으로 국소화 — 검색·파싱·실행 경로 무변경, 응답 스키마 불변(하위호환).
+- 원문 포함은 프롬프트 레벨 결정이라 모델 비의존: 70b·8b 어느 쪽이 개선 모드로 출력하든 원문이 실리는 것으로 검증됨.
+- 70b TPD 소진으로 70b 동일조건 전후 비교는 미실시 → 8b 확인 + 70b 프롬프트 검사로 대체. 70b 전체 재측정은 쿼터 회복 후 `python -m eval.uplift_eval`로 가능(루프 유지).
+- 8b의 ask 모드 과잉(전환-원문 포함 5/8 제외)은 소형 모델 성향으로, 과잉질문 완화(별도 백로그)와 함께 추후 다룸 — 본 작업 범위(원문 누락)와 분리.
+
+---
+
+## [2026-06-27] 원문 보존 후속 버그 2건 수정 — 추출 잘림(`---`) · 한자노이즈 과삭제
+**목적**: 직전 '원문 verbatim 포함' 수정으로 개선프롬프트가 **사용자 원문을 통째로 담게** 되면서, 그 원문을 다루는 후단(추출·후처리)에서 드러난 잠재 버그 2건을 정리. 단위 테스트로 재현→수정→검증.
+
+**Before (재현됨, API 無·결정론적)**
+1. **`extract_improved_prompt` 원문 속 `---`에서 잘림** (`app/main.py`): 종료점이 바 `---`이라, 개선프롬프트에 포함된 사용자 원문(마크다운·코드 등)에 `---` 구분선이 있으면 거기서 추출이 끊김 → Execute로 가는 `improved_prompt`가 원문 뒷부분 통째 누락. (테스트: 중간 `---` 뒤 '섹션2/내용 B' 손실 확인) **방금 한 원문 보존을 도로 무력화하는 회귀.**
+2. **`_strip_cjk_noise` 정상 외국어 삭제** (`app/rag/generator.py`): 한자 노이즈 제거 정규식이 `[가-힣\s]` 인접(=공백 포함)을 조건으로 해, **공백으로 분리된 일본어/중국어**(예: `世界`)까지 삭제 → 번역·인용 원문 훼손. (테스트: `こんにちは 世界`의 `世界` 사라짐 확인)
+
+**After**
+1. 추출 종료점을 **구조 마커(`**적용한 기법`/`**개선 포인트`)** 기준으로 변경(사용자 원문엔 안 나옴). 중간 `---`는 보존, 헤더 직후·꼬리의 구분선만 제거. 헤더 매칭도 볼드·콜론 유무 허용으로 견고화.
+2. 노이즈 정규식 인접 조건에서 `\s` 제거 → **한국어 음절에 직접 붙은**(공백 없는) 한자만 노이즈로 제거. 공백·따옴표·줄바꿈으로 분리된 한자/일본어는 '정상 원문'으로 보존.
+
+**검증 (단위 테스트 12케이스 ALL PASS)**
+- 추출: 원문 중간 `---` 보존 / 꼬리 `---` 제거 / 일반 개선 / 질문모드→`""` / 기법섹션 없음 케이스
+- 노이즈: 붙은 한자(`마케팅图片 글`→`마케팅 글`, `결과紹介입니다`→`결과입니다`) 제거 / 공백분리 일본어·따옴표 중국어·[원문]블록 한자 보존
+- `py_compile` + `app.main` import 정상.
+
+**변경 파일**
+- 수정: `app/main.py`(`extract_improved_prompt` 재작성), `app/rag/generator.py`(`_CJK_NOISE_RE` 인접 조건 `\s` 제거 + 주석)
+
+**결정·근거**
+- 두 버그 모두 **원문을 담기 시작하면서 비로소 노출**됨(이전엔 개선프롬프트가 짧아 안 터짐). 원문 보존 수정과 한 묶음으로 마감.
+- 추출은 바 `---`(원문에 흔함) 대신 구조 마커로 끊는 게 근본적. 응답 스키마·프론트 규약(빈 `improved_prompt`→Execute 숨김) 불변(하위호환).
+- 노이즈 제거는 '한글에 직접 붙음'이 실제 Groq 오염 시그니처. 공백분리 외국어 보존으로 번역 유스케이스 안전. 잔여 엣지(2자 외국어가 한국어 조사에 직접 붙는 경우)는 원문이 보통 줄바꿈/따옴표로 분리돼 실무 영향 작음.
+
+---
+
+## [2026-06-27] /query 런타임 견고성 2건 — 출력 한도 상향 · 빈 응답 가드
+**목적**: '더 볼 문제' 점검 중 발견한 런타임 `/query` 경로의 잠재 결함 2건. 둘 다 원문 verbatim 포함이 적용되며 영향이 커진 항목.
+
+**Before**
+1. **긴 원문 truncation 위험**: 생성 `max_tokens=2048`. 개선프롬프트가 사용자 원문을 통째로 담게 되면서, 긴 회의록·문서·코드를 받으면 출력이 2048 토큰에서 잘려 개선프롬프트가 중간에 끊길 수 있음(이전엔 출력이 짧아 무사).
+2. **빈/None 생성 응답 → 500 크래시**: LLM이 `None`/빈 본문을 반환하면 `extract_improved_prompt(None)`에서 `TypeError` → 불친절한 500.
+
+**After**
+1. 생성 `max_tokens` **2048 → 4096** (GroqGenerator/GeminiGenerator/Generator 3곳 기본값). 출력 상한일 뿐이라 짧은 응답엔 비용·지연 영향 없음.
+2. `app/main.py` `/query`: 생성 후 `answer`가 비면(공백 포함) **503 + 명확한 메시지**("생성 결과가 비어 있습니다…")로 처리 → 추출 단계에 `None` 미전달.
+
+**검증**: `py_compile` + `app.main` import 정상. `max_tokens=4096` 3곳 반영 확인. (DB·indexer 계층은 별도 점검 — upsert autoflush·NULL chunk_id 유니크 동작 정상, 런타임 치명 결함 없음.)
+
+**변경 파일**
+- 수정: `app/rag/generator.py`(max_tokens 3곳), `app/main.py`(빈 응답 가드)
+- 동기화: `RAG_PIPELINE.md`([C]/[D]/설정표/한계 섹션) — 파이프라인 변경 반영 규칙대로
+
+**결정·근거**
+- `max_tokens`는 천장 상향이라 회귀 위험 낮고 verbatim 원문 기능과 직접 맞물림. 매우 긴 문서는 여전히 한계 → 장문 선처리(분할/요약)는 백로그.
+- 빈 응답은 500(서버오류)보다 503(일시적, 재시도 유도)이 사용자·프론트에 정확한 신호.
+
+---
+
+## [2026-06-28] spring-integration-example 삭제 — v2.0 계약과 불일치한 stale 예제 제거
+**목적**: 설계 문서(v2.0)와 대조 중 `spring-integration-example/`가 v1.0에 멈춰 있어 그대로 따라하면 오히려 오연동을 유발함을 확인. 불필요 판단으로 제거.
+
+**Before**
+- `spring-integration-example/`(RagDto·RagService·RagController·application-rag.yml)가 구버전 계약:
+  - `QueryResponse`에 `improved_prompt`/`techniques_applied`/`changes` 누락(실제 `/query`는 반환) → Execute·기법표시 연동 불가
+  - `QueryRequest` 기본값 `collection="papers"`, `model="claude-3-haiku-20240307"`(폐기된 값), `history` 필드 없음
+  - README 2곳에서 이 디렉터리를 "Spring 연동 참고"로 안내
+
+**After**
+- `spring-integration-example/` 디렉터리 전체 삭제.
+- 참조 정리: 루트 `README.md`의 "참고" 섹션 제거, `rag-server/README.md` 디렉터리 트리에서 항목 제거.
+
+**변경 파일**
+- 삭제: `spring-integration-example/`(RagDto.java, RagService.java, RagController.java, application-rag.yml)
+- 수정: `README.md`(참고 섹션), `rag-server/README.md`(디렉터리 트리)
+
+**결정·근거**
+- rag-server `/query` 코어는 v2.0 계약과 이미 일치 — 예제만 stale이라 유지 가치보다 오연동 위험이 큼. Spring 실연동은 별도 백엔드 레포에서 진행하므로 이 스텁은 불필요.
+- 파이프라인 코드 무변경 → `RAG_PIPELINE.md` 갱신 불필요.
+
+---
+
+## [2026-06-28] 문서 무결성 수정 — API 예시 경로 교체 · MySQL 노트 중복 제거 · 잔재 파일 삭제
+**목적**: spring-integration-example 삭제 이후 남아 있던 문서 불일치 3건 정리.
+
+**Before**
+1. `rag-server/README.md` 상단 아키텍처 다이어그램이 `Spring Boot → POST /api/rag/index · /api/rag/query` 형태로 삭제된 RagController.java의 v1.0 Spring 경로를 노출.
+2. "API 사용 예시" 섹션이 `http://localhost:8080/api/rag/index`, `http://localhost:8080/api/rag/query` 로 curl 예시 제공 — 삭제된 Spring 스텁 경로, 응답 스키마도 v1.0(techniques_applied·changes 누락).
+3. MySQL brute-force 설명 blockquote이 README 내 2곳에 동일 내용으로 중복(§전체 구조 + §평가 섹션).
+4. `rag-server/main.py` 0바이트 빈 파일이 untracked으로 존재 — 2026-06-22 패키지 리팩터링 때 `app/main.py`로 이동 후 루트에 남은 잔재.
+
+**After**
+1. 아키텍처 다이어그램 → 실제 FastAPI 엔드포인트(`POST /query`, `POST /index`, `GET /health`)와 두 가지 호출 경로(Chrome 확장 직접 / Spring 프록시 `/api/prompts/improve`) 명시.
+2. API 예시 → `http://localhost:8000/query`, `http://localhost:8000/index` 직접 호출로 교체. 응답 스키마에 `techniques_applied`, `changes` 추가(v2.0 계약 반영). Swagger UI 안내 추가.
+3. 중복 MySQL 노트 제거(§평가 섹션 내 중복분 삭제, §전체 구조 내 원문 유지).
+4. `rag-server/main.py` 빈 파일 삭제.
+
+**변경 파일**
+- 수정: `rag-server/README.md`(아키텍처 다이어그램·API 예시·중복 제거)
+- 삭제: `rag-server/main.py`(0바이트 잔재)
+
+**검증**: `grep` 으로 `localhost:8080/api/rag` 0건, MySQL 노트 1건 확인. `main.py` 삭제 확인.
+
+**결정·근거**
+- API 예시는 RAG 서버 자체의 엔드포인트를 기준으로 두고, Spring 연동 경로는 주석으로 안내하는 것이 rag-server README의 역할에 맞음. Spring 실연동은 백엔드 레포 담당.
+- 파이프라인 코드 무변경 → `RAG_PIPELINE.md` 갱신 불필요.
+
+---
+
+## [2026-07-05] fetch_k 스윕 + 유효 유사도 컷(min_score) — 측정 기반 결정 2건
+**목적**: ① 검색 지연의 90%(리랭크 1.85s/20쌍)를 fetch_k 축소로 줄일 수 있는지 품질로 판정. ② top_k가 무조건 5개를 채우지 말고 "유효한 유사도"인 것만 반영하도록(사용자 요청) 신호·임계치를 측정으로 정해 구현.
+
+**Before**
+- fetch_k=20 고정(근거 없음). 검색 평균 1988ms/쿼리.
+- top_k=5 무조건 채움 — 무관한 입력("오늘 점심 뭐 먹지")에도 쓰레기 5건이 LLM 컨텍스트로 유입.
+- 리랭크 후 리랭커 sigmoid가 score로 노출(~0.50 평탄).
+
+**After — 측정 결과와 결정**
+1) fetch_k 스윕(59문항, 리랭크 on):
+   | fetch_k | Hit@1 | Recall@5 | NDCG@5 | 지연 |
+   |---|---|---|---|---|
+   | **20 (유지)** | 0.695 | **0.847** | 0.757 | 1988ms |
+   | 15 | 0.661 | 0.822 | 0.732 | 1359ms |
+   | 10 | 0.678 | 0.802 | 0.730 | 922ms |
+   → 지연 절반의 대가가 Recall@5 −4.5%p. dense가 11~20위에 빠뜨린 정답을 리랭커가 실제로 구조함. LLM 생성이 수 초인 서비스라 품질 우선 → **fetch_k=20 유지(이제 근거 있는 결정)**. run_eval에 `--fetch-k` 스윕·지연 측정 추가.
+2) 점수 임계치(신규 `eval/score_analysis.py`):
+   - **리랭커 확률은 필터 신호로 무용** — 정답 p50 0.503 vs 오답 p50 0.500 (분리 전무, "평탄" 정량 확인).
+   - **dense 코사인은 분리** — 정답 평균 0.525 vs 오답 0.474. τ 스윕: **0.40 = recall 무손실(0.839 유지)·빈결과 0%**, 0.45부터 recall −6%p, 0.50은 −24%p 파괴적.
+   → `Retriever.search(min_score=)` 구현(dense 기준, 3단계 후처리 필터), `QueryRequest.min_score` 기본 **0.40**. eval은 필터 없이 순수 랭킹 측정 유지.
+3) 점수 표시: 리랭크 후 score=dense 코사인으로 노출(해석 가능), `rerank_score`(sigmoid) 병기.
+   ※ 표시 점수를 dense로 바꾸는 변경은 이 세션 편집분이 아닌데 워킹트리에 이미 있었음(이전 에이전트/다른 세션 추정) — 검토 후 유지, rerank_score 병기는 이번에 추가.
+
+**변경 파일**
+- 수정: `app/rag/retriever.py`(min_score·rerank_score), `app/main.py`(QueryRequest.min_score=0.40), `eval/run_eval.py`(--fetch-k·지연 측정)
+- 신규: `eval/score_analysis.py`(분포·임계치 스윕 도구)
+
+**검증**
+- 실제 프롬프트("지원자 다섯 명…") → 5건 유지(dense 0.407~0.485). 무관 입력("ㅁㄴㅇㄹ asdf", "오늘 점심 뭐 먹지") → 0건(첫 턴 404 = 의도된 동작).
+- 평가셋 59문항 기준 τ=0.40에서 빈 결과 0% — 개선 의도가 있는 실제 프롬프트는 안 잘림.
+
+**결정·근거**
+- 필터 신호는 측정이 정함: 직관적으로는 "리랭커가 더 정확하니 리랭커 점수로 필터"겠지만, bge-reranker 로짓이 0 근처 평탄이라 분리 불가 → dense 채택.
+- τ=0.40은 보수적(무손실 지점). 코퍼스가 커지면 `python -m eval.score_analysis`로 재측정해 조정.
+- fetch_k 지연 개선은 기각이 아니라 보류 — Railway 배포에서 CPU가 더 느리면 fetch_k=10(Recall −4.5%p)을 의식적 트레이드오프로 선택 가능. QueryRequest 노출은 필요 시.
+
+---
+
+## [2026-07-05] 운영/보안 묶음 — /index 보호 · requirements 분리 · compose healthcheck
+**목적**: 구조 점검(P1)에서 나온 배포 전 필수 3건. 각각 소규모지만 방치 시 코퍼스 오염·이미지 비대·기동 중 트래픽 유입 문제.
+
+**Before**
+- `/index` 무인증 — CORS `*`와 결합해 누구나 rag_chunk에 upsert 가능(코퍼스 오염 벡터)
+- `requirements.txt`에 런타임·적재·크롤러 의존성 혼재 → Docker 이미지에 크롤러 전용 requests/bs4/tqdm/reportlab·pypdf 불필요 설치
+- compose의 rag-server에 healthcheck 없음 — `/health` 미활용, 모델 로딩(수십 초~수 분) 중 준비 안 된 컨테이너가 healthy 취급
+
+**After**
+- `/index`: `RAG_INDEX_API_KEY` 설정 시 `X-API-Key` 헤더 필수(`hmac.compare_digest` 상수시간 비교, 불일치 403). 미설정이면 로컬 편의상 허용 + 기동 경고. `/query`는 제품 API라 공개 유지. `.env`에 주석 예시 추가.
+- requirements 분리: `requirements.txt`(런타임 12개) / `requirements-ingestion.txt`(-r 포함 + pypdf·requests·bs4·tqdm·reportlab). app/ 의 실제 import 그렙으로 분류 검증(pypdf도 ingestion 전용으로 판명).
+- compose: rag-server에 `/health` 기반 healthcheck(interval 30s, start_period 300s — 첫 기동 모델 다운로드 고려).
+
+**변경 파일**
+- 수정: `app/main.py`(_verify_index_key + Header), `requirements.txt`, `../docker-compose.yml`, `README.md`(설치·curl 예시·배포 환경변수), `.env`(주석 예시)
+- 신규: `requirements-ingestion.txt`
+
+**검증**
+- TestClient 실호출: 키 없음 403 / 틀린 키 403 / 맞는 키 통과 / `/health`·`/query` 무영향 200
+- `docker compose config` 문법 통과
+- app/ import 그렙으로 런타임 의존성 완결성 확인
+
+**결정·근거**
+- 키 미설정 시 차단이 아니라 허용+경고: 로컬 개발 흐름(Spring 없이 직접 인덱싱)을 안 깨기 위함. 배포 환경에선 키 설정을 README·경고로 강제 유도.
+- ⚠️ 진행 중 발견·해결: `app/main.py`의 retriever가 `fetch_k=50`으로 변경돼 있었음(외부 세션 추정, 미측정). 50 vs 20 동일 프로세스 측정 결과 **50이 전 지표 열세 + 2.5배 느림**(Hit@1 0.661 vs 0.695, Recall@5 0.839 vs 0.847, NDCG@5 0.736 vs 0.757, 지연 4065 vs 1651ms) → **20으로 환원**. 원인: 21~50위 저품질 후보가 리랭커에 유입되면 cross-encoder 오판으로 정답 위에 올라가는 경우가 생김(넓다고 좋은 게 아님). main.py에 근거 주석 명시.
+
+---
+
+## [2026-07-05] 출력 구조화 — LLM JSON 응답 (정규식 파싱 의존 제거)
+**목적**: 설계 문서의 `{improved, score, changes[]}` 구조화 응답. 기존엔 LLM 마크다운을 정규식으로 파싱해 마커가 어긋나면 improved_prompt가 비어 Execute 버튼이 안 뜨는 취약점(단일 결정점)이 있었음.
+
+**Before**
+- generator가 마크다운(`**개선된 프롬프트:**`…) 출력 → main.py의 정규식 3종(extract_improved_prompt/applied_techniques/changes)으로 추출
+- gen_eval·uplift_eval도 각자 generate→extract 경로 중복
+- score(자체 평가) 없음
+
+**After**
+- SYSTEM_PROMPT에 [출력 형식 — JSON] 섹션: `{mode, improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary, questions[]}`. 행동 규칙(2-항목 게이트·verbatim 원칙)은 그대로, 형식 섹션만 교체
+- Groq `response_format=json_object` / Gemini `response_mime_type=application/json` 강제
+- main.py `run_generation()` 공용 경로: JSON 관대 파싱(`parse_generation`) → 실패 시 **레거시 정규식 폴백**(안 끊김) → `build_answer()`로 기존 표시용 마크다운 복원(익스텐션 UI·history 왕복 형식 무변경)
+- `/query`·gen_eval·uplift_eval 모두 run_generation 사용(경로 단일화). QueryResponse에 `score` 필드 추가(하위호환 additive)
+- gen_eval 캐시: dict(신형)/문자열(구형) 양쪽 호환
+
+**검증 (gen_eval 12문항, judge 70b)**
+| 지표 | 기준선(정규식) | JSON 구조화 |
+|---|---|---|
+| mode_accuracy | ≈0.92 | **1.00 (12/12)** |
+| mode_fit | 4.50 | **5.00** |
+| technique_grounding | 4.50 | 4.58 |
+| instruction_form | 5.00 (n=7) | 5.00 (n=8) |
+- 스모크: improve(score=8, 원문 verbatim 포함, 마크다운 복원 정상)·ask(questions 정상) 모두 structured=True. 폴백 발동 0회.
+
+**결정·근거**
+- answer를 JSON에서 마크다운으로 **복원**해 반환 → Spring/익스텐션 무변경으로 배포 가능. 이후 프론트가 구조화 필드를 직접 쓰게 되면 복원 로직은 표시 전용으로 남음.
+- 파싱 실패 시 폴백을 남겨 모델이 JSON을 안 지켜도 서비스가 안 끊김(정규식 코드는 폴백 용도로 유지).
+- 관찰: eval 4번 항목(회의록 실본문 없는 메타 요청)에서 요청문 자체를 회의록으로 인용 — 평가셋 인공물이며 실사용 시나리오 아님. 평가셋 개선 후보.
+
+---
+
+## [2026-07-05] 코퍼스 확장 1차 — 가이드 8기법 적재 + 회귀 무해 검증
+**목적**: 100청크 동질 코퍼스 확장(하이브리드 실패의 근본 원인 완화 시작). 확장이 기존 검색을 해치지 않는지 회귀 방법론 확립.
+
+**Before**: prompt_techniques 100청크(pdf_001~100). 신규 자료 적재 시 기존 쿼리 방해 여부 미검증.
+
+**After**
+- **108청크**: Brex·DAIR 가이드에서 70b가 추출한 kept.jsonl(적합도 7~9)을 회수 인덱싱 — Markdown Tables, Give a Bot a Fish, Chain of Thought(Brex판), Embedding Data, Simple Lists, Self-Consistency, PAL, AutoPrompt
+- 중복 방어 2중: 이름 정규화 일치(기존 100과 비교 → CoT/Zero-Shot/Few-Shot 3개 자동 폐기) + 의미 중복제거(코사인≥0.90)
+- **회귀(59문항, fk20)**: Hit@1/MRR **변화 0**, Recall@5 0.847→0.839(−0.008, 경계 1건), NDCG −0.005 → **무해 판정**
+- min_score 재검: τ=0.40 여전히 recall 무손실·빈결과 0% → 유지
+
+**여정에서 배운 것 (쿼터 제약)**
+- 70b 풀 적재 시도 → **TPD 100k 소진**(DAIR 5/16 윈도에서 중단, DB 무변경 확인)
+- 8b 전환 시도 → **TPM 6,000에 요청(6,347tok)이 아예 초과(413)**. 원인: 입력이 아니라 `max_tokens=4096` 출력예약이 지배적
+- 해결: ingest `_complete` 백오프 개선(레이트리밋 20/40/60s, 'Request too large'는 즉시 실패+안내) + **kept.jsonl 회수 인덱싱**(LLM 0토큰)으로 70b 품질 확보
+
+**변경 파일**: `ingestion/ingest_knowledge.py`(백오프·413 처리), `app/rag/retriever.py`(생성자 fetch_k 기본값 50→20 — main.py 외 두 번째 외부 변경 지점 발견·환원)
+
+**결정·근거**
+- 하이브리드 재평가는 보류 — +8청크로는 코퍼스 이질화 부족. DAIR 나머지 14윈도·OpenAI Cookbook 본적재(70b TPD 리셋 후) 뒤에 재평가.
+- 관찰: 'Chain of Thought'(Brex판)가 기존 'Chain-of-Thought Prompting'과 이름 정규화 불일치로 생존(의미중복 0.90도 미달) — near-dup 1건 허용, 회귀 무해 확인됨. 임계치 하향(0.85)은 패러프레이즈 오폐기 위험과 트레이드오프라 보류.
+
+---
+
+## [2026-07-05] 평가 운용 — judge 일치도 측정·기본값 결정·쿼터 강건화 (D)
+**목적**: Groq 무료 티어 한도(70b TPD 100k, 8b TPM 6k) 아래에서 gen_eval을 지속 운용 가능하게. judge를 8b로 낮출 수 있는지 **같은 답변에 대한 두 judge 일치도**로 판정.
+
+**방법**: gen_eval `--cache-file`(외부 세션 기여)로 답변 12개를 캐시에 시딩(8b 생성) → 같은 캐시로 judge만 8b/70b 각각 실행 → 항목별 점수 비교.
+
+**측정 결과 → 판정: judge 기본 70b 유지, 8b judge는 신뢰 불가**
+- 8b judge 이상 패턴: ① improve 항목의 instruction_form **채점 누락(None)** 빈발 ② 정답 ask 항목에 mode_fit **2점 오채점** ③ technique_grounding 전항목 5점(인플레이션 — 70b는 3~5 변별)
+- 70b judge와 정확 일치(5개 겹침 항목): tech 1/5, fit 4/5 — 상관 낮음
+- 부수 확인: **8b 생성**도 mode_accuracy 0.75(70b 1.00) — 과잉 질문 재발. 생성·채점 모두 70b 유지.
+
+**쿼터 강건화 (이번에 추가)**
+- `generator.py`: 8b-instant는 max_tokens 2048 캡 — Groq가 입력+출력예약 합산이라 4096 예약(6/27 상향분)이 8b TPM 6k를 초과시켜 413. 이 캡으로 8b 경로 복구(스모크 확인).
+- `gen_eval._retry`: 413('Request too large')은 대기 없이 즉시 실패(기다려도 안 풀림).
+- `gen_eval`: judge 실패를 비치명 처리 — 점수 없이도 **mode_accuracy(결정론적)는 끝까지 집계**(중도 크래시로 집계 유실 방지).
+- `ingest_knowledge._complete`: 레이트리밋 백오프 20/40/60s + 413 즉시 실패(C에서 선반영).
+
+**운용 가이드 (TPD 제약 시)**
+1. `--cache-file`로 생성 캐시 → 재채점은 judge 비용만
+2. mode_accuracy는 judge 없이도 유효한 1차 신호 (judge 실패 허용됨)
+3. 70b TPD 소진 시: 측정을 미루는 게 원칙. 8b judge 점수는 참고용으로도 부적합.
+
+**변경 파일**: `app/rag/generator.py`(8b max_tokens 캡), `eval/gen_eval.py`(413 즉시실패·judge 비치명)
+
+---
+
+## [2026-07-07] 병행 정비 — postprocess 분리·단위테스트 · --from-jsonl · max_tokens 동적 산정
+**목적**: 코퍼스 2차 적재(롤링 쿼터 드립으로 장시간 소요)가 도는 동안, LLM 불필요한 백로그 3건 처리.
+
+**1) 파싱·복원 순수 함수 분리 + 단위테스트 (신규 `tests/`)**
+- Before: `parse_generation`/`build_answer`/`extract_*`가 main.py에 있어 테스트하려면 모델·DB 로딩 필요. 모드 판정(=Execute 버튼)의 단일 결정점인데 테스트 0개.
+- After: **`app/rag/postprocess.py`로 분리**(순수 함수, main.py는 동일 이름 재노출 → eval 하위호환). `tests/test_postprocess.py` **21케이스** — 핵심은 왕복 계약 `extract(build(p)) == improved_prompt` (JSON 경로와 정규식 폴백이 같은 표시 형식 공유 보장), 원문 속 `---` 보존, 결손 필드 관용.
+- 실행: `python3 -m tests.test_postprocess` (1초, 모델·DB·LLM 불필요)
+
+**2) `--from-jsonl` CLI 승격 (`ingestion/ingest_knowledge.py`)**
+- Before: kept.jsonl 회수 인덱싱이 일회성 인라인 스크립트(2026-07-05 C에서 사용).
+- After: `python -m ingestion.ingest_knowledge --from-jsonl data/curated/X.kept.jsonl [--dry-run]` — LLM 0토큰, 이름·의미 중복제거 동일 적용. **멱등 검증**: 기존 적재분 재실행 시 5/5 이름중복 폐기.
+
+**3) max_tokens 동적 산정 (`app/rag/generator.py`) — 긴 원문 truncation·413 대응**
+- Before: 고정 4096(70b)/2048캡(8b). 긴 원문(회의록·코드) 포함 시 입력+예약이 TPM 초과 → 413 즉사.
+- After: `_fit_max_tokens()` — 입력 추정(≈chars/3)해 TPM(70b 12k/8b 6k) 예산 내로 예약 축소(하한 512, 짧은 입력은 4096 유지). 8b 고정 캡을 일반화로 대체. `tests/test_token_budget.py` **7케이스**.
+- ⚠️ 실LLM 연동 스모크는 쿼터 회복 후 gen_eval 회귀로 확인 예정(산술은 테스트로 보장).
+
+**변경 파일**: 신규 `app/rag/postprocess.py`, `tests/`(3파일) / 수정 `app/main.py`(재노출·함수 제거), `ingestion/ingest_knowledge.py`(+index_from_jsonl), `app/rag/generator.py`(_fit_max_tokens)
+
+---
+
+## [2026-07-08] RAG_PIPELINE.md 줄번호 정합화 (문서만, 코드 무변경)
+**목적**: 문서가 표방하는 `파일:줄` 참조가 실제 코드와 어긋난 것을 전수 대조로 정정.
+
+**Before**: 2026-07-07 postprocess 분리(main.py 축소)·`_fit_max_tokens` 추가(generator.py 줄 밀림) 이후 내용은 갱신했으나 줄번호는 미갱신 — main.py 참조 6곳(249-255/267/190/245/44), generator.py 참조 5곳(274/156/175/121/135)이 전부 오지시. 문서 내부 자기모순 2건(§1 `_load_collection` 193 vs §2-(3) 182, `_dense_scores` 148 vs 139).
+
+**After**: 전 참조를 현행 코드와 대조해 정정(main.py 142-147/160/83/137/48, generator.py 321/182/215/147/161). retriever.py·query_transform.py 참조는 이미 정확해 무변경.
+
+**변경 파일**: `RAG_PIPELINE.md`(수정 — 줄번호만, 서술 무변경)
+
+**검증**: 각 참조를 `grep -n "def \|class "` 실측과 1:1 대조 후 `grep 'main\.py:[0-9]'`로 재검. 부수 확인: `tests/` 28케이스(21+7) 실행 전부 통과.
+
+**결정·근거**: 줄번호 표기는 리팩터마다 썩는 비용이 있으나 팀 공유 문서의 탐색성 가치가 커서 유지. 코드 이동을 동반한 작업 후에는 줄번호 재검을 마무리 체크에 포함할 것.
+
+---
+
+## [2026-07-09] 코퍼스 확장 2차 완료 — 108→138청크 (DAIR 16윈도+Cookbook) · 이름 중복 4건 유입
+**목적**: 백로그 "코퍼스 확장 2차" — DAIR 나머지 + OpenAI Cookbook을 드립 내성 ingest로 적재하고 회귀 측정.
+
+**Before**: 108청크. 07-07 시도는 TPD 96.5k 소진 상태에서 시작해 윈도 2/16에서 예산(1h) 소진으로 중단(산출물 없음). Hit@1 0.695 / R@5 0.847 / MRR 0.794.
+
+**After**: 쿼터 회복 후 재실행(분리 nohup) → 16윈도 완주, **31개 추출·30개 순증 = 138청크**. 단, paper 모드 주 파이프라인은 **기존 컬렉션과 이름 중복 검사를 안 함**(`--from-jsonl` 경로에만 있음) → CoT·Few-Shot·Zero-Shot·Role Prompting 4건이 정규화 이름 기준 중복 유입. 회귀(59문항, rerank): Hit@1 **0.695(유지)** / R@5 **0.822(−0.025)** / MRR 0.794 / NDCG@5 0.737 — 방해 후보 30개 증가 대비 소폭 하락, 중복 제거 후 재측정 여지.
+
+| 측정 (138청크) | Hit@1 | R@5 | MRR@10 | 지연 |
+|---|---|---|---|---|
+| rerank(운영) | **0.695** | **0.822** | 0.794 | 2058ms |
+| hybrid+rerank | 0.661 | 0.788 | 0.767 | 2040ms |
+
+- 하이브리드: 코퍼스가 이질화("코퍼스 커지면 재평가" 조건 충족)됐어도 **여전히 전 지표 열세** → 기본 off 유지 근거 강화.
+- min_score 재검(`score_analysis`): **0.40이 여전히 무손실 컷**(유지Recall 0.822, Precision 0.261→0.267, 빈결과 0%). 0.45부터 recall 손실(−0.051). 리랭커 확률은 여전히 분리력 없음(정답 p50 0.503 vs 오답 0.500) → dense 코사인 컷 유지.
+
+**변경 파일**: 코드 무변경(DB만 +30). `data/ingest_phase2.log`(미추적).
+
+**검증**: DB COUNT 138 확인, 정규화 이름 GROUP BY로 중복 4건 특정. 회귀·하이브리드·score_analysis 3종 재측정(위 표).
+
+**결정·근거**: 중복 4건은 1차 salvage 때와 동일 기준으로 신규 쪽 삭제. **사용자 승인 후 삭제 완료 → 134청크** (id 109·111·112·118). 삭제 후 재측정: Hit@1 0.695 / R@3 0.689(+0.008) / R@5 0.822 / MRR 0.795 — R@5는 미회복(하락분은 중복이 아니라 순수 방해 후보 증가분). dense 기준선도 재측정(R@5 0.760 → 리랭커 Δ+0.062). **재발 방지**: 주 파이프라인 인덱싱 직전에 기존 컬렉션과 이름 정확일치 dedupe 추가(`ingest_knowledge.py` main — 의미 dedupe는 설명 문구가 다른 동명 기법을 놓침이 이번에 실증됨).
+
+---
+
+## [2026-07-09] 리뷰 문서 P0 검증 — "코드에도 ask" 버그는 8b 캐시 오진 · gen_eval 캐시 키에 모델 포함
+**목적**: `docs/rag-review-2026-07-09.md`(그릴링 결과)의 P0 버그 "코드가 있어도 ask 모드, mode accuracy 75%"를 재현·검증.
+
+**Before**: 리뷰 문서가 `.gen_cache_d.json`(12건) 분석으로 mode accuracy 9/12(75%) 판정 — 케이스 2(파이썬 코드리뷰)가 ask로 응답한 것을 운영 버그로 분류. `gen_eval._cache_key`는 SYSTEM_PROMPT+query+기법명만 해시(모델 미포함).
+
+**After**: **오진 판정**. 해당 캐시는 [2026-07-05] D 작업에서 judge 일치도 실험용으로 **8b로 시딩**한 것(당시 기록: 8b 생성 mode_accuracy 0.75, 70b 1.00 — 수치 정확히 일치). 케이스 2의 캐시 키를 현행 프롬프트·검색결과로 재계산하니 일치 → 조건 변수는 모델뿐. 원인 후보 (a) 검색 약함도 기각(top1 = Code Review Prompting 0.593, top5 전부 유관). 재발 방지로 `_cache_key`에 **생성 모델 포함** — 모델이 다르면 캐시 자동 무효화(기존 캐시는 키 불일치로 자연 폐기).
+
+**변경 파일**: `eval/gen_eval.py`(수정 — 캐시 키에 model), `docs/rag-review-2026-07-09.md`(검증 결과 추기)
+
+**검증**: 캐시 키 재계산 일치 확인. 70b 신선 재현 3회는 TPD 소진(적재가 94.6k 사용)으로 미실시 — 쿼터 회복 후 1회 확인 예정(P0→P2 강등). 리뷰 항목 2(Gemini history 납작)·3(retrieved=0 미검증)은 사실로 확인, 미수정.
+
+**결정·근거**: 평가 캐시는 응답을 만든 모델을 키에 넣지 않으면 실험 캐시가 운영 측정으로 오인될 수 있음(실제 사고). 측정치 인용 전 캐시 출처 확인을 원칙화.
+
+---
+
+# 다음 작업 / 보류 항목 (백로그)
+
+- [x] **코퍼스 확장 2차** — 완료(위 [2026-07-09] 항목). 138청크, 하이브리드 재평가·min_score 재측정 포함. (~~--from-jsonl 승격~~ → 완료 2026-07-07)
+- [x] **코퍼스 이름 중복 4건 정리** — 삭제 완료(134청크) + 주 파이프라인에 이름 dedupe 추가 + 회귀 재측정. (위 [2026-07-09] 항목)
+
+- [x] 🔴 **generator 원문 페이로드 누락(uplift_eval 발견)** — 완료(위 [2026-06-26] 항목). 사용자가 변환할 원문(회의록·번역 대상 이메일·리뷰 대상 코드 등)을 직접 준 경우, 개선프롬프트가 그 원문을 **조건·재료로 그대로 포함**하도록 SYSTEM_PROMPT 규칙 추가. 회의록 개선점수 1.0→5.0, 이메일 원문 verbatim 포함 확인(8b/70b). ⚠️ 70b TPD 회복 후 동일조건 전체 재측정 권장.
+
+- [x] **생성기 과잉 질문 완화** — (A)작업종류+(B)핵심주제 2-항목 게이트로 완화. mode_accuracy 0.27→≈0.92, instruction_form N/A→5.0. (위 2026-06-22 항목)
+- [~] **생성 출력 토큰 깨짐**: Groq llama-3.3-70b 응답에 `图片`/`_highlight`/`紹介`/`詳細` 등 혼합언어·깨진 토큰. 한글에 붙은 한자는 `_strip_cjk_noise`로 제거(2026-06-27 정상 외국어 보존하도록 보강). `_highlight` 류 라틴 깨짐은 미해결 — 모델 교체 또는 후처리 추가 검토.
+- [~] **장문 원문 truncation**: max_tokens 동적 산정(_fit_max_tokens)으로 413 즉사 방지 완료(2026-07-07). 단 TPM 예산상 매우 긴 원문은 출력이 짧아져 잘릴 수 있음 → 분할/요약 선처리는 여전히 미해결.
+- [x] **Groq 무료 티어 TPD 대응** — 캐시(--cache-file)·judge 비치명·413 즉시실패·8b max_tokens 캡으로 강건화. judge 8b 전환은 일치도 측정 결과 **기각**(신뢰 불가). (위 2026-07-05 D 항목)
+- [ ] **gen judge 신뢰도**: 70b judge도 과잉질문에 관대(mode_fit). 모드 판정은 결정론적 mode_accuracy 우선 유지. judge 강건화(few-shot 라벨, 타 프로바이더 모델) 검토.
+- [x] **리랭커 점수 표시** — 해결됨(코드 확인). `retriever.py`의 `_rerank`가 표시 `score`를 평탄한 sigmoid가 아니라 **dense 코사인**으로 환산해 반환(`c["score"] = c.pop("dense_score", ...)`). UI "유사도 %"는 코사인 기준.
+- [ ] **리랭커 비용/지연**: 모델(~568M 파라미터, 디스크 2GB대) + 쿼리당 CPU cross-encoder — **실측 1.85s/20쌍(Mac CPU), 검색 지연의 90%**. Railway 무료티어 RAM 확인 필요. 부담 시 fetch_k=10(지연 절반, Recall@5 −4.5%p — 2026-07-05 스윕 표 참조) 또는 `use_reranker=false` 폴백.
+- [x] **쿼리 변환 HyDE형** — 구현·측정 완료. 결과: 악화 → 기본 off(opt-in 보존).
+- [x] **한국어 BM25 토큰화** — kiwipiepy 적용 완료. 결과: 하이브리드는 여전히 악화 → 기본 off.
+- [x] **평가셋 확장** — 현실셋 59문항으로 확장 완료.
+- [x] **출력 구조화** — LLM JSON 응답 + 정규식 폴백으로 완료. mode_accuracy 1.00. (위 2026-07-05 항목)
+- [ ] **스트리밍(SSE)**: 설계 문서의 `/improve/stream` — 미착수.
+- [ ] **검색 추가 아이디어**: 기법 corpus가 동질적이라 sparse/쿼리변환이 안 통함. 코퍼스가 커지고 이질화되면 하이브리드 재평가 가치 있음. min_score(0.40)도 코퍼스 변경 시 `python -m eval.score_analysis`로 재측정.
+
+## [2026-07-20] DB 비밀번호 백엔드 기준(root) 통일
+**목적**: 브랜치 통합 과정에서 발견된 설정 불일치 해소 — docker-compose MySQL은 빈 비밀번호, Spring `application.yml` 기본값은 `root`라 기본 설정끼리 조합하면 백엔드가 DB 접속 실패. 백엔드 기본값(root/root)을 기준으로 전부 통일.
+**Before**: docker-compose `MYSQL_ALLOW_EMPTY_PASSWORD: yes`, rag-server `DB_PASSWORD` 기본 `""`(코드·compose·.env 모두 공백).
+**After**: docker-compose `MYSQL_ROOT_PASSWORD: root`(healthcheck에 `-uroot -proot` 반영), rag-server 컨테이너 env·코드 기본값·로컬 `.env` 모두 `DB_PASSWORD=root`. 기동 중이던 ttalkak-mysql 컨테이너는 `ALTER USER`로 비밀번호만 변경(데이터 보존).
+**변경 파일**: `../docker-compose.yml`(수정) · `app/core/db.py`(수정: 기본값·docstring) · `.env`(로컬, git 미추적)
+**검증**: 호스트에서 pymysql로 root/root 접속 → `rag_chunk` 134행 보존 확인. 컨테이너 내부 `mysql -uroot -proot SELECT 1` OK.
+**결정·근거**: 방향은 "백엔드 기준"(사용자 지시). 빈 비밀번호 쪽으로 맞추는 대안은 backend/compose.yaml(trytur)도 root를 쓰고 있어 배제. 기존 볼륨 재초기화(`down -v`) 대신 ALTER USER로 무중단 정합 — 코퍼스 재인덱싱 불필요.

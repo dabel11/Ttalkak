@@ -1,0 +1,8 @@
+# ── 오프라인 데이터 적재/크롤링 (ingestion/) — 로컬에서만 필요 ──
+# 사용: pip install -r requirements-ingestion.txt  (런타임 의존성 포함)
+-r requirements.txt
+pypdf>=5.0.0          # pdf_indexer / ingest_knowledge
+requests>=2.31.0      # pdf_crawler
+beautifulsoup4>=4.12.0
+tqdm>=4.66.0
+reportlab>=4.0.0      # pdf_crawler 통합 PDF 생성
