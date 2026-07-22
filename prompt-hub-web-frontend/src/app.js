@@ -3,13 +3,25 @@ const {
   normalizeTag,
   isValidPhone,
   isFutureDate,
-  escapeHtml,
-  escapeAttr,
+  escapeHtml: utilEscapeHtml,
+  escapeAttr: utilEscapeAttr,
   getFinalPromptText,
   formatNumber,
   formatShortDate,
   parseTimestamp,
 } = window.TtalkakUtils || {};
+
+function fallbackEscapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+const escapeHtml = typeof utilEscapeHtml === "function" ? utilEscapeHtml : fallbackEscapeHtml;
+const escapeAttr = typeof utilEscapeAttr === "function" ? utilEscapeAttr : escapeHtml;
 
 if (
   [
@@ -17,8 +29,6 @@ if (
     normalizeTag,
     isValidPhone,
     isFutureDate,
-    escapeHtml,
-    escapeAttr,
     getFinalPromptText,
     formatNumber,
     formatShortDate,
