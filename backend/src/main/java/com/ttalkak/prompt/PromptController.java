@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.*;
 import java.time.LocalDateTime;
@@ -508,8 +509,7 @@ public class PromptController {
         List<Map<String, String>> ragHistory =
                 toRagHistory(messages);
 
-        Map<?, ?> ragResponse = Map.of();
-        boolean ragConnected = false;
+        Map<String, Object> body;
 
         try {
             Map<String, Object> ragRequest =
@@ -530,20 +530,41 @@ public class PromptController {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response != null) {
-                ragResponse = response;
-                ragConnected = true;
-            }
-        } catch (Exception ignored) {
-            // RAG 서버 연결 실패 시 fallback 결과를 반환한다.
-        }
-
-        Map<String, Object> body =
-                buildImproveResponse(
-                        prompt,
-                        ragResponse,
-                        ragConnected
+            if (response == null) {
+                throw new ApiException(
+                        HttpStatus.BAD_GATEWAY,
+                        "AI_INVALID_RESPONSE",
+                        "AI 서비스에서 올바른 응답을 받지 못했습니다."
                 );
+            }
+
+            body = buildImproveResponse(response);
+        } catch (WebClientResponseException.NotFound e) {
+            body = buildNoEvidenceResponse(prompt);
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode().value() == 429
+                    || isRateLimitError(e)) {
+                throw new ApiException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "AI_RATE_LIMIT_EXCEEDED",
+                        "AI 서비스 사용 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
+                );
+            }
+
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_SERVICE_UNAVAILABLE",
+                    "AI 서비스를 일시적으로 사용할 수 없습니다."
+            );
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_SERVICE_UNAVAILABLE",
+                    "AI 서비스를 일시적으로 사용할 수 없습니다."
+            );
+        }
 
         Long savedThreadId = null;
 
@@ -581,10 +602,27 @@ public class PromptController {
         return body;
     }
 
+    private Map<String, Object> buildNoEvidenceResponse(
+            String prompt
+    ) {
+        Map<String, Object> body =
+                new LinkedHashMap<>();
+
+        body.put(
+                "answer",
+                "관련 프롬프트 기법 근거를 찾지 못했습니다."
+        );
+        body.put("improvedPrompt", prompt);
+        body.put("sources", List.of());
+        body.put("ragStatus", "no_evidence");
+        body.put("techniquesApplied", List.of());
+        body.put("changes", List.of());
+
+        return body;
+    }
+
     private Map<String, Object> buildImproveResponse(
-            String prompt,
-            Map<?, ?> ragResponse,
-            boolean ragConnected
+            Map<?, ?> ragResponse
     ) {
         String improvedPrompt = firstNonBlank(
                 ragResponse,
@@ -595,21 +633,6 @@ public class PromptController {
                 "answer"
         );
 
-        if (improvedPrompt == null) {
-            improvedPrompt = """
-                    당신은 사용자의 목적을 정확히 파악해 실행 가능한 결과물을 만드는 AI 전문가입니다.
-
-                    [사용자 요청]
-                    %s
-
-                    [수행 방식]
-                    1. 사용자의 목적을 먼저 분석합니다.
-                    2. 부족한 조건은 합리적으로 보완합니다.
-                    3. 결과는 바로 사용할 수 있는 형태로 작성합니다.
-                    4. 필요한 경우 예시와 출력 형식을 함께 제시합니다.
-                    """.formatted(prompt);
-        }
-
         String answer = firstNonBlank(
                 ragResponse,
                 "answer",
@@ -617,23 +640,39 @@ public class PromptController {
                 "result"
         );
 
+        if (improvedPrompt == null && answer == null) {
+            throw new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "AI_INVALID_RESPONSE",
+                    "AI 서비스에서 올바른 응답을 받지 못했습니다."
+            );
+        }
+
+        if (improvedPrompt == null) {
+            improvedPrompt = answer;
+        }
+
         if (answer == null) {
             answer = improvedPrompt;
         }
 
-        List<?> sources =
-                ragResponse.get("sources") instanceof List<?> list
-                        ? list
-                        : List.of();
+        List<?> sources = firstList(
+                ragResponse,
+                "sources",
+                "references",
+                "documents"
+        );
 
-        String ragStatus;
+        String ragStatus = firstNonBlank(
+                ragResponse,
+                "ragStatus",
+                "rag_status"
+        );
 
-        if (!ragConnected) {
-            ragStatus = "fallback";
-        } else if (sources.isEmpty()) {
-            ragStatus = "no_evidence";
-        } else {
-            ragStatus = "ok";
+        if (ragStatus == null) {
+            ragStatus = sources.isEmpty()
+                    ? "no_evidence"
+                    : "ok";
         }
 
         Map<String, Object> body =
@@ -645,22 +684,61 @@ public class PromptController {
         body.put("ragStatus", ragStatus);
         body.put(
                 "techniquesApplied",
-                List.of(
-                        "Role Prompting",
-                        "Specificity",
-                        "Output Format"
+                firstList(
+                        ragResponse,
+                        "techniquesApplied",
+                        "techniques_applied"
                 )
         );
         body.put(
                 "changes",
-                List.of(
-                        "AI의 역할을 명확하게 지정",
-                        "요청 조건을 구조화",
-                        "출력 형식을 구체화"
-                )
+                firstList(ragResponse, "changes")
         );
 
         return body;
+    }
+
+    private List<?> firstList(
+            Map<?, ?> source,
+            String... keys
+    ) {
+        if (source == null) {
+            return List.of();
+        }
+
+        for (String key : keys) {
+            Object value = source.get(key);
+
+            if (value instanceof List<?> list) {
+                return list;
+            }
+        }
+
+        return List.of();
+    }
+
+    private boolean isRateLimitError(
+            WebClientResponseException exception
+    ) {
+        String responseBody =
+                exception.getResponseBodyAsString();
+
+        if (responseBody == null
+                || responseBody.isBlank()) {
+            return false;
+        }
+
+        String normalized =
+                responseBody.toLowerCase(
+                        java.util.Locale.ROOT
+                );
+
+        return normalized.contains("한도 초과")
+                || normalized.contains("quota")
+                || normalized.contains("rate limit")
+                || normalized.contains(
+                        "resource_exhausted"
+                );
     }
 
     private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {

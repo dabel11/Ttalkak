@@ -11,6 +11,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -27,312 +32,253 @@ import static org.mockito.Mockito.when;
 
 class PromptImproveConversationTest {
 
-    private static final String AUTHORIZATION =
-            "Bearer test-token";
+	private static final String AUTHORIZATION = "Bearer test-token";
 
-    private PromptRepository promptRepository;
-    private PromptSaveRepository saveRepository;
-    private PromptLikeRepository likeRepository;
-    private TagRepository tagRepository;
-    private AuthService authService;
-    private MakeThreadRepository makeThreadRepository;
+	private PromptRepository promptRepository;
+	private PromptSaveRepository saveRepository;
+	private PromptLikeRepository likeRepository;
+	private TagRepository tagRepository;
+	private AuthService authService;
+	private MakeThreadRepository makeThreadRepository;
 
-    private ObjectMapper objectMapper;
-    private PromptController controller;
+	private ObjectMapper objectMapper;
+	private PromptController controller;
 
-    @BeforeEach
-    void setUp() {
-        promptRepository = mock(PromptRepository.class);
-        saveRepository = mock(PromptSaveRepository.class);
-        likeRepository = mock(PromptLikeRepository.class);
-        tagRepository = mock(TagRepository.class);
-        authService = mock(AuthService.class);
-        makeThreadRepository =
-                mock(MakeThreadRepository.class);
+	@BeforeEach
+	void setUp() {
+		promptRepository = mock(PromptRepository.class);
+		saveRepository = mock(PromptSaveRepository.class);
+		likeRepository = mock(PromptLikeRepository.class);
+		tagRepository = mock(TagRepository.class);
+		authService = mock(AuthService.class);
+		makeThreadRepository = mock(MakeThreadRepository.class);
 
-        objectMapper = new ObjectMapper();
+		objectMapper = new ObjectMapper();
 
-        controller = new PromptController(
-                promptRepository,
-                saveRepository,
-                likeRepository,
-                tagRepository,
-                authService,
-                makeThreadRepository,
-                objectMapper,
-                WebClient.builder()
-        );
+		controller = new PromptController(
+				promptRepository,
+				saveRepository,
+				likeRepository,
+				tagRepository,
+				authService,
+				makeThreadRepository,
+				objectMapper,
+				successfulRagWebClientBuilder());
 
-        ReflectionTestUtils.setField(
-                controller,
-                "ragServerUrl",
-                "http://127.0.0.1:1"
-        );
+		ReflectionTestUtils.setField(
+				controller,
+				"ragServerUrl",
+				"http://rag.test");
 
-        when(
-                makeThreadRepository.save(
-                        any(MakeThread.class)
-                )
-        ).thenAnswer(invocation -> {
-            MakeThread thread =
-                    invocation.getArgument(0);
+		when(
+				makeThreadRepository.save(
+						any(MakeThread.class)))
+				.thenAnswer(invocation -> {
+					MakeThread thread = invocation.getArgument(0);
 
-            if (thread.getId() == null) {
-                ReflectionTestUtils.setField(
-                        thread,
-                        "id",
-                        101L
-                );
-            }
+					if (thread.getId() == null) {
+						ReflectionTestUtils.setField(
+								thread,
+								"id",
+								101L);
+					}
 
-            return thread;
-        });
-    }
+					return thread;
+				});
+	}
 
-    @Test
-    void anonymousImproveDoesNotSaveThread() {
-        when(
-                authService.currentMemberIdOrNull(null)
-        ).thenReturn(null);
+	@Test
+	void anonymousImproveDoesNotSaveThread() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
 
-        Map<String, Object> response =
-                controller.improve(
-                        request(
-                                "운동 계획을 만들어줘",
-                                null,
-                                null
-                        ),
-                        null
-                );
+		Map<String, Object> response = controller.improve(
+				request(
+						"운동 계획을 만들어줘",
+						null,
+						null),
+				null);
 
-        assertNull(response.get("conversationId"));
-        assertNull(response.get("threadId"));
-        assertEquals(
-                "fallback",
-                response.get("ragStatus")
-        );
+		assertNull(response.get("conversationId"));
+		assertNull(response.get("threadId"));
+		assertEquals(
+				"ok",
+				response.get("ragStatus"));
 
-        verify(
-                makeThreadRepository,
-                never()
-        ).save(any(MakeThread.class));
-    }
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
 
-    @Test
-    void loggedInFirstImproveCreatesThread()
-            throws Exception {
-        when(
-                authService.currentMemberIdOrNull(
-                        AUTHORIZATION
-                )
-        ).thenReturn(7L);
+	@Test
+	void loggedInFirstImproveCreatesThread()
+			throws Exception {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION))
+				.thenReturn(7L);
 
-        Map<String, Object> response =
-                controller.improve(
-                        request(
-                                "운동 계획을 만들어줘",
-                                null,
-                                null
-                        ),
-                        AUTHORIZATION
-                );
+		Map<String, Object> response = controller.improve(
+				request(
+						"운동 계획을 만들어줘",
+						null,
+						null),
+				AUTHORIZATION);
 
-        assertEquals(
-                101L,
-                response.get("conversationId")
-        );
+		assertEquals(
+				101L,
+				response.get("conversationId"));
 
-        assertEquals(
-                101L,
-                response.get("threadId")
-        );
+		assertEquals(
+				101L,
+				response.get("threadId"));
 
-        ArgumentCaptor<MakeThread> captor =
-                ArgumentCaptor.forClass(
-                        MakeThread.class
-                );
+		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(
+				MakeThread.class);
 
-        verify(makeThreadRepository)
-                .save(captor.capture());
+		verify(makeThreadRepository)
+				.save(captor.capture());
 
-        MakeThread savedThread =
-                captor.getValue();
+		MakeThread savedThread = captor.getValue();
 
-        assertEquals(
-                7L,
-                savedThread.getMemberId()
-        );
+		assertEquals(
+				7L,
+				savedThread.getMemberId());
 
-        List<Map<String, Object>> messages =
-                readMessages(savedThread);
+		List<Map<String, Object>> messages = readMessages(savedThread);
 
-        assertEquals(2, messages.size());
-        assertEquals(
-                "user",
-                messages.get(0).get("role")
-        );
-        assertEquals(
-                "assistant",
-                messages.get(1).get("role")
-        );
-    }
+		assertEquals(2, messages.size());
+		assertEquals(
+				"user",
+				messages.get(0).get("role"));
+		assertEquals(
+				"assistant",
+				messages.get(1).get("role"));
+	}
 
-    @Test
-    void loggedInFollowUpAppendsMessages()
-            throws Exception {
-        when(
-                authService.currentMemberIdOrNull(
-                        AUTHORIZATION
-                )
-        ).thenReturn(7L);
+	@Test
+	void loggedInFollowUpAppendsMessages()
+			throws Exception {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION))
+				.thenReturn(7L);
 
-        String originalMessages =
-                objectMapper.writeValueAsString(
-                        List.of(
-                                Map.of(
-                                        "role",
-                                        "user",
-                                        "content",
-                                        "첫 번째 요청"
-                                ),
-                                Map.of(
-                                        "role",
-                                        "assistant",
-                                        "content",
-                                        "첫 번째 답변"
-                                )
-                        )
-                );
+		String originalMessages = objectMapper.writeValueAsString(
+				List.of(
+						Map.of(
+								"role",
+								"user",
+								"content",
+								"첫 번째 요청"),
+						Map.of(
+								"role",
+								"assistant",
+								"content",
+								"첫 번째 답변")));
 
-        MakeThread existingThread =
-                new MakeThread(
-                        7L,
-                        "기존 대화",
-                        originalMessages,
-                        null
-                );
+		MakeThread existingThread = new MakeThread(
+				7L,
+				"기존 대화",
+				originalMessages,
+				null);
 
-        ReflectionTestUtils.setField(
-                existingThread,
-                "id",
-                42L
-        );
+		ReflectionTestUtils.setField(
+				existingThread,
+				"id",
+				42L);
 
-        when(
-                makeThreadRepository
-                        .findByIdAndMemberId(
-                                42L,
-                                7L
-                        )
-        ).thenReturn(Optional.of(existingThread));
+		when(
+				makeThreadRepository
+						.findByIdAndMemberId(
+								42L,
+								7L))
+				.thenReturn(Optional.of(existingThread));
 
-        Map<String, Object> response =
-                controller.improve(
-                        request(
-                                "두 번째 요청",
-                                null,
-                                42L
-                        ),
-                        AUTHORIZATION
-                );
+		Map<String, Object> response = controller.improve(
+				request(
+						"두 번째 요청",
+						null,
+						42L),
+				AUTHORIZATION);
 
-        assertEquals(
-                42L,
-                response.get("threadId")
-        );
+		assertEquals(
+				42L,
+				response.get("threadId"));
 
-        verify(makeThreadRepository)
-                .findByIdAndMemberId(
-                        42L,
-                        7L
-                );
+		verify(makeThreadRepository)
+				.findByIdAndMemberId(
+						42L,
+						7L);
 
-        verify(makeThreadRepository)
-                .save(existingThread);
+		verify(makeThreadRepository)
+				.save(existingThread);
 
-        List<Map<String, Object>> messages =
-                readMessages(existingThread);
+		List<Map<String, Object>> messages = readMessages(existingThread);
 
-        assertEquals(4, messages.size());
-        assertEquals(
-                "두 번째 요청",
-                messages.get(2).get("content")
-        );
-        assertEquals(
-                "assistant",
-                messages.get(3).get("role")
-        );
-    }
+		assertEquals(4, messages.size());
+		assertEquals(
+				"두 번째 요청",
+				messages.get(2).get("content"));
+		assertEquals(
+				"assistant",
+				messages.get(3).get("role"));
+	}
 
-    @Test
-    void anonymousUserCannotContinueSavedThread() {
-        when(
-                authService.currentMemberIdOrNull(null)
-        ).thenReturn(null);
+	@Test
+	void anonymousUserCannotContinueSavedThread() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
 
-        ApiException exception =
-                assertThrows(
-                        ApiException.class,
-                        () -> controller.improve(
-                                request(
-                                        "이어서 개선해줘",
-                                        null,
-                                        42L
-                                ),
-                                null
-                        )
-                );
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request(
+								"이어서 개선해줘",
+								null,
+								42L),
+						null));
 
-        assertEquals(
-                401,
-                exception.getStatusCode().value()
-        );
+		assertEquals(
+				401,
+				exception.getStatusCode().value());
 
-        assertEquals(
-                "LOGIN_REQUIRED",
-                exception.getCode()
-        );
-    }
+		assertEquals(
+				"LOGIN_REQUIRED",
+				exception.getCode());
+	}
 
-    @Test
-    void cannotAccessAnotherUsersThread() {
-        when(
-                authService.currentMemberIdOrNull(
-                        AUTHORIZATION
-                )
-        ).thenReturn(7L);
+	@Test
+	void cannotAccessAnotherUsersThread() {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION))
+				.thenReturn(7L);
 
-        when(
-                makeThreadRepository
-                        .findByIdAndMemberId(
-                                42L,
-                                7L
-                        )
-        ).thenReturn(Optional.empty());
+		when(
+				makeThreadRepository
+						.findByIdAndMemberId(
+								42L,
+								7L))
+				.thenReturn(Optional.empty());
 
-        ApiException exception =
-                assertThrows(
-                        ApiException.class,
-                        () -> controller.improve(
-                                request(
-                                        "이어서 개선해줘",
-                                        null,
-                                        42L
-                                ),
-                                AUTHORIZATION
-                        )
-                );
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request(
+								"이어서 개선해줘",
+								null,
+								42L),
+						AUTHORIZATION));
 
-        assertEquals(
-                404,
-                exception.getStatusCode().value()
-        );
+		assertEquals(
+				404,
+				exception.getStatusCode().value());
 
-        assertEquals(
-                "THREAD_NOT_FOUND",
-                exception.getCode()
-        );
-    }
+		assertEquals(
+				"THREAD_NOT_FOUND",
+				exception.getCode());
+	}
 
 	@Test
 	void conversationIdCanContinueExistingThread() throws Exception {
@@ -343,38 +289,30 @@ class PromptImproveConversationTest {
 				List.of(
 						Map.of(
 								"role", "user",
-								"content", "첫 번째 요청"
-						),
+								"content", "첫 번째 요청"),
 						Map.of(
 								"role", "assistant",
-								"content", "첫 번째 답변"
-						)
-				)
-		);
+								"content", "첫 번째 답변")));
 
 		MakeThread existingThread = new MakeThread(
 				7L,
 				"기존 대화",
 				originalMessages,
-				null
-		);
+				null);
 
 		ReflectionTestUtils.setField(existingThread, "id", 42L);
 
 		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
 				.thenReturn(Optional.of(existingThread));
 
-		PromptController.ImproveRequest request =
-				new PromptController.ImproveRequest(
-						"conversationId로 이어가기",
-						"prompt_techniques",
-						42L,
-						null,
-						List.of()
-				);
+		PromptController.ImproveRequest request = new PromptController.ImproveRequest(
+				"conversationId로 이어가기",
+				"prompt_techniques",
+				42L,
+				null,
+				List.of());
 
-		Map<String, Object> response =
-				controller.improve(request, AUTHORIZATION);
+		Map<String, Object> response = controller.improve(request, AUTHORIZATION);
 
 		assertEquals(42L, response.get("conversationId"));
 		assertEquals(42L, response.get("threadId"));
@@ -383,24 +321,81 @@ class PromptImproveConversationTest {
 				.findByIdAndMemberId(42L, 7L);
 	}
 
+	private void useRagResponse(
+			HttpStatus status,
+			String responseBody) {
+		WebClient.Builder webClientBuilder = WebClient.builder()
+				.exchangeFunction(request -> Mono.just(
+						ClientResponse
+								.create(status)
+								.header(
+										HttpHeaders.CONTENT_TYPE,
+										MediaType.APPLICATION_JSON_VALUE)
+								.body(responseBody)
+								.build()));
+
+		controller = new PromptController(
+				promptRepository,
+				saveRepository,
+				likeRepository,
+				tagRepository,
+				authService,
+				makeThreadRepository,
+				objectMapper,
+				webClientBuilder);
+
+		ReflectionTestUtils.setField(
+				controller,
+				"ragServerUrl",
+				"http://rag.test");
+	}
+
+	private WebClient.Builder successfulRagWebClientBuilder() {
+		String responseBody = """
+				{
+				"answer": "프롬프트를 개선했습니다.",
+				"improvedPrompt": "개선된 테스트 프롬프트",
+				"sources": [
+					{
+					"title": "테스트 근거"
+					}
+				],
+				"ragStatus": "ok",
+				"techniquesApplied": [
+					"Role Prompting"
+				],
+				"changes": [
+					"역할을 명확하게 지정"
+				]
+				}
+				""";
+
+		return WebClient.builder()
+				.exchangeFunction(request -> Mono.just(
+						ClientResponse
+								.create(HttpStatus.OK)
+								.header(
+										HttpHeaders.CONTENT_TYPE,
+										MediaType.APPLICATION_JSON_VALUE)
+								.body(responseBody)
+								.build()));
+	}
+
 	@Test
 	void rejectsDifferentConversationIdAndThreadId() {
 		when(authService.currentMemberIdOrNull(AUTHORIZATION))
 				.thenReturn(7L);
 
-		PromptController.ImproveRequest request =
-				new PromptController.ImproveRequest(
-						"이어지는 요청",
-						"prompt_techniques",
-						41L,
-						42L,
-						List.of()
-				);
+		PromptController.ImproveRequest request = new PromptController.ImproveRequest(
+				"이어지는 요청",
+				"prompt_techniques",
+				41L,
+				42L,
+				List.of());
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(request, AUTHORIZATION)
-		);
+				() -> controller.improve(request, AUTHORIZATION));
 
 		assertEquals(400, exception.getStatusCode().value());
 		assertEquals("THREAD_ID_MISMATCH", exception.getCode());
@@ -412,102 +407,190 @@ class PromptImproveConversationTest {
 				.save(any(MakeThread.class));
 	}
 
-    @Test
-    void rejectsCorruptedStoredThreadWithoutOverwritingIt() {
-        when(authService.currentMemberIdOrNull(AUTHORIZATION))
-                .thenReturn(7L);
+	@Test
+	void rejectsCorruptedStoredThreadWithoutOverwritingIt() {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
 
-        MakeThread corruptedThread = new MakeThread(
-                7L,
-                "손상된 대화",
-                "{not-valid-json",
-                null
-        );
+		MakeThread corruptedThread = new MakeThread(
+				7L,
+				"손상된 대화",
+				"{not-valid-json",
+				null);
 
-        ReflectionTestUtils.setField(
-                corruptedThread,
-                "id",
-                42L
-        );
+		ReflectionTestUtils.setField(
+				corruptedThread,
+				"id",
+				42L);
 
-        when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
-                .thenReturn(Optional.of(corruptedThread));
+		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
+				.thenReturn(Optional.of(corruptedThread));
 
-        ApiException exception = assertThrows(
-                ApiException.class,
-                () -> controller.improve(
-                        request("이어서 개선해줘", null, 42L),
-                        AUTHORIZATION
-                )
-        );
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request("이어서 개선해줘", null, 42L),
+						AUTHORIZATION));
 
-        assertEquals(
-                500,
-                exception.getStatusCode().value()
-        );
-        assertEquals(
-                "THREAD_DATA_CORRUPTED",
-                exception.getCode()
-        );
+		assertEquals(
+				500,
+				exception.getStatusCode().value());
+		assertEquals(
+				"THREAD_DATA_CORRUPTED",
+				exception.getCode());
 
-        verify(makeThreadRepository, never())
-                .save(any(MakeThread.class));
-    }
+		verify(makeThreadRepository, never())
+				.save(any(MakeThread.class));
+	}
 
-    @Test
-    void rejectsBlankPrompt() {
-        ApiException exception =
-                assertThrows(
-                        ApiException.class,
-                        () -> controller.improve(
-                                request(
-                                        "   ",
-                                        null,
-                                        null
-                                ),
-                                null
-                        )
-                );
+	@Test
+	void rejectsBlankPrompt() {
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request(
+								"   ",
+								null,
+								null),
+						null));
 
-        assertEquals(
-                400,
-                exception.getStatusCode().value()
-        );
+		assertEquals(
+				400,
+				exception.getStatusCode().value());
 
-        assertEquals(
-                "PROMPT_REQUIRED",
-                exception.getCode()
-        );
+		assertEquals(
+				"PROMPT_REQUIRED",
+				exception.getCode());
 
-        verify(
-                makeThreadRepository,
-                never()
-        ).save(any(MakeThread.class));
-    }
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
 
-    private PromptController.ImproveRequest request(
-            String prompt,
-            Long conversationId,
-            Long threadId
-    ) {
-        return new PromptController.ImproveRequest(
-                prompt,
-                "prompt_techniques",
-                conversationId,
-                threadId,
-                List.of()
-        );
-    }
+	@Test
+	void ragNotFoundReturnsNoEvidence() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
 
-    private List<Map<String, Object>> readMessages(
-            MakeThread thread
-    ) throws Exception {
-        return objectMapper.readValue(
-                thread.getMessagesJson(),
-                new TypeReference<
-                        List<Map<String, Object>>
-                        >() {
-                }
-        );
-    }
+		useRagResponse(
+				HttpStatus.NOT_FOUND,
+				"""
+						{
+						  "detail": "관련 근거를 찾지 못했습니다."
+						}
+						""");
+
+		Map response = controller.improve(
+				request(
+						"자기소개서 프롬프트를 만들어줘",
+						null,
+						null),
+				null);
+
+		assertEquals(
+				"no_evidence",
+				response.get("ragStatus"));
+		assertEquals(
+				"자기소개서 프롬프트를 만들어줘",
+				response.get("improvedPrompt"));
+		assertEquals(
+				List.of(),
+				response.get("sources"));
+
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void ragServiceUnavailableDoesNotSaveThread() {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION))
+				.thenReturn(7L);
+
+		useRagResponse(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				"""
+						{
+						  "detail": "RAG 서버를 사용할 수 없습니다."
+						}
+						""");
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request(
+								"프롬프트를 개선해줘",
+								null,
+								null),
+						AUTHORIZATION));
+
+		assertEquals(
+				503,
+				exception.getStatusCode().value());
+		assertEquals(
+				"AI_SERVICE_UNAVAILABLE",
+				exception.getCode());
+
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void ragQuotaExceededDoesNotSaveThread() {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION))
+				.thenReturn(7L);
+
+		useRagResponse(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				"""
+						{
+						  "detail": "Gemini 일일 한도 초과"
+						}
+						""");
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						request(
+								"프롬프트를 개선해줘",
+								null,
+								null),
+						AUTHORIZATION));
+
+		assertEquals(
+				503,
+				exception.getStatusCode().value());
+		assertEquals(
+				"AI_RATE_LIMIT_EXCEEDED",
+				exception.getCode());
+
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
+
+	private PromptController.ImproveRequest request(
+			String prompt,
+			Long conversationId,
+			Long threadId) {
+		return new PromptController.ImproveRequest(
+				prompt,
+				"prompt_techniques",
+				conversationId,
+				threadId,
+				List.of());
+	}
+
+	private List<Map<String, Object>> readMessages(
+			MakeThread thread) throws Exception {
+		return objectMapper.readValue(
+				thread.getMessagesJson(),
+				new TypeReference<List<Map<String, Object>>>() {
+				});
+	}
 }
