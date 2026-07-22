@@ -1,6 +1,7 @@
+import { forwardRef } from "react";
 import { Plus, Send } from "lucide-react";
 
-export function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages }) {
+export const Composer = forwardRef(function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages }, ref) {
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       {hasMessages && (
@@ -9,6 +10,7 @@ export function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMe
         </button>
       )}
       <textarea
+        ref={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -27,4 +29,4 @@ export function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMe
       </button>
     </form>
   );
-}
+});

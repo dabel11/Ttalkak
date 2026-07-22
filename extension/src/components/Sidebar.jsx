@@ -74,7 +74,14 @@ export function Sidebar({
 
 function TabButton({ id, activeTab, onClick, icon, label }) {
   return (
-    <button className={`tab-button ${activeTab === id ? "active" : ""}`} type="button" onClick={() => onClick(id)}>
+    <button
+      className={`tab-button ${activeTab === id ? "active" : ""}`}
+      type="button"
+      onClick={() => onClick(id)}
+      aria-label={label}
+      title={label}
+      data-tooltip={label}
+    >
       {icon}
       <span>{label}</span>
     </button>

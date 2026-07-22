@@ -16,6 +16,7 @@ export function ChatFeed({
   onChangeEditDraft,
   onCancelEdit,
   onSubmitEdit,
+  onSelectExample,
 }) {
   const isEmpty = messages.length === 0 && !isLoading;
   const scrollRef = useRef(null);
@@ -29,7 +30,7 @@ export function ChatFeed({
   return (
     <section ref={scrollRef} className={`chat-feed ${isEmpty ? "empty" : ""}`} aria-label="채팅 메시지">
       {isEmpty ? (
-        <Intro />
+        <Intro onSelectExample={onSelectExample} />
       ) : (
         <div className="message-stack">
           {messages.map((message) => (
@@ -56,7 +57,7 @@ export function ChatFeed({
   );
 }
 
-function Intro() {
+function Intro({ onSelectExample }) {
   return (
     <div className="intro">
       <div className="intro-icon"><Plus size={34} /></div>
@@ -74,8 +75,12 @@ function Intro() {
         ))}
       </div>
       <div className="example-queries">
-        <p className="example-label">Try one of these</p>
-        {EXAMPLE_QUERIES.map((example) => <span className="example-chip" key={example}>{example}</span>)}
+        <p className="example-label">예시로 시작하기</p>
+        {EXAMPLE_QUERIES.map((example) => (
+          <button className="example-chip" type="button" onClick={() => onSelectExample(example)} key={example}>
+            {example}
+          </button>
+        ))}
       </div>
     </div>
   );

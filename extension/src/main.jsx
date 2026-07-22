@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -20,6 +20,7 @@ function App() {
   const [executeTarget] = useState("auto");
   const [confirmAction, setConfirmAction] = useState(null);
   const [ragConfig] = useState(loadBackendConfig);
+  const composerRef = useRef(null);
 
   const {
     authMode,
@@ -100,6 +101,15 @@ function App() {
     setQuery("");
   }
 
+  function handleSelectExample(example) {
+    setComposerValue(example);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      const length = example.length;
+      composerRef.current?.setSelectionRange(length, length);
+    });
+  }
+
   return (
     <main className="extension-frame" aria-label="TTALKAK Chrome extension">
       <section className="extension-shell">
@@ -141,8 +151,10 @@ function App() {
             onChangeEditDraft={setEditingDraft}
             onCancelEdit={cancelEditMessage}
             onSubmitEdit={submitEditedMessage}
+            onSelectExample={handleSelectExample}
           />
           <Composer
+            ref={composerRef}
             value={composerValue}
             onChange={setComposerValue}
             onSubmit={submitPrompt}

@@ -121,24 +121,68 @@ button:disabled {
 
 .tab-list {
   min-height: 43px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--line-soft);
   transition: padding 0.24s cubic-bezier(0.22, 1, 0.36, 1), gap 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .tab-button {
-  min-width: 0;
+  position: relative;
+  flex: 0 0 34px;
+  width: auto;
+  min-width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
   color: var(--muted-dark);
   background: transparent;
   border: 0;
   border-radius: 999px;
   font-size: 13px;
-  transition: background 0.16s, color 0.16s, transform 0.16s;
+  transition: flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1), padding 0.22s cubic-bezier(0.22, 1, 0.36, 1), gap 0.18s, background 0.16s, color 0.16s, transform 0.16s;
+}
+
+.tab-button.active,
+.tab-button:hover,
+.tab-button:focus-visible {
+  flex-basis: 88px;
+  gap: 7px;
+  padding: 0 9px;
+}
+
+.tab-button::after {
+  content: attr(data-tooltip);
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  z-index: 12;
+  max-width: 160px;
+  padding: 6px 9px;
+  color: #fff;
+  background: #050510;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(5, 5, 16, 0.18);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -3px);
+  transition: opacity 0.14s, transform 0.14s;
+}
+
+.tab-button:hover::after,
+.tab-button:focus-visible::after {
+  opacity: 0;
 }
 
 .tab-button:hover,
@@ -158,9 +202,25 @@ button:disabled {
 }
 
 .sidebar.collapsed .tab-button {
+  flex-basis: 34px;
   width: 34px;
   height: 34px;
+  gap: 0;
+  padding: 0;
   border-radius: 10px;
+}
+
+.sidebar.collapsed .tab-button::after {
+  display: block;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translate(-4px, -50%);
+}
+
+.sidebar.collapsed .tab-button:hover::after,
+.sidebar.collapsed .tab-button:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .tab-button.active {
@@ -169,9 +229,18 @@ button:disabled {
 
 .tab-button span {
   overflow: hidden;
+  max-width: 0;
+  opacity: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
   transition: opacity 0.14s, max-width 0.18s;
+}
+
+.tab-button.active span,
+.tab-button:hover span,
+.tab-button:focus-visible span {
+  max-width: 58px;
+  opacity: 1;
 }
 
 .sidebar.collapsed .tab-button span {
@@ -1060,14 +1129,21 @@ button:disabled {
   margin: 0;
 }
 .example-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 3px 10px;
   font-size: 11px;
   color: var(--muted-dark);
-  cursor: default;
+  cursor: pointer;
+  transition: color 0.16s, background 0.16s, border-color 0.16s, transform 0.16s, box-shadow 0.16s;
+}
+
+.example-chip:active {
+  transform: translateY(0);
 }
 
 /* ── Saved / Recent item with delete button ──────────────────── */
@@ -1214,10 +1290,21 @@ button:disabled {
 }
 
 .saved-item:hover span,
+.saved-item:hover small,
 .recent-item:hover span,
 .tab-button.active span,
 .tab-button:hover span {
   color: rgba(255, 255, 255, 0.78);
+}
+
+.saved-item:hover .save-card-action {
+  color: var(--brand-green);
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(5, 5, 16, 0.18);
+}
+
+.saved-item:hover .save-card-action.saved {
+  color: #050510;
 }
 
 .header {
@@ -1225,10 +1312,11 @@ button:disabled {
   min-height: 66px;
   padding: 16px 18px 8px;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .brand-mark {
+  flex: 1 1 auto;
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -1258,18 +1346,25 @@ button:disabled {
 }
 
 .header-actions {
+  flex: 0 1 auto;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 7px;
   margin-left: auto;
 }
 
 .login-button {
+  max-width: 128px;
+  min-height: 34px;
+  overflow: hidden;
+  padding: 0 13px;
   color: var(--brand-green-soft);
   background: #050510;
   box-shadow: var(--brand-shadow);
+  text-overflow: ellipsis;
 }
 
 .login-button:hover,
@@ -1331,7 +1426,9 @@ button:disabled {
 .example-chip:hover {
   color: #fff;
   background: var(--brand-green);
+  border-color: var(--brand-green);
   box-shadow: var(--brand-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .message-row.user .message-card {
@@ -1391,10 +1488,11 @@ button:disabled {
 }
 
 .rag-status {
+  flex: none;
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  padding: 0 9px;
+  padding: 0 8px;
   border-radius: 999px;
   color: var(--brand-green);
   background: var(--brand-green-soft);
@@ -1402,6 +1500,46 @@ button:disabled {
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .header {
+    padding: 14px 14px 7px;
+    gap: 8px;
+  }
+
+  .brand-mark {
+    gap: 8px;
+  }
+
+  .brand-dot {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .brand-name {
+    max-width: 86px;
+    font-size: 15px;
+  }
+
+  .header-actions {
+    gap: 5px;
+  }
+
+  .rag-status {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .login-button {
+    max-width: 82px;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
 }
 
 .rag-status.connected {
