@@ -56,6 +56,9 @@ function App() {
     isLoading,
     copiedId,
     ragStatus,
+    canEditUserMessages,
+    editingMessageId,
+    editingDraft,
     recentThreads,
     openPrompt,
     openRecentThread,
@@ -64,6 +67,10 @@ function App() {
     toggleSave,
     executeMessage,
     submitPrompt,
+    startEditMessage,
+    setEditingDraft,
+    cancelEditMessage,
+    submitEditedMessage,
     requestDeleteRecentThread,
   } = useConversation({
     authSession,
@@ -124,9 +131,16 @@ function App() {
             messages={messages}
             isLoading={isLoading}
             copiedId={copiedId}
+            canEditUserMessages={canEditUserMessages}
+            editingMessageId={editingMessageId}
+            editingDraft={editingDraft}
             onCopy={copyMessage}
             onSave={toggleSave}
             onExecute={executeMessage}
+            onStartEdit={startEditMessage}
+            onChangeEditDraft={setEditingDraft}
+            onCancelEdit={cancelEditMessage}
+            onSubmitEdit={submitEditedMessage}
           />
           <Composer
             value={composerValue}

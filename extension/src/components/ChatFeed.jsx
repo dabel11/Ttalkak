@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, BookmarkCheck, Check, Copy, Play, Plus } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Copy, Edit3, Play, Plus, X } from "lucide-react";
 import { EXAMPLE_QUERIES, TIPS } from "../constants";
 
-export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExecute }) {
+export function ChatFeed({
+  messages,
+  isLoading,
+  copiedId,
+  canEditUserMessages,
+  editingMessageId,
+  editingDraft,
+  onCopy,
+  onSave,
+  onExecute,
+  onStartEdit,
+  onChangeEditDraft,
+  onCancelEdit,
+  onSubmitEdit,
+}) {
   const isEmpty = messages.length === 0 && !isLoading;
   const scrollRef = useRef(null);
 
@@ -19,7 +33,21 @@ export function ChatFeed({ messages, isLoading, copiedId, onCopy, onSave, onExec
       ) : (
         <div className="message-stack">
           {messages.map((message) => (
-            <MessageCard message={message} copied={copiedId === message.id} onCopy={onCopy} onSave={onSave} onExecute={onExecute} key={message.id} />
+            <MessageCard
+              message={message}
+              copied={copiedId === message.id}
+              canEditUserMessages={canEditUserMessages}
+              isEditing={editingMessageId === message.id}
+              editingDraft={editingDraft}
+              onCopy={onCopy}
+              onSave={onSave}
+              onExecute={onExecute}
+              onStartEdit={onStartEdit}
+              onChangeEditDraft={onChangeEditDraft}
+              onCancelEdit={onCancelEdit}
+              onSubmitEdit={onSubmitEdit}
+              key={message.id}
+            />
           ))}
           {isLoading && <TypingIndicator />}
         </div>
@@ -53,15 +81,57 @@ function Intro() {
   );
 }
 
-function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
+function MessageCard({
+  message,
+  copied,
+  canEditUserMessages,
+  isEditing,
+  editingDraft,
+  onCopy,
+  onSave,
+  onExecute,
+  onStartEdit,
+  onChangeEditDraft,
+  onCancelEdit,
+  onSubmitEdit,
+}) {
   const isAssistant = message.role === "assistant";
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
+  const canEdit = !isAssistant && canEditUserMessages && !message.isError;
 
   return (
     <article className={`message-row ${message.role}${message.isError ? " error" : ""}`} data-mid={message.id}>
-      <div className="message-card">
-        <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
+      <div className={`message-card${isEditing ? " editing" : ""}`}>
+        {isEditing ? (
+          <form className="message-edit-form" onSubmit={(event) => onSubmitEdit(event, message.id)}>
+            <textarea
+              rows={3}
+              value={editingDraft}
+              onChange={(event) => onChangeEditDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  onSubmitEdit(event, message.id);
+                }
+              }}
+              autoFocus
+            />
+            <div className="message-edit-actions">
+              <button type="button" onClick={onCancelEdit}>
+                <X size={14} />
+                <span>취소</span>
+              </button>
+              <button type="submit">
+                <Play size={14} />
+                <span>다시 전송</span>
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
+        )}
         {hasSources && (
           <div className="sources-section">
             <button className="sources-toggle" type="button" onClick={() => setShowSources((v) => !v)}>
@@ -89,6 +159,11 @@ function MessageCard({ message, copied, onCopy, onSave, onExecute }) {
             <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "Saved" : "Save"} onClick={() => onSave(message.id)} />
             {message.executablePrompt && <ActionButton icon={<Play size={14} />} label="Execute" onClick={() => onExecute(message)} />}
           </div>
+        )}
+        {canEdit && !isEditing && (
+          <button className="user-edit-button" type="button" onClick={() => onStartEdit(message)} aria-label="메시지 수정" title="수정">
+            <Edit3 size={14} />
+          </button>
         )}
       </div>
     </article>

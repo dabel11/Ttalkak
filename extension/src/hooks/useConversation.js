@@ -22,6 +22,8 @@ export function useConversation({
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState("");
   const [ragStatus, setRagStatus] = useState("idle");
+  const [editingMessageId, setEditingMessageId] = useState("");
+  const [editingDraft, setEditingDraft] = useState("");
   const [localRecentThreads, setLocalRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
   const [serverRecentThreads, setServerRecentThreads] = useState([]);
   const activeThreadId = useRef(null);
@@ -90,6 +92,8 @@ export function useConversation({
     activeThreadId.current = null;
     setMessages([]);
     setComposerValue("");
+    setEditingMessageId("");
+    setEditingDraft("");
   }
 
   async function copyMessage(message) {
@@ -293,6 +297,114 @@ export function useConversation({
     }
   }
 
+  function startEditMessage(message) {
+    if (isLoggedIn) {
+      showNotice("서버 대화 메시지 수정은 백엔드 명세 확정 후 지원할 예정입니다.");
+      return;
+    }
+    if (!message || message.role !== "user" || isLoading) return;
+    setEditingMessageId(message.id);
+    setEditingDraft(message.content || "");
+  }
+
+  function cancelEditMessage() {
+    setEditingMessageId("");
+    setEditingDraft("");
+  }
+
+  async function submitEditedMessage(event, messageId) {
+    event?.preventDefault?.();
+    if (isLoggedIn) {
+      showNotice("서버 대화 메시지 수정은 백엔드 명세 확정 후 지원할 예정입니다.");
+      return;
+    }
+    if (isLoading) return;
+
+    const prompt = editingDraft.trim();
+    const index = messages.findIndex((message) => message.id === messageId && message.role === "user");
+    if (index < 0 || !prompt) return;
+
+    const baseMessages = messages.slice(0, index);
+    const editedUserMsg = {
+      ...messages[index],
+      content: prompt,
+      editedAt: new Date().toISOString(),
+    };
+    const history = baseMessages
+      .filter((message) => !message.isError && !message.excludeFromHistory)
+      .map((message) => ({ role: message.role, content: message.content }));
+    const guestSessionUuid = sessionUuid || (await getOrCreateSessionUuid());
+    if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
+
+    setMessages([...baseMessages, editedUserMsg]);
+    setEditingMessageId("");
+    setEditingDraft("");
+    setIsLoading(true);
+    setRagStatus("checking");
+
+    try {
+      const data = await requestPromptImprove(ragConfig, {
+        prompt,
+        sessionUuid: guestSessionUuid,
+        history,
+      });
+      setRagStatus("connected");
+
+      const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
+      const assistantMsg = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content:
+          data.ragStatus === "no_evidence"
+            ? data.answer ||
+              data.ragMessage ||
+              `"${prompt}"와 관련된 근거를 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`
+            : data.answer || data.improvedPrompt,
+        executablePrompt: data.improvedPrompt || null,
+        sourcePrompt: prompt,
+        sources: data.sources || [],
+        saved: false,
+        excludeFromHistory: data.ragStatus === "no_evidence",
+      };
+      const nextMessages = [...baseMessages, editedUserMsg, assistantMsg];
+      setMessages(nextMessages);
+
+      if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+      const threadId = activeThreadId.current;
+      setLocalRecentThreads((prev) => {
+        const updatedThread = {
+          id: threadId,
+          title: makeTitle(prompt),
+          time: "방금",
+          messages: nextMessages,
+        };
+        return [updatedThread, ...prev.filter((thread) => thread.id !== threadId)].slice(0, 30);
+      });
+      showNotice("수정한 메시지를 다시 개선했습니다.");
+    } catch (err) {
+      const isNetwork = err instanceof TypeError;
+      setRagStatus("error");
+      if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: isNetwork
+            ? "Backend API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
+            : `오류가 발생했습니다.\n\n${err.message}`,
+          executablePrompt: null,
+          sourcePrompt: prompt,
+          sources: [],
+          saved: false,
+          isError: true,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function requestDeleteRecentThreadLocal(id, setConfirmAction) {
     if (isLoggedIn) {
       setConfirmAction({
@@ -366,6 +478,9 @@ export function useConversation({
     isLoading,
     copiedId,
     ragStatus,
+    canEditUserMessages: !isLoggedIn,
+    editingMessageId,
+    editingDraft,
     recentThreads,
     openPrompt,
     openRecentThread,
@@ -374,6 +489,10 @@ export function useConversation({
     toggleSave,
     executeMessage,
     submitPrompt,
+    startEditMessage,
+    setEditingDraft,
+    cancelEditMessage,
+    submitEditedMessage,
     requestDeleteRecentThread,
   };
 }

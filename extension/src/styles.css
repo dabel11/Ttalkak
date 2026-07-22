@@ -493,9 +493,16 @@ button:disabled {
 
 .message-row.user .message-card {
   max-width: 76%;
-  padding: 12px 17px;
+  position: relative;
+  padding: 12px 46px 12px 17px;
   color: #fff;
   background: #040414;
+}
+
+.message-row.user .message-card.editing {
+  width: min(100%, 420px);
+  max-width: 82%;
+  padding: 12px;
 }
 
 .message-row.assistant .message-card {
@@ -532,6 +539,73 @@ button:disabled {
 
 .action-button:hover {
   color: var(--text);
+}
+
+.user-edit-button {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  opacity: 0.76;
+  transition: transform 0.16s, opacity 0.16s, background 0.16s, border-color 0.16s;
+}
+
+.user-edit-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.28);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.message-edit-form {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 9px;
+}
+
+.message-edit-form textarea {
+  width: 100%;
+  min-height: 94px;
+  resize: vertical;
+  padding: 11px 12px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: 0;
+}
+
+.message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.message-edit-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.message-edit-actions button[type="submit"] {
+  color: #fff;
+  background: #065442;
+  border-color: #065442;
 }
 
 .typing-message {
