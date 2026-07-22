@@ -10,7 +10,7 @@ export function Header({ currentUser, onLogin, onLogout, ragStatus }) {
       <div className="header-actions">
         <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
         {currentUser ? (
-          <button className="login-button" type="button" onClick={onLogout}>{currentUser}님</button>
+          <button className="login-button" type="button" onClick={onLogout}>{currentUser}님 · 로그아웃</button>
         ) : (
           <button className="login-button" type="button" onClick={onLogin}>로그인</button>
         )}

@@ -67,12 +67,12 @@
 
     const token = getAuthToken();
     if (keepSession) {
-      showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
+      showNotice(fallbackMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태를 유지합니다.");
       return true;
     }
 
     if (!token || isDemoAuthToken(token)) {
-      showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태는 유지합니다.");
+      showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태를 유지합니다.");
       return true;
     }
 
@@ -83,7 +83,13 @@
   }
 
   function handleForbiddenError({ status, code, backendMessage, showNotice }) {
-    if (status !== 403 && code !== "ACCESS_DENIED" && code !== "OWNER_ONLY" && code !== "ADMIN_ONLY" && code !== "ADMIN_ACCOUNT_PROTECTED") {
+    if (
+      status !== 403 &&
+      code !== "ACCESS_DENIED" &&
+      code !== "OWNER_ONLY" &&
+      code !== "ADMIN_ONLY" &&
+      code !== "ADMIN_ACCOUNT_PROTECTED"
+    ) {
       return false;
     }
 
@@ -113,13 +119,22 @@
   }
 
   function handleRateLimitError({ status, code, backendMessage, showNotice }) {
-    if (status !== 429 && code !== "RATE_LIMIT_EXCEEDED" && code !== "FREE_TRIAL_LIMIT_EXCEEDED") return false;
+    if (
+      status !== 429 &&
+      code !== "RATE_LIMIT_EXCEEDED" &&
+      code !== "FREE_TRIAL_LIMIT_EXCEEDED" &&
+      code !== "AI_RATE_LIMIT_EXCEEDED"
+    ) {
+      return false;
+    }
 
     showNotice(
       backendMessage ||
         (code === "FREE_TRIAL_LIMIT_EXCEEDED"
           ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요."
-          : "요청이 많습니다. 잠시 후 다시 시도해주세요."),
+          : code === "AI_RATE_LIMIT_EXCEEDED"
+            ? "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            : "요청이 많습니다. 잠시 후 다시 시도해주세요."),
     );
     return true;
   }

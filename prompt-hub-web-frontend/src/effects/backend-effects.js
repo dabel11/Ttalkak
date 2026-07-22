@@ -38,6 +38,8 @@
         return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
       case "AI_SERVICE_UNAVAILABLE":
         return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+      case "AI_RATE_LIMIT_EXCEEDED":
+        return "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
       case "RATE_LIMIT_EXCEEDED":
@@ -320,7 +322,7 @@
     if (!api?.getCommunityPosts) {
       state.backendStatus = "fallback";
       state.backendStatusMessage = canUseDemoFallback()
-        ? "src/api.js를 사용할 수 없어 데모 데이터를 표시 중입니다."
+        ? "GET /api/prompts 호출 실패로 데모 데이터를 표시 중입니다."
         : getApiFailureMessage("Home API");
       render();
       return;
@@ -336,12 +338,12 @@
 
     if (promptsResult.status === "fulfilled" && applyBackendHomePromptsResult(backendDataContext, promptsResult.value, state.popularPage)) {
       state.backendStatus = "connected";
-      state.backendStatusMessage = "GET http://localhost:8080/api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+      state.backendStatusMessage = "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
       shouldRender = true;
     } else if (promptsResult.status === "rejected") {
       state.backendStatus = "fallback";
       state.backendStatusMessage = canUseDemoFallback()
-        ? "GET http://localhost:8080/api/prompts 호출에 실패해 데모 데이터를 표시 중입니다."
+        ? "GET /api/prompts 호출 실패로 데모 데이터를 표시 중입니다."
         : getApiFailureMessage("Home API");
       console.warn("[TTALKAK] /api/prompts 연동에 실패했습니다.", promptsResult.reason);
     }
@@ -397,7 +399,7 @@
     } catch (error) {
       state.backendStatus = "fallback";
       state.backendStatusMessage = canUseDemoFallback()
-        ? "검색 API 호출에 실패해 현재 화면의 로컬 목록을 유지합니다."
+        ? "검색 API 호출 실패로 현재 화면의 로컬 목록을 유지합니다."
         : getApiFailureMessage("Home 검색 API");
       console.warn("[TTALKAK] /api/prompts 검색 호출에 실패했습니다.", error);
       render();
