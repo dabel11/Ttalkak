@@ -12,7 +12,8 @@
 
 services:
   mysql:
-    image: mysql:8.0
+    # mysql:8 (=8.4.x). 기존 볼륨 데이터가 8.4로 만들어져 있어 8.0으로 내리면 기동 불가.
+    image: mysql:8
     container_name: ttalkak-mysql
     restart: unless-stopped
 
@@ -29,7 +30,8 @@ services:
       - --collation-server=utf8mb4_unicode_ci
 
     volumes:
-      - ttalkak_mysql_data:/var/lib/mysql   # 데이터 영속
+      # 이름 고정(ttalkak_ttalkak-mysql-data): 이미 인덱싱된 rag_chunk 코퍼스가 이 볼륨에 있다.
+      - ttalkak-mysql-data:/var/lib/mysql   # 데이터 영속
 
     healthcheck:
       test:
@@ -99,5 +101,5 @@ services:
       - "4173:80"
 
 volumes:
-  ttalkak_mysql_data:
+  ttalkak-mysql-data:
   hf-cache:
