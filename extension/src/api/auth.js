@@ -21,11 +21,14 @@ function normalizeAuthSession(payload) {
   };
 }
 
-export async function requestLogin(config, credentials) {
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(credentials),
+async function requestJson(config, path, { method = "POST", body, accessToken } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   const responseBody = await res.json().catch(() => null);
 
@@ -37,5 +40,41 @@ export async function requestLogin(config, credentials) {
     throw error;
   }
 
+  return responseBody;
+}
+
+export async function requestLogin(config, credentials) {
+  const responseBody = await requestJson(config, "/api/auth/login", { body: credentials });
   return normalizeAuthSession(responseBody);
+}
+
+export async function requestSignup(config, payload) {
+  const responseBody = await requestJson(config, "/api/auth/signup", { body: payload });
+  return normalizeAuthSession(responseBody);
+}
+
+export async function requestFindId(config, payload) {
+  return requestJson(config, "/api/auth/find-id", { body: payload });
+}
+
+export async function requestPasswordReset(config, payload) {
+  return requestJson(config, "/api/auth/password-reset/request", { body: payload });
+}
+
+export async function requestWithdrawAccount(config, payload, accessToken) {
+  return requestJson(config, "/api/auth/withdraw", {
+    method: "DELETE",
+    body: payload,
+    accessToken,
+  });
+}
+
+export async function requestCheckUserId(config, userId) {
+  const query = new URLSearchParams({ userId });
+  return requestJson(config, `/api/auth/check-user-id?${query.toString()}`, { method: "GET" });
+}
+
+export async function requestCheckNickname(config, nickname) {
+  const query = new URLSearchParams({ nickname });
+  return requestJson(config, `/api/auth/check-nickname?${query.toString()}`, { method: "GET" });
 }

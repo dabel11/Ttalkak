@@ -15,6 +15,11 @@ export const DEFAULT_RAG_CONFIG = {
 
 export const API_TIMEOUT_MS = 15000;
 
+export const PRIVACY_POLICY_URL =
+  "https://docs.google.com/document/d/e/2PACX-1vQtMHg_T33kpcCY1-5RApEsv3Wvg0KEnF_v5zfqBjnQMvwoLqBt2vRAhby39YGx2-2eIqlCrBhucIyK/pub";
+
+export const TERMS_URL = PRIVACY_POLICY_URL;
+
 export const EXAMPLE_QUERIES = [
   "역할과 목표가 분명한 프롬프트로 바꿔줘",
   "결과 형식과 제약 조건을 포함해서 개선해줘",

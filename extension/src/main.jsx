@@ -27,8 +27,13 @@ function App() {
     authSession,
     currentUser,
     handleAuthExpired,
+    handleCheckDuplicate,
+    handleFindId,
     handleLogin,
     handleLogout,
+    handlePasswordReset,
+    handleSignup,
+    handleWithdraw,
     sessionUuid,
     setAuthMode,
     setSessionUuid,
@@ -135,6 +140,7 @@ function App() {
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
             onLogout={() => handleLogout()}
+            onWithdraw={() => setAuthMode("withdraw")}
             ragStatus={ragStatus}
           />
           <ChatFeed
@@ -171,6 +177,12 @@ function App() {
           setMode={setAuthMode}
           onClose={() => setAuthMode(null)}
           onLogin={handleLogin}
+          onSignup={handleSignup}
+          onFindId={handleFindId}
+          onPasswordReset={handlePasswordReset}
+          onWithdraw={handleWithdraw}
+          onCheckDuplicate={handleCheckDuplicate}
+          isLoggedIn={Boolean(authSession?.accessToken)}
         />
       )}
       {confirmAction && (

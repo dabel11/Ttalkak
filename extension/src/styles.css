@@ -772,17 +772,22 @@ button:disabled {
   padding: 20px;
   background: #05051075;
   animation: 0.16s fadeIn;
+  overflow: hidden;
 }
 
 .auth-modal {
   position: relative;
   width: min(100%, 390px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 24px 80px #05051038;
   animation: 0.22s cubic-bezier(0.22, 1, 0.36, 1) modalIn;
+  scrollbar-gutter: stable;
 }
 
 .close-button {
@@ -850,6 +855,12 @@ button:disabled {
   font-weight: 500;
 }
 
+.auth-form .optional-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .auth-form input {
   width: 100%;
   min-height: 42px;
@@ -860,9 +871,41 @@ button:disabled {
   outline: 0;
 }
 
+.auth-check-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 7px;
+}
+
+.auth-check-row button {
+  min-height: 42px;
+  padding: 0 9px;
+  color: var(--brand-green);
+  background: #fff;
+  border: 1px solid rgba(18, 63, 52, 0.18);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.auth-check-row button:hover:not(:disabled) {
+  background: rgba(18, 63, 52, 0.08);
+}
+
+.auth-check-row button:disabled {
+  color: var(--muted);
+  background: rgba(18, 63, 52, 0.05);
+  cursor: default;
+}
+
 .password-field {
   display: flex;
   align-items: center;
+  width: 100%;
+  min-height: 42px;
+  overflow: hidden;
+  background: #fff;
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -873,11 +916,21 @@ button:disabled {
 }
 
 .password-field input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding-right: 4px;
+  background: transparent;
   border: 0;
   box-shadow: none;
 }
 
+.password-field input:focus {
+  box-shadow: none;
+}
+
 .password-field button {
+  flex: 0 0 40px;
   width: 40px;
   height: 40px;
   display: grid;
@@ -885,6 +938,14 @@ button:disabled {
   color: var(--muted);
   background: transparent;
   border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+
+.password-field button:hover {
+  color: var(--text);
+  background: rgba(18, 63, 52, 0.08);
 }
 
 .auth-submit {
@@ -896,6 +957,52 @@ button:disabled {
   border-radius: 11px;
   font-weight: 600;
   transition: transform 0.16s, box-shadow 0.16s;
+}
+
+.auth-submit.danger {
+  background: #9f1239;
+}
+
+.auth-submit.danger:hover {
+  background: #be123c;
+  box-shadow: 0 12px 28px rgba(159, 18, 57, 0.22);
+}
+
+.auth-agreements {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(18, 63, 52, 0.05);
+  border: 1px solid rgba(18, 63, 52, 0.08);
+  border-radius: 12px;
+}
+
+.auth-agreements label {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-agreements input {
+  width: 15px;
+  min-height: 15px;
+  margin-top: 2px;
+  padding: 0;
+  accent-color: var(--brand-green);
+}
+
+.auth-agreements a {
+  color: var(--brand-green);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-agreements a:hover {
+  text-decoration: underline;
 }
 
 .auth-switch {
@@ -1367,6 +1474,70 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.account-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.account-menu-trigger {
+  min-width: 58px;
+}
+
+.account-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 15;
+  width: 150px;
+  display: none;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid rgba(18, 63, 52, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 18px 42px rgba(5, 5, 16, 0.16);
+}
+
+.account-menu:hover .account-menu-popover,
+.account-menu:focus-within .account-menu-popover {
+  display: grid;
+  gap: 5px;
+}
+
+.account-menu-popover p {
+  margin: 0 0 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-popover button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.account-menu-popover button:hover {
+  background: var(--brand-green-soft);
+}
+
+.account-menu-popover .danger-menu-item {
+  color: #9f1239;
+}
+
+.account-menu-popover .danger-menu-item:hover {
+  background: #fff1f2;
+}
+
 .login-button:hover,
 .send-button:not(:disabled):hover,
 .auth-submit:hover {
@@ -1382,7 +1553,7 @@ button:disabled {
 }
 
 .search-input input:focus,
-.auth-form input:focus,
+.auth-form > label > input:focus,
 .composer textarea:focus,
 .password-field:focus-within {
   border-color: transparent;
@@ -1503,6 +1674,15 @@ button:disabled {
 }
 
 @media (max-width: 430px) {
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .auth-modal {
+    max-height: calc(100vh - 16px);
+    padding: 22px 18px;
+  }
+
   .header {
     padding: 14px 14px 7px;
     gap: 8px;
