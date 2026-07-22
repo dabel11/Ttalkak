@@ -6,6 +6,12 @@ import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/ext
 import { isAuthExpiredError } from "../utils/apiErrors";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
 
+function buildNoEvidenceMessage(prompt, data) {
+  if (data.answer || data.ragMessage) return data.answer || data.ragMessage;
+  const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
+  return `관련 기법 근거 없이 기본 첨삭을 수행했습니다.\n\n"${prompt}"에 대한 직접 근거는 찾지 못했지만, 기본 개선 결과를 아래에 반영했습니다.\n\n이런 요청으로 다시 시도해볼 수 있습니다:\n${examples}`;
+}
+
 export function useConversation({
   authSession,
   executeTarget,
@@ -134,7 +140,7 @@ export function useConversation({
               ...items,
             ]
       );
-      showNotice("Saved에 저장했습니다.");
+      showNotice("보관함에 저장했습니다.");
     } else {
       setSavedItems((items) => items.filter((i) => i.id !== messageId));
       showNotice("저장을 해제했습니다.");
@@ -215,14 +221,10 @@ export function useConversation({
       }
 
       if (data.ragStatus === "no_evidence") {
-        const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
         const assistantMsg = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          content:
-            data.answer ||
-            data.ragMessage ||
-            `"${prompt}"와 관련된 근거를 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`,
+          content: buildNoEvidenceMessage(prompt, data),
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
           sources: data.sources || [],
@@ -283,7 +285,7 @@ export function useConversation({
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: isNetwork
-            ? "Backend API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
+            ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
             : `오류가 발생했습니다.\n\n${err.message}`,
           executablePrompt: null,
           sourcePrompt: prompt,
@@ -350,15 +352,12 @@ export function useConversation({
       });
       setRagStatus("connected");
 
-      const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
       const assistantMsg = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content:
           data.ragStatus === "no_evidence"
-            ? data.answer ||
-              data.ragMessage ||
-              `"${prompt}"와 관련된 근거를 찾지 못했지만 기본 첨삭을 수행했습니다.\n\n이런 질문을 입력해보세요:\n${examples}`
+            ? buildNoEvidenceMessage(prompt, data)
             : data.answer || data.improvedPrompt,
         executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
@@ -391,7 +390,7 @@ export function useConversation({
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: isNetwork
-            ? "Backend API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
+            ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
             : `오류가 발생했습니다.\n\n${err.message}`,
           executablePrompt: null,
           sourcePrompt: prompt,

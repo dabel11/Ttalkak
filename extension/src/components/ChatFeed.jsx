@@ -61,8 +61,8 @@ function Intro({ onSelectExample }) {
   return (
     <div className="intro">
       <div className="intro-icon"><Plus size={34} /></div>
-      <h1>AI Prompt Assistant</h1>
-      <p>Write a prompt for an AI tool, and TTALKAK will improve it into a clearer, executable prompt.</p>
+      <h1>프롬프트 개선</h1>
+      <p>AI 도구에 보낼 문장을 입력하면 TTALKAK이 더 명확하고 실행 가능한 프롬프트로 다듬어줍니다.</p>
       <div className="tip-list">
         {TIPS.map((tip) => (
           <article className="tip-card" key={tip.title}>
@@ -160,9 +160,9 @@ function MessageCard({
         )}
         {isAssistant && !message.isError && (
           <div className="card-actions">
-            <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "Copied" : "Copy"} onClick={() => onCopy(message)} />
-            <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "Saved" : "Save"} onClick={() => onSave(message.id)} />
-            {message.executablePrompt && <ActionButton icon={<Play size={14} />} label="Execute" onClick={() => onExecute(message)} />}
+            <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "복사됨" : "복사"} onClick={() => onCopy(message)} />
+            <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />
+            {message.executablePrompt && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
           </div>
         )}
         {canEdit && !isEditing && (

@@ -41,7 +41,7 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
           if (mergeable.length > 0) {
             await Promise.allSettled(mergeable.map((promptId) => savePrompt(ragConfig, promptId, token)));
             setLocalSavedItems((items) => items.filter((item) => !mergeable.includes(getPromptSaveId(item))));
-            showNotice("로컬 Saved를 서버 보관함에 병합했습니다.");
+            showNotice("로컬 보관함을 서버 보관함에 병합했습니다.");
           }
           mergedTokenRef.current = token;
         }
@@ -147,7 +147,7 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
         showNotice("저장을 해제했습니다.");
         return items.filter((saved) => saved.id !== id && saved.id !== item.id && saved.content !== item.content);
       }
-      showNotice("Saved에 저장했습니다.");
+      showNotice("보관함에 저장했습니다.");
       return [
         {
           id,

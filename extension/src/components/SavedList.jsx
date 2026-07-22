@@ -32,11 +32,11 @@ export function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSa
                     e.stopPropagation();
                     onSavePrompt(item);
                   }}
-                  aria-label={saved ? "Unsave" : "Save"}
-                  title={saved ? "Unsave" : "Save"}
+                  aria-label={saved ? "보관 취소" : "보관"}
+                  title={saved ? "보관 취소" : "보관"}
                 >
                   {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-                  {saved ? "Saved" : "Save"}
+                  {saved ? "보관됨" : "보관"}
                 </button>
               )}
             </div>

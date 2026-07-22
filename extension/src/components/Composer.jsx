@@ -5,7 +5,7 @@ export const Composer = forwardRef(function Composer({ value, onChange, onSubmit
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       {hasMessages && (
-        <button className="newchat-button" type="button" onClick={onNewChat} disabled={disabled} aria-label="New chat" title="New chat">
+        <button className="newchat-button" type="button" onClick={onNewChat} disabled={disabled} aria-label="새 대화" title="새 대화">
           <Plus size={16} />
         </button>
       )}
@@ -21,10 +21,10 @@ export const Composer = forwardRef(function Composer({ value, onChange, onSubmit
           }
         }}
         rows={1}
-        placeholder={hasMessages ? "Enter a follow-up improvement request..." : "Enter a prompt to improve..."}
-        aria-label="Prompt input"
+        placeholder={hasMessages ? "후속 개선 요청을 입력하세요..." : "개선하고 싶은 프롬프트를 입력하세요..."}
+        aria-label="프롬프트 입력"
       />
-      <button className="send-button" type="submit" disabled={!value.trim() || disabled} aria-label="Send prompt">
+      <button className="send-button" type="submit" disabled={!value.trim() || disabled} aria-label="프롬프트 전송">
         <Send size={18} />
       </button>
     </form>

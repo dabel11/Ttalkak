@@ -26,22 +26,22 @@ export function Sidebar({
 
   const placeholder =
     activeTab === "search"
-      ? "Search all prompts..."
+      ? "전체 프롬프트 검색..."
       : activeTab === "saved"
-        ? "Search saved prompts..."
-        : "Search recent chats...";
+        ? "보관한 프롬프트 검색..."
+        : "최근 대화 검색...";
 
   return (
-    <aside className={`sidebar ${collapsed ? "collapsed" : ""}`} aria-label="Search, saved prompts, and recent chats">
+    <aside className={`sidebar ${collapsed ? "collapsed" : ""}`} aria-label="검색, 보관함, 최근 대화">
       <div className="sidebar-top">
-        <button className="collapse-button" type="button" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed((v) => !v)}>
+        <button className="collapse-button" type="button" aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"} onClick={() => setCollapsed((v) => !v)}>
           <ChevronLeft size={16} />
         </button>
       </div>
-      <nav className="tab-list" aria-label="Sidebar tabs">
-        <TabButton id="search" activeTab={activeTab} onClick={selectTab} icon={<Search size={15} />} label="Search" />
-        <TabButton id="saved" activeTab={activeTab} onClick={selectTab} icon={<Save size={15} />} label="Saved" />
-        <TabButton id="recents" activeTab={activeTab} onClick={selectTab} icon={<Clock3 size={15} />} label="Recents" />
+      <nav className="tab-list" aria-label="사이드바 탭">
+        <TabButton id="search" activeTab={activeTab} onClick={selectTab} icon={<Search size={15} />} label="검색" />
+        <TabButton id="saved" activeTab={activeTab} onClick={selectTab} icon={<Save size={15} />} label="보관함" />
+        <TabButton id="recents" activeTab={activeTab} onClick={selectTab} icon={<Clock3 size={15} />} label="최근" />
       </nav>
       <div className="sidebar-content">
         <label className="search-input">
