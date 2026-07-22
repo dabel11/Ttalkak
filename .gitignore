@@ -41,3 +41,6 @@ docs/
 .gitignore
 
 extension/.env.production.local
+
+# Local preview server logs
+prompt-hub-web-frontend/preview-server.*.log
