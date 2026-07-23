@@ -12,6 +12,18 @@ function buildNoEvidenceMessage(prompt, data) {
   return `관련 기법 근거 없이 기본 첨삭을 수행했습니다.\n\n"${prompt}"에 대한 직접 근거는 찾지 못했지만, 기본 개선 결과를 아래에 반영했습니다.\n\n이런 요청으로 다시 시도해볼 수 있습니다:\n${examples}`;
 }
 
+function getServerEditErrorMessage(error) {
+  const code = String(error?.code || error?.payload?.code || "").toUpperCase();
+  if (code === "THREAD_ID_REQUIRED") return "대화 정보를 찾을 수 없어 수정할 수 없습니다. 최근 대화를 다시 열어주세요.";
+  if (code === "MESSAGE_NOT_EDITABLE") return "수정할 수 없는 메시지입니다. 사용자 메시지만 수정할 수 있습니다.";
+  if (code === "THREAD_NOT_FOUND") return "이미 삭제되었거나 접근할 수 없는 대화입니다.";
+  if (code === "MESSAGE_NOT_FOUND") return "수정할 메시지를 찾을 수 없습니다. 대화를 다시 불러와 주세요.";
+  if (code === "AI_INVALID_RESPONSE") return "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
+  if (code === "AI_SERVICE_UNAVAILABLE") return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
+  if (code === "AI_RATE_LIMIT_EXCEEDED") return "AI 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
+  return error?.message || "수정 실패: 잠시 후 다시 시도해주세요.";
+}
+
 export function useConversation({
   authSession,
   executeTarget,
@@ -41,6 +53,21 @@ export function useConversation({
     const items = await requestMakeThreads(ragConfig, authSession.accessToken);
     setServerRecentThreads(items);
     return items;
+  }
+
+  async function refreshActiveServerThread(threadId = activeThreadId.current) {
+    const items = await refreshServerThreads();
+    const targetId = String(threadId || "");
+    const activeThread = items.find((thread) => {
+      const serverId = String(thread.serverId || "");
+      const id = String(thread.id || "");
+      return Boolean(targetId) && (serverId === targetId || id === targetId);
+    });
+    if (activeThread) {
+      activeThreadId.current = String(activeThread.serverId || activeThread.id);
+      setMessages(activeThread.messages || []);
+    }
+    return activeThread;
   }
 
   useEffect(() => {
@@ -202,6 +229,7 @@ export function useConversation({
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
     const improvePayload = {
       prompt,
+      category: "prompt_techniques",
       accessToken: authSession?.accessToken || "",
       sessionUuid: guestSessionUuid,
       ...(authSession?.accessToken && activeServerThreadId ? { threadId: activeServerThreadId } : {}),
@@ -234,7 +262,7 @@ export function useConversation({
         const nextMessages = [...messages, userMsg, assistantMsg];
         setMessages((prev) => [...prev, assistantMsg]);
         if (isLoggedIn) {
-          await refreshServerThreadsAfterImprove();
+          await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
         } else {
           if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
           const threadId = activeThreadId.current;
@@ -259,7 +287,7 @@ export function useConversation({
       setMessages((prev) => [...prev, assistantMsg]);
 
       if (isLoggedIn) {
-        await refreshServerThreadsAfterImprove();
+        await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
         return;
       }
 
@@ -300,10 +328,6 @@ export function useConversation({
   }
 
   function startEditMessage(message) {
-    if (isLoggedIn) {
-      showNotice("서버 대화 메시지 수정은 백엔드 명세 확정 후 지원할 예정입니다.");
-      return;
-    }
     if (!message || message.role !== "user" || isLoading) return;
     setEditingMessageId(message.id);
     setEditingDraft(message.content || "");
@@ -317,7 +341,44 @@ export function useConversation({
   async function submitEditedMessage(event, messageId) {
     event?.preventDefault?.();
     if (isLoggedIn) {
-      showNotice("서버 대화 메시지 수정은 백엔드 명세 확정 후 지원할 예정입니다.");
+      if (isLoading) return;
+      const prompt = editingDraft.trim();
+      const threadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
+      if (!prompt) return;
+      if (!threadId) {
+        showNotice("서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.");
+        return;
+      }
+
+      setEditingMessageId("");
+      setEditingDraft("");
+      setIsLoading(true);
+      setRagStatus("checking");
+
+      try {
+        await requestPromptImprove(ragConfig, {
+          accessToken: authSession.accessToken,
+          threadId,
+          messageId,
+          prompt,
+          category: "prompt_techniques",
+        });
+        setRagStatus("connected");
+        await refreshActiveServerThread(String(threadId));
+        showNotice("수정한 메시지로 다시 개선했습니다.");
+      } catch (error) {
+        setRagStatus("error");
+        if (isAuthExpiredError(error)) {
+          await onAuthExpired?.();
+          return;
+        }
+        if (Number(error?.status || 0) === 404) {
+          await refreshServerThreads().catch(() => {});
+        }
+        showNotice(getServerEditErrorMessage(error));
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
     if (isLoading) return;
@@ -347,6 +408,7 @@ export function useConversation({
     try {
       const data = await requestPromptImprove(ragConfig, {
         prompt,
+        category: "prompt_techniques",
         sessionUuid: guestSessionUuid,
         history,
       });
@@ -477,7 +539,7 @@ export function useConversation({
     isLoading,
     copiedId,
     ragStatus,
-    canEditUserMessages: !isLoggedIn,
+    canEditUserMessages: true,
     editingMessageId,
     editingDraft,
     recentThreads,

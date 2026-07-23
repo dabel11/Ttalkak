@@ -4745,7 +4745,11 @@ async function submitMakePrompt(composer) {
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(threadId);
   applyPendingImproveThreadId(threadId);
-  if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
+  if (shouldUseImproveThreadSync()) {
+    await refreshActiveMakeThreadFromBackend(threadId);
+    return;
+  }
+  syncMakeThreadWithBackend(threadId);
   render();
 }
 async function copyMakeMessage(messageId) {
@@ -4784,6 +4788,35 @@ async function resendEditedMessage(messageId, value) {
   const assistantMessageId = `make-${now}`;
   const history = buildMakeImproveHistory(state.messages.slice(0, index));
   const threadId = state.activeThreadId || `thread-${now}`;
+
+  if (shouldUseImproveThreadSync()) {
+    const backendThreadId = getMakeBackendThreadId(threadId);
+    if (!backendThreadId) {
+      showNotice("서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.");
+      return;
+    }
+
+    try {
+      await improvePromptWithBackend(cleanValue, {
+        threadId,
+        messageId,
+        category: "prompt_techniques",
+      });
+      state.editingMessageId = null;
+      await refreshActiveMakeThreadFromBackend(threadId);
+      showNotice("수정한 메시지로 다시 개선했습니다.");
+    } catch (error) {
+      state.makeBackendStatus = "fallback";
+      state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
+      if (Number(error?.status || 0) === 404) {
+        await refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {});
+      }
+      handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
+      render();
+    }
+    return;
+  }
+
   applyEditedMakeMessageState(state, index, cleanValue, now);
   let improvedPrompt = "";
   try {
@@ -4805,7 +4838,7 @@ async function resendEditedMessage(messageId, value) {
   updateRecentThread(threadId);
   applyPendingImproveThreadId(threadId);
   if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
-  showNotice("수정한 메시지를 다시 개선했습니다.");
+  showNotice("수정한 메시지로 다시 개선했습니다.");
   render();
 }
 function openShareFromMakeMessage(messageId) {
@@ -6964,11 +6997,13 @@ function shouldUseImproveThreadSync() {
   return state.isLoggedIn && hasBackendAuthToken();
 }
 
-function buildMakeImprovePayload(prompt, history, threadId) {
-  const payload = { prompt };
+function buildMakeImprovePayload(prompt, history, threadId, { messageId = "", category = "" } = {}) {
+  const payload = { prompt, category: category || "prompt_techniques" };
   if (shouldUseImproveThreadSync()) {
     const backendThreadId = getMakeBackendThreadId(threadId);
     if (backendThreadId) payload.threadId = Number(backendThreadId);
+    if (messageId) payload.messageId = String(messageId);
+    if (category) payload.category = String(category);
     return payload;
   }
 
@@ -6976,7 +7011,12 @@ function buildMakeImprovePayload(prompt, history, threadId) {
   return payload;
 }
 
-async function improvePromptWithBackend(prompt, { history = buildMakeImproveHistory(), threadId = state.activeThreadId } = {}) {
+async function improvePromptWithBackend(prompt, {
+  history = buildMakeImproveHistory(),
+  threadId = state.activeThreadId,
+  messageId = "",
+  category = "",
+} = {}) {
   const api = getMakeApi();
   if (!api?.improvePrompt) {
     if (canUseDemoFallback()) return polishPrompt(prompt);
@@ -6986,7 +7026,10 @@ async function improvePromptWithBackend(prompt, { history = buildMakeImproveHist
   }
 
   try {
-    const improved = await api.improvePrompt(buildMakeImprovePayload(prompt, history, threadId), getMakeApiToken());
+    const improved = await api.improvePrompt(
+      buildMakeImprovePayload(prompt, history, threadId, { messageId, category }),
+      getMakeApiToken(),
+    );
     applyImproveThreadId(threadId, improved);
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
@@ -7048,17 +7091,33 @@ async function syncMakeThreadWithBackend(threadId) {
   if (serverId) thread.serverId = serverId;
 }
 
-async function refreshMakeThreadsFromBackend() {
+async function refreshMakeThreadsFromBackend({ shouldRender = true } = {}) {
   const api = getMakeApi();
   if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
 
   try {
     const threads = await api.getMakeThreads(getMakeApiToken());
     applyMakeThreadsResult(getBackendDataEffectContext(), threads);
-    render();
+    if (shouldRender) render();
   } catch (error) {
     handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
   }
+}
+
+async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId) {
+  const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
+  await refreshMakeThreadsFromBackend({ shouldRender: false });
+  const refreshedThread = state.recentThreads.find((thread) => {
+    const id = String(thread.id || "");
+    const serverId = String(thread.serverId || "");
+    return Boolean(backendThreadId) && (id === backendThreadId || serverId === backendThreadId);
+  });
+
+  if (refreshedThread) {
+    openRecentMakeThreadState(state, refreshedThread);
+  }
+  render();
+  return refreshedThread;
 }
 
 function getBackendDataEffectContext() {

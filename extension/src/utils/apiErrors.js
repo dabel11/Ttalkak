@@ -8,8 +8,15 @@ export function getApiErrorMessage(status, body) {
   const code = String(body?.code || "").toUpperCase();
 
   if (code === "ACCOUNT_BLOCKED") return body?.message || "차단된 계정입니다. 관리자에게 문의해주세요.";
+  if (code === "THREAD_ID_REQUIRED") return body?.message || "대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.";
+  if (code === "THREAD_NOT_FOUND") return body?.message || "이미 삭제되었거나 접근할 수 없는 대화입니다.";
+  if (code === "MESSAGE_NOT_FOUND") return body?.message || "수정할 메시지를 찾을 수 없습니다. 대화를 다시 불러와 주세요.";
+  if (code === "MESSAGE_NOT_EDITABLE") return body?.message || "수정할 수 없는 메시지입니다. 사용자 메시지만 수정할 수 있습니다.";
   if (code === "REQUEST_TIMEOUT" || code === "AI_TIMEOUT") {
     return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (code === "AI_INVALID_RESPONSE") {
+    return body?.message || "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
   }
   if (code === "AI_SERVICE_UNAVAILABLE") {
     return body?.message || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";

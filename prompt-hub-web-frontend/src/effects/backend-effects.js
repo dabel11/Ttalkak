@@ -26,6 +26,14 @@
         return "차단 사유가 필요합니다.";
       case "RESOURCE_NOT_FOUND":
         return "요청한 대상을 찾을 수 없습니다.";
+      case "THREAD_ID_REQUIRED":
+        return "대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.";
+      case "THREAD_NOT_FOUND":
+        return "이미 삭제되었거나 접근할 수 없는 대화입니다.";
+      case "MESSAGE_NOT_FOUND":
+        return "수정할 메시지를 찾을 수 없습니다. 대화를 다시 불러와 주세요.";
+      case "MESSAGE_NOT_EDITABLE":
+        return "수정할 수 없는 메시지입니다. 사용자 메시지만 수정할 수 있습니다.";
       case "VALIDATION_FAILED":
       case "INVALID_REQUEST":
         return "입력값을 확인해주세요.";
@@ -40,6 +48,8 @@
         return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
       case "AI_RATE_LIMIT_EXCEEDED":
         return "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
+      case "AI_INVALID_RESPONSE":
+        return "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
       case "RATE_LIMIT_EXCEEDED":
