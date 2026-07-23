@@ -19,6 +19,9 @@ spring:
 rag:
   server-url: ${RAG_SERVER_URL:http://localhost:8000}
 ttalkak:
+  cors:
+    allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}"
+
   admin:
     seed-enabled: "${ADMIN_SEED_ENABLED:false}"
     user-id: "${ADMIN_USER_ID:admin}"
