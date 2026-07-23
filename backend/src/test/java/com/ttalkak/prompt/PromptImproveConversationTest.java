@@ -20,10 +20,14 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -305,12 +309,15 @@ class PromptImproveConversationTest {
 		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
 				.thenReturn(Optional.of(existingThread));
 
-		PromptController.ImproveRequest request = new PromptController.ImproveRequest(
-				"conversationId로 이어가기",
-				"prompt_techniques",
-				42L,
-				null,
-				List.of());
+		PromptController.ImproveRequest request =
+				new PromptController.ImproveRequest(
+						"conversationId로 이어가기",
+						"prompt_techniques",
+						42L,
+						null,
+						null,
+						List.of()
+				);
 
 		Map<String, Object> response = controller.improve(request, AUTHORIZATION);
 
@@ -386,12 +393,15 @@ class PromptImproveConversationTest {
 		when(authService.currentMemberIdOrNull(AUTHORIZATION))
 				.thenReturn(7L);
 
-		PromptController.ImproveRequest request = new PromptController.ImproveRequest(
-				"이어지는 요청",
-				"prompt_techniques",
-				41L,
-				42L,
-				List.of());
+		PromptController.ImproveRequest request =
+				new PromptController.ImproveRequest(
+						"이어지는 요청",
+						"prompt_techniques",
+						41L,
+						42L,
+						null,
+						List.of()
+				);
 
 		ApiException exception = assertThrows(
 				ApiException.class,
@@ -574,16 +584,355 @@ class PromptImproveConversationTest {
 				never()).save(any(MakeThread.class));
 	}
 
+	@Test
+	void editsUserMessageAndDeletesFollowingMessages()
+			throws Exception {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION
+				)
+		).thenReturn(7L);
+
+		List<Map<String, Object>> storedMessages =
+				new ArrayList<>(List.of(
+						Map.of(
+								"id", "user-1",
+								"role", "user",
+								"content", "첫 질문",
+								"createdAt", "2026-07-22T10:00:00"
+						),
+						Map.of(
+								"id", "assistant-1",
+								"role", "assistant",
+								"content", "첫 답변",
+								"createdAt", "2026-07-22T10:00:01"
+						),
+						Map.of(
+								"id", "user-2",
+								"role", "user",
+								"content", "수정 전 질문",
+								"createdAt", "2026-07-22T10:00:02"
+						),
+						Map.of(
+								"id", "assistant-2",
+								"role", "assistant",
+								"content", "삭제될 답변",
+								"createdAt", "2026-07-22T10:00:03"
+						),
+						Map.of(
+								"id", "user-3",
+								"role", "user",
+								"content", "삭제될 후속 질문",
+								"createdAt", "2026-07-22T10:00:04"
+						)
+				));
+
+		MakeThread thread = new MakeThread(
+				7L,
+				"테스트 대화",
+				objectMapper.writeValueAsString(
+						storedMessages
+				),
+				null
+		);
+
+		ReflectionTestUtils.setField(
+				thread,
+				"id",
+				42L
+		);
+
+		when(
+				makeThreadRepository.findByIdAndMemberId(
+						42L,
+						7L
+				)
+		).thenReturn(Optional.of(thread));
+
+		Map<String, Object> response =
+				controller.improve(
+						editRequest(
+								"수정된 질문",
+								42L,
+								"user-2"
+						),
+						AUTHORIZATION
+				);
+
+		assertEquals(42L, response.get("threadId"));
+		assertEquals(
+				"user-2",
+				response.get("editedMessageId")
+		);
+
+		List<Map<String, Object>> savedMessages =
+				readMessages(thread);
+
+		assertEquals(4, savedMessages.size());
+
+		assertEquals(
+				"user-1",
+				savedMessages.get(0).get("id")
+		);
+		assertEquals(
+				"assistant-1",
+				savedMessages.get(1).get("id")
+		);
+
+		assertEquals(
+				"user-2",
+				savedMessages.get(2).get("id")
+		);
+		assertEquals(
+				"수정된 질문",
+				savedMessages.get(2).get("content")
+		);
+		assertNotNull(
+				savedMessages.get(2).get("editedAt")
+		);
+
+		assertEquals(
+				"assistant",
+				savedMessages.get(3).get("role")
+		);
+		assertEquals(
+				"프롬프트를 개선했습니다.",
+				savedMessages.get(3).get("content")
+		);
+
+		assertTrue(
+				savedMessages.stream().noneMatch(
+						message ->
+								"assistant-2".equals(
+										message.get("id")
+								)
+										|| "user-3".equals(
+										message.get("id")
+								)
+				)
+		);
+
+		verify(makeThreadRepository)
+				.save(thread);
+	}
+
+	@Test
+	void rejectsEditingAssistantMessage()
+			throws Exception {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION
+				)
+		).thenReturn(7L);
+
+		List<Map<String, Object>> storedMessages =
+				List.of(
+						Map.of(
+								"id", "user-1",
+								"role", "user",
+								"content", "질문"
+						),
+						Map.of(
+								"id", "assistant-1",
+								"role", "assistant",
+								"content", "답변"
+						)
+				);
+
+		MakeThread thread = new MakeThread(
+				7L,
+				"테스트 대화",
+				objectMapper.writeValueAsString(
+						storedMessages
+				),
+				null
+		);
+
+		ReflectionTestUtils.setField(
+				thread,
+				"id",
+				42L
+		);
+
+		when(
+				makeThreadRepository.findByIdAndMemberId(
+						42L,
+						7L
+				)
+		).thenReturn(Optional.of(thread));
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						editRequest(
+								"답변을 수정",
+								42L,
+								"assistant-1"
+						),
+						AUTHORIZATION
+				)
+		);
+
+		assertEquals(
+				"MESSAGE_NOT_EDITABLE",
+				exception.getCode()
+		);
+
+		verify(
+				makeThreadRepository,
+				never()
+		).save(any(MakeThread.class));
+	}
+
+	@Test
+	void rejectsUnknownMessageId()
+			throws Exception {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION
+				)
+		).thenReturn(7L);
+
+		MakeThread thread = new MakeThread(
+				7L,
+				"테스트 대화",
+				objectMapper.writeValueAsString(
+						List.of(
+								Map.of(
+										"id", "user-1",
+										"role", "user",
+										"content", "질문"
+								)
+						)
+				),
+				null
+		);
+
+		ReflectionTestUtils.setField(
+				thread,
+				"id",
+				42L
+		);
+
+		when(
+				makeThreadRepository.findByIdAndMemberId(
+						42L,
+						7L
+				)
+		).thenReturn(Optional.of(thread));
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						editRequest(
+								"수정된 질문",
+								42L,
+								"user-missing"
+						),
+						AUTHORIZATION
+				)
+		);
+
+		assertEquals(
+				"MESSAGE_NOT_FOUND",
+				exception.getCode()
+		);
+
+		verify(
+				makeThreadRepository,
+				never()
+		).save(any(MakeThread.class));
+	}
+
+	@Test
+	void editingMessageRequiresThreadId() {
+		when(
+				authService.currentMemberIdOrNull(
+						AUTHORIZATION
+				)
+		).thenReturn(7L);
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						editRequest(
+								"수정된 질문",
+								null,
+								"user-1"
+						),
+						AUTHORIZATION
+				)
+		);
+
+		assertEquals(
+				"THREAD_ID_REQUIRED",
+				exception.getCode()
+		);
+
+		verify(
+				makeThreadRepository,
+				never()
+		).findByIdAndMemberId(any(), any());
+	}
+
+	@Test
+	void anonymousUserCannotEditServerMessage() {
+		when(
+				authService.currentMemberIdOrNull(null)
+		).thenReturn(null);
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						editRequest(
+								"수정된 질문",
+								42L,
+								"user-1"
+						),
+						null
+				)
+		);
+
+		assertEquals(401, exception.getStatusCode().value());
+		assertEquals(
+				"LOGIN_REQUIRED",
+				exception.getCode()
+		);
+
+		verify(
+				makeThreadRepository,
+				never()
+		).findByIdAndMemberId(any(), any());
+	}
+
+	private PromptController.ImproveRequest editRequest(
+			String prompt,
+			Long threadId,
+			String messageId
+	) {
+		return new PromptController.ImproveRequest(
+				prompt,
+				"prompt_techniques",
+				null,
+				threadId,
+				messageId,
+				List.of()
+		);
+	}
+
 	private PromptController.ImproveRequest request(
 			String prompt,
 			Long conversationId,
-			Long threadId) {
+			Long threadId
+	) {
 		return new PromptController.ImproveRequest(
 				prompt,
 				"prompt_techniques",
 				conversationId,
 				threadId,
-				List.of());
+				null,
+				List.of()
+		);
 	}
 
 	private List<Map<String, Object>> readMessages(

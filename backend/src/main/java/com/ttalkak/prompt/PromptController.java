@@ -313,6 +313,103 @@ public class PromptController {
         return history;
     }
 
+	private int findEditableUserMessageIndex(
+			List<Map<String, Object>> messages,
+			String messageId
+	) {
+		for (int index = 0;
+			index < messages.size();
+			index++) {
+
+			Map<String, Object> message =
+					messages.get(index);
+
+			Object storedId = message.get("id");
+
+			if (!Objects.equals(
+					messageId,
+					storedId == null
+							? null
+							: String.valueOf(storedId)
+			)) {
+				continue;
+			}
+
+			String role = message.get("role") == null
+					? ""
+					: String.valueOf(
+							message.get("role")
+					);
+
+			if (!"user".equalsIgnoreCase(role)) {
+				throw new ApiException(
+						HttpStatus.BAD_REQUEST,
+						"MESSAGE_NOT_EDITABLE",
+						"사용자 메시지만 수정할 수 있습니다."
+				);
+			}
+
+			return index;
+		}
+
+		throw new ApiException(
+				HttpStatus.NOT_FOUND,
+				"MESSAGE_NOT_FOUND",
+				"수정할 메시지를 찾을 수 없습니다."
+		);
+	}
+
+	private void replaceMessageAndAppendResponse(
+			List<Map<String, Object>> messages,
+			int messageIndex,
+			String prompt,
+			Map<String, Object> response
+	) {
+		Map<String, Object> editedMessage =
+				new LinkedHashMap<>(
+						messages.get(messageIndex)
+				);
+
+		String now = LocalDateTime.now().toString();
+
+		editedMessage.put("content", prompt);
+		editedMessage.put("editedAt", now);
+
+		while (messages.size() > messageIndex) {
+			messages.remove(messages.size() - 1);
+		}
+
+		messages.add(editedMessage);
+
+		Map<String, Object> assistantMessage =
+				new LinkedHashMap<>();
+
+		assistantMessage.put(
+				"id",
+				"assistant-" + UUID.randomUUID()
+		);
+		assistantMessage.put("role", "assistant");
+		assistantMessage.put(
+				"content",
+				response.get("answer")
+		);
+		assistantMessage.put(
+				"improvedPrompt",
+				response.get("improvedPrompt")
+		);
+		assistantMessage.put(
+				"sources",
+				response.get("sources")
+		);
+		assistantMessage.put(
+				"ragStatus",
+				response.get("ragStatus")
+		);
+		assistantMessage.put("createdAt", now);
+
+		messages.add(assistantMessage);
+	}
+
     private void appendMessages(
             List<Map<String, Object>> messages,
             String prompt,
@@ -476,6 +573,29 @@ public class PromptController {
 
 	Long requestedThreadId = resolveRequestedThreadId(request);
 
+        String messageId = request.messageId() == null
+                ? null
+                : request.messageId().trim();
+
+        boolean editingMessage =
+                messageId != null && !messageId.isBlank();
+
+        if (editingMessage && requestedThreadId == null) {
+			throw new ApiException(
+					HttpStatus.BAD_REQUEST,
+					"THREAD_ID_REQUIRED",
+					"메시지를 수정하려면 threadId가 필요합니다."
+			);
+        }
+		
+		if (editingMessage && memberId == null) {
+			throw new ApiException(
+					HttpStatus.UNAUTHORIZED,
+					"LOGIN_REQUIRED",
+					"로그인이 필요합니다."
+			);
+		}
+
         if (requestedThreadId != null && memberId == null) {
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED,
@@ -484,30 +604,51 @@ public class PromptController {
             );
         }
 
-        MakeThread thread = null;
-        List<Map<String, Object>> messages;
+	MakeThread thread = null;
+	List<Map<String, Object>> messages;
+	int editedMessageIndex = -1;
 
-        if (requestedThreadId != null) {
-            thread = makeThreadRepository
-                    .findByIdAndMemberId(
-                            requestedThreadId,
-                            memberId
-                    )
-                    .orElseThrow(() -> new ApiException(
-                            HttpStatus.NOT_FOUND,
-                            "THREAD_NOT_FOUND",
-                            "대화를 찾을 수 없습니다."
-                    ));
+	if (requestedThreadId != null) {
+		thread = makeThreadRepository
+				.findByIdAndMemberId(
+						requestedThreadId,
+						memberId
+				)
+				.orElseThrow(() -> new ApiException(
+						HttpStatus.NOT_FOUND,
+						"THREAD_NOT_FOUND",
+						"대화를 찾을 수 없습니다."
+				));
 
-            messages = readMessages(
-                    thread.getMessagesJson()
-            );
-        } else {
-            messages = copyHistory(request.history());
-        }
+		messages = readMessages(
+				thread.getMessagesJson()
+		);
 
-        List<Map<String, String>> ragHistory =
-                toRagHistory(messages);
+		if (editingMessage) {
+			editedMessageIndex =
+					findEditableUserMessageIndex(
+							messages,
+							messageId
+					);
+		}
+	} else {
+		messages = copyHistory(request.history());
+	}
+
+	List<Map<String, String>> ragHistory;
+
+	if (editingMessage) {
+		ragHistory = toRagHistory(
+				new ArrayList<>(
+						messages.subList(
+								0,
+								editedMessageIndex
+						)
+				)
+		);
+	} else {
+		ragHistory = toRagHistory(messages);
+	}
 
         Map<String, Object> body;
 
@@ -568,14 +709,23 @@ public class PromptController {
 
         Long savedThreadId = null;
 
-        if (memberId != null) {
-            appendMessages(
-                    messages,
-                    prompt,
-                    body
-            );
+		if (memberId != null) {
+			if (editingMessage) {
+				replaceMessageAndAppendResponse(
+						messages,
+						editedMessageIndex,
+						prompt,
+						body
+				);
+			} else {
+				appendMessages(
+						messages,
+						prompt,
+						body
+				);
+			}
 
-            String messagesJson = writeMessages(messages);
+			String messagesJson = writeMessages(messages);
 
             if (thread == null) {
                 thread = new MakeThread(
@@ -598,6 +748,10 @@ public class PromptController {
 
         body.put("conversationId", savedThreadId);
         body.put("threadId", savedThreadId);
+
+		if (editingMessage) {
+			body.put("editedMessageId", messageId);
+		}
 
         return body;
     }
@@ -906,11 +1060,12 @@ public class PromptController {
 
     public record SharePromptRequest(String title, String text, List<String> tags) {}
     public record VisibilityRequest(Boolean isShared) {}
-    public record ImproveRequest(
-            String prompt,
-            String category,
-            Long conversationId,
-            Long threadId,
-            List<Map<String, String>> history
-    ) {}
+	public record ImproveRequest(
+			String prompt,
+			String category,
+			Long conversationId,
+			Long threadId,
+			String messageId,
+			List<Map<String, String>> history
+	) {}
 }
