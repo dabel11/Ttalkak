@@ -19,6 +19,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
 public class SecurityConfig {
@@ -178,7 +179,24 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-		config.setAllowedOriginPatterns(allowedOriginPatterns);
+        List<String> exactOrigins =
+                allowedOriginPatterns
+                        .stream()
+                        .filter(origin -> !origin.contains("*"))
+                        .collect(Collectors.toList());
+        List<String> originPatterns =
+                allowedOriginPatterns
+                        .stream()
+                        .filter(origin -> origin.contains("*"))
+                        .collect(Collectors.toList());
+
+        if (!exactOrigins.isEmpty()) {
+            config.setAllowedOrigins(exactOrigins);
+        }
+
+        if (!originPatterns.isEmpty()) {
+            config.setAllowedOriginPatterns(originPatterns);
+        }
 
         config.setAllowedMethods(List.of(
                 "GET",
