@@ -1489,18 +1489,26 @@ button:disabled {
   right: 0;
   z-index: 15;
   width: 150px;
-  display: none;
+  display: grid;
+  gap: 5px;
   padding: 8px;
   background: #fff;
   border: 1px solid rgba(18, 63, 52, 0.08);
   border-radius: 12px;
   box-shadow: 0 18px 42px rgba(5, 5, 16, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: top right;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .account-menu:hover .account-menu-popover,
-.account-menu:focus-within .account-menu-popover {
-  display: grid;
-  gap: 5px;
+.account-menu:focus-within .account-menu-popover,
+.account-menu.open .account-menu-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
 }
 
 .account-menu-popover p {
@@ -1532,6 +1540,7 @@ button:disabled {
 
 .account-menu-popover .danger-menu-item {
   color: #9f1239;
+  border-top: 1px solid rgba(159, 18, 57, 0.08);
 }
 
 .account-menu-popover .danger-menu-item:hover {
