@@ -54,6 +54,28 @@ public class MakeController {
         return pageResponse(items, page, size, pageSize);
     }
 
+    @GetMapping("/threads/{id}")
+    public Map<String, Object> threadDetail(
+            @PathVariable String id,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization
+    ) {
+        Long memberId = requireMemberId(authorization);
+        Long threadId = parseNumericId(id, "thread id");
+
+        MakeThread thread = threadRepository
+                .findByIdAndMemberId(threadId, memberId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "THREAD_NOT_FOUND",
+                        "대화를 찾을 수 없습니다."
+                ));
+
+        return threadMap(thread);
+    }
+
     @PostMapping("/threads")
     public Map<String, Object> saveThread(@RequestBody SaveThreadRequest request,
                                           @RequestHeader(value = "Authorization", required = false) String authorization) {
