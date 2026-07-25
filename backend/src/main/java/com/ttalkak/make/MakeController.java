@@ -313,12 +313,22 @@ public class MakeController {
         }
     }
 
-    private Object fromJson(String json) {
-        if (json == null || json.isBlank()) return List.of();
+    private List<Map<String, Object>> fromJson(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+
         try {
-            return objectMapper.readValue(json, new TypeReference<Object>() {});
+            return objectMapper.readValue(
+                    json,
+                    new TypeReference<List<Map<String, Object>>>() {}
+            );
         } catch (Exception e) {
-            return json;
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "THREAD_DATA_CORRUPTED",
+                    "대화 데이터가 손상되었습니다."
+            );
         }
     }
 

@@ -91,4 +91,25 @@ class MakeThreadDetailTest {
                 controller.threadDetail("42", "Bearer token")
         ).isInstanceOf(ApiException.class);
     }
+
+    @Test
+    void rejectsCorruptedThreadMessages() {
+        MakeThread thread = new MakeThread(
+                7L,
+                "손상된 대화",
+                "invalid-json",
+                null
+        );
+
+        ReflectionTestUtils.setField(thread, "id", 42L);
+
+        when(authService.currentMemberIdOrNull("Bearer token"))
+                .thenReturn(7L);
+        when(threadRepository.findByIdAndMemberId(42L, 7L))
+                .thenReturn(Optional.of(thread));
+
+        assertThatThrownBy(() ->
+                controller.threadDetail("42", "Bearer token")
+        ).isInstanceOf(ApiException.class);
+    }
 }
