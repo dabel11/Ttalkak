@@ -77,35 +77,61 @@ public class MakeController {
     }
 
     @PostMapping("/threads")
-    public Map<String, Object> saveThread(@RequestBody SaveThreadRequest request,
-                                          @RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> saveThread(
+            @RequestBody SaveThreadRequest request,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
         Long memberId = requireMemberId(authorization);
+        Long requestedId =
+                request.id() != null ? request.id() : request.threadId();
+
+        if (requestedId != null) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "THREAD_ID_NOT_ALLOWED",
+                    "새 대화 생성 요청에는 threadId를 지정할 수 없습니다."
+            );
+        }
+
         String title = normalizeTitle(request.title());
         String messagesJson = toJson(request.messages());
         Long folderId = normalizeFolderId(request.folderId(), memberId);
-        Long requestedId = request.id() != null ? request.id() : request.threadId();
 
-        MakeThread thread;
-        if (requestedId != null) {
-            thread = threadRepository.findByIdAndMemberId(requestedId, memberId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "대화 스레드를 찾을 수 없습니다."));
-            thread.update(title, messagesJson, folderId);
-        } else {
-            thread = new MakeThread(memberId, title, messagesJson, folderId);
-        }
+        MakeThread thread =
+                new MakeThread(memberId, title, messagesJson, folderId);
 
         return threadMap(threadRepository.save(thread));
     }
 
     @PatchMapping("/threads/{id}")
-    public Map<String, Object> updateThread(@PathVariable String id,
-                                            @RequestBody SaveThreadRequest request,
-                                            @RequestHeader(value = "Authorization", required = false) String authorization) {
+    public Map<String, Object> updateThread(
+            @PathVariable String id,
+            @RequestBody SaveThreadRequest request,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
         Long memberId = requireMemberId(authorization);
         Long threadId = parseNumericId(id, "thread id");
-        MakeThread thread = threadRepository.findByIdAndMemberId(threadId, memberId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "대화 스레드를 찾을 수 없습니다."));
-        thread.update(normalizeTitle(request.title()), toJson(request.messages()), normalizeFolderId(request.folderId(), memberId));
+
+        MakeThread thread = threadRepository
+                .findByIdAndMemberId(threadId, memberId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "THREAD_NOT_FOUND",
+                        "대화 스레드를 찾을 수 없습니다."
+                ));
+
+        String title = request.title() == null
+                ? thread.getTitle()
+                : normalizeTitle(request.title());
+
+        thread.update(
+                title,
+                thread.getMessagesJson(),
+                thread.getFolderId()
+        );
+
         return threadMap(threadRepository.save(thread));
     }
 
