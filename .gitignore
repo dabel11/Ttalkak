@@ -40,6 +40,9 @@ rag-server/eval/.gen_cache*.json
 rag-server/eval/.example_ab_cache*.json
 rag-server/eval/.temp_*.log
 
+# ── 계약 문서 (git 미포함 · 백엔드/프론트 담당에게 별도 공유) ──
+rag-server/CONTRACT_*.md
+
 docs/
 .gitignore
 

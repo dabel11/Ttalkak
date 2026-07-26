@@ -35,7 +35,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
                 changes, score, summary, questions }
 ```
 
-- **응답의 mode 가 프론트 분기의 단일 기준** — `"improve"`(개선안) / `"ask"`(추가 질문). 프론트는 `improved_prompt==""` 같은 추측 대신 `mode` 로 분기하고, `mode=="ask"` 면 구조화 `questions[]` 를 렌더한다(상세 계약: [`QUESTION_MODE_CONTRACT.md`](QUESTION_MODE_CONTRACT.md)).
+- **응답의 mode 가 프론트 분기의 단일 기준** — `"improve"`(개선안) / `"ask"`(추가 질문). 프론트는 `improved_prompt==""` 같은 추측 대신 `mode` 로 분기하고, `mode=="ask"` 면 구조화 `questions[]` 를 렌더한다(상세 계약은 별도 공유하는 백엔드/프론트 계약 문서 참조).
 
 - **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3) · 생성 LLM(Groq/Gemini)
 - **저장소**: MySQL `rag_chunk` (Spring 백엔드와 **동일 DB** `ttalkak` 공유)
@@ -99,7 +99,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - **파싱 실패 시 폴백**: 원문 그대로 answer + 정규식 추출(2026-06-27 `---` 보존 유지). `mode`는 개선블록 유무로 추정, `questions`는 `[]`(마크다운에서 구조화 복원 불가 → answer 원문으로 우아하게 저하)
 - **응답 필드**(2026-07-23 추가): `mode`(improve|ask) · `summary`(한 줄 요약, 두 모드 공통) · `questions[]`(질문 모드 전용). 종전엔 mode/questions/summary 가 `answer` 마크다운 안에만 있어 프론트가 되파싱해야 했음 → 상단 필드로 노출
 - `sources` = 검색된 청크 ≤5개 (`text[:300]`, metadata, score). `score` = LLM 자체평가(1~10, 개선 모드만)
-- **프론트 규약**: `mode=="ask"` → `questions[]` 렌더 + Execute 숨김 / `mode=="improve"` → `improved_prompt` 표시 + Execute 활성. 전체 계약·왕복 흐름은 [`QUESTION_MODE_CONTRACT.md`](QUESTION_MODE_CONTRACT.md)
+- **프론트 규약**: `mode=="ask"` → `questions[]` 렌더 + Execute 숨김 / `mode=="improve"` → `improved_prompt` 표시 + Execute 활성. 전체 계약·왕복 흐름은 별도 공유하는 백엔드/프론트 계약 문서 참조
 
 ---
 
