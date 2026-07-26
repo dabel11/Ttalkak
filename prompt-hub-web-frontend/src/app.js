@@ -6878,12 +6878,6 @@ async function createBackendMakeThread(thread) {
   const messages = Array.isArray(thread.messages) && thread.messages.length
     ? thread.messages
     : state.messages;
-  const backendThreadId = isBackendNumericId(thread.serverId)
-    ? Number(thread.serverId)
-    : isBackendNumericId(thread.id)
-      ? Number(thread.id)
-      : null;
-
   try {
     const payload = {
         title: thread.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
@@ -6895,11 +6889,6 @@ async function createBackendMakeThread(thread) {
           sourcePrompt: message.sourcePrompt || "",
         })),
       };
-    if (backendThreadId) {
-      payload.id = backendThreadId;
-      payload.threadId = backendThreadId;
-    }
-
     const result = await api.createMakeThread(
       payload,
       getMakeApiToken(),
@@ -7105,7 +7094,32 @@ async function refreshMakeThreadsFromBackend({ shouldRender = true } = {}) {
 }
 
 async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId) {
+  const api = getMakeApi();
   const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
+  if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
+    try {
+      const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
+      if (refreshedThread?.id) {
+        state.recentThreads = [
+          refreshedThread,
+          ...state.recentThreads.filter((thread) => {
+            const id = String(thread.id || "");
+            const serverId = String(thread.serverId || "");
+            return id !== String(refreshedThread.id) && serverId !== String(refreshedThread.serverId || refreshedThread.id);
+          }),
+        ].slice(0, 8);
+        normalizeRecentThreads();
+        openRecentMakeThreadState(state, refreshedThread);
+        render();
+        return refreshedThread;
+      }
+    } catch (error) {
+      if (Number(error?.status || 0) !== 404) {
+        handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+      }
+    }
+  }
+
   await refreshMakeThreadsFromBackend({ shouldRender: false });
   const refreshedThread = state.recentThreads.find((thread) => {
     const id = String(thread.id || "");

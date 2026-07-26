@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { deleteMakeThread, requestMakeThreads } from "../api/make";
+import { deleteMakeThread, requestMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { EXAMPLE_QUERIES, STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
@@ -56,8 +56,31 @@ export function useConversation({
   }
 
   async function refreshActiveServerThread(threadId = activeThreadId.current) {
-    const items = await refreshServerThreads();
     const targetId = String(threadId || "");
+    if (targetId) {
+      try {
+        const activeThread = await requestMakeThread(ragConfig, targetId, authSession.accessToken);
+        if (activeThread) {
+          activeThreadId.current = String(activeThread.serverId || activeThread.id);
+          setServerRecentThreads((prev) => [
+            activeThread,
+            ...prev.filter((thread) => {
+              const serverId = String(thread.serverId || "");
+              const id = String(thread.id || "");
+              return serverId !== String(activeThread.serverId || activeThread.id) && id !== String(activeThread.id);
+            }),
+          ]);
+          setMessages(activeThread.messages || []);
+          return activeThread;
+        }
+      } catch (error) {
+        if (Number(error?.status || 0) !== 404) {
+          throw error;
+        }
+      }
+    }
+
+    const items = await refreshServerThreads();
     const activeThread = items.find((thread) => {
       const serverId = String(thread.serverId || "");
       const id = String(thread.id || "");

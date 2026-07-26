@@ -61,6 +61,15 @@ export async function requestMakeThreads(config, accessToken) {
   return unwrapItems(responseBody).map(normalizeMakeThread);
 }
 
+export async function requestMakeThread(config, threadId, accessToken) {
+  if (!accessToken || !threadId) return null;
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads/${threadId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const responseBody = await parseResponse(res);
+  return normalizeMakeThread(responseBody?.data || responseBody);
+}
+
 export async function createMakeThread(config, payload, accessToken) {
   if (!accessToken) return null;
   const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads`, {

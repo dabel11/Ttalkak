@@ -6,6 +6,9 @@
       getMakeThreads(token) {
         return request("/api/make/threads", { token }).then((payload) => unwrapItems(payload).map(normalizeMakeThread));
       },
+      getMakeThread(threadId, token) {
+        return request(`/api/make/threads/${threadId}`, { token }).then((payload) => normalizeMakeThread(payload?.data || payload));
+      },
       getMakeFolders(token) {
         return request("/api/make/folders", { token }).then((payload) => unwrapItems(payload).map(normalizeMakeFolder));
       },
