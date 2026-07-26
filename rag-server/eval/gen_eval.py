@@ -38,12 +38,15 @@ from app.rag.generator import SYSTEM_PROMPT
 
 
 # ── 응답 캐시 (Groq 무료 TPD 100k 절약) ────────────────────────
-# 캐시 키 = sha256(생성모델 + SYSTEM_PROMPT + query + sorted 기법명) — 검색 결과·시스템
-# 프롬프트·모델이 바뀌면 자동 무효화. 같은 조건이면 LLM 호출을 건너뜀.
-# (모델 미포함 시 8b 실험 응답이 70b 측정으로 오인되는 사고가 실제 있었음 — 2026-07-09)
+# 캐시 키 = sha256(생성모델 + temperature + SYSTEM_PROMPT + query + sorted 기법명) —
+# 검색 결과·시스템 프롬프트·모델·온도가 바뀌면 자동 무효화. 같은 조건이면 LLM 호출 스킵.
+# (모델 미포함 시 8b 실험 응답이 70b 측정으로 오인되는 사고가 실제 있었음 — 2026-07-09.
+#  temperature 도 같은 이유로 포함 — 온도 비교 실험 캐시가 서로 오염되지 않게. 2026-07-23)
 
-def _cache_key(query: str, technique_names: list[str], model: str = "") -> str:
-    payload = str(model) + "|" + SYSTEM_PROMPT + "|" + query + "|" + str(sorted(technique_names))
+def _cache_key(query: str, technique_names: list[str], model: str = "",
+               temperature: str = "") -> str:
+    payload = (str(model) + "|t" + str(temperature) + "|" + SYSTEM_PROMPT + "|"
+               + query + "|" + str(sorted(technique_names)))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -163,8 +166,11 @@ def main():
     ap = argparse.ArgumentParser(description="RAG 생성(G) 품질 평가 — LLM-as-judge")
     ap.add_argument("--qa", default="gen_set.json", help="평가셋 파일명 (eval/ 기준)")
     ap.add_argument("--limit", type=int, default=0, help="앞 N개만 (0=전체)")
+    ap.add_argument("--items", default="", help="1-기준 항목 번호 선택 (예: 1,3,9) — limit 무시")
     ap.add_argument("--model", default="gemini-2.0-flash", help="생성 모델(딸각 응답용)")
     ap.add_argument("--judge-model", default=_JUDGE_MODEL, help="채점 LLM")
+    ap.add_argument("--no-judge", action="store_true",
+                    help="judge 생략 — 결정론 지표(mode_accuracy·structured)만 집계 (TPD 절약)")
     ap.add_argument("--sleep", type=float, default=5.0,
                     help="항목 간 대기(초) — 무료 티어 TPM 한도 회피")
     ap.add_argument("--show", action="store_true", help="항목별 응답·점수 상세 출력")
@@ -175,18 +181,25 @@ def main():
     qa_path = Path(__file__).parent / args.qa
     data = json.loads(qa_path.read_text(encoding="utf-8"))
     items = data["items"]
-    if args.limit:
+    if args.items:
+        picks = [int(x) for x in args.items.split(",") if x.strip()]
+        items = [items[n - 1] for n in picks]
+    elif args.limit:
         items = items[:args.limit]
     collection = data.get("collection", "prompt_techniques")
     cache = _load_cache(args.cache_file)
     cache_hits = 0
-    print(f"생성 평가셋: {args.qa}  (컬렉션 {collection}, {len(items)}개, judge={args.judge_model})"
+    temperature = os.environ.get("GEN_TEMPERATURE", "0.7")   # generator 와 동일 규약
+    print(f"생성 평가셋: {args.qa}  (컬렉션 {collection}, {len(items)}개, "
+          f"temp={temperature}, judge={'생략' if args.no_judge else args.judge_model})"
           + (f"  캐시: {args.cache_file} ({len(cache)}건)" if args.cache_file else ""))
 
     scores = {"mode_fit": [], "technique_grounding": [],
               "instruction_form": [], "intent_preservation": []}
     mode_correct = 0
     mode_total = 0
+    structured_n = 0     # 구조화 JSON 파싱 성공(정규식 폴백 미발동) 건수
+    structured_known = 0  # structured 필드가 있는 건수(구형 캐시는 알 수 없음)
 
     for i, it in enumerate(items, 1):
         query = it["query"]
@@ -196,7 +209,7 @@ def main():
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
 
-        ckey = _cache_key(query, techniques, args.model) if args.cache_file else None
+        ckey = _cache_key(query, techniques, args.model, temperature) if args.cache_file else None
         if ckey and ckey in cache:
             cached = cache[ckey]
             if isinstance(cached, dict):           # 신형 캐시: run_generation 결과 dict
@@ -222,14 +235,20 @@ def main():
         if expected:
             mode_total += 1
             mode_correct += 1 if mode == expected else 0
+        if "structured" in gen:
+            structured_known += 1
+            structured_n += 1 if gen["structured"] else 0
 
         # judge 실패(TPD 소진 등)는 비치명 — mode_accuracy(결정론적)는 계속 집계
-        try:
-            verdict = _retry(lambda: _judge(query, techniques, answer, improved,
-                                            mode, args.judge_model))
-        except Exception as e:
-            print(f"       (judge 실패 → 점수 없이 mode만 집계: {str(e)[:80]})")
+        if args.no_judge:
             verdict = {}
+        else:
+            try:
+                verdict = _retry(lambda: _judge(query, techniques, answer, improved,
+                                                mode, args.judge_model))
+            except Exception as e:
+                print(f"       (judge 실패 → 점수 없이 mode만 집계: {str(e)[:80]})")
+                verdict = {}
         for k in scores:
             scores[k].append(verdict.get(k))
 
@@ -259,6 +278,8 @@ def main():
         print(f"  {k:<20}: {a:.2f}  (n={cnt})" if a is not None else f"  {k:<20}: N/A")
     if mode_total:
         print(f"  {'mode_accuracy':<20}: {mode_correct/mode_total:.2f}  ({mode_correct}/{mode_total})")
+    if structured_known:
+        print(f"  {'structured(JSON)':<20}: {structured_n}/{structured_known}  (정규식 폴백 {structured_known - structured_n}회)")
     print("═" * 52)
 
 

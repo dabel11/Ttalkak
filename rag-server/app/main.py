@@ -13,7 +13,7 @@ from app.rag.generator import Generator
 from app.rag import query_transform
 # 파싱·복원 순수 함수 (eval 스크립트 하위호환 위해 동일 이름 재노출)
 from app.rag.postprocess import (
-    parse_generation, build_answer,
+    parse_generation, build_answer, assemble_fields,
     extract_improved_prompt, extract_applied_techniques, extract_changes,
 )
 
@@ -70,50 +70,41 @@ class QueryRequest(BaseModel):
     use_query_transform: bool = False   # 키워드 쿼리변환(실험적) — 코퍼스 미스매치로 기본 off
     use_hyde:            bool = False   # HyDE 가상문서 쿼리(실험적)
     min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
+    # ── C(타입별 멀티 컬렉션): 기법 카드에 더해 '유사 요청 개선 사례'를 함께 주입 ──
+    # A안 헤드투헤드 검증(2026-07-23): 예시 승률 66.7%·Δ+0.83(방향 신호). min_score 미달 시
+    # 자동 제외 → 관련 예시 없으면 기존과 동일 동작(무회귀). 정밀 재측정 후 유지/조정.
+    use_examples:        bool = True    # 예시 컬렉션 주입 on/off (per-request 로 끌 수 있음)
+    example_collection:  str  = "prompt_examples"
+    n_examples:          int  = 2       # 주입할 예시 수(상한 — min_score 컷으로 줄 수 있음)
+    example_min_score:   float = 0.40   # 예시 유효 유사도 컷(dense 코사인)
 
 class QueryResponse(BaseModel):
-    answer:              str            # 전체 응답 (화면 표시용 마크다운 — JSON에서 복원)
-    improved_prompt:     str            # 개선된 프롬프트만 (Execute용)
-    sources:             list[dict]
-    techniques_applied:  list[str] = []  # 적용한 기법명 목록
-    changes:             list[str] = []  # 개선 포인트 줄 목록
-    score:               Optional[int] = None  # LLM 자체 평가(1~10, 개선 모드만) — 설계문서 {improved, score, changes[]}
+    mode:                str            # "improve" | "ask" — 프론트 분기의 단일 기준(추측 금지)
+    answer:              str            # 전체 응답 (화면 표시용 마크다운 — 항상 렌더 가능한 폴백)
+    improved_prompt:     str = ""       # 개선된 프롬프트만 (Execute용). ask 모드면 ""
+    sources:             list[dict] = []
+    techniques_applied:  list[str] = []  # 적용한 기법명 목록 (개선 모드)
+    changes:             list[str] = []  # 개선 포인트 줄 목록 (개선 모드)
+    score:               Optional[int] = None  # LLM 자체 평가(1~10, 개선 모드만)
+    summary:             str = ""       # 한 줄 요약 (개선: 무엇을 개선했는지 / 질문: 파악내용+왜 묻는지)
+    questions:           list[str] = []  # 추가 질문 1~3개 (질문 모드 전용, 개선 모드는 [])
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
                    history: list[dict]) -> dict:
-    """검색 결과 → 생성 → 구조화 필드 추출까지의 공용 경로 (/query·eval 공유).
-    반환: {answer, improved_prompt, techniques_applied, changes, score, structured}
+    """검색 결과 → 생성 → 구조화 필드 조립까지의 공용 경로 (/query·eval 공유).
+    반환: {mode, answer, improved_prompt, techniques_applied, changes, score,
+           summary, questions, structured}.
+    필드 조립은 순수 함수 assemble_fields() 가 담당(LLM 없이 단위 테스트됨).
     JSON 파싱 실패 시 레거시 정규식 추출로 폴백(structured=False)."""
     raw = generator.generate(query=query, contexts=contexts, model=model, history=history)
     if not (raw and raw.strip()):
         raise RuntimeError("생성 결과가 비어 있습니다.")
 
-    p = parse_generation(raw)
-    if p is not None:
-        improved = str(p.get("improved_prompt") or "") if p["mode"] == "improve" else ""
-        techs = [t.get("name", "") if isinstance(t, dict) else str(t)
-                 for t in (p.get("techniques") or [])]
-        score = p.get("score")
-        return {
-            "answer":             build_answer(p),
-            "improved_prompt":    improved.strip(),
-            "techniques_applied": [t for t in techs if t],
-            "changes":            [str(c) for c in (p.get("changes") or [])],
-            "score":              int(score) if isinstance(score, (int, float)) else None,
-            "structured":         True,
-        }
-
-    # 폴백: 모델이 JSON을 안 지킨 경우 — 원문을 그대로 표시하고 정규식으로 추출
-    print("[Main] 구조화 JSON 파싱 실패 → 정규식 폴백")
-    return {
-        "answer":             raw,
-        "improved_prompt":    extract_improved_prompt(raw),
-        "techniques_applied": extract_applied_techniques(raw),
-        "changes":            extract_changes(raw),
-        "score":              None,
-        "structured":         False,
-    }
+    fields = assemble_fields(raw)
+    if not fields["structured"]:
+        print("[Main] 구조화 JSON 파싱 실패 → 정규식 폴백")
+    return fields
 
 
 # ── 엔드포인트 ───────────────────────────────────────────────
@@ -157,14 +148,35 @@ def query(req: QueryRequest):
     # 첫 턴(대화 기록 없음)에 매칭 결과가 없을 때만 404.
     # min_score 컷으로 전부 걸러졌다면 = 정말 무관한 입력 → 404가 의도된 동작.
     # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
+    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
     if not retrieved and not history:
         raise HTTPException(
             status_code=404,
             detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
         )
 
+    # ── C(타입별 멀티 컬렉션): 예시 컬렉션에서 '유사 요청 개선 사례'를 별도 검색해 주입 ──
+    # 예시는 원본 거친 요청(req.query)과 매칭한다(기법 검색용 변환쿼리가 아님 — 예시의 'before'가
+    # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(20건 규모 typed 컬렉션엔 dense로 충분,
+    # 쿼리당 리랭크 2회 지연 방지). min_score 미달·빈 컬렉션·검색 실패는 모두 '예시 없음'으로 흡수.
+    examples: list[dict] = []
+    if req.use_examples and req.n_examples > 0:
+        try:
+            examples = retriever.search(
+                query=req.query,
+                collection_name=req.example_collection,
+                top_k=req.n_examples,
+                use_reranker=False,
+                use_hybrid=False,
+                min_score=req.example_min_score,
+            )
+        except Exception as e:                       # 예시 실패가 본 개선을 막지 않게
+            print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
+            examples = []
+
     try:
-        gen = run_generation(req.query, retrieved, req.model, history)
+        # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)
+        gen = run_generation(req.query, retrieved + examples, req.model, history)
     except RuntimeError as e:
         # 빈 생성·백엔드 한도 등 — 명확히 503 (extract(None) 500 크래시 방지 겸용)
         raise HTTPException(status_code=503, detail=str(e))
@@ -174,12 +186,15 @@ def query(req: QueryRequest):
         for r in retrieved
     ]
     return QueryResponse(
+        mode=gen["mode"],
         answer=gen["answer"],
         improved_prompt=gen["improved_prompt"],
         sources=sources,
         techniques_applied=gen["techniques_applied"],
         changes=gen["changes"],
         score=gen["score"],
+        summary=gen["summary"],
+        questions=gen["questions"],
     )
 
 

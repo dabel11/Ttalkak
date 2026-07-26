@@ -23,6 +23,56 @@ def _strip_cjk_noise(text: str) -> str:
     return _CJK_NOISE_RE.sub("", text)
 
 
+# ── 토큰 추정 (llama 토크나이저 실측 기반) ───────────────────
+# 2026-07-23 usage.prompt_tokens 실측: 한국어 0.9~1.7 chars/tok(문체 편차 큼 — 고유명사
+# 많은 구어체가 최악), 영어 5.4 chars/tok. 종전의 일괄 chars/3 은 한국어를 최대 2.3배
+# 과소추정 → 413 방어가 뚫릴 수 있었다. 계수는 '과소추정 금지' 우선으로 최악 케이스에
+# 맞춤(한글 /1.0, 영문·숫자·공백 /4, 기호·기타 /1.5) — 실측 4샘플에서 과소추정 ≤5%,
+# 과대추정 +21~36%. 과대추정은 출력 예약만 줄이고(want=4096 여유로 평시 무영향) 413은
+# 못 내므로 안전한 방향이다.
+_HANGUL_RE = re.compile(r"[가-힣]")
+_ASCII_RE  = re.compile(r"[a-zA-Z0-9 \n]")
+
+
+def _est_tokens(text: str) -> int:
+    """텍스트의 llama 토큰 수 추정 — 한글/영숫자·공백/기타를 분리해 계산."""
+    if not text:
+        return 0
+    hangul = len(_HANGUL_RE.findall(text))
+    ascii_ = len(_ASCII_RE.findall(text))
+    other  = len(text) - hangul - ascii_
+    return int(hangul / 1.0 + ascii_ / 4 + other / 1.5)
+
+
+def _gen_temperature() -> float:
+    """생성 temperature. GEN_TEMPERATURE 환경변수로 오버라이드(평가 비교용, 기본 0.7)."""
+    try:
+        return float(os.environ.get("GEN_TEMPERATURE", "0.7"))
+    except ValueError:
+        return 0.7
+
+
+# ── Groq 429 재시도 정책 ─────────────────────────────────────
+# 이 시간(초)을 넘는 대기 요구(TPD 소진 등)는 기다리지 않고 즉시 실패 → /query 는 503.
+_RETRY_WAIT_CAP = 20.0
+# Groq 429 메시지 예: "Please try again in 7.66s" / "in 2m59.56s"
+_RETRY_AFTER_RE = re.compile(r"try again in (?:(\d+)m)?([\d.]+)s")
+
+
+def _retry_after_seconds(e: Exception) -> float:
+    """Groq 429 에러에서 재시도 대기 시간(초)을 추출. 헤더 → 메시지 → 기본 8초."""
+    try:
+        v = e.response.headers.get("retry-after")
+        if v:
+            return float(v)
+    except Exception:
+        pass
+    m = _RETRY_AFTER_RE.search(str(e))
+    if m:
+        return int(m.group(1) or 0) * 60 + float(m.group(2))
+    return 8.0
+
+
 # ── 핵심 시스템 프롬프트 ─────────────────────────────────────
 SYSTEM_PROMPT = """당신은 프롬프트 엔지니어링 전문가이며, 사용자와 '대화'를 통해 프롬프트를 다듬어 갑니다.
 Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문해 사용자의 의도를 파악합니다.
@@ -87,11 +137,20 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 [질문 모드] — 컨텍스트가 부족할 때 (여러 턴에 걸쳐 OK)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 빈 항목을 채우기 위해 **한 번에 1~3개**의 짧고 구체적인 질문을 하세요.
-한 라운드로 부족하면 다음 턴에서 또 물어도 됩니다(최대 2~3라운드). 추상적으로 묻지 말고,
-사용자가 답하기 쉽게 보기/예시를 함께 제시하세요. 이미 받은 정보는 다시 묻지 마세요.
+한 라운드로 부족하면 다음 턴에서 또 물어도 됩니다(최대 2~3라운드). 이미 받은 정보는 다시 묻지 마세요.
 
-이때 JSON 출력: "mode"="ask", "questions"에 짧은 질문 1~3개(답하기 쉽게 보기/예시 포함),
-"summary"에 '지금까지 파악한 내용 한 줄 + 왜 더 묻는지'. "improved_prompt"는 ""(개선안 절대 금지).
+**핵심: 사용자가 '무슨 정보를 채워야 하는지' 한눈에 알게 하세요.** 각 질문은 다음 3요소를 갖춥니다.
+  ① 채울 정보의 **이름(항목)**을 앞에 명시 (예: "대상 독자:", "주제:", "분량:")
+  ② **왜 필요한지** — 그 정보가 결과 프롬프트를 어떻게 바꾸는지 한 조각
+  ③ 답하기 쉬운 **보기/예시** 2~3개
+  예) ❌ "누구를 위한 건가요?" (항목·이유·보기 없음, 추상적)
+      ✅ "대상 독자: 누가 읽나요? 톤·난이도가 달라집니다. (예: 20대 잠재고객 / 사내 실무자 / 초등학생)"
+
+"summary"에는 **파악한 작업 종류 + 무엇이 비어 특정 못 하는지**를 한 줄로 명시하세요.
+  예) "'글쓰기' 요청은 파악했지만 '무엇에 대한 글'(주제)인지가 없어 개선안을 만들 수 없어요."
+
+이때 JSON 출력: "mode"="ask", "questions"에 위 ①②③ 형식의 질문 1~3개,
+"summary"에 위 한 줄. "improved_prompt"는 ""(개선안 절대 금지).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [개선 모드] — 기본 모드 ((A)와 (B)가 특정되면 바로 여기)
@@ -124,8 +183,8 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
   "techniques": [{"name": "기법명", "reason": "한 줄 적용 설명"}],
   "changes": ["개선 포인트·가정, 항목당 한 줄"],
   "score": 1,
-  "summary": "한 줄 — improve: 무엇을 개선했는지 / ask: 파악한 내용과 왜 묻는지",
-  "questions": ["ask일 때 질문 1~3개(보기 포함)"]
+  "summary": "한 줄 — improve: 무엇을 개선했는지 / ask: 파악한 작업 + 무엇이 비어 특정 못 하는지",
+  "questions": ["ask일 때 질문 1~3개 — 각 '항목명: 질문 + 왜 필요한지 (예: 보기1 / 보기2)' 형식"]
 }
 
 - improve 모드: questions=[] · score는 1~10 정수. / ask 모드: improved_prompt="" ·
@@ -144,9 +203,18 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 - 참고 기법에 없는 내용은 함부로 추가하지 마세요. 핵심 의도는 항상 유지합니다."""
 
 
+# 대화 기록 문자 예산 — 최신 턴부터 이 안에 들어오는 만큼만 유지(초과분은 오래된 턴부터 폐기).
+# 상한이 없으면 스레드가 길어질수록 입력이 무한히 커져 _fit_max_tokens 가 출력 예약을
+# 하한(512)까지 죽이고, 그마저 넘으면 413이 난다. verbatim 원문이 assistant 턴마다
+# 반복 포함되는 구조라 실제로 밟기 쉬운 경로.
+_HISTORY_CHAR_BUDGET = 6000
+
+
 def _sanitize_history(history: list[dict] | None) -> list[dict]:
     """프론트에서 받은 대화 기록을 LLM messages 형식으로 정제.
-    role 은 user/assistant 만 허용, 빈 내용·잘못된 role 은 제외."""
+    role 은 user/assistant 만 허용, 빈 내용·잘못된 role 은 제외.
+    이후 문자 예산 컷 — 최신 턴부터 예산 안에서 유지하되, 턴 내용은 자르지 않는다
+    (verbatim 원문 훼손 방지). 가장 최근 턴은 예산을 넘어도 반드시 남긴다."""
     if not history:
         return []
     clean = []
@@ -155,7 +223,19 @@ def _sanitize_history(history: list[dict] | None) -> list[dict]:
         content = (h.get("content") or "").strip()
         if role in ("user", "assistant") and content:
             clean.append({"role": role, "content": content})
-    return clean
+
+    kept, used = [], 0
+    for h in reversed(clean):
+        if kept and used + len(h["content"]) > _HISTORY_CHAR_BUDGET:
+            break
+        kept.append(h)
+        used += len(h["content"])
+    return list(reversed(kept))
+
+
+def _is_example(ctx: dict) -> bool:
+    """검색 컨텍스트가 '개선 예시'(prompt_examples 컬렉션)인지 판정."""
+    return (ctx.get("metadata") or {}).get("kind") == "example"
 
 
 def _build_technique_context(contexts: list[dict]) -> str:
@@ -176,6 +256,39 @@ def _build_technique_context(contexts: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def _build_example_context(contexts: list[dict]) -> str:
+    """개선 예시(거친 요청→개선 프롬프트 사례) 컨텍스트를 렌더."""
+    parts = []
+    for i, ctx in enumerate(contexts, 1):
+        meta  = ctx.get("metadata", {}) or {}
+        task  = meta.get("task_type", "")
+        score = ctx.get("score", 0)
+        header = f"[예시 {i}]"
+        if task:
+            header += f" {task}"
+        header += f" — 유사도 {score*100:.0f}%"
+        parts.append(
+            f"{header}\n{ctx['text']}"
+            "\n→ 위 '개선된 프롬프트'의 구조·기법을 참고해 이번 요청을 같은 수준으로 "
+            "개선하라(내용은 이번 요청에 맞게, 예시 내용을 복사하지 말 것)."
+        )
+    return "\n\n".join(parts)
+
+
+def _build_context_blocks(contexts: list[dict]) -> str:
+    """검색 컨텍스트를 '[참고 기법]' + (있으면) '[참고 예시]' 블록으로 조립.
+    예시 컨텍스트(metadata.kind=='example')가 하나도 없으면 기존과 **완전히 동일한**
+    '[참고 기법]\\n…' 문자열을 반환한다 → 개선 예시 도입 전 생성 경로 무회귀 보장."""
+    techs = [c for c in contexts if not _is_example(c)]
+    exs   = [c for c in contexts if _is_example(c)]
+    blocks: list[str] = []
+    if techs:
+        blocks.append(f"[참고 기법]\n{_build_technique_context(techs)}")
+    if exs:
+        blocks.append(f"[참고 예시 — 유사 요청의 개선 사례]\n{_build_example_context(exs)}")
+    return "\n\n".join(blocks)
+
+
 # ── Groq 백엔드 ───────────────────────────────────────────────
 class GroqGenerator:
     """Groq API 사용 (무료 14,400회/일, 매우 빠름)"""
@@ -192,10 +305,11 @@ class GroqGenerator:
 
     @classmethod
     def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int) -> int:
-        """입력 길이를 추정(≈chars/3)해 TPM 예산 안에 들어가는 max_tokens 를 계산.
-        긴 원문(회의록·코드)을 포함한 요청이 413(Request too large)으로 즉사하는 것을
-        방지하고, 짧은 입력이면 want(기본 4096)를 그대로 쓴다. 하한 512."""
-        est_input = sum(len(m.get("content") or "") for m in messages) // 3 + 100
+        """입력 길이를 추정(_est_tokens — 한글/비한글 분리 실측 계수)해 TPM 예산 안에
+        들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을 포함한 요청이 413(Request
+        too large)으로 즉사하는 것을 방지하고, 짧은 입력이면 want(기본 4096)를 그대로
+        쓴다. 하한 512. (종전 chars//3 일괄 추정은 한국어 과소추정 — 2026-07-23 보정)"""
+        est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
         tpm = cls.TPM_LIMIT.get(groq_model, 12000)
         return max(512, min(want, tpm - est_input - 200))
 
@@ -216,9 +330,8 @@ class GroqGenerator:
         messages.extend(_sanitize_history(history))
 
         if contexts:
-            technique_text = _build_technique_context(contexts)
             label = "원본 프롬프트" if not messages[1:] else "이번 요청"
-            user_msg = f"[참고 기법]\n{technique_text}\n\n[{label}]\n{query}"
+            user_msg = f"{_build_context_blocks(contexts)}\n\n[{label}]\n{query}"
         else:
             # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
             user_msg = query
@@ -227,14 +340,33 @@ class GroqGenerator:
         # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력·8b TPM 6k에서 413 방지)
         max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens)
 
-        response = self.client.chat.completions.create(
-            model=groq_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.7,
-            response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
-        )
-        return _strip_cjk_noise(response.choices[0].message.content)
+        # 429는 대기시간이 짧으면 1회 재시도, 그 외 API 에러는 RuntimeError 로 변환
+        # → main.run_generation 이 503 으로 매핑 (기존엔 groq 예외가 그대로 500).
+        from groq import APIConnectionError, APIStatusError, RateLimitError
+
+        for attempt in range(2):
+            try:
+                response = self.client.chat.completions.create(
+                    model=groq_model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=_gen_temperature(),
+                    response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
+                )
+                return _strip_cjk_noise(response.choices[0].message.content)
+            except RateLimitError as e:
+                wait = _retry_after_seconds(e)
+                if attempt == 0 and wait <= _RETRY_WAIT_CAP:
+                    print(f"[Generator] Groq 429 — {wait:.1f}초 대기 후 재시도 (1/1)")
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(
+                    f"Groq 호출 한도 초과(429) — 약 {wait:.0f}초 후 재시도 가능합니다."
+                ) from e
+            except APIConnectionError as e:
+                raise RuntimeError(f"Groq 연결 실패: {e}") from e
+            except APIStatusError as e:   # 413(Request too large)·5xx 등
+                raise RuntimeError(f"Groq 요청 실패(HTTP {e.status_code})") from e
 
 
 # ── Gemini 백엔드 ─────────────────────────────────────────────
@@ -251,36 +383,40 @@ class GeminiGenerator:
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None) -> str:
-        # 대화 기록을 텍스트로 풀어 프롬프트에 포함
-        convo = ""
+        # 대화 기록을 contents 배열의 정식 턴으로 전달 (Groq messages 와 구조 동일).
+        # 과거엔 system+대화를 한 문자열로 평탄화 → 멀티턴에서 role 경계가 사라져
+        # 모델이 이전 assistant 응답을 자기 지시문으로 오인할 수 있었음 (리뷰 확인 항목).
+        contents = []
         for h in _sanitize_history(history):
-            who   = "사용자" if h["role"] == "user" else "어시스턴트"
-            convo += f"\n[{who}]\n{h['content']}\n"
+            role = "user" if h["role"] == "user" else "model"
+            contents.append(types.Content(
+                role=role, parts=[types.Part.from_text(text=h["content"])],
+            ))
 
         if contexts:
-            technique_text = _build_technique_context(contexts)
-            label = "원본 프롬프트" if not convo else "이번 요청"
-            current = f"[참고 기법]\n{technique_text}\n\n[{label}]\n{query}"
+            label = "원본 프롬프트" if not contents else "이번 요청"
+            current = f"{_build_context_blocks(contexts)}\n\n[{label}]\n{query}"
         else:
-            current = f"[이번 요청(피드백)]\n{query}"
-
-        prompt = f"{SYSTEM_PROMPT}\n"
-        if convo:
-            prompt += f"\n=== 지금까지의 대화 ==={convo}\n=== 이번 턴 ===\n"
-        prompt += f"\n{current}"
+            # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달 (Groq 경로와 동일)
+            current = query
+        contents.append(types.Content(
+            role="user", parts=[types.Part.from_text(text=current)],
+        ))
 
         last_err = None
         for attempt in range(3):
             try:
                 response = self.client.models.generate_content(
                     model=model,
-                    contents=prompt,
+                    contents=contents,
                     config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,        # 시스템 지시는 정식 채널로
                         max_output_tokens=max_tokens,
+                        temperature=_gen_temperature(),          # Groq 경로와 동일 기본 0.7
                         response_mime_type="application/json",  # 구조화 출력 강제
                     ),
                 )
-                return response.text
+                return _strip_cjk_noise(response.text)
             except ClientError as e:
                 last_err = e
                 err_str  = str(e)
@@ -311,31 +447,65 @@ class GeminiGenerator:
         raise RuntimeError("⛔ Gemini API 재시도 3회 초과") from last_err
 
 
-# ── 자동 선택 Generator ───────────────────────────────────────
+# ── 장문 라우팅 판정 ─────────────────────────────────────────
+def _needs_long_context(query: str, contexts: list[dict] | None,
+                        history: list[dict] | None, groq_model: str) -> bool:
+    """Groq TPM 예산으로 'verbatim 원문 포함 출력'이 불가능한 장문 입력인지 판정.
+    개선 프롬프트는 사용자가 준 원문을 그대로 재인용해야 하므로, 필요 출력은
+    최소한 원문 길이만큼이다 — 예산이 그에 못 미치면 잘림이 '보장'되는 구조.
+    이 경우 컨텍스트가 큰 Gemini 로 보내는 것이 분할/요약 선처리보다 싸고 확실하다."""
+    est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100   # _fit_max_tokens 와 동일 추정기
+    est_in += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
+    est_in += sum(_est_tokens(c.get("text") or "") + 60 for c in (contexts or []))
+    avail_out  = GroqGenerator.TPM_LIMIT.get(groq_model, 12000) - est_in - 200
+    needed_out = _est_tokens(query) + 600               # 원문 재인용 + 지시문·JSON 오버헤드
+    return avail_out < needed_out
+
+
+# ── 자동 선택 + 요청 단위 라우팅 Generator ────────────────────
 class Generator:
     """
-    GROQ_API_KEY 가 있으면 Groq 우선 사용,
-    없으면 Gemini 사용 (일일 한도 있음)
+    백엔드 자동 선택 + 요청 단위 라우팅.
+    - 기본: GROQ_API_KEY 있으면 Groq(빠름), 없으면 Gemini
+    - 장문 라우팅: Groq TPM 예산으로 verbatim 출력이 불가능한 긴 원문은 Gemini 로
+      (GEMINI_API_KEY 가 함께 설정된 경우에만 작동)
+    - 폴백: Groq 실패(429 재시도 포함) 시 Gemini 가용하면 1회 폴백
     """
 
     def __init__(self):
-        if os.environ.get("GROQ_API_KEY"):
-            self._backend = GroqGenerator()
-            self._using   = "groq"
-        elif os.environ.get("GEMINI_API_KEY"):
-            self._backend = GeminiGenerator()
-            self._using   = "gemini"
-        else:
+        self._groq   = GroqGenerator()   if os.environ.get("GROQ_API_KEY")   else None
+        self._gemini = GeminiGenerator() if os.environ.get("GEMINI_API_KEY") else None
+        if not (self._groq or self._gemini):
             raise EnvironmentError(
                 "GROQ_API_KEY 또는 GEMINI_API_KEY 중 하나를 .env에 설정해주세요."
             )
-        print(f"[Generator] 백엔드: {self._using}")
+        self._using = "groq" if self._groq else "gemini"
+        extra = " (+gemini 장문 라우팅·폴백)" if (self._groq and self._gemini) else ""
+        print(f"[Generator] 백엔드: {self._using}{extra}")
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None) -> str:
-        return self._backend.generate(
-            query=query, contexts=contexts,
-            model=model, max_tokens=max_tokens,
-            history=history,
-        )
+        backend = self._groq or self._gemini
+
+        if self._groq and self._gemini:
+            groq_model = GroqGenerator.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
+            if _needs_long_context(query, contexts, history, groq_model):
+                print("[Generator] 장문 입력 → Gemini 라우팅 (Groq TPM 예산 부족)")
+                backend = self._gemini
+
+        try:
+            return backend.generate(
+                query=query, contexts=contexts,
+                model=model, max_tokens=max_tokens,
+                history=history,
+            )
+        except RuntimeError:
+            if backend is self._groq and self._gemini:
+                print("[Generator] Groq 실패 → Gemini 폴백")
+                return self._gemini.generate(
+                    query=query, contexts=contexts,
+                    model=model, max_tokens=max_tokens,
+                    history=history,
+                )
+            raise

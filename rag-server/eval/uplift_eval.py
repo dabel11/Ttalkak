@@ -103,15 +103,31 @@ def _complete(backend: str, model: str, system: str, user: str,
 
 
 # ── 429 재시도 / 캐시 (gen_eval 패턴 재사용) ──────────────────
-def _retry(fn, tries: int = 4, base: float = 9.0):
+def _retry_wait_hint(msg: str) -> float | None:
+    """429 메시지에서 서버가 권고한 대기(초)를 추출. Groq('try again in 1m2s')·
+    Gemini('retryDelay': '20s' / 'retry in 20.8s') 형식을 모두 지원."""
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
+    if m:
+        return int(m.group(1) or 0) * 60 + float(m.group(2))
+    m = re.search(r"retry(?:Delay)?['\":\s]+.*?([\d.]+)s", msg)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+def _retry(fn, tries: int = 5, base: float = 9.0, cap: float = 90.0):
+    """429/레이트리밋 재시도. 서버 권고 대기(retryDelay)가 있으면 그만큼(+2s, cap 이내)
+    기다린다 — 고정 백오프가 서버 권고보다 짧아 즉시 재실패하는 것을 방지."""
     for attempt in range(tries):
         try:
             return fn()
         except Exception as e:
-            if "429" in str(e) or "rate_limit" in str(e):
+            msg = str(e)
+            if "429" in msg or "rate_limit" in msg or "RESOURCE_EXHAUSTED" in msg:
                 if attempt == tries - 1:
                     raise
-                wait = base * (attempt + 1)
+                hint = _retry_wait_hint(msg)
+                wait = min(cap, (hint + 2) if hint else base * (attempt + 1))
                 print(f"       (429 — {wait:.0f}s 대기 후 재시도 {attempt + 1}/{tries - 1})")
                 time.sleep(wait)
             else:
@@ -218,6 +234,11 @@ def main():
     ap.add_argument("--no-cache", action="store_true", help="결과물 캐시 비활성화")
     ap.add_argument("--cache-file", default="eval/.uplift_cache.json",
                     help="결과물 캐시 JSON 경로")
+    ap.add_argument("--with-examples", type=int, default=0, metavar="N",
+                    help="치료군(딸각) 검색에 개선 예시 컬렉션에서 상위 N개를 추가 주입 "
+                         "(A안 검증: 0=기법만/기존, >0=기법+예시). 기본 0")
+    ap.add_argument("--ex-collection", default="prompt_examples",
+                    help="--with-examples 로 뽑을 개선 예시 컬렉션 이름")
     args = ap.parse_args()
 
     backend = _pick_backend()
@@ -233,10 +254,12 @@ def main():
         items = items[:args.limit]
     collection = data.get("collection", "prompt_techniques")
 
+    ex_note = (f"기법+예시 {args.with_examples}개({args.ex_collection})"
+               if args.with_examples > 0 else "기법만(기존)")
     print(f"결과 상향 평가셋: {args.qa}  ({len(items)}개, 컬렉션 {collection})")
     print(f"  백엔드={backend}  실행모델={target_model}  채점={judge_model}  "
           f"swap={'off' if args.no_swap else 'on'}  "
-          f"캐시={'off' if args.no_cache else cache_path}")
+          f"캐시={'off' if args.no_cache else cache_path}  치료군={ex_note}")
 
     wins = {"baseline": 0, "improved": 0, "tie": 0}
     base_scores, impr_scores = [], []
@@ -247,6 +270,11 @@ def main():
 
         # ── ① 딸각 파이프라인 → 개선 프롬프트 ──
         retrieved = retriever.search(query=task, collection_name=collection, top_k=5)
+        # A안 검증: 치료군 검색에 '유사 요청 개선 예시'를 추가 주입(기법+예시)
+        if args.with_examples > 0:
+            examples = retriever.search(query=task, collection_name=args.ex_collection,
+                                        top_k=args.with_examples)
+            retrieved = retrieved + examples
         # 운영과 동일 경로(JSON 구조화 + 폴백)
         gen = _retry(lambda: run_generation(task, retrieved, args.gen_model, []))
         improved_prompt = gen["improved_prompt"]

@@ -697,7 +697,7 @@ eval/  run_eval.py(+__init__.py)
 
 - [x] **생성기 과잉 질문 완화** — (A)작업종류+(B)핵심주제 2-항목 게이트로 완화. mode_accuracy 0.27→≈0.92, instruction_form N/A→5.0. (위 2026-06-22 항목)
 - [~] **생성 출력 토큰 깨짐**: Groq llama-3.3-70b 응답에 `图片`/`_highlight`/`紹介`/`詳細` 등 혼합언어·깨진 토큰. 한글에 붙은 한자는 `_strip_cjk_noise`로 제거(2026-06-27 정상 외국어 보존하도록 보강). `_highlight` 류 라틴 깨짐은 미해결 — 모델 교체 또는 후처리 추가 검토.
-- [~] **장문 원문 truncation**: max_tokens 동적 산정(_fit_max_tokens)으로 413 즉사 방지 완료(2026-07-07). 단 TPM 예산상 매우 긴 원문은 출력이 짧아져 잘릴 수 있음 → 분할/요약 선처리는 여전히 미해결.
+- [~] **장문 원문 truncation**: max_tokens 동적 산정(_fit_max_tokens)으로 413 즉사 방지(2026-07-07) + 장문은 Gemini 라우팅(2026-07-23 항목). 단 라우팅은 GEMINI_API_KEY 설정 시에만 작동 — Groq 단독 구성에선 여전히 잘릴 수 있음.
 - [x] **Groq 무료 티어 TPD 대응** — 캐시(--cache-file)·judge 비치명·413 즉시실패·8b max_tokens 캡으로 강건화. judge 8b 전환은 일치도 측정 결과 **기각**(신뢰 불가). (위 2026-07-05 D 항목)
 - [ ] **gen judge 신뢰도**: 70b judge도 과잉질문에 관대(mode_fit). 모드 판정은 결정론적 mode_accuracy 우선 유지. judge 강건화(few-shot 라벨, 타 프로바이더 모델) 검토.
 - [x] **리랭커 점수 표시** — 해결됨(코드 확인). `retriever.py`의 `_rerank`가 표시 `score`를 평탄한 sigmoid가 아니라 **dense 코사인**으로 환산해 반환(`c["score"] = c.pop("dense_score", ...)`). UI "유사도 %"는 코사인 기준.
@@ -716,3 +716,226 @@ eval/  run_eval.py(+__init__.py)
 **변경 파일**: `../docker-compose.yml`(수정) · `app/core/db.py`(수정: 기본값·docstring) · `.env`(로컬, git 미추적)
 **검증**: 호스트에서 pymysql로 root/root 접속 → `rag_chunk` 134행 보존 확인. 컨테이너 내부 `mysql -uroot -proot SELECT 1` OK.
 **결정·근거**: 방향은 "백엔드 기준"(사용자 지시). 빈 비밀번호 쪽으로 맞추는 대안은 backend/compose.yaml(trytur)도 root를 쓰고 있어 배제. 기존 볼륨 재초기화(`down -v`) 대신 ALTER USER로 무중단 정합 — 코퍼스 재인덱싱 불필요.
+
+---
+
+## [2026-07-23] 코퍼스 종류 확장 A안 — 합성 개선 예시 코퍼스(prompt_examples) 프로토타입 (평가 쿼터 대기)
+**목적**: 기존 코퍼스(prompt_techniques 134청크)는 '기법 정의 카드'라 추상적이다. 딸각의 실제 작업은 '거친 프롬프트 재작성'이고 uplift_eval이 잡은 약점도 태스크형 재작성이었다. 재작성에 직접 쓰이는 코퍼스는 기법 정의가 아니라 **'유사 요청의 개선 사례(before→after)'** → 이를 별도 컬렉션으로 추가하고 효용을 측정(A안). 개선이 확인되면 타입별 멀티 컬렉션 검색(C)으로 확장.
+
+**Before**
+- 코퍼스 = `prompt_techniques` 단일 컬렉션(134). 기법 정의 카드만. (WORKLOG 다수 근거: 카드 순증은 R@5 하락 — 동질성·방해후보 증가, distinct 기법 수 자체가 바운드.)
+- 생성 컨텍스트 = `[참고 기법]` 블록 하나. exemplar(개선 사례) 개념 없음.
+
+**After (구현물 — 코드/데이터. 운영 `/query` 경로는 무변경)**
+- 신규 `ingestion/gen_examples.py`: 태스크 유형 10종별 (거친 요청 → 개선 프롬프트 + 적용 기법 + 개선 이유) 예시를 LLM 생성·큐레이션(완결성 게이트) → `data/curated/synthetic_examples.jsonl` → 신규 컬렉션 `prompt_examples` 적재. `--from-jsonl`(LLM 0토큰 재인덱싱)·`--dry-run`·`--replace` 지원.
+- **20개 예시 적재**(10유형×2, 전량 게이트 통과). 기존 prompt_techniques 134 **무손상**(additive, 별 컬렉션).
+- `app/rag/generator.py`: 예시 컨텍스트(`metadata.kind=="example"`)를 **`[참고 예시]` 별도 블록**으로 렌더(`_is_example`/`_build_example_context`/`_build_context_blocks` 신규). **예시 0개면 출력 바이트 동일** → SYSTEM_PROMPT 무변경·gen_eval 무회귀 보장.
+- `eval/uplift_eval.py`: `--with-examples N`(치료군 검색에 예시 N개 추가 주입)·`--ex-collection` 추가.
+
+**검증 (LLM 불필요분 — 전부 통과)**
+- 무회귀: technique-only 컨텍스트에서 `_build_context_blocks` 출력이 종전 `[참고 기법]\n…`과 **바이트 동일** 단언.
+- 기존 유닛테스트 28개(postprocess 21 + token_budget 7) 전부 통과, `py_compile` OK.
+- 검색 배선: uplift 4개 쿼리가 prompt_examples에서 정확한 task-type 예시 회수(dense 코사인 0.446~0.649, reranker on).
+
+**검증 (uplift A/B — 미완, 쿼터 블록)**
+- arm A(기법만) → arm B(기법+예시2) 순차 실행 시도(`--no-swap`, 8문항).
+- **Groq llama-3.3-70b TPD 100k 소진**(429: "Limit 100000, Used 99734")으로 중단. 오늘 generator.py에 `GEN_TEMPERATURE`가 동시 추가된 정황상 **병행 평가 세션과 TPD 공유**가 원인. (8b는 별도 TPD 풀이나 WORKLOG상 8b judge는 신뢰 불가 → 판정용 부적합.)
+- arm A 부분결과(5/8 채점): **개선 승 1(마케팅) / raw 승 4(채용·코드리뷰·요약·설명)**. arm B 데이터 0.
+  - ⚠️ 이 수치는 **강한 70b 실행모델 기준 vs-raw**라 신호가 약함 — WORKLOG 2026-06-26 "강한 실행모델에선 프롬프트 엔지니어링 한계효용 작음"과 일치. arm B 부재 + 저신호 메트릭 → **예시 효용 판정 불가.**
+
+**알려진 캐비엇**
+- 생성 예시에 Groq 70b 언어 혼입 노이즈(`宣傳`,`保護`,`hiện` 등, 알려진 이슈) 잔존 — 구조(before/after/기법)는 정상. 후처리 정제는 후속.
+- 예시 커버리지가 uplift_set 태스크 유형과 정렬됨(측정 편의). 일반화(더 다양한 유형·다중 예시)는 후속.
+
+**결정·근거 / 다음**
+- A 구현·배선은 완료·검증. **판정만 쿼터 대기.**
+- 메트릭 개선안: vs-raw(강한 executor에서 저신호) 대신 **improved_tech vs improved_ex 헤드투헤드**가 예시 효과를 격리하고 raw baseline이 불필요해 비용도 낮음 → 재개 시 이 방식 우선 검토.
+- 운영 `/query`는 아직 예시를 주입하지 않으므로(주입은 eval 경로에서만) 파이프라인 계약·RAG_PIPELINE.md 무변경. C에서 `/query`가 예시를 쓰게 되면 그때 문서 동기화.
+
+---
+
+## [2026-07-23] A안 측정 완료 — 헤드투헤드 예시 승률 66.7% (Gemini 경로) → C 진행 결정
+**목적**: 직전 A안이 Groq 70b TPD 소진으로 판정 미완. 사용자가 Gemini 키를 추가 → 별도 쿼터로 측정 완료. vs-raw(강한 executor 저신호) 대신 **헤드투헤드**(improved_기법 vs improved_기법+예시)로 예시 효과만 격리.
+
+**여정 (쿼터 벽 3종)**
+- Groq `llama-3.3-70b` TPD 100k 소진(병행 세션 공유) → 사용 불가(당일).
+- Gemini 키 추가. 모델별 무료 티어 실측: `gemini-2.0-flash`=**limit 0**(무료 불가), `gemini-flash-latest`(→`gemini-3.6-flash`)=**RPD 20**(헤드투헤드 3문항서 소진), `gemini-flash-lite-latest`=측정 완주 가능(더 관대).
+- 대응: `eval/uplift_eval._retry` 를 **서버 권고 대기(retryDelay/‘try again in’) 존중**하도록 개선(고정 백오프가 서버 권고보다 짧아 즉시 재실패하던 것 방지). 신규 `eval/example_ab_eval.py`(헤드투헤드 전용, uplift 부품 재사용).
+
+**측정 결과 (uplift_set 6문항, gen/exec/judge 모두 gemini-flash-lite-latest, no-swap, 예시 2개 주입)**
+| 지표 | 값 |
+|---|---|
+| 예시 승률 | **66.7%** (예시 4 / 무 0 / 기법만 2) |
+| 평균 점수(1~5) | 기법만 3.50 → 예시 **4.33 (Δ +0.83)** |
+
+- ✅ 진짜 효과: [1]마케팅(톤·이모지), **[6]환불이메일 — 기법만은 "정보부족"으로 작성 거부(1.0), 예시는 즉시 사용 가능 완성(5.0)**. A 가설("예시가 '일단 만들고 원문/재료 채워라' 패턴을 가르침") 직접 입증.
+- ⚠️ 노이즈: [2]/[3]은 lite 1024토큰 트렁케이션 아티팩트(서로 상쇄). ❌ [5]광합성은 기법이 5문장 제한 더 정확 준수(정당).
+
+**변경 파일**: 신규 `eval/example_ab_eval.py` / 수정 `eval/uplift_eval.py`(`_retry` 서버권고 대기·`_retry_wait_hint`)
+
+**결정·근거**
+- **방향성 양(+)이 분명하고 인과 메커니즘([6])까지 확인** → 사용자 조건("평가 괜찮으면 C")을 충족으로 판단, **C(타입별 멀티 컬렉션 검색) 진행**.
+- 단 **정밀 수치는 아님**(n=6·no-swap·lite judge/executor). 최종 default-on 승격 전 쿼터 회복 후 **정밀 재측정 권장**(swap·8문항·강한 judge, exec max_tokens↑로 트렁케이션 제거).
+
+## [2026-07-23] 생성기 운영 견고성 묶음(P1×4) — Groq 에러 매핑 · history 상한 · 장문 Gemini 라우팅 · Gemini 멀티턴 구조화
+**목적**: 파이프라인 재검토에서 나온 P1 4건 일괄 처리. 검색 스택은 손댈 곳 없음(측정 완료) — 남은 리스크가 전부 생성기 운영 견고성에 몰려 있어 한 묶음으로 수정.
+
+**Before**:
+1. `/query`의 예외 처리는 `RuntimeError`만 503 매핑 — Groq 429(TPM 충돌)·5xx·연결 실패는 `groq.APIError`가 그대로 올라와 **500**. Gemini 쪽엔 429 재시도가 있는데 운영 기본 백엔드인 Groq만 무방비.
+2. `_sanitize_history`는 정제만 하고 안 자름 — 스레드가 길어지면 입력이 무한히 커져 `_fit_max_tokens`가 출력 예약을 하한(512)까지 죽이고, 그마저 넘으면 413. verbatim 원문이 assistant 턴마다 반복 포함되는 구조라 실사용 경로.
+3. 긴 원문일수록 출력 예산이 줄어드는 구조적 충돌 — "verbatim 포함" 원칙상 출력은 최소 원문 길이인데, Groq TPM 12k에선 긴 회의록이면 잘림이 보장됨.
+4. Gemini 백엔드가 system+대화를 한 문자열로 평탄화(리뷰 확인 항목 2) — 멀티턴 role 경계 소실.
+
+**After** (`generator.py`):
+1. Groq 429 → 대기시간(헤더→메시지→기본 8s 순 추출)이 20s 이하면 **1회 재시도**, 그 외/소진 시 `RuntimeError` 변환 → `/query`가 **503 + 안내 메시지**. `APIConnectionError`·`APIStatusError`(413·5xx)도 동일 매핑.
+2. `_sanitize_history`에 **6,000자 예산 컷** — 최신 턴부터 예산 안에서 유지, 턴 내용은 안 자름(verbatim 훼손 방지), 최신 턴은 초과여도 유지.
+3. `Generator`를 요청 단위 라우터로 재구성: 두 키가 모두 있으면 `_needs_long_context`(필요 출력 ≈ 원문 재인용 + 600tok > 남는 TPM 예산) 판정 시 **Gemini로 라우팅**, Groq 실패 시 **Gemini 1회 폴백**. 키가 하나뿐이면 기존과 동일 동작.
+4. Gemini를 `system_instruction` + `contents` 배열(user/model 정식 턴)로 전환. 검색 0건 피드백 턴 표기도 Groq와 통일(bare query), `_strip_cjk_noise`도 공통 적용.
+
+**변경 파일**: `app/rag/generator.py`(수정) · `tests/test_generator_guards.py`(신규 14케이스) · `RAG_PIPELINE.md`(§[C]·한계 동기화)
+
+**검증**: 단위 42케이스 전부 통과(guards 14 + token_budget 7 + postprocess 21). Groq 실경로 스모크 1회 — mode=improve·JSON 파싱 정상. 라우팅·폴백은 GEMINI_API_KEY 미설정(현 .env)이라 휴면 — 판정 함수만 단위 검증, 키 추가 시 실경로 확인 필요.
+
+**결정·근거**: 장문 대응은 분할/요약 선처리보다 **백엔드 라우팅**이 싸고 확실(Gemini 컨텍스트가 커서 충돌 자체가 없음 + 원문 무손실). history 컷은 턴 단위(내용 미절단) — 직전 개선 프롬프트가 핵심 맥락이므로 최신 턴 절대 보존. 429 대기 상한 20s — TPD 소진(수십 분 대기)은 기다려봐야 의미 없어 즉시 503으로 클라이언트에 위임.
+
+---
+
+## [2026-07-23] C안 — 타입별 멀티 컬렉션 검색: /query에 개선 예시 주입 배선
+**목적**: A안(예시 승률 66.7%·Δ+0.83) 검증 후, `prompt_examples`를 운영 `/query`에서 실제로 쓰도록 배선. 기법 카드와 개선 예시를 **한 검색 풀에서 경쟁시키지 않고 타입별로 따로 검색**해 생성기에 함께 전달.
+
+**Before**
+- `/query`는 `prompt_techniques` 단일 검색 → 그 결과만 생성기로. 예시 주입은 eval 경로에서만(A안 실험).
+
+**After** (`app/main.py` `/query`)
+- `QueryRequest`에 `use_examples`(기본 True)·`example_collection`(prompt_examples)·`n_examples`(2)·`example_min_score`(0.40) 추가.
+- 기법 검색(기존) 후 **예시 별도 검색**: `req.query`(원본 거친 요청)로 매칭(HyDE/변환쿼리 아님 — 예시의 'before'가 원 프롬프트를 닮을수록 유효), **리랭커 생략**(20건 typed 컬렉션엔 dense로 충분+쿼리당 리랭크 2회 지연 방지), `example_min_score` 컷. 실패·빈 컬렉션·min_score 미달은 모두 '예시 없음'으로 흡수.
+- `run_generation(req.query, retrieved + examples, …)` — generator가 `metadata.kind`로 `[참고 기법]`/`[참고 예시]` **분리 렌더**(2026-07-23 A안에서 도입한 `_build_context_blocks`).
+- **404 가드는 기법 기준 유지**(예시는 보조 재료, 무관 입력을 구제하지 않음). **`sources`는 기법만**(예시 미포함) → QueryResponse 스키마·프론트 계약 **무변경**.
+
+**변경 파일**: `app/main.py`(QueryRequest 4필드·query() 예시 주입) · `RAG_PIPELINE.md`(§0 흐름 [B+]·§[C] 컨텍스트·§3 설정표·§4 한계 동기화)
+
+**검증**
+- `py_compile` OK. 기존 유닛테스트(postprocess 21 + token_budget 7 + generator_guards 14 = 42) 전부 통과 — **무회귀**.
+- **C 데이터 경로(LLM 불필요)**: "환불 이메일" 쿼리 → 기법 5 + 예시 2(둘 다 task=email, dense 0.615/0.547) → `_build_context_blocks`가 `[참고 기법]`·`[참고 예시]` 둘 다 렌더, kind 플래그 정확. 무회귀 재확인(technique-only 바이트 동일).
+- 생성 경로는 A안 헤드투헤드가 이미 `run_generation(task, techs+exs)`(=C와 동일 호출)로 실증.
+- ⚠️ 미검증: 운영 컨테이너(`ttalkak-rag`)는 구 main.py — **재기동해야 C 활성화**(코드는 반영). `.dockerignore`가 ingestion/eval 제외라 예시 재생성은 호스트/마운트에서.
+
+**결정·근거**
+- `use_examples` 기본 **True**: A안이 양의 신호 + 사용자 목표가 '예시 사용'. 단 근거가 방향 신호(n=6·lite)라 **per-request로 끌 수 있게** 남기고, 정밀 재측정 후 최종 확정(RAG_PIPELINE §4 백로그).
+- 예시는 `req.query`로 매칭(검색 변환쿼리와 분리) — 예시 매칭 대상은 '원 프롬프트를 닮은 사례'이므로. 리랭커 생략은 20건 규모+지연 트레이드오프(코퍼스 커지면 재검토).
+- `example_min_score=0.40`은 기법 컷 재사용한 **임시값** — 무관 입력에도 예시 1건이 통과하는 경우 관측(404가 먼저 잡지만) → score_analysis로 예시 코퍼스 기준 재측정 필요(백로그).
+
+---
+
+## [2026-07-23] 개선 예시 코퍼스 2차 확장 — 20 → 131 (태스크 20유형·순수 한국어)
+**목적**: A안 검증 후 예시 커버리지 일반화(사용자 요청 "100개 이상"). uplift 태스크 유형에 정렬됐던 20개를 대체해 실사용 유형 전반으로 확대 + 언어 혼입 노이즈 제거.
+
+**Before**: `prompt_examples` 20개(10유형×2). Groq 70b 언어 혼입 노이즈(`宣傳`·`保護` 등) 잔존.
+**After**: **131개**(gemini-flash-lite-latest, `--replace` 재구축). `gen_examples.py`에 태스크 **10종 추가**(sns_post·product_desc·cover_letter·study_plan·interview_qa·naming·proofread·extract·classify·sql_query → 총 20종) + `_GEN_SYSTEM`에 **"순수 한국어(한자·외국어 금지)" 규칙** 추가 → 노이즈 소거 확인. (summarize 유형은 이번 배치 산출 0 — 게이트/파싱 실패로 19유형 실적재, 7개씩 대체로 채워짐.)
+
+**변경 파일**: `ingestion/gen_examples.py`(TASK_TYPES 20종·no-hanja 규칙) · `data/curated/synthetic_examples.jsonl`(131) · DB `prompt_examples`(--replace)
+
+**검증**: DB COUNT **prompt_examples=131 / prompt_techniques=134 = 265**. 프리뷰상 순수 한국어(노이즈 소거). 코퍼스 브라우저 아티팩트(검색·필터 HTML)로 265청크 전량 육안 확인 가능.
+
+**결정·근거**
+- `--replace`로 깨끗이 재구축 — A 측정에 쓴 노이즈 20개는 폐기(측정 완료분).
+- ⚠️ A 헤드투헤드(승률 66.7%)는 **구 20개 기준**. 확장 131 기준 **정밀 재측정은 쿼터 회복 후**(백로그) — 확대·정제로 최소 동등 이상 기대하나 수치 확인 필요. `example_min_score`도 확대 코퍼스 기준 재측정.
+- 생성은 품질보다 **양·커버리지·쿼터 안정성** 우선으로 lite 선택. 강한 모델(70b) 재생성은 쿼터 회복 후 품질 업그레이드 옵션.
+
+---
+
+## [2026-07-23] 질문 모드 계약 노출 — `/query` 응답에 mode·questions·summary 추가
+**목적**: 최재원 2026-07-12 지적 대응 — 질문 모드(mode="ask") 데이터가 `answer` 마크다운 안에만 있어 프론트가 `improved_prompt==""`로 **추측**하거나 마크다운을 **되파싱**해야 했다. 프론트가 세 UI(리스트/카드/배너) 중 무엇을 쓰든 결정적으로 렌더하도록 구조화 필드를 상단에 노출한다.
+
+**Before**
+- `QueryResponse { answer, improved_prompt, sources, techniques_applied, changes, score }` — **mode·questions·summary 없음**
+- LLM은 이미 `{mode, questions, summary}`를 JSON으로 냈지만 `run_generation`이 이를 버리고 `build_answer()`로 `answer` 마크다운(`**확인이 필요해요 🤔**\n• 질문…`)에만 뭉쳐 담음
+- 프론트: 질문 모드를 `improved_prompt==""`로 추측 / 질문 개별 항목은 markdown 되파싱 필요
+
+**After**
+- `QueryResponse`에 **`mode`(improve|ask) · `summary` · `questions[]`** 추가 (기존 필드·`answer` 마크다운은 그대로 → 하위호환)
+- 필드 조립을 순수 함수 **`postprocess.assemble_fields(raw)`**로 분리 — `run_generation`은 LLM 호출·503 가드만, 조립은 LLM 없이 단위 테스트되는 seam
+- 폴백(비JSON): `mode`는 개선블록 유무로 추정, `questions=[]`(answer 원문으로 우아하게 저하)
+- 계약·왕복 흐름 문서 `QUESTION_MODE_CONTRACT.md` 신규(프론트/백 담당자용)
+
+**변경 파일**
+- 수정: `app/rag/postprocess.py`(assemble_fields 신규) · `app/main.py`(QueryResponse +3필드, run_generation 위임, 엔드포인트 반영) · `tests/test_postprocess.py`(assemble_fields 계약 테스트 15케이스) · `RAG_PIPELINE.md`
+- 신규: `QUESTION_MODE_CONTRACT.md`
+
+**검증**
+- `python3 -m tests.test_postprocess` **36/36 통과**(신규 15 포함: ask questions/summary 통과, improve questions 비움, 폴백 mode 추정 양방향)
+- `test_generator_guards` 15/15 · `test_token_budget` 13/13 무회귀. `py_compile app/main.py` OK
+- eval 3종(`gen_eval`·`uplift_eval`·`example_ab_eval`)은 `run_generation` 반환 dict에서 특정 키만 읽음 → 키 추가는 additive·무회귀(import 시그니처 불변)
+
+**결정·근거**
+- `mode`를 **응답 최상단 단일 기준**으로: `improved_prompt==""` 추측은 폴백·엣지에서 깨질 수 있고 세 UI 방식 지원 불가. 구조화 `questions[]`면 리스트/카드/배너 어느 렌더든 프론트가 자유 선택.
+- `answer` 마크다운 **유지**: 익스텐션 UI·history 왕복 형식 무변경 + 폴백 시 항상 렌더 가능한 안전판.
+- 조립 로직을 `assemble_fields`로 뽑아 **LLM 없이 계약을 테스트** — 프롬프트/스키마 변경 시 회귀를 CI급 단위테스트로 포착.
+- UI 방식(리스트/카드/배너) 선택은 **프론트 담당자 몫** — API는 셋 다 지원만 하고 강제하지 않음.
+
+---
+
+## [2026-07-23] 질문 모드 강화 — 방식1 채택, '채워야 할 정보' 명시화 (방식2/3 보류)
+**목적**: 팀 결정 — 변경 전 계약으로도 방식1(리스트)+왕복은 이미 동작했음을 확인하고, 방식2(카드)·방식3(배너)는 **보류**. 대신 방식1을 강화: 질문 모드에서 **'어떤 작업엔 어떤 정보를 채워야 하는지'를 질문마다 명확히** 드러낸다.
+
+**Before**
+- [질문 모드] SYSTEM_PROMPT: "짧고 구체적인 질문 1~3개(보기/예시 포함)" — 항목·이유가 불명확해 "누구를 위한 건가요?" 같은 추상 질문 가능
+- `build_answer` ask 렌더: 헤더 + summary + 질문 불릿만 (무엇을 왜 채우는지 안내 부재)
+
+**After**
+- SYSTEM_PROMPT [질문 모드] 강화: 각 질문을 **`항목명: 질문 + 왜 필요한지 (예: 보기)` 3요소** 형식으로 강제. `summary`는 **파악한 작업 + 무엇이 비어 특정 못 하는지** 한 줄. (스키마 힌트도 동기화)
+- `build_answer` ask: 질문 앞에 **"아래 정보를 알려주시면 이어서 만들어 드릴게요:"** 안내문 추가(방식1 강화). 문구에 `개선된 프롬프트` 마커를 넣지 않아 `extract_improved_prompt` 오인 없음
+- 계약 문서: 방식1 채택·방식2/3 보류 명시, '채워야 할 정보' 표시 규칙(§1)·예시(§3)·UI(§7) 갱신
+
+**변경 파일**
+- 수정: `app/rag/generator.py`(SYSTEM_PROMPT [질문 모드]·스키마 힌트) · `app/rag/postprocess.py`(build_answer ask 안내문) · `tests/test_postprocess.py`(안내문 테스트) · `QUESTION_MODE_CONTRACT.md`(§6 역할별 가이드로 정리) · `RAG_PIPELINE.md`
+- 신규: `CONTRACT_BACKEND.md`(백엔드 담당자용 `/api/prompts/improve` 가이드) · `CONTRACT_FRONTEND.md`(프론트 담당자용 렌더 가이드) — 최재원 규약(AI→백→프론트)대로 역할별 파일 분리
+
+---
+
+## [2026-07-23] 백엔드↔프론트 통합 결함 검토 (질문 모드 end-to-end 미연결)
+**목적**: 백엔드/프론트 실제 코드를 읽고 질문 모드 계약이 실제로 배선됐는지 엄격 검토. `user_context` 입력 확장 여부 결론.
+
+**Before(관측)**: `/api/prompts/improve`(PromptController.java)·확장(useConversation.js) 이미 구현. 그러나 **둘 다 `mode`/`questions`/`summary`를 안 읽음** → 백엔드 `buildImproveResponse`가 `improved_prompt`("")를 `answer`(질문 마크다운)로 폴백 → `improvedPrompt=질문텍스트` → 프론트가 Execute 버튼 노출. **질문 모드가 개선 모드로 오작동.** 상태축도 `ragStatus`(ok/no_evidence)와 `mode`(improve/ask) 둘로 갈림.
+
+**After**: 결함·미해결 결정을 코드 근거(`파일:줄`)와 함께 `CONTRACT_DECISIONS.md`로 정리. P0(D1 mode 통과·D2 ask improvedPrompt="" 강제·D3 프론트 ask 분기), P1(UI/UX 흐름 U1~U6), P2(계약 정리), 분기 우선순위(mode 1차)·질문 모드 UX 흐름도 포함. `user_context` **저장형 폐기** 결론(target_model만 요청 단위, 프론트 executeTarget 활용) → CONTRACT_BACKEND §6 반영.
+
+**변경 파일**
+- 신규: `CONTRACT_DECISIONS.md`
+- 수정: `CONTRACT_BACKEND.md`(§6 실제 구현 주석+user_context 결론) · `CONTRACT_FRONTEND.md`(현재 결함 주석) · `QUESTION_MODE_CONTRACT.md`(§6 결정문서 링크)
+
+**검증**: 코드 리딩 근거 — PromptController.java:781(improvedPrompt 폴백), ChatFeed.jsx:165(Execute 조건), useConversation.js:251(ragStatus 분기). rag-server 코드 변경 없음(문서·검토만).
+
+**결정·근거**
+- 질문 모드 정상화는 **rag가 아니라 백엔드·프론트 배선 문제** — `/query`는 이미 `mode`/`questions`를 냄. 수정 지점은 backend `buildImproveResponse` + frontend `normalizeImproveResult`/`useConversation`.
+- `mode` 1차 축 권장: `ragStatus`(no_evidence)는 improve 하위상태로. ask는 sources가 있어 ragStatus만으론 구분 불가.
+- 신규 UI 최소화: 기존 composer·history·말풍선 재사용, `mode` 분기 + "ask면 executablePrompt=null"만 추가.
+
+---
+
+## [2026-07-23] 통합 상태 전체 재검토 + 계층 간 SSOT 계약 문서
+**목적**: develop-integrated 현행에서 rag·backend·extension·web·docker 연동을 처음부터 재점검. 계층 간 규칙을 담당자 공유용 단일 문서로 확정.
+
+**검토 결과(신규 발견)**
+- **프론트가 둘**: Chrome 확장 + 웹(prompt-hub-web-frontend, nginx :4173). 둘 다 `/api/prompts/improve` 호출.
+- **`mode`/`questions` 계약이 4계층 제각각**: rag=`ask` 방출 / backend=버림 / 확장=안 읽음 / 웹=`question` 기대(값 불일치). 웹은 방식1 렌더 로직이 이미 있으나 mode 값 불일치+backend 차단으로 죽어 있음.
+- **배선은 견고**: docker(mysql3306/backend8080/rag8000/web4173, 공유 DB `ttalkak`), 인증(improve=permitAll·make/**=ROLE_USER), CORS(env 패턴+chrome-extension origin), JPA ddl-auto=update(rag_chunk는 Python 소유라 무충돌).
+- **rag 검증**: assemble_fields 순수경로로 ask→`{mode:ask, improved_prompt:"", questions, summary}`, improve→`{mode:improve, improved_prompt, score}` 확인. 테스트 37/37. **rag는 정본 계약 만족**(단 미커밋·컨테이너 재기동 필요).
+
+**변경 파일**
+- 신규: `CONTRACT_LAYERS.md`(SSOT — 정본 필드·경계 변환 규칙·2축 우선순위·e2e 예시·계층별 체크리스트)
+- 수정: `QUESTION_MODE_CONTRACT.md`·`CONTRACT_DECISIONS.md`(SSOT 링크+웹 4번째 계층 반영)
+
+**결정·근거**
+- 정본 `mode` 값 = **`ask`/`improve`**(rag 기준). 웹의 `question`은 폐기 → `ask`로 정정(한 줄).
+- 정본 필드명: 프론트 대상은 camelCase(backend가 snake→camel 변환), 실제 변환은 `improvedPrompt`·`techniquesApplied` 둘뿐.
+- **backend 통과가 P0 병목**: 여길 안 고치면 프론트 수정이 무효. rag는 완료라 잇기만 하면 됨.
+
+**검증**
+- `python3 -m tests.test_postprocess` **37/37 통과**(안내문구 케이스 추가). `py_compile` OK
+- ⚠️ mode 판정(improve vs ask) 규칙은 **미변경** — 강화는 질문 '문구'에 국한. gen_eval `mode_accuracy` 회귀 위험 낮음(판정부 불변). 쿼터 회복 시 질문 품질 육안 확인 권장(백로그)
+
+**결정·근거**
+- **방식2/3 보류가 안전한 이유**: 되파싱이 필요했던 건 방식2/3뿐 — 그 UI를 안 만들면 문제도 없음. 기존 구조로 방식1은 동작했으므로 이번 변경은 '필수 수정'이 아닌 **방식1 명확성 강화**.
+- 슬롯 스키마를 코드로 하드코딩(작업유형별 필수항목 표)하지 않고 **프롬프트로 유도** — 기존 A/B 판정 철학(LLM 자율) 유지, 유형 확장에 유연. 하드코딩 슬롯은 필요 시 후속(백로그).
+- `questions[]`가 `항목명:` 접두로 구조화돼 방식2/3 보류 해제 시 **추가 API 변경 없이** 확장 가능.

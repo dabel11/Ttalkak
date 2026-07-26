@@ -40,7 +40,12 @@ def build_answer(p: dict) -> str:
         lines = ["**확인이 필요해요 🤔**"]
         if p.get("summary"):
             lines.append(str(p["summary"]))
-        lines += [f"• {q}" for q in p.get("questions") or []]
+        qs = p.get("questions") or []
+        if qs:
+            # '무엇을 채워야 하는지'를 명시 — 방식1(리스트) 강화. 문구에 '개선된 프롬프트'
+            # 마커를 넣지 않아 extract_improved_prompt 가 이 블록을 오인하지 않는다.
+            lines.append("아래 정보를 알려주시면 이어서 만들어 드릴게요:")
+            lines += [f"• {q}" for q in qs]
         return "\n".join(lines)
 
     parts = ["---", "**개선된 프롬프트:**", "", str(p.get("improved_prompt") or ""), "",
@@ -54,6 +59,54 @@ def build_answer(p: dict) -> str:
         parts += ["", "**개선 포인트:**"] + [f"- {c}" for c in changes]
     parts.append("---")
     return "\n".join(parts)
+
+
+def assemble_fields(raw: str) -> dict:
+    """비어있지 않은 LLM 원문 → /query 응답 필드 dict (순수 함수 · 모델/DB/LLM 무관).
+
+    구조화 JSON이 파싱되면 그대로 필드에 싣고(structured=True), 실패하면 레거시
+    정규식으로 폴백한다(structured=False). main.run_generation() 이 LLM 호출 뒤
+    이 함수만 부른다 → 계약(필드 조립) 로직을 LLM 없이 단위 테스트할 수 있는 지점.
+
+    반환 키: mode, answer, improved_prompt, techniques_applied, changes, score,
+             summary, questions, structured.
+    - mode      : "improve" | "ask" — 프론트 분기의 단일 기준. 폴백은 개선프롬프트
+                  블록 유무로 추정(있으면 improve, 없으면 ask).
+    - summary   : 두 모드 공통(개선: 무엇을 개선했는지 / 질문: 파악내용+왜 묻는지)
+    - questions : 질문 모드의 추가 질문 배열. 개선 모드·폴백은 []."""
+    p = parse_generation(raw)
+    if p is not None:
+        improved = str(p.get("improved_prompt") or "") if p["mode"] == "improve" else ""
+        techs = [t.get("name", "") if isinstance(t, dict) else str(t)
+                 for t in (p.get("techniques") or [])]
+        score = p.get("score")
+        return {
+            "mode":               p["mode"],
+            "answer":             build_answer(p),
+            "improved_prompt":    improved.strip(),
+            "techniques_applied": [t for t in techs if t],
+            "changes":            [str(c) for c in (p.get("changes") or [])],
+            "score":              int(score) if isinstance(score, (int, float)) else None,
+            "summary":            str(p.get("summary") or ""),
+            "questions":          [str(q) for q in (p.get("questions") or []) if str(q).strip()],
+            "structured":         True,
+        }
+
+    # 폴백: 모델이 JSON을 안 지킨 경우 — 원문을 그대로 표시하고 정규식으로 추출.
+    # 질문 모드는 markdown에서 구조화 질문을 신뢰성 있게 복원할 수 없으므로 questions=[].
+    # (answer 원문에는 질문 텍스트가 남아 있어 프론트가 그대로 렌더 가능 — 우아한 저하)
+    improved_fb = extract_improved_prompt(raw)
+    return {
+        "mode":               "improve" if improved_fb.strip() else "ask",
+        "answer":             raw,
+        "improved_prompt":    improved_fb,
+        "techniques_applied": extract_applied_techniques(raw),
+        "changes":            extract_changes(raw),
+        "score":              None,
+        "summary":            "",
+        "questions":          [],
+        "structured":         False,
+    }
 
 
 # ── 레거시 정규식 경로 (폴백) ────────────────────────────────
