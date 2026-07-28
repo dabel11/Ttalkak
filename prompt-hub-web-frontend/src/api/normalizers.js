@@ -312,10 +312,18 @@
   }
 
   function normalizeMakeMessage(item, index = 0) {
+    const mode = String(item?.mode || item?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
+    const questions = Array.isArray(item?.questions)
+      ? item.questions.map((question) => String(question)).filter(Boolean)
+      : [];
     return {
       id: String(item?.id || item?.messageId || `backend-message-${index}`),
       role: item?.role || item?.sender || "assistant",
       content: String(item?.content || item?.text || item?.message || ""),
+      mode,
+      answer: String(item?.answer || ""),
+      questions,
+      summary: String(item?.summary || ""),
       sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
       createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.timestamp),
       raw: item,
