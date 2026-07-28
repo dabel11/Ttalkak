@@ -101,6 +101,7 @@ function MessageCard({
   onSubmitEdit,
 }) {
   const isAssistant = message.role === "assistant";
+  const isAsk = message.mode === "ask";
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;
@@ -134,6 +135,15 @@ function MessageCard({
               </button>
             </div>
           </form>
+        ) : isAsk && Array.isArray(message.questions) && message.questions.length ? (
+          <div className="ask-message">
+            {message.summary && <p>{message.summary}</p>}
+            <ol>
+              {message.questions.map((question, index) => (
+                <li key={`${message.id}-question-${index}`}>{question}</li>
+              ))}
+            </ol>
+          </div>
         ) : (
           <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
         )}

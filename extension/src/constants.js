@@ -13,7 +13,7 @@ export const DEFAULT_RAG_CONFIG = {
   backendApiUrl: getDefaultBackendApiUrl(),
 };
 
-export const API_TIMEOUT_MS = 15000;
+export const API_TIMEOUT_MS = 60000;
 
 export const PRIVACY_POLICY_URL =
   "https://docs.google.com/document/d/e/2PACX-1vQtMHg_T33kpcCY1-5RApEsv3Wvg0KEnF_v5zfqBjnQMvwoLqBt2vRAhby39YGx2-2eIqlCrBhucIyK/pub";

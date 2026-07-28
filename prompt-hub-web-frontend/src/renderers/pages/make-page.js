@@ -202,8 +202,9 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { content, id, isCopied, isEditing, isSaved, role } = data;
+    const { content, id, isCopied, isEditing, isSaved, mode, role } = data;
     const isAssistant = role === "assistant";
+    const isAsk = mode === "ask";
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
 
@@ -213,12 +214,12 @@
           <article class="message assistant">
             <p>${safeContent}</p>
           </article>
-          <footer class="message-actions">
-            <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
-            <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-            <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
-            <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
-          </footer>
+          ${isAsk ? "" : `<footer class="message-actions">
+              <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
+              <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
+              <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
+              <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
+            </footer>`}
         </div>
       `;
     }

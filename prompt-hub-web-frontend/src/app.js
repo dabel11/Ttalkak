@@ -1519,6 +1519,7 @@ function MessageBubble(message) {
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
       isSaved: isAssistant && isPromptSaved(message.id),
+      mode: message.mode || "improve",
       role: message.role,
     },
   );
@@ -4739,7 +4740,10 @@ async function submitMakePrompt(composer) {
   appendMakeAssistantMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
-    content: improvedPrompt,
+    mode: improvedPrompt.mode || "improve",
+    content: improvedPrompt.text || "",
+    answer: improvedPrompt.answer || "",
+    questions: improvedPrompt.questions || [],
     sourcePrompt: value,
   });
   pendingLatestMessageScrollId = assistantMessageId;
@@ -4831,7 +4835,10 @@ async function resendEditedMessage(messageId, value) {
   finishEditedMakeMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
-    content: improvedPrompt,
+    mode: improvedPrompt.mode || "improve",
+    content: improvedPrompt.text || "",
+    answer: improvedPrompt.answer || "",
+    questions: improvedPrompt.questions || [],
     sourcePrompt: cleanValue,
   });
   pendingLatestMessageScrollId = assistantMessageId;
@@ -6886,6 +6893,9 @@ async function createBackendMakeThread(thread) {
         messages: messages.map((message) => ({
           role: message.role,
           content: message.content,
+          mode: message.mode || "improve",
+          answer: message.answer || "",
+          questions: message.questions || [],
           sourcePrompt: message.sourcePrompt || "",
         })),
       };
@@ -6938,7 +6948,7 @@ function buildMakeImproveHistory(messages = state.messages) {
     .filter((message) => message && (message.role === "user" || message.role === "assistant") && String(message.content || "").trim())
     .map((message) => ({
       role: message.role,
-      content: String(message.content || ""),
+      content: String(message.role === "assistant" ? message.answer || message.content || "" : message.content || ""),
     }));
 }
 
@@ -7008,7 +7018,10 @@ async function improvePromptWithBackend(prompt, {
 } = {}) {
   const api = getMakeApi();
   if (!api?.improvePrompt) {
-    if (canUseDemoFallback()) return polishPrompt(prompt);
+    if (canUseDemoFallback()) {
+      const fallbackText = polishPrompt(prompt);
+      return { text: fallbackText, mode: "improve", improvedPrompt: fallbackText };
+    }
     const error = new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다.");
     error.code = "API_NOT_CONFIGURED";
     throw error;
@@ -7029,7 +7042,9 @@ async function improvePromptWithBackend(prompt, {
     } else {
       state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
     }
-    return improvedText || polishPrompt(prompt);
+    return typeof improved === "object" && improved
+      ? { ...improved, text: improvedText || polishPrompt(prompt), mode: improved.mode || "improve" }
+      : { text: improvedText || polishPrompt(prompt), mode: "improve", improvedPrompt: improvedText || polishPrompt(prompt) };
   } catch (error) {
     const status = Number(error?.status || error?.payload?.status || 0);
     const code = String(error?.payload?.code || error?.code || "").toUpperCase();
@@ -7069,7 +7084,8 @@ async function improvePromptWithBackend(prompt, {
     handleBackendAccessError(error, fallbackMessage);
     console.warn("[TTALKAK] /api/prompts/improve 연동에 실패했습니다.", error);
     if (!canUseDemoFallback()) throw error;
-    return polishPrompt(prompt);
+    const fallbackText = polishPrompt(prompt);
+    return { text: fallbackText, mode: "improve", improvedPrompt: fallbackText };
   }
 }
 

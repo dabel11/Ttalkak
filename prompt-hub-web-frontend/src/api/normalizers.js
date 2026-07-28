@@ -350,11 +350,12 @@
 
   function normalizeImproveResult(payload, fallbackPrompt = "") {
     if (typeof payload === "string") {
-      return { text: payload, answer: "", improvedPrompt: payload, sources: [], ragStatus: "ok", ragMessage: "" };
+      return { text: payload, mode: "improve", answer: "", questions: [], summary: "", improvedPrompt: payload, sources: [], ragStatus: "ok", ragMessage: "" };
     }
 
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
     const result = data?.result && typeof data.result === "object" ? data.result : data;
+    const mode = String(result?.mode || result?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
     const questions = result?.questions || result?.followUpQuestions || result?.additionalQuestions;
     const ragStatus = String(
       result?.rag_status ||
@@ -370,19 +371,21 @@
         "",
     ).trim();
     const answer = String(result?.answer || result?.explanation || result?.summary || "").trim();
-    const improvedPrompt = String(
-      result?.improvedPrompt ||
-        result?.improved_prompt ||
-        result?.finalPrompt ||
-        result?.final_prompt ||
-        result?.markdown ||
-        result?.text ||
-        result?.content ||
-        result?.prompt ||
-        (typeof result?.result === "string" ? result.result : "") ||
-        answer ||
-        fallbackPrompt,
-    );
+    const improvedPrompt = mode === "ask"
+      ? ""
+      : String(
+          result?.improvedPrompt ||
+            result?.improved_prompt ||
+            result?.finalPrompt ||
+            result?.final_prompt ||
+            result?.markdown ||
+            result?.text ||
+            result?.content ||
+            result?.prompt ||
+            (typeof result?.result === "string" ? result.result : "") ||
+            answer ||
+            fallbackPrompt,
+        );
     const sources = Array.isArray(result?.sources)
       ? result.sources
       : Array.isArray(result?.references)
@@ -399,15 +402,17 @@
       payload?.thread_id ||
       "";
 
-    if (String(result?.mode || result?.type || "").toLowerCase() === "question" && Array.isArray(questions) && questions.length) {
+    if (mode === "ask" && Array.isArray(questions) && questions.length) {
       return {
         text: [
           "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
           "",
           ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
         ].join("\n"),
-        mode: "question",
+        mode: "ask",
         answer,
+        questions: questions.map((question) => String(question)),
+        summary: String(result?.summary || ""),
         improvedPrompt,
         sources,
         ragStatus,
@@ -417,8 +422,11 @@
     }
 
     return {
-      text: improvedPrompt,
+      text: mode === "ask" ? answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다." : improvedPrompt,
+      mode,
       answer,
+      questions: Array.isArray(questions) ? questions.map((question) => String(question)) : [],
+      summary: String(result?.summary || ""),
       improvedPrompt,
       sources,
       ragStatus,

@@ -12,12 +12,20 @@ function unwrapItems(payload) {
 }
 
 function normalizeMakeMessage(item, index = 0) {
+  const mode = ["ask", "improve"].includes(String(item?.mode || item?.type || "").toLowerCase())
+    ? String(item.mode || item.type).toLowerCase()
+    : "improve";
+  const improvedPrompt = item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.content || item?.text || "";
   return {
     id: String(item?.id || item?.messageId || `server-message-${index}`),
     role: item?.role || item?.sender || "assistant",
     content: String(item?.content || item?.text || item?.message || ""),
+    answer: item?.answer || "",
     sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
-    executablePrompt: item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.content || item?.text || "",
+    executablePrompt: mode === "ask" ? "" : improvedPrompt,
+    mode,
+    questions: Array.isArray(item?.questions) ? item.questions : [],
+    summary: item?.summary || "",
     sources: item?.sources || [],
     saved: Boolean(item?.saved || item?.isSaved),
     raw: item,

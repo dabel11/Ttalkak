@@ -1,6 +1,6 @@
 (function () {
   const API_BASE_URL = window.__API_BASE_URL__ || window.TTALKAK_API_BASE_URL || "http://localhost:8080";
-  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 15000);
+  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 60000);
 
   function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;

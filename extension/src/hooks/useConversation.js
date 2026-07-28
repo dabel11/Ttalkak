@@ -12,6 +12,17 @@ function buildNoEvidenceMessage(prompt, data) {
   return `관련 기법 근거 없이 기본 첨삭을 수행했습니다.\n\n"${prompt}"에 대한 직접 근거는 찾지 못했지만, 기본 개선 결과를 아래에 반영했습니다.\n\n이런 요청으로 다시 시도해볼 수 있습니다:\n${examples}`;
 }
 
+function buildAskMessage(data) {
+  if (Array.isArray(data.questions) && data.questions.length) {
+    return [
+      data.summary ? String(data.summary) : "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
+      "",
+      ...data.questions.map((question, index) => `${index + 1}. ${String(question)}`),
+    ].join("\n");
+  }
+  return data.answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다.";
+}
+
 function getServerEditErrorMessage(error) {
   const code = String(error?.code || error?.payload?.code || "").toUpperCase();
   if (code === "THREAD_ID_REQUIRED") return "대화 정보를 찾을 수 없어 수정할 수 없습니다. 최근 대화를 다시 열어주세요.";
@@ -248,7 +259,7 @@ export function useConversation({
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
     const history = messages
       .filter((m) => !m.isError && !m.excludeFromHistory)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => ({ role: m.role, content: m.role === "assistant" ? m.answer || m.content : m.content }));
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
     const improvePayload = {
       prompt,
@@ -271,11 +282,42 @@ export function useConversation({
         activeThreadId.current = String(data.threadId);
       }
 
+      if (data.mode === "ask") {
+        const assistantMsg = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          mode: "ask",
+          content: buildAskMessage(data),
+          answer: data.answer || "",
+          questions: data.questions || [],
+          summary: data.summary || "",
+          executablePrompt: null,
+          sourcePrompt: prompt,
+          sources: data.sources || [],
+          saved: false,
+        };
+        const nextMessages = [...messages, userMsg, assistantMsg];
+        setMessages((prev) => [...prev, assistantMsg]);
+        if (isLoggedIn) {
+          await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
+        } else {
+          if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+          const threadId = activeThreadId.current;
+          setLocalRecentThreads((prev) => [
+            { id: threadId, title: makeTitle(prompt), time: "방금", messages: nextMessages },
+            ...prev.filter((t) => t.id !== threadId),
+          ].slice(0, 30));
+        }
+        return;
+      }
+
       if (data.ragStatus === "no_evidence") {
         const assistantMsg = {
           id: `assistant-${Date.now()}`,
           role: "assistant",
+          mode: "improve",
           content: buildNoEvidenceMessage(prompt, data),
+          answer: data.answer || "",
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
           sources: data.sources || [],
@@ -300,7 +342,9 @@ export function useConversation({
       const assistantMsg = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
+        mode: data.mode || "improve",
         content: data.answer || data.improvedPrompt,
+        answer: data.answer || "",
         executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
         sources: data.sources || [],
@@ -418,7 +462,10 @@ export function useConversation({
     };
     const history = baseMessages
       .filter((message) => !message.isError && !message.excludeFromHistory)
-      .map((message) => ({ role: message.role, content: message.content }));
+      .map((message) => ({
+        role: message.role,
+        content: message.role === "assistant" ? message.answer || message.content : message.content,
+      }));
     const guestSessionUuid = sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
@@ -440,11 +487,17 @@ export function useConversation({
       const assistantMsg = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
+        mode: data.mode || "improve",
         content:
-          data.ragStatus === "no_evidence"
+          data.mode === "ask"
+            ? buildAskMessage(data)
+            : data.ragStatus === "no_evidence"
             ? buildNoEvidenceMessage(prompt, data)
             : data.answer || data.improvedPrompt,
-        executablePrompt: data.improvedPrompt || null,
+        answer: data.answer || "",
+        questions: data.questions || [],
+        summary: data.summary || "",
+        executablePrompt: data.mode === "ask" ? null : data.improvedPrompt || null,
         sourcePrompt: prompt,
         sources: data.sources || [],
         saved: false,
