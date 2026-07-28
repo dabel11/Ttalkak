@@ -1637,6 +1637,7 @@ function getAdminPanelRendererContext() {
   return {
     AdminTagPromptUsagePanel,
     AdminUserActivitySummary,
+    escapeAttr,
     escapeHtml,
     formatNumber,
     formatShortDate,
