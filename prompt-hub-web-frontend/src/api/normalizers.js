@@ -313,9 +313,7 @@
 
   function normalizeMakeMessage(item, index = 0) {
     const mode = String(item?.mode || item?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
-    const questions = Array.isArray(item?.questions)
-      ? item.questions.map((question) => String(question)).filter(Boolean)
-      : [];
+    const questions = normalizeImproveQuestions(item?.questions);
     return {
       id: String(item?.id || item?.messageId || `backend-message-${index}`),
       role: item?.role || item?.sender || "assistant",
@@ -364,7 +362,7 @@
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
     const result = data?.result && typeof data.result === "object" ? data.result : data;
     const mode = String(result?.mode || result?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
-    const questions = result?.questions || result?.followUpQuestions || result?.additionalQuestions;
+    const questions = normalizeImproveQuestions(result?.questions || result?.followUpQuestions || result?.additionalQuestions);
     const ragStatus = String(
       result?.rag_status ||
         result?.ragStatus ||
@@ -410,16 +408,16 @@
       payload?.thread_id ||
       "";
 
-    if (mode === "ask" && Array.isArray(questions) && questions.length) {
+    if (mode === "ask" && questions.length) {
       return {
         text: [
           "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
           "",
-          ...questions.map((question, index) => `${index + 1}. ${String(question)}`),
+          ...questions.map((question, index) => `${index + 1}. ${getImproveQuestionText(question)}`),
         ].join("\n"),
         mode: "ask",
         answer,
-        questions: questions.map((question) => String(question)),
+        questions,
         summary: String(result?.summary || ""),
         improvedPrompt,
         sources,
@@ -433,7 +431,7 @@
       text: mode === "ask" ? answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다." : improvedPrompt,
       mode,
       answer,
-      questions: Array.isArray(questions) ? questions.map((question) => String(question)) : [],
+      questions,
       summary: String(result?.summary || ""),
       improvedPrompt,
       sources,
@@ -441,6 +439,41 @@
       ragMessage,
       threadId: threadId ? String(threadId) : "",
     };
+  }
+
+  function normalizeImproveQuestion(item, index = 0) {
+    if (typeof item === "string") {
+      const question = item.trim();
+      return question
+        ? {
+            field: "",
+            question,
+            reason: "",
+            importance: "recommended",
+          }
+        : null;
+    }
+
+    if (!item || typeof item !== "object") return null;
+    const question = String(item.question || item.text || item.content || item.label || "").trim();
+    if (!question) return null;
+    const importance = String(item.importance || item.priority || "recommended").toLowerCase();
+
+    return {
+      field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
+      question,
+      reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
+      importance: importance === "required" ? "required" : "recommended",
+    };
+  }
+
+  function normalizeImproveQuestions(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(normalizeImproveQuestion).filter(Boolean);
+  }
+
+  function getImproveQuestionText(question) {
+    return String(question?.question || question || "").trim();
   }
 
   window.TTALKAK_API_NORMALIZERS = {

@@ -202,24 +202,32 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { content, id, isCopied, isEditing, isSaved, mode, role } = data;
+    const { answer, content, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, role, summary } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
+    const normalizedQuestions = normalizeMessageQuestions(questions);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
+    const leadText = normalizedQuestions.length
+      ? String(summary || answer || (isAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
+      : content;
+    const questionSection = normalizedQuestions.length
+      ? MessageQuestionsView({ escapeHtml }, { isAsk, questions: normalizedQuestions })
+      : "";
 
     if (isAssistant) {
       return `
         <div class="message-group assistant-group" data-message-id="${safeMessageId}">
           <article class="message assistant">
-            <p>${safeContent}</p>
+            <p>${escapeHtml(leadText)}</p>
+            ${questionSection}
           </article>
-          ${isAsk ? "" : `<footer class="message-actions">
+          ${hasExecutablePrompt ? `<footer class="message-actions">
               <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
               <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
               <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
               <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
-            </footer>`}
+            </footer>` : ""}
         </div>
       `;
     }
@@ -243,6 +251,53 @@
               </article>`
         }
       </div>
+    `;
+  }
+
+  function normalizeMessageQuestions(questions) {
+    return Array.isArray(questions)
+      ? questions
+          .map((item, index) => {
+            if (typeof item === "string") {
+              const question = item.trim();
+              return question ? { field: "", question, reason: "", importance: "recommended" } : null;
+            }
+            if (!item || typeof item !== "object") return null;
+            const question = String(item.question || item.text || item.content || item.label || "").trim();
+            if (!question) return null;
+            const importance = String(item.importance || item.priority || "recommended").toLowerCase();
+            return {
+              field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
+              question,
+              reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
+              importance: importance === "required" ? "required" : "recommended",
+            };
+          })
+          .filter(Boolean)
+      : [];
+  }
+
+  function MessageQuestionsView(ctx, data) {
+    const { escapeHtml } = ctx;
+    const { isAsk, questions } = data;
+    const title = isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요.";
+
+    return `
+      <section class="message-question-section" aria-label="${escapeHtml(title)}">
+        <strong>${escapeHtml(title)}</strong>
+        <ol>
+          ${questions
+            .map(
+              (item) => `
+                <li class="${item.importance === "required" ? "required" : "recommended"}">
+                  <span>${escapeHtml(item.question)}</span>
+                  ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ""}
+                </li>
+              `,
+            )
+            .join("")}
+        </ol>
+      </section>
     `;
   }
 

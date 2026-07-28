@@ -1515,12 +1515,16 @@ function MessageBubble(message) {
     { icons, escapeAttr, escapeHtml },
     {
       content: message.content,
+      answer: message.answer || "",
+      hasExecutablePrompt: isAssistant && message.mode !== "ask" && Boolean(getFinalPromptText(message)),
       id: message.id,
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
       isSaved: isAssistant && isPromptSaved(message.id),
       mode: message.mode || "improve",
+      questions: message.questions || [],
       role: message.role,
+      summary: message.summary || "",
     },
   );
 }
@@ -4745,6 +4749,7 @@ async function submitMakePrompt(composer) {
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
     questions: improvedPrompt.questions || [],
+    summary: improvedPrompt.summary || "",
     sourcePrompt: value,
   });
   pendingLatestMessageScrollId = assistantMessageId;
@@ -4840,6 +4845,7 @@ async function resendEditedMessage(messageId, value) {
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
     questions: improvedPrompt.questions || [],
+    summary: improvedPrompt.summary || "",
     sourcePrompt: cleanValue,
   });
   pendingLatestMessageScrollId = assistantMessageId;
@@ -6897,6 +6903,7 @@ async function createBackendMakeThread(thread) {
           mode: message.mode || "improve",
           answer: message.answer || "",
           questions: message.questions || [],
+          summary: message.summary || "",
           sourcePrompt: message.sourcePrompt || "",
         })),
       };

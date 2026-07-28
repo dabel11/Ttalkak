@@ -17,10 +17,14 @@ function buildAskMessage(data) {
     return [
       data.summary ? String(data.summary) : "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요.",
       "",
-      ...data.questions.map((question, index) => `${index + 1}. ${String(question)}`),
+      ...data.questions.map((question, index) => `${index + 1}. ${getQuestionText(question)}`),
     ].join("\n");
   }
   return data.answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다.";
+}
+
+function getQuestionText(question) {
+  return String(question?.question || question || "").trim();
 }
 
 function getServerEditErrorMessage(error) {
@@ -318,6 +322,8 @@ export function useConversation({
           mode: "improve",
           content: buildNoEvidenceMessage(prompt, data),
           answer: data.answer || "",
+          questions: data.questions || [],
+          summary: data.summary || "",
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
           sources: data.sources || [],
@@ -345,6 +351,8 @@ export function useConversation({
         mode: data.mode || "improve",
         content: data.answer || data.improvedPrompt,
         answer: data.answer || "",
+        questions: data.questions || [],
+        summary: data.summary || "",
         executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
         sources: data.sources || [],

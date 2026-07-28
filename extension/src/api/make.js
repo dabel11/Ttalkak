@@ -1,5 +1,6 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
+import { normalizeImproveQuestions } from "../utils/normalizeImproveResult";
 
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload;
@@ -24,7 +25,7 @@ function normalizeMakeMessage(item, index = 0) {
     sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
     executablePrompt: mode === "ask" ? "" : improvedPrompt,
     mode,
-    questions: Array.isArray(item?.questions) ? item.questions : [],
+    questions: normalizeImproveQuestions(item?.questions),
     summary: item?.summary || "",
     sources: item?.sources || [],
     saved: Boolean(item?.saved || item?.isSaved),

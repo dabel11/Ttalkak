@@ -135,15 +135,13 @@ function MessageCard({
               </button>
             </div>
           </form>
-        ) : isAsk && Array.isArray(message.questions) && message.questions.length ? (
-          <div className="ask-message">
-            {message.summary && <p>{message.summary}</p>}
-            <ol>
-              {message.questions.map((question, index) => (
-                <li key={`${message.id}-question-${index}`}>{question}</li>
-              ))}
-            </ol>
-          </div>
+        ) : isAssistant && Array.isArray(message.questions) && message.questions.length ? (
+          <>
+            <p style={{ whiteSpace: "pre-wrap" }}>
+              {isAsk ? message.summary || message.answer || "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : message.content}
+            </p>
+            <QuestionList questions={message.questions} mode={message.mode} summary={message.summary} />
+          </>
         ) : (
           <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
         )}
@@ -183,6 +181,50 @@ function MessageCard({
       </div>
     </article>
   );
+}
+
+function QuestionList({ questions, mode, summary }) {
+  const normalizedQuestions = normalizeMessageQuestions(questions);
+  if (!normalizedQuestions.length) return null;
+  const isAsk = mode === "ask";
+
+  return (
+    <div className="ask-message">
+      <strong>{isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요."}</strong>
+      {summary && !isAsk && <p>{summary}</p>}
+      <ol>
+        {normalizedQuestions.map((item, index) => (
+          <li className={item.importance === "required" ? "required" : "recommended"} key={`${item.field || "question"}-${index}`}>
+            <span>{item.question}</span>
+            {item.reason && <small>{item.reason}</small>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function normalizeMessageQuestions(questions) {
+  return Array.isArray(questions)
+    ? questions
+        .map((item, index) => {
+          if (typeof item === "string") {
+            const question = item.trim();
+            return question ? { field: "", question, reason: "", importance: "recommended" } : null;
+          }
+          if (!item || typeof item !== "object") return null;
+          const question = String(item.question || item.text || item.content || item.label || "").trim();
+          if (!question) return null;
+          const importance = String(item.importance || item.priority || "recommended").toLowerCase();
+          return {
+            field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
+            question,
+            reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
+            importance: importance === "required" ? "required" : "recommended",
+          };
+        })
+        .filter(Boolean)
+    : [];
 }
 
 function ActionButton({ icon, label, onClick }) {
