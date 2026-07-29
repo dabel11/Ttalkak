@@ -15,6 +15,8 @@ eval/gen_eval.py
   instruction_form    — [개선 모드만] improved_prompt 가 'AI에게 시키는 지시문'이고
                         결과물을 직접 쓰지 않았나. 질문 모드면 N/A(null)
   intent_preservation — 원래 요청의 의도를 유지했나
+  faithfulness        — [개선 모드만] 사용자가 안 준 '구체 사실'을 지어냈나(환각). 정상 가정
+                        (대상·톤·분량 등 보조항목)은 감점 아님. + fabricated(bool)로 환각률 집계
 
 판정 모드 vs expected_mode 일치율도 함께 보고한다.
 
@@ -106,9 +108,16 @@ _JUDGE_SYSTEM = """너는 '프롬프트 개선 어시스턴트'의 응답을 채
 [instruction_form] (개선 모드일 때만) improved_prompt 가 'AI에게 ~하라'는 지시문이고,
   결과물(예: 마케팅 글 자체)을 직접 작성하지 '않았'나? 질문 모드면 null.
 [intent_preservation] 사용자의 원래 의도를 왜곡 없이 유지했나?
+[faithfulness] (개선 모드일 때만) improved_prompt 가 사용자가 주지 않은 '구체적 사실'을 지어냈나?
+  - 감점(환각): 사용자가 안 준 구체 날짜·가격·수치·고유명사·사건·제품 스펙·통계, 또는
+    요약/번역/리뷰할 원문의 내용 자체를 창작. (없는 핵심 소재를 만들어낸 경우 특히 낮게)
+  - 감점 아님(정상 가정): 대상 독자·톤·분량·페르소나 등 '보조 항목'을 합리적 기본값으로 가정하거나,
+    사용자가 준 정보를 재표현한 것. → 이건 설계된 가정이지 환각이 아니다.
+  - 5=지어낸 구체 사실 전혀 없음 … 1=핵심 사실을 여러 개 창작. 질문 모드면 null.
+  - 함께 "fabricated": 구체 사실을 하나라도 지어냈으면 true, 아니면 false. (질문 모드면 false)
 
 반드시 아래 JSON 한 개만 출력한다(설명 금지):
-{"mode_fit": <1-5>, "technique_grounding": <1-5>, "instruction_form": <1-5 또는 null>, "intent_preservation": <1-5>, "reason": "<한 줄 근거>"}"""
+{"mode_fit": <1-5>, "technique_grounding": <1-5>, "instruction_form": <1-5 또는 null>, "intent_preservation": <1-5>, "faithfulness": <1-5 또는 null>, "fabricated": <true/false>, "reason": "<한 줄 근거>"}"""
 
 _judge_client = None
 
@@ -195,9 +204,11 @@ def main():
           + (f"  캐시: {args.cache_file} ({len(cache)}건)" if args.cache_file else ""))
 
     scores = {"mode_fit": [], "technique_grounding": [],
-              "instruction_form": [], "intent_preservation": []}
+              "instruction_form": [], "intent_preservation": [], "faithfulness": []}
     mode_correct = 0
     mode_total = 0
+    fabricated_n = 0      # 개선안이 없는 구체 사실을 지어낸 건수 (환각)
+    fabricated_known = 0  # fabricated 판정이 있는 개선 모드 건수
     structured_n = 0     # 구조화 JSON 파싱 성공(정규식 폴백 미발동) 건수
     structured_known = 0  # structured 필드가 있는 건수(구형 캐시는 알 수 없음)
 
@@ -251,11 +262,18 @@ def main():
                 verdict = {}
         for k in scores:
             scores[k].append(verdict.get(k))
+        # 환각률: 개선 모드에서 fabricated(bool) 판정이 있을 때만 집계
+        if mode == "improve" and isinstance(verdict.get("fabricated"), bool):
+            fabricated_known += 1
+            fabricated_n += 1 if verdict["fabricated"] else 0
 
         tag = "" if not expected else (" ✓" if mode == expected else f" ✗(기대 {expected})")
+        fab = verdict.get("fabricated")
+        fab_mark = " 🚨지어냄" if fab is True else ""
         print(f"  [{i:>2}] mode={mode}{tag}  "
               f"fit={verdict.get('mode_fit')} tech={verdict.get('technique_grounding')} "
-              f"form={verdict.get('instruction_form')} intent={verdict.get('intent_preservation')}  "
+              f"form={verdict.get('instruction_form')} intent={verdict.get('intent_preservation')} "
+              f"faith={verdict.get('faithfulness')}{fab_mark}  "
               f"| {query[:30]}")
         if args.show:
             print(f"       기법: {', '.join(t for t in techniques if t)}")
@@ -278,6 +296,9 @@ def main():
         print(f"  {k:<20}: {a:.2f}  (n={cnt})" if a is not None else f"  {k:<20}: N/A")
     if mode_total:
         print(f"  {'mode_accuracy':<20}: {mode_correct/mode_total:.2f}  ({mode_correct}/{mode_total})")
+    if fabricated_known:
+        rate = fabricated_n / fabricated_known
+        print(f"  {'환각률(fabricated)':<18}: {rate:.2f}  ({fabricated_n}/{fabricated_known} 개선안이 없는 사실 창작)")
     if structured_known:
         print(f"  {'structured(JSON)':<20}: {structured_n}/{structured_known}  (정규식 폴백 {structured_known - structured_n}회)")
     print("═" * 52)

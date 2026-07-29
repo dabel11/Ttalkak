@@ -818,7 +818,7 @@ eval/  run_eval.py(+__init__.py)
 - `py_compile` OK. 기존 유닛테스트(postprocess 21 + token_budget 7 + generator_guards 14 = 42) 전부 통과 — **무회귀**.
 - **C 데이터 경로(LLM 불필요)**: "환불 이메일" 쿼리 → 기법 5 + 예시 2(둘 다 task=email, dense 0.615/0.547) → `_build_context_blocks`가 `[참고 기법]`·`[참고 예시]` 둘 다 렌더, kind 플래그 정확. 무회귀 재확인(technique-only 바이트 동일).
 - 생성 경로는 A안 헤드투헤드가 이미 `run_generation(task, techs+exs)`(=C와 동일 호출)로 실증.
-- ⚠️ 미검증: 운영 컨테이너(`ttalkak-rag`)는 구 main.py — **재기동해야 C 활성화**(코드는 반영). `.dockerignore`가 ingestion/eval 제외라 예시 재생성은 호스트/마운트에서.
+- ✅ **운영 활성화 완료(2026-07-23)**: 코드는 이미지에 baked(`COPY . .`)라 `docker compose -p ttalkak build rag-server && up -d rag-server`로 재빌드·재생성(pip 레이어 캐시, hf-cache 볼륨 재사용). 컨테이너 `use_examples` 반영 확인, healthy, 라이브 `/query` 스모크(환불이메일) **200 OK**(mode=improve·score 8·Role/Step-by-step, sources는 기법 5개만). `.dockerignore`가 ingestion/eval 제외라 예시 재생성은 호스트에서.
 
 **결정·근거**
 - `use_examples` 기본 **True**: A안이 양의 신호 + 사용자 목표가 '예시 사용'. 단 근거가 방향 신호(n=6·lite)라 **per-request로 끌 수 있게** 남기고, 정밀 재측정 후 최종 확정(RAG_PIPELINE §4 백로그).
@@ -939,3 +939,22 @@ eval/  run_eval.py(+__init__.py)
 - **방식2/3 보류가 안전한 이유**: 되파싱이 필요했던 건 방식2/3뿐 — 그 UI를 안 만들면 문제도 없음. 기존 구조로 방식1은 동작했으므로 이번 변경은 '필수 수정'이 아닌 **방식1 명확성 강화**.
 - 슬롯 스키마를 코드로 하드코딩(작업유형별 필수항목 표)하지 않고 **프롬프트로 유도** — 기존 A/B 판정 철학(LLM 자율) 유지, 유형 확장에 유연. 하드코딩 슬롯은 필요 시 후속(백로그).
 - `questions[]`가 `항목명:` 접두로 구조화돼 방식2/3 보류 해제 시 **추가 API 변경 없이** 확장 가능.
+
+---
+
+## [2026-07-27] gen_eval에 환각률(faithfulness) 측정 추가
+**목적**: "AI가 임의로 채우는(환각) 게 완전 없다고 할 수 있나?" — 감이 아닌 수치로. 개선안이 사용자가 안 준 구체 사실을 지어내는지 측정.
+
+**Before**: gen_eval judge가 mode_fit·technique_grounding·instruction_form·intent 4개만 채점. 환각(입력에 없는 사실 창작) 지표 없음.
+**After**: judge에 **faithfulness(1~5)** + **fabricated(bool)** 추가(같은 judge 1회, 추가 호출 없음). 정상 가정(대상·톤·분량 등 보조항목)은 감점 아님, 없는 구체 사실(날짜·가격·고유명사·원문 창작)만 감점. 집계에 **환각률(fabricated 비율)** 출력.
+
+**변경 파일**: `eval/gen_eval.py`(judge 기준·집계·출력·docstring)
+
+**검증 (컨테이너 실행)**:
+- 정보-충분 6개: faithfulness 5.00 / **환각률 0.00 (0/6)** / mode_accuracy 1.00. 개선안이 사용자 준 값만 사용, 창작 없음.
+- **부분-정보 6개 신규(gen_set 13~18 추가)**: 모델이 **5/6을 ask로 자기선택** — 창작 유혹 지대에 진입하지 않고 되물음. 유일하게 improve한 '제주도 여행'도 특정 장소·가격을 지어내지 않고 일반화(faith 4, 환각 0/1). mode_accuracy 0.67.
+- ⭐ **핵심 발견**: 현재 환각이 낮은 진짜 이유 = "모델이 정보 부족하면 ask로 빠져 **위험 지대를 회피**". → **하이브리드('항상 개선안')는 바로 이 안전밸브를 없애 partial 입력에 improve를 강제** → 여기서 환각이 실제로 발생. **현재 0%는 하이브리드에 전이되지 않음.**
+- ⚠️ 하이브리드/다중턴의 실제 환각률을 재려면 (a) partial 입력에 **improve 강제** 측정, (b) **다중턴 drift** 케이스가 별도로 필요(백로그).
+
+**결정·근거**: faithfulness(점수)와 fabricated(이진 플래그)를 분리 — 품질과 환각률을 각각. 정상 가정 vs 환각 구분을 judge 프롬프트에 명시해 설계된 보조항목 가정을 환각으로 오판하지 않게.
+

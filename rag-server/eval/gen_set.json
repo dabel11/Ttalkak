@@ -49,6 +49,12 @@
     {
       "query": "기획안 만들어줘",
       "expected_mode": "ask"
-    }
+    },
+    { "query": "제주도 여행 블로그 글 써줘", "expected_mode": "improve", "note": "부분정보: 주제만 있고 대상/일정/장소 없음 → 특정 장소·일정·가격 창작 위험" },
+    { "query": "다이어트 식단 블로그 글 써줘", "expected_mode": "improve", "note": "부분정보: 가짜 칼로리·식단·'연구에 따르면' 통계 창작 위험" },
+    { "query": "신제품 무선 이어폰 제품 소개 글 써줘", "expected_mode": "improve", "note": "부분정보: 배터리시간·가격·기능 창작 위험" },
+    { "query": "자기소개서 써줘", "expected_mode": "ask", "note": "부분정보: 지원 직무/회사 없음 → improve하면 핵심(직무) 창작 = 환각" },
+    { "query": "발표 대본 만들어줘", "expected_mode": "ask", "note": "부분정보: 발표 주제 없음" },
+    { "query": "제품 홍보 이메일 써줘", "expected_mode": "ask", "note": "부분정보: 제품/용건 없음" }
   ]
 }
