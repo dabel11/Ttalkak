@@ -370,8 +370,32 @@ class GroqGenerator:
 
 
 # ── Gemini 백엔드 ─────────────────────────────────────────────
+# ── Gemini 모델 해석 ─────────────────────────────────────────
+# 이 계정의 Gemini 무료 티어에서 gemini-2.0-flash 는 limit 0(무료 호출 불가)이라, 폴백·장문
+# 라우팅이 실행되면 즉시 실패해 /query 가 503이 됐다(2026-07-23 실측). 요청 model 이 무료
+# 불가 모델이면 실제 호출 가능한 모델로 대체한다. GEMINI_MODEL 환경변수로 오버라이드 가능.
+#   gemini-flash-latest      : 최신 flash(강함). 이 무료 티어에선 RPD 20 → 저트래픽 dev/폴백용.
+#   gemini-flash-lite-latest : 무료 RPD가 더 관대(대량 폴백용) — 필요 시 GEMINI_MODEL 로 지정.
+_GEMINI_UNAVAILABLE = {
+    "gemini-2.0-flash", "gemini-2.0-flash-lite",
+    "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-pro",
+}
+_GEMINI_DEFAULT_MODEL = "gemini-flash-latest"
+
+
+def _resolve_gemini_model(model: str) -> str:
+    """요청 model 을 이 계정에서 실제 호출 가능한 Gemini 모델로 해석.
+    GEMINI_MODEL 환경변수가 있으면 최우선, 없으면 무료 불가 모델을 기본 모델로 대체."""
+    override = os.environ.get("GEMINI_MODEL")
+    if override:
+        return override
+    if not model or model in _GEMINI_UNAVAILABLE:
+        return _GEMINI_DEFAULT_MODEL
+    return model
+
+
 class GeminiGenerator:
-    """Gemini API 사용 (무료 1,500회/일, 일일 한도 주의)"""
+    """Gemini API 사용 (무료 티어 모델·쿼터는 _resolve_gemini_model 참고)"""
 
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -383,6 +407,7 @@ class GeminiGenerator:
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None) -> str:
+        model = _resolve_gemini_model(model)   # 무료 불가 모델(gemini-2.0-flash 등) → 실제 되는 모델
         # 대화 기록을 contents 배열의 정식 턴으로 전달 (Groq messages 와 구조 동일).
         # 과거엔 system+대화를 한 문자열로 평탄화 → 멀티턴에서 role 경계가 사라져
         # 모델이 이전 assistant 응답을 자기 지시문으로 오인할 수 있었음 (리뷰 확인 항목).
