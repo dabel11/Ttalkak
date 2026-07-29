@@ -2,7 +2,7 @@
 
 > `POST /query` 한 건이 들어와 응답이 나가기까지의 전체 흐름과 핵심 설계 포인트 정리.
 > 코드 위치는 `파일:줄`로 표기. 기준: `rag-server/` (FastAPI, bge-m3 + MySQL + reranker + LLM).
-> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_query_transform=False`, `use_hyde=False`, `min_score=0.40`.
+> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_hyde=True`, `use_query_transform=False`, `min_score=0.40`.
 
 ---
 
@@ -14,7 +14,7 @@ POST /query
   │                 model="gemini-2.0-flash", history, use_reranker=T, use_hybrid=F,
   │                 use_examples=T, n_examples=2, example_min_score=0.40, ... }
   ▼
-[A] 검색 쿼리 결정      main.py:142-147   (기본: 원본 / 옵션: HyDE·키워드 변환)
+[A] 검색 쿼리 결정      main.py:142-147   (기본: HyDE 카드형 재작성 / 옵션: 원본·키워드 변환)
   ▼
 [B] 기법 검색 (2단계+컷) retriever.py:84   (컬렉션 prompt_techniques)
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
@@ -23,6 +23,7 @@ POST /query
    └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
   ▼
    검색결과 0 & history 없음 → 404                  main.py:160
+  │                                                (HyDE 상시 적용 시 사실상 미발동 — §1-[B4])
   ▼
 [B+] 예시 검색 (타입별)  main.py query()   (컬렉션 prompt_examples: 원본요청 매칭 dense top-N,
   │                                         리랭커 생략, example_min_score 컷 → 관련無면 0건)
@@ -48,9 +49,10 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 ## 1. 단계별 상세
 
 ### [A] 검색 쿼리 결정 — `main.py:142-147`
-- 기본값: `search_query = req.query` (원본 그대로)
-- `use_hyde` ON → `query_transform.hyde()` (가상 기법문서 생성)
-- `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성)
+- **기본값: `use_hyde=True` → `query_transform.hyde()`** (거친 요청 → 기법 카드형 가상문서 생성 후 `원본+가상문서`를 검색 쿼리로). 실패 시 원본으로 안전 폴백.
+- `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성 — 카드 장르 미스매치로 hyde보다 열등, 기본 off)
+- 둘 다 off → `search_query = req.query` (원본 그대로)
+- **왜 HyDE가 기본인가** (2026-07-29 측정): 코퍼스는 '기법 설명 카드'인데 사용자 입력은 '거친 작업지시'라 **문체 장르가 달라** 주제가 맞아도 dense 코사인이 **0.34~0.48 좁은 띠**에 눌린다. `min_score=0.40` 컷이 이 띠 한복판을 잘라, 예컨대 "제주도 여행 블로그 글 써줘"(0.42)에 "아이랑 3박4일"을 덧붙이면 0.36으로 떨어져 **첫 턴 404**가 났다. HyDE는 쿼리를 카드 장르로 재작성해 **0.69~0.84**로 끌어올리고(폴백 0건), 회수 기법도 더 정확(자소서 → `Analyst-Then-Writer` #1). 모델은 8b(`llama-3.1-8b-instant`) — 형식 모방만 하면 되어 70b보다 오히려 높고 TPD 한도도 여유. (`query_transform.py:17-20`)
 - **검색용 쿼리와 생성용 쿼리를 분리** → 자세히는 §2-(1)
 
 ### [B] 검색 — `retriever.py:84 search()`
@@ -68,8 +70,9 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   - 표시 `score`는 평탄한 sigmoid 대신 **dense 코사인으로 환산**해 노출(순위만 리랭커 기준), `rerank_score`(sigmoid) 병기
   - 리랭커 예외 → 후보 상위 5개로 **폴백** (검색 안 끊김, `retriever.py:117`)
 - **B4. 유효 유사도 컷** (`retriever.py:121`, 기본 `min_score=0.40`)
-  - `score`(dense 코사인) < min_score 인 결과를 top_k에서 **제외** → 무관 입력은 0건이 되어 첫 턴 404
+  - `score`(dense 코사인) < min_score 인 결과를 top_k에서 **제외**
   - 신호·임계치는 측정으로 결정: 리랭커 확률은 정답/오답 분리 전무(p50 0.503 vs 0.500)라 **dense 채택**, τ=0.40은 recall 무손실(0.839)·빈결과 0% 지점 (`eval/score_analysis.py`, 코퍼스 변경 시 재측정)
+  - **HyDE 상시 적용(기본)의 부수효과**: hyde가 쿼리를 카드 장르로 맞춰 거의 모든 입력이 0.6~0.8로 통과하므로 이 컷은 **관련성 게이트로는 사실상 무력화**된다(쓰레기 입력 "asdf"도 0.77). 결과적으로 **첫 턴 404는 hyde 폴백(한도 초과 등)+원본마저 0.40 미만인 드문 경우에만 발동**. 무의미 입력의 최종 게이트는 404가 아니라 **생성 단계의 `mode=ask`**(무엇을 개선할지 되물음)가 담당한다.
 - **결과**: 관련 기법 청크 ≤5개 `{text, metadata{technique, category, source, chunk_id}, score, rerank_score}`
 
 ### [C] 생성 — `generator.py`
@@ -110,10 +113,10 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - 이유: 검색이 매칭할 대상은 **기법 카드 코퍼스**, 생성이 다룰 대상은 **사용자 실제 의도·내용** → 최적 입력이 다름
 - 변환 함수 (`query_transform.py`)
   - `transform()` (71): Groq `llama-3.1-8b-instant`, 출력=**키워드 한 줄** (예: `역할 부여, 출력 형식, 톤`)
-  - `hyde()` (101): Groq `llama-3.3-70b-versatile`, 출력=**기법 카드형 가상문서**, 반환은 `원본+가상문서`
+  - `hyde()` (101): Groq `llama-3.1-8b-instant`, 출력=**기법 카드형 가상문서**, 반환은 `원본+가상문서`
   - 모든 실패 경로에서 **원본 쿼리 반환** → 변환이 검색을 절대 끊지 않음
 - **변환문은 생성기에 도달하지 않음** → 켜져도 원문은 100% 보존, 순수 "검색 렌즈"
-- **기본 둘 다 off**: 동질적 기법 코퍼스에선 측정상 오히려 검색 악화 (WORKLOG 2026-06-21) → opt-in 보존
+- **기본값: `hyde()` on, `transform()` off**: 초기엔 둘 다 off였으나(동질 코퍼스에서 키워드 변환이 악화, WORKLOG 2026-06-21), 2026-07-29 재측정에서 **거친 작업지시 ↔ 카드 코퍼스의 장르 미스매치**가 드러나 HyDE(카드형 재작성)를 기본 on으로 전환. 키워드 `transform`은 장르가 여전히 안 맞아(임영웅 케이스 0.42→0.37 악화) opt-in 유지.
 
 ### (2) 임베딩 모델 1개 공유 + 별도 리랭커 — `embeddings.py`
 - **bge-m3 임베딩 모델은 프로세스당 1회 로드** 후 Indexer·Retriever **공유** (`get_model`, 캐시 `_model_cache`)

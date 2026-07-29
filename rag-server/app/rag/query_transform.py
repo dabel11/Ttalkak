@@ -15,7 +15,10 @@ query_transform.py
 import os
 
 _TRANSFORM_MODEL = "llama-3.1-8b-instant"
-_HYDE_MODEL      = "llama-3.3-70b-versatile"   # 가상 문서 품질이 중요 → 더 큰 모델
+# HyDE는 '추론 품질'이 아니라 '기법 카드 장르로 문체를 맞추는 것'이 목적이라 8b로 충분하다.
+# 실측(2026-07-29): 8b HyDE가 6개 거친 쿼리를 dense 0.69~0.84로 끌어올려(baseline 0.34~0.48)
+# 오히려 70b(0.65~0.68)보다 높고 폴백 0건. 70b는 일일 토큰 한도(TPD)에 걸려 429로 원본 폴백됨.
+_HYDE_MODEL      = "llama-3.1-8b-instant"
 
 # HyDE: 키워드 확장(미스매치) 대신 '기법 카드처럼 생긴 가상 문서'를 생성해 임베딩한다.
 # 코퍼스(기법 청크)와 글의 모양이 비슷해져 검색이 살아난다.

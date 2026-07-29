@@ -67,8 +67,12 @@ class QueryRequest(BaseModel):
     history:             Optional[list[dict]] = None   # [{role, content}, ...] 대화 기록
     use_reranker:        bool = True    # 2단계 리랭크 (검증: 단독이 최고)
     use_hybrid:          bool = False   # dense+BM25 하이브리드 — 이 코퍼스에선 악화로 기본 off(opt-in)
-    use_query_transform: bool = False   # 키워드 쿼리변환(실험적) — 코퍼스 미스매치로 기본 off
-    use_hyde:            bool = False   # HyDE 가상문서 쿼리(실험적)
+    use_query_transform: bool = False   # 키워드 쿼리변환 — 카드 장르 미스매치로 hyde보다 열등, off
+    use_hyde:            bool = True    # HyDE(기법 카드형 가상문서로 검색) — 기본 on.
+    # 근거(2026-07-29): 거친 작업지시(예 "제주도 여행 블로그 글 써줘")와 코퍼스(기법 설명 카드)는
+    # 문체 장르가 달라 주제가 맞아도 dense 코사인이 0.34~0.48 좁은 띠에 눌려 min_score=0.40 컷에
+    # 걸린다("아이랑 3박4일" 덧붙이면 0.36으로 떨어져 첫 턴 404). hyde가 쿼리를 카드 장르로 재작성해
+    # 0.69~0.84로 끌어올리고 더 정확한 기법을 회수(자소서 → Analyst-Then-Writer #1). 8b라 저지연.
     min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
     # ── C(타입별 멀티 컬렉션): 기법 카드에 더해 '유사 요청 개선 사례'를 함께 주입 ──
     # A안 헤드투헤드 검증(2026-07-23): 예시 승률 66.7%·Δ+0.83(방향 신호). min_score 미달 시
@@ -145,8 +149,9 @@ def query(req: QueryRequest):
         use_hybrid=req.use_hybrid,
         min_score=req.min_score,
     )
-    # 첫 턴(대화 기록 없음)에 매칭 결과가 없을 때만 404.
-    # min_score 컷으로 전부 걸러졌다면 = 정말 무관한 입력 → 404가 의도된 동작.
+    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
+    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
+    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
     # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
     # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
     if not retrieved and not history:
