@@ -960,6 +960,32 @@ eval/  run_eval.py(+__init__.py)
 
 ---
 
+## [2026-07-29] 공신력 소스 코퍼스 수집 — prompt_techniques 134→190 (+56) · 검색 회귀 관측(결정 대기)
+**목적**: 사용자 요청 "다양한 공신력있는 사이트/인물 기준으로 코퍼스 수집". 목적성 프롬프트 가이드/블로그를 직접 fetch해 기법 카드로 적재.
+
+**수집 소스(사이트 5 + 인물 2)**: Lilian Weng(OpenAI, 블로그) · OpenAI GPT-4.1 Prompting Guide · Microsoft Azure PE · Google Gemini Prompting · DAIR promptingguide(Elvis Saravia) · Learn Prompting · Anthropic Claude PE. WebFetch로 추출 → `data/web_sources/*.txt`.
+
+**파이프라인(신규 `ingestion/ingest_web.py`)**: 텍스트 소스를 기존 ingest_knowledge 부품(LLMJudge 추출·curate·semantic_dedupe·Indexer)에 태우는 얇은 래퍼. **Gemini lite로 추출**(Groq TPD 회피). 63카드 추출 → 이름중복 3 + 의미중복(0.85) 9 폐기 → **56 신규 적재**.
+- dedup 임계 스윕(0.82/0.85/0.88): 0.82는 ReAct·ToT·Self-Ask 등 구별 기법까지 폐기(과공격), 0.85가 균형 → 채택.
+
+**검증 — 검색 회귀(run_eval, qa_set_realistic 59문항, LLM無)**
+| 경로 | 134청크 | 190청크 | Δ |
+|---|---|---|---|
+| 리랭커(raw) | R@5 0.822 / Hit@1 0.695 / NDCG 0.757 | R@5 **0.746** / Hit@1 **0.593** / NDCG 0.656 | **−7.6 / −10.2 / −10.1 pp** |
+| 리랭커+HyDE(운영) | — | R@5 **0.483** / Hit@1 0.373 | 급락 |
+- 🔴 **material 회귀**. WORKLOG 기존 교훈("중복 카드 순증 = 방해후보 → R@5 하락")과 일치. HyDE 급락은 추가된 **제네릭 near-dup**(Instructions·Clear Instructions×4·Constraints·Delimiters×5·Long Context×3 등)이 HyDE 가상문서의 오답 attractor가 되는 것으로 추정.
+- ⚠️ qa_set 정답은 기존 134 기준 → **신규 커버리지 이득은 미측정**(방해 비용만 보임). 신규 기법(Self-Ask·ToT·ReAct·PAL·Reflexion·Persistence·Grounding·Prefill 등)을 겨냥한 평가문항 없음.
+- ⚠️ HyDE 기본화는 병행 세션(2026-07-29) 작업 — 코퍼스 확장이 그 튜닝과 상호작용. 조인트 재튜닝 필요.
+
+**변경 파일**: 신규 `ingestion/ingest_web.py` · `data/web_sources/*.txt`(7) · `data/curated/web_sources.paper.*.jsonl` · DB `prompt_techniques`(+56). 코퍼스 브라우저 아티팩트 갱신(321청크).
+
+**결정·근거 (미결 — 사용자 판단)**
+- 수집 자체는 완료. 그러나 **−7.6pp(raw)~급락(hyde) 회귀는 방치 불가** 수준.
+- 원인의 상당분은 **제네릭 near-dup 카드**(회피 가능). 선택지: (A) near-dup ~18개 정리 후 재측정(구별 기법 ~38 유지, 권장) / (B) 전량 유지(커버리지 우선, 회귀 감수) / (C) 56 전량 롤백(원복은 origin_pdf 기준 삭제로 가역). **사용자 결정 대기.**
+- 원복 방법 기록: `DELETE FROM rag_chunk WHERE collection_name='prompt_techniques' AND JSON_EXTRACT(metadata,'$.origin_pdf') IN (<web 소스명들>)` 또는 chunk_id prefix.
+
+---
+
 ## [2026-07-29] 검색 쿼리 HyDE 상시 적용 (문체 미스매치로 인한 min_score 컷·404 해소)
 **목적**: 사용자 직접 테스트에서 "제주도 여행 블로그 글 써줘"에 "아이랑 3박4일"을 덧붙이자 개선이 아니라 404가 났다. 정보를 더 줬는데 검색이 더 약해진 역설을 근본 원인(문체 장르 미스매치)에서 해결.
 
