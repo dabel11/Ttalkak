@@ -1014,3 +1014,32 @@ eval/  run_eval.py(+__init__.py)
 - keyword `transform`은 여전히 카드 장르와 안 맞아(임영웅 0.42→0.37 악화, 시스템 프롬프트 누출) 채택 안 함.
 - **min_score=0.40은 유지**: hyde로 사실상 무력화되지만, hyde 폴백 시의 안전망으로 남김. **A안(하드 404 폐지)은 별도 개선으로 미결** — 이번엔 B(검색)만 처리. hyde 폴백+원본<0.40인 드문 케이스에서 여전히 404 가능하므로 A는 후속 권장.
 - gen_eval 종합 재측정(mode_accuracy/기법근거/환각률에 대한 hyde 영향)은 쿼터 회복 후 백로그.
+
+---
+
+## [2026-07-30] gen_eval에 HyDE 토글(--no-hyde) 추가 + HyDE의 생성영향 측정
+**목적**: gen_eval이 검색을 원본 쿼리로 직접 호출해(hyde 미적용) 운영(use_hyde=True)과 불일치했다. HyDE가 mode/기법근거/환각률에 주는 영향을 운영과 동일 경로로 측정.
+
+**Before**: `retriever.search(query=query)` — 원본 쿼리 검색(hyde 미반영). 운영 파이프라인과 검색 단계가 달랐다.
+**After**: `--no-hyde` 플래그 추가(기본 hyde on = 운영 충실). 검색 전 `query_transform.hyde()` 적용, 실패 시 원본 폴백. 헤더에 HyDE on/off 표기.
+
+**변경 파일**: `eval/gen_eval.py`(수정: import·플래그·검색부·헤더)
+
+**검증/측정 (gen_set 18문항, 생성 gemini-flash-latest, judge llama-3.3-70b temp0)**
+| 지표 | HyDE ON(운영) | HyDE OFF(baseline) |
+|---|---|---|
+| mode_accuracy | 0.78 (14/18) | 1.00 (18/18) |
+| technique_grounding | 4.33 (n=18) | 5.00 (n=8, judge 429로 일부만) |
+| faithfulness | 5.00 | 5.00 |
+| 환각률(fabricated) | 0.00 (0/7) | 0.00 (0/8, full-info만 판정됨) |
+
+- **mode 차이의 실체**: ON/OFF가 갈린 4개(항목 8·13·14·15, borderline/partial-info)에서 **ON=ask, OFF=improve**. mode_accuracy 0.78 vs 1.00은 gen_set 라벨(expected=improve, 하이브리드 지향) 기준이다.
+- 🔴 **핵심 발견 — "높은 mode_accuracy"의 대가**: OFF의 1.00은 partial-info를 improve한 결과인데, 캐시 직접 검사 결과 **항목15(신제품 이어폰)에서 스펙 창작**("AirSound Pro"·"최대 30시간"·"IPX4"·"ANC") 발생. gen_set note가 예고한 "배터리시간·가격·기능 창작"이 그대로 실현. 반면 **ON은 같은 입력을 ask로 되물어 창작 회피**(mode=ask). 항목13(제주도)은 양쪽 다 방향가정 수준(2박3일·감성카페 — Low), 항목14(다이어트)는 창작 없음.
+- **technique_grounding 4.33(ON)**: 병행세션의 R@5 0.483(190 코퍼스+hyde) 회귀에도 생성 기법근거는 견고 → near-dup 회귀는 검색지표 문제이고 생성기가 대체로 흡수.
+- ⚠️ **judge(70b) RPM/TPD 한계**: ON 18건 판정 후 OFF는 429로 앞 8건(full-info)만 판정. partial-info(13-15) judge 점수는 미확보 → **캐시 생성물 직접 검사로 보완**(위 이어폰 케이스).
+- ⚠️ temp 0.7 단일 실행 — borderline 4건의 mode flip은 방향 신호이지 확정 아님(반복측정 필요, 백로그).
+
+**결정·근거**
+- **mode_accuracy는 이 평가셋에서 오도적 지표**: OFF의 1.00은 "improve해야 할 것을 improve"가 아니라 "창작해서라도 improve"를 보상한다(이어폰 스펙). 안전(환각) 기준으론 ON의 ask가 더 보수적.
+- **하이브리드 설계 함의**: 하이브리드('항상 개선안+선택질문')는 13-15를 improve로 강제 → 이어폰형 스펙 창작을 유발. 채택 시 **미상 구체값을 그럴듯한 가짜(30시간)가 아니라 명시적 플레이스홀더([배터리 시간 입력])로 강제**하는 제약이 필요. (OFF 생성이 제품명엔 "(가칭)"을 붙인 걸 보면 유도 가능.)
+- gen_eval 토글은 유지 — 이후 hyde on/off 회귀 비교의 표준 경로. judge 한계는 --sleep 상향 또는 판정 모델 분리로 후속.

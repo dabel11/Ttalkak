@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 
 from app.main import retriever, generator, extract_improved_prompt, run_generation
+from app.rag import query_transform
 from app.rag.generator import SYSTEM_PROMPT
 
 
@@ -185,7 +186,10 @@ def main():
     ap.add_argument("--show", action="store_true", help="항목별 응답·점수 상세 출력")
     ap.add_argument("--cache-file", default=None,
                     help="생성 응답 캐시 JSON 경로 (지정 시 동일 조건 재호출 스킵)")
+    ap.add_argument("--no-hyde", action="store_true",
+                    help="검색 시 HyDE 미적용(baseline). 기본은 운영과 동일하게 HyDE on.")
     args = ap.parse_args()
+    use_hyde = not args.no_hyde
 
     qa_path = Path(__file__).parent / args.qa
     data = json.loads(qa_path.read_text(encoding="utf-8"))
@@ -200,7 +204,8 @@ def main():
     cache_hits = 0
     temperature = os.environ.get("GEN_TEMPERATURE", "0.7")   # generator 와 동일 규약
     print(f"생성 평가셋: {args.qa}  (컬렉션 {collection}, {len(items)}개, "
-          f"temp={temperature}, judge={'생략' if args.no_judge else args.judge_model})"
+          f"temp={temperature}, HyDE={'on' if use_hyde else 'off'}, "
+          f"judge={'생략' if args.no_judge else args.judge_model})"
           + (f"  캐시: {args.cache_file} ({len(cache)}건)" if args.cache_file else ""))
 
     scores = {"mode_fit": [], "technique_grounding": [],
@@ -216,7 +221,10 @@ def main():
         query = it["query"]
         expected = it.get("expected_mode")
 
-        retrieved = retriever.search(query=query, collection_name=collection, top_k=5)
+        # 운영과 동일: use_hyde 면 검색 쿼리를 기법 카드형으로 재작성(main.py 엔드포인트와 일치).
+        # 실패 시 hyde()가 원본 반환하므로 검색은 절대 끊기지 않음.
+        search_query = query_transform.hyde(query) if use_hyde else query
+        retrieved = retriever.search(query=search_query, collection_name=collection, top_k=5)
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
 
