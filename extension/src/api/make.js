@@ -2,6 +2,17 @@ import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 import { normalizeImproveQuestions } from "../utils/normalizeImproveResult";
 
+function normalizeChanges(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
+    })
+    .filter(Boolean);
+}
+
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.content)) return payload.content;
@@ -26,6 +37,7 @@ function normalizeMakeMessage(item, index = 0) {
     executablePrompt: mode === "ask" ? "" : improvedPrompt,
     mode,
     questions: normalizeImproveQuestions(item?.questions),
+    changes: normalizeChanges(item?.changes),
     summary: item?.summary || "",
     sources: item?.sources || [],
     saved: Boolean(item?.saved || item?.isSaved),

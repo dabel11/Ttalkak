@@ -1516,7 +1516,8 @@ function MessageBubble(message) {
     {
       content: message.content,
       answer: message.answer || "",
-      hasExecutablePrompt: isAssistant && message.mode !== "ask" && Boolean(getFinalPromptText(message)),
+      changes: message.changes || [],
+      hasExecutablePrompt: isAssistant && Boolean(getFinalPromptText(message)),
       id: message.id,
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
@@ -4749,6 +4750,7 @@ async function submitMakePrompt(composer) {
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
     questions: improvedPrompt.questions || [],
+    changes: improvedPrompt.changes || [],
     summary: improvedPrompt.summary || "",
     sourcePrompt: value,
   });
@@ -4845,6 +4847,7 @@ async function resendEditedMessage(messageId, value) {
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
     questions: improvedPrompt.questions || [],
+    changes: improvedPrompt.changes || [],
     summary: improvedPrompt.summary || "",
     sourcePrompt: cleanValue,
   });
@@ -4879,17 +4882,32 @@ function openShareFromMakeMessage(messageId) {
 }
 
 function openExecuteModal(messageId) {
-  if (!state.messages.some((item) => item.id === messageId)) return;
+  const message = state.messages.find((item) => item.id === messageId);
+  if (!message) return;
+  if (!confirmPlaceholderExecution(getFinalPromptText(message))) return;
   state.executeMessageId = messageId;
   state.executePromptId = null;
   render();
 }
 
 function openPromptExecuteModal(promptId) {
-  if (!findPromptById(promptId)) return;
+  const prompt = findPromptById(promptId);
+  if (!prompt) return;
+  if (!confirmPlaceholderExecution(String(prompt.text || ""))) return;
   state.executePromptId = promptId;
   state.executeMessageId = null;
   render();
+}
+
+function confirmPlaceholderExecution(text) {
+  if (!hasPromptPlaceholders(text)) return true;
+  return window.confirm(
+    "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
+  );
+}
+
+function hasPromptPlaceholders(text) {
+  return /\[[^\]\n]{1,80}\]/.test(String(text || ""));
 }
 
 async function executeMakeMessage(messageId, targetId) {
@@ -6903,6 +6921,7 @@ async function createBackendMakeThread(thread) {
           mode: message.mode || "improve",
           answer: message.answer || "",
           questions: message.questions || [],
+          changes: message.changes || [],
           summary: message.summary || "",
           sourcePrompt: message.sourcePrompt || "",
         })),

@@ -138,12 +138,16 @@ function MessageCard({
         ) : isAssistant && Array.isArray(message.questions) && message.questions.length ? (
           <>
             <p style={{ whiteSpace: "pre-wrap" }}>
-              {isAsk ? message.summary || message.answer || "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : message.content}
+              <PromptText text={isAsk ? message.summary || message.answer || "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : message.content} />
             </p>
+            <ChangeList changes={message.changes} />
             <QuestionList questions={message.questions} mode={message.mode} summary={message.summary} />
           </>
         ) : (
-          <p style={{ whiteSpace: "pre-wrap" }}>{message.content}</p>
+          <>
+            <p style={{ whiteSpace: "pre-wrap" }}><PromptText text={message.content} /></p>
+            {isAssistant && <ChangeList changes={message.changes} />}
+          </>
         )}
         {hasSources && (
           <div className="sources-section">
@@ -183,6 +187,42 @@ function MessageCard({
   );
 }
 
+function PromptText({ text }) {
+  const source = String(text || "");
+  const pattern = /\[[^\]\n]{1,80}\]/g;
+  const parts = [];
+  let cursor = 0;
+
+  for (const match of source.matchAll(pattern)) {
+    if (match.index > cursor) parts.push(source.slice(cursor, match.index));
+    parts.push(
+      <span className="prompt-placeholder-chip" title="채워 넣으면 더 정확해지는 정보입니다." key={`placeholder-${match.index}`}>
+        {match[0]}
+      </span>,
+    );
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < source.length) parts.push(source.slice(cursor));
+  return <>{parts.length ? parts : source}</>;
+}
+
+function ChangeList({ changes }) {
+  const normalizedChanges = normalizeMessageChanges(changes);
+  if (!normalizedChanges.length) return null;
+
+  return (
+    <div className="assumption-list" aria-label="가정한 부분">
+      <strong>가정한 부분</strong>
+      <ul>
+        {normalizedChanges.map((item, index) => (
+          <li key={`${item}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function QuestionList({ questions, mode, summary }) {
   const normalizedQuestions = normalizeMessageQuestions(questions);
   if (!normalizedQuestions.length) return null;
@@ -202,6 +242,18 @@ function QuestionList({ questions, mode, summary }) {
       </ol>
     </div>
   );
+}
+
+function normalizeMessageChanges(changes) {
+  return Array.isArray(changes)
+    ? changes
+        .map((item) => {
+          if (typeof item === "string") return item.trim();
+          if (!item || typeof item !== "object") return "";
+          return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
+        })
+        .filter(Boolean)
+    : [];
 }
 
 function normalizeMessageQuestions(questions) {

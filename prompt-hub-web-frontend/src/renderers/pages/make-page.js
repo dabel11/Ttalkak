@@ -202,9 +202,10 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, content, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, role, summary } = data;
+    const { answer, changes, content, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, role, summary } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
+    const normalizedChanges = normalizeMessageChanges(changes);
     const normalizedQuestions = normalizeMessageQuestions(questions);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
@@ -214,12 +215,16 @@
     const questionSection = normalizedQuestions.length
       ? MessageQuestionsView({ escapeHtml }, { isAsk, questions: normalizedQuestions })
       : "";
+    const changeSection = normalizedChanges.length
+      ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
+      : "";
 
     if (isAssistant) {
       return `
         <div class="message-group assistant-group" data-message-id="${safeMessageId}">
           <article class="message assistant">
-            <p>${escapeHtml(leadText)}</p>
+            <p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>
+            ${changeSection}
             ${questionSection}
           </article>
           ${hasExecutablePrompt ? `<footer class="message-actions">
@@ -244,7 +249,7 @@
                 </div>
               </form>`
             : `<article class="message ${escapeAttr(role)}">
-                <p>${safeContent}</p>
+                <p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>
                 <div class="user-message-actions">
                   <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
                 </div>
@@ -277,6 +282,34 @@
       : [];
   }
 
+  function normalizeMessageChanges(changes) {
+    return Array.isArray(changes)
+      ? changes
+          .map((item) => {
+            if (typeof item === "string") return item.trim();
+            if (!item || typeof item !== "object") return "";
+            return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
+          })
+          .filter(Boolean)
+      : [];
+  }
+
+  function renderPromptTextWithPlaceholders(text, escapeHtml) {
+    const source = String(text || "");
+    const pattern = /\[[^\]\n]{1,80}\]/g;
+    let cursor = 0;
+    let html = "";
+
+    for (const match of source.matchAll(pattern)) {
+      html += escapeHtml(source.slice(cursor, match.index));
+      html += `<span class="prompt-placeholder-chip" title="채워 넣으면 더 정확해지는 정보입니다.">${escapeHtml(match[0])}</span>`;
+      cursor = match.index + match[0].length;
+    }
+
+    html += escapeHtml(source.slice(cursor));
+    return html;
+  }
+
   function MessageQuestionsView(ctx, data) {
     const { escapeHtml } = ctx;
     const { isAsk, questions } = data;
@@ -297,6 +330,20 @@
             )
             .join("")}
         </ol>
+      </section>
+    `;
+  }
+
+  function MessageChangesView(ctx, data) {
+    const { escapeHtml } = ctx;
+    const { changes } = data;
+
+    return `
+      <section class="message-changes-section" aria-label="가정한 부분">
+        <strong>가정한 부분</strong>
+        <ul>
+          ${changes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
       </section>
     `;
   }

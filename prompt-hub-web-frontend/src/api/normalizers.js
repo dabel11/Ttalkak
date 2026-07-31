@@ -314,6 +314,7 @@
   function normalizeMakeMessage(item, index = 0) {
     const mode = String(item?.mode || item?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(item?.questions);
+    const changes = normalizeImproveChanges(item?.changes);
     return {
       id: String(item?.id || item?.messageId || `backend-message-${index}`),
       role: item?.role || item?.sender || "assistant",
@@ -321,6 +322,7 @@
       mode,
       answer: String(item?.answer || ""),
       questions,
+      changes,
       summary: String(item?.summary || ""),
       sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
       createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.timestamp),
@@ -363,6 +365,7 @@
     const result = data?.result && typeof data.result === "object" ? data.result : data;
     const mode = String(result?.mode || result?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(result?.questions || result?.followUpQuestions || result?.additionalQuestions);
+    const changes = normalizeImproveChanges(result?.changes || result?.assumptions || result?.assumedChanges);
     const ragStatus = String(
       result?.rag_status ||
         result?.ragStatus ||
@@ -418,6 +421,7 @@
         mode: "ask",
         answer,
         questions,
+        changes,
         summary: String(result?.summary || ""),
         improvedPrompt,
         sources,
@@ -432,6 +436,7 @@
       mode,
       answer,
       questions,
+      changes,
       summary: String(result?.summary || ""),
       improvedPrompt,
       sources,
@@ -470,6 +475,17 @@
   function normalizeImproveQuestions(value) {
     if (!Array.isArray(value)) return [];
     return value.map(normalizeImproveQuestion).filter(Boolean);
+  }
+
+  function normalizeImproveChanges(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (!item || typeof item !== "object") return "";
+        return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
+      })
+      .filter(Boolean);
   }
 
   function getImproveQuestionText(question) {

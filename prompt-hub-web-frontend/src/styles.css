@@ -2247,6 +2247,45 @@ h1 {
   word-break: keep-all;
 }
 
+.prompt-placeholder-chip {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 7px;
+  border: 1px dashed rgba(9, 83, 62, 0.38);
+  border-radius: 999px;
+  background: #fff8db;
+  color: #0d4f3d;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.message-changes-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(9, 83, 62, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 248, 219, 0.55);
+  color: #35564c;
+}
+
+.message-changes-section > strong {
+  font-size: 0.82rem;
+  color: #0d4f3d;
+}
+
+.message-changes-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.message-changes-section li {
+  margin: 4px 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
 .message-question-section {
   display: grid;
   gap: 10px;

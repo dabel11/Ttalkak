@@ -27,6 +27,10 @@ function getQuestionText(question) {
   return String(question?.question || question || "").trim();
 }
 
+function hasPromptPlaceholders(text) {
+  return /\[[^\]\n]{1,80}\]/.test(String(text || ""));
+}
+
 function getServerEditErrorMessage(error) {
   const code = String(error?.code || error?.payload?.code || "").toUpperCase();
   if (code === "THREAD_ID_REQUIRED") return "대화 정보를 찾을 수 없어 수정할 수 없습니다. 최근 대화를 다시 열어주세요.";
@@ -227,6 +231,12 @@ export function useConversation({
 
   async function executeMessage(message) {
     const prompt = message.executablePrompt || message.content;
+    if (hasPromptPlaceholders(prompt)) {
+      const proceed = window.confirm(
+        "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다."
+      );
+      if (!proceed) return;
+    }
     const targetLabel = executeTarget === "claude" ? "Claude" : executeTarget === "gemini" ? "Gemini" : "선택한 AI 사이트";
 
     if (executeTarget === "claude") {
@@ -294,6 +304,7 @@ export function useConversation({
           content: buildAskMessage(data),
           answer: data.answer || "",
           questions: data.questions || [],
+          changes: data.changes || [],
           summary: data.summary || "",
           executablePrompt: null,
           sourcePrompt: prompt,
@@ -323,6 +334,7 @@ export function useConversation({
           content: buildNoEvidenceMessage(prompt, data),
           answer: data.answer || "",
           questions: data.questions || [],
+          changes: data.changes || [],
           summary: data.summary || "",
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
@@ -352,6 +364,7 @@ export function useConversation({
         content: data.answer || data.improvedPrompt,
         answer: data.answer || "",
         questions: data.questions || [],
+        changes: data.changes || [],
         summary: data.summary || "",
         executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
@@ -504,6 +517,7 @@ export function useConversation({
             : data.answer || data.improvedPrompt,
         answer: data.answer || "",
         questions: data.questions || [],
+        changes: data.changes || [],
         summary: data.summary || "",
         executablePrompt: data.mode === "ask" ? null : data.improvedPrompt || null,
         sourcePrompt: prompt,
