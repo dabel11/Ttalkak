@@ -764,6 +764,39 @@ function render() {
   });
 }
 
+function captureMakeScrollSnapshot() {
+  const root = document.scrollingElement || document.documentElement;
+  return {
+    rootLeft: root?.scrollLeft || 0,
+    rootTop: root?.scrollTop || 0,
+    panels: [".chat-feed", ".make-side-panel"].map((selector) => {
+      const element = document.querySelector(selector);
+      return {
+        left: element?.scrollLeft || 0,
+        selector,
+        top: element?.scrollTop || 0,
+      };
+    }),
+  };
+}
+
+function restoreMakeScrollSnapshot(snapshot) {
+  if (!snapshot) return;
+  requestAnimationFrame(() => {
+    const root = document.scrollingElement || document.documentElement;
+    root?.scrollTo({ left: snapshot.rootLeft, top: snapshot.rootTop, behavior: "auto" });
+    snapshot.panels.forEach(({ selector, left, top }) => {
+      document.querySelector(selector)?.scrollTo({ left, top, behavior: "auto" });
+    });
+  });
+}
+
+function renderPreservingMakeScroll() {
+  const snapshot = captureMakeScrollSnapshot();
+  render();
+  restoreMakeScrollSnapshot(snapshot);
+}
+
 function scrollToHighlightedComment() {
   if (!state.detailHighlightCommentId) return;
   window.setTimeout(() => {
@@ -796,12 +829,20 @@ function scrollToPendingLatestMessage() {
   if (pendingMessageScrollId || !pendingLatestMessageScrollId) return;
   const messageId = pendingLatestMessageScrollId;
   pendingLatestMessageScrollId = null;
-  requestAnimationFrame(() => {
-    const safeId = String(messageId).replace(/"/g, '\\"');
-    const target = document.querySelector(`[data-message-id="${safeId}"]`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "end" });
-  });
+  const safeId = String(messageId).replace(/"/g, '\\"');
+  const target = document.querySelector(`[data-message-id="${safeId}"]`);
+  if (!target) return;
+  const feed = target.closest(".chat-feed");
+  if (feed) {
+    const feedRect = feed.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    feed.scrollTo({
+      top: feed.scrollTop + targetRect.bottom - feedRect.bottom + 16,
+      behavior: "auto",
+    });
+    return;
+  }
+  target.scrollIntoView({ behavior: "auto", block: "end" });
 }
 
 function navigateTo(route) {
@@ -855,7 +896,14 @@ function resetHomeView() {
 }
 
 function closeTopModal() {
-  if (closeTopModalState(state)) render();
+  const shouldPreserveMakeScroll = Boolean(state.executeMessageId || state.executePromptId);
+  if (closeTopModalState(state)) {
+    if (shouldPreserveMakeScroll) {
+      renderPreservingMakeScroll();
+      return;
+    }
+    render();
+  }
 }
 
 function focusActiveModal() {
@@ -1517,6 +1565,7 @@ function MessageBubble(message) {
       content: message.content,
       answer: message.answer || "",
       changes: message.changes || [],
+      fields: message.fields || [],
       hasExecutablePrompt: isAssistant && Boolean(getFinalPromptText(message)),
       id: message.id,
       isCopied: state.copiedMessageId === message.id,
@@ -1524,8 +1573,10 @@ function MessageBubble(message) {
       isSaved: isAssistant && isPromptSaved(message.id),
       mode: message.mode || "improve",
       questions: message.questions || [],
+      ragStatus: message.ragStatus || "",
       role: message.role,
       summary: message.summary || "",
+      techniques: message.techniques || [],
     },
   );
 }
@@ -2550,7 +2601,7 @@ function bindModalControlEvents() {
     button.addEventListener("click", () => {
       state.executeMessageId = null;
       state.executePromptId = null;
-      render();
+      renderPreservingMakeScroll();
     });
   });
 
@@ -4721,7 +4772,7 @@ async function submitMakePrompt(composer) {
   if (!value) return;
   if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
     state.authView = "login";
-    render();
+    renderPreservingMakeScroll();
     return;
   }
   if (!state.isLoggedIn) {
@@ -4729,9 +4780,14 @@ async function submitMakePrompt(composer) {
   }
   const now = Date.now();
   const threadId = state.activeThreadId || `thread-${now}`;
+  const userMessageId = `user-${now}`;
   const assistantMessageId = `make-${now}`;
   const history = buildMakeImproveHistory(state.messages);
-  appendMakeUserMessageState(state, threadId, { id: `user-${now}`, role: "user", content: value });
+  state.composerDraft = "";
+  appendMakeUserMessageState(state, threadId, { id: userMessageId, role: "user", content: value });
+  pendingLatestMessageScrollId = userMessageId;
+  updateRecentThread(threadId);
+  render();
   let improvedPrompt = "";
   try {
     improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
@@ -4740,7 +4796,7 @@ async function submitMakePrompt(composer) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
     handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
-    render();
+    renderPreservingMakeScroll();
     return;
   }
   appendMakeAssistantMessageState(state, {
@@ -4749,16 +4805,23 @@ async function submitMakePrompt(composer) {
     mode: improvedPrompt.mode || "improve",
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
+    improvedPrompt: improvedPrompt.improvedPrompt || "",
     questions: improvedPrompt.questions || [],
     changes: improvedPrompt.changes || [],
+    fields: improvedPrompt.fields || [],
+    techniques: improvedPrompt.techniques || [],
     summary: improvedPrompt.summary || "",
+    sources: improvedPrompt.sources || [],
+    ragStatus: improvedPrompt.ragStatus || "",
+    ragMessage: improvedPrompt.ragMessage || "",
     sourcePrompt: value,
   });
   pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(threadId);
   applyPendingImproveThreadId(threadId);
   if (shouldUseImproveThreadSync()) {
-    await refreshActiveMakeThreadFromBackend(threadId);
+    const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true });
+    if (!refreshedThread) render();
     return;
   }
   syncMakeThreadWithBackend(threadId);
@@ -4815,7 +4878,8 @@ async function resendEditedMessage(messageId, value) {
         category: "prompt_techniques",
       });
       state.editingMessageId = null;
-      await refreshActiveMakeThreadFromBackend(threadId);
+      const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true });
+      if (!refreshedThread) render();
       showNotice("수정한 메시지로 다시 개선했습니다.");
     } catch (error) {
       state.makeBackendStatus = "fallback";
@@ -4846,9 +4910,15 @@ async function resendEditedMessage(messageId, value) {
     mode: improvedPrompt.mode || "improve",
     content: improvedPrompt.text || "",
     answer: improvedPrompt.answer || "",
+    improvedPrompt: improvedPrompt.improvedPrompt || "",
     questions: improvedPrompt.questions || [],
     changes: improvedPrompt.changes || [],
+    fields: improvedPrompt.fields || [],
+    techniques: improvedPrompt.techniques || [],
     summary: improvedPrompt.summary || "",
+    sources: improvedPrompt.sources || [],
+    ragStatus: improvedPrompt.ragStatus || "",
+    ragMessage: improvedPrompt.ragMessage || "",
     sourcePrompt: cleanValue,
   });
   pendingLatestMessageScrollId = assistantMessageId;
@@ -4887,7 +4957,7 @@ function openExecuteModal(messageId) {
   if (!confirmPlaceholderExecution(getFinalPromptText(message))) return;
   state.executeMessageId = messageId;
   state.executePromptId = null;
-  render();
+  renderPreservingMakeScroll();
 }
 
 function openPromptExecuteModal(promptId) {
@@ -4896,7 +4966,7 @@ function openPromptExecuteModal(promptId) {
   if (!confirmPlaceholderExecution(String(prompt.text || ""))) return;
   state.executePromptId = promptId;
   state.executeMessageId = null;
-  render();
+  renderPreservingMakeScroll();
 }
 
 function confirmPlaceholderExecution(text) {
@@ -4929,7 +4999,7 @@ async function executeMakeMessage(messageId, targetId) {
   } else {
     showNotice(`${target.name}로 이동합니다. 복사가 제한되면 Make의 Copy 버튼으로 다시 복사해주세요.`);
   }
-  render();
+  renderPreservingMakeScroll();
 }
 
 function getExecuteTarget(targetId) {
@@ -6735,10 +6805,18 @@ function polishPrompt(prompt) {
 function showNotice(message) {
   state.notice = message;
   window.clearTimeout(showNotice.timer);
-  render();
+  if (state.currentPage === "make") {
+    renderPreservingMakeScroll();
+  } else {
+    render();
+  }
   showNotice.timer = window.setTimeout(() => {
     state.notice = "";
-    render();
+    if (state.currentPage === "make") {
+      renderPreservingMakeScroll();
+    } else {
+      render();
+    }
   }, 1700);
 }
 
@@ -6905,6 +6983,7 @@ async function deleteBackendMakeFolder(folderId) {
 
 async function createBackendMakeThread(thread) {
   const api = getMakeApi();
+  if (!hasBackendAuthToken()) return "";
   if (!api?.createMakeThread || !thread) return "";
 
   const messages = Array.isArray(thread.messages) && thread.messages.length
@@ -6920,9 +6999,15 @@ async function createBackendMakeThread(thread) {
           content: message.content,
           mode: message.mode || "improve",
           answer: message.answer || "",
+          improvedPrompt: message.improvedPrompt || "",
           questions: message.questions || [],
           changes: message.changes || [],
+          fields: message.fields || [],
+          techniques: message.techniques || [],
           summary: message.summary || "",
+          sources: message.sources || [],
+          ragStatus: message.ragStatus || "",
+          ragMessage: message.ragMessage || "",
           sourcePrompt: message.sourcePrompt || "",
         })),
       };
@@ -7117,13 +7202,14 @@ async function improvePromptWithBackend(prompt, {
 }
 
 async function syncMakeThreadWithBackend(threadId) {
+  if (!hasBackendAuthToken()) return;
   const thread = state.recentThreads.find((item) => item.id === threadId);
   if (!thread) return;
   const serverId = await createBackendMakeThread(thread);
   if (serverId) thread.serverId = serverId;
 }
 
-async function refreshMakeThreadsFromBackend({ shouldRender = true } = {}) {
+async function refreshMakeThreadsFromBackend({ shouldRender = true, quiet = false } = {}) {
   const api = getMakeApi();
   if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
 
@@ -7132,13 +7218,21 @@ async function refreshMakeThreadsFromBackend({ shouldRender = true } = {}) {
     applyMakeThreadsResult(getBackendDataEffectContext(), threads);
     if (shouldRender) render();
   } catch (error) {
+    if (quiet) return;
     handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
   }
 }
 
-async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId) {
+async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false } = {}) {
   const api = getMakeApi();
   const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
+  const renderThread = () => {
+    if (preserveScroll) {
+      renderPreservingMakeScroll();
+      return;
+    }
+    render();
+  };
   if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
     try {
       const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
@@ -7153,17 +7247,18 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
         ].slice(0, 8);
         normalizeRecentThreads();
         openRecentMakeThreadState(state, refreshedThread);
-        render();
+        renderThread();
         return refreshedThread;
       }
     } catch (error) {
       if (Number(error?.status || 0) !== 404) {
+        if (quiet) return null;
         handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
       }
     }
   }
 
-  await refreshMakeThreadsFromBackend({ shouldRender: false });
+  await refreshMakeThreadsFromBackend({ shouldRender: false, quiet });
   const refreshedThread = state.recentThreads.find((thread) => {
     const id = String(thread.id || "");
     const serverId = String(thread.serverId || "");
@@ -7173,7 +7268,7 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
   if (refreshedThread) {
     openRecentMakeThreadState(state, refreshedThread);
   }
-  render();
+  renderThread();
   return refreshedThread;
 }
 
@@ -7197,11 +7292,14 @@ function getBackendHydrationEffectContext() {
     api: window.TTALKAK_API,
     applyContext: getBackendDataEffectContext,
     canUseDemoFallback,
+    clearAuthenticatedSession,
     getApiFailureMessage,
     getAuthToken,
+    hasBackendAuthToken,
     getMakeApi,
     getMakeApiToken,
     getValidSearchScope,
+    handleBackendAccessError,
     homePageSize: HOME_PAGE_SIZE,
     render,
     state,

@@ -72,6 +72,10 @@
     }
 
     if (!token || isDemoAuthToken(token)) {
+      if (!token && state.isLoggedIn) {
+        clearAuthenticatedSession({ keepRoute: true });
+        state.authView = "login";
+      }
       showNotice(backendMessage || "백엔드 인증이 필요한 요청입니다. 현재 화면 상태를 유지합니다.");
       return true;
     }

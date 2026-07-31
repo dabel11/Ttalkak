@@ -44,6 +44,16 @@
   }
 
   function getFinalPromptText(message) {
+    const explicitPrompt = String(
+      message?.executablePrompt ||
+        message?.improvedPrompt ||
+        message?.finalPrompt ||
+        message?.final_prompt ||
+        "",
+    ).trim();
+    if (explicitPrompt) return explicitPrompt;
+    if (message?.role === "assistant") return "";
+
     const content = String(message?.content || "");
     const marker = "역할:";
     const markerIndex = content.indexOf(marker);

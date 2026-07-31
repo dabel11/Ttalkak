@@ -315,14 +315,22 @@
     const mode = String(item?.mode || item?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(item?.questions);
     const changes = normalizeImproveChanges(item?.changes);
+    const fields = normalizeImproveFields(item?.fields || item?.fieldState || item?.missingFields);
+    const techniques = normalizeImproveTechniques(item?.techniques || item?.techniquesApplied || item?.techniques_applied);
+    const improvedPrompt = mode === "ask"
+      ? ""
+      : String(item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.improved_prompt || "").trim();
     return {
       id: String(item?.id || item?.messageId || `backend-message-${index}`),
       role: item?.role || item?.sender || "assistant",
       content: String(item?.content || item?.text || item?.message || ""),
       mode,
       answer: String(item?.answer || ""),
+      improvedPrompt,
       questions,
       changes,
+      fields,
+      techniques,
       summary: String(item?.summary || ""),
       sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
       createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.timestamp),
@@ -366,6 +374,8 @@
     const mode = String(result?.mode || result?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(result?.questions || result?.followUpQuestions || result?.additionalQuestions);
     const changes = normalizeImproveChanges(result?.changes || result?.assumptions || result?.assumedChanges);
+    const fields = normalizeImproveFields(result?.fields || result?.fieldState || result?.missingFields);
+    const techniques = normalizeImproveTechniques(result?.techniques || result?.techniquesApplied || result?.techniques_applied);
     const ragStatus = String(
       result?.rag_status ||
         result?.ragStatus ||
@@ -387,14 +397,8 @@
             result?.improved_prompt ||
             result?.finalPrompt ||
             result?.final_prompt ||
-            result?.markdown ||
-            result?.text ||
-            result?.content ||
-            result?.prompt ||
-            (typeof result?.result === "string" ? result.result : "") ||
-            answer ||
-            fallbackPrompt,
-        );
+            "",
+        ).trim();
     const sources = Array.isArray(result?.sources)
       ? result.sources
       : Array.isArray(result?.references)
@@ -422,6 +426,8 @@
         answer,
         questions,
         changes,
+        fields,
+        techniques,
         summary: String(result?.summary || ""),
         improvedPrompt,
         sources,
@@ -437,6 +443,8 @@
       answer,
       questions,
       changes,
+      fields,
+      techniques,
       summary: String(result?.summary || ""),
       improvedPrompt,
       sources,
@@ -484,6 +492,48 @@
         if (typeof item === "string") return item.trim();
         if (!item || typeof item !== "object") return "";
         return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
+      })
+      .filter(Boolean);
+  }
+
+  function normalizeImproveFields(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item, index) => {
+        if (typeof item === "string") {
+          const name = item.trim();
+          return name ? { name, role: "fact", status: "empty", value: "" } : null;
+        }
+        if (!item || typeof item !== "object") return null;
+        const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
+        if (!name) return null;
+        const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
+        const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
+        return {
+          name,
+          role: ["required", "fact", "framing"].includes(role) ? role : "fact",
+          status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
+          value: String(item.value || item.answer || "").trim(),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function normalizeImproveTechniques(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        if (typeof item === "string") {
+          const name = item.trim();
+          return name ? { name, reason: "" } : null;
+        }
+        if (!item || typeof item !== "object") return null;
+        const name = String(item.name || item.technique || item.title || item.label || "").trim();
+        if (!name) return null;
+        return {
+          name,
+          reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
+        };
       })
       .filter(Boolean);
   }

@@ -137,16 +137,22 @@ function MessageCard({
           </form>
         ) : isAssistant && Array.isArray(message.questions) && message.questions.length ? (
           <>
+            <EvidenceNotice ragStatus={message.ragStatus} />
             <p style={{ whiteSpace: "pre-wrap" }}>
               <PromptText text={isAsk ? message.summary || message.answer || "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : message.content} />
             </p>
+            <FieldList fields={message.fields} />
             <ChangeList changes={message.changes} />
             <QuestionList questions={message.questions} mode={message.mode} summary={message.summary} />
+            <TechniqueList techniques={message.techniques || message.techniquesApplied} />
           </>
         ) : (
           <>
+            {isAssistant && <EvidenceNotice ragStatus={message.ragStatus} />}
             <p style={{ whiteSpace: "pre-wrap" }}><PromptText text={message.content} /></p>
+            {isAssistant && <FieldList fields={message.fields} />}
             {isAssistant && <ChangeList changes={message.changes} />}
+            {isAssistant && <TechniqueList techniques={message.techniques || message.techniquesApplied} />}
           </>
         )}
         {hasSources && (
@@ -223,6 +229,49 @@ function ChangeList({ changes }) {
   );
 }
 
+function FieldList({ fields }) {
+  const normalizedFields = normalizeMessageFields(fields).filter((item) => item.status !== "filled");
+  if (!normalizedFields.length) return null;
+
+  return (
+    <div className="field-list" aria-label="채워야 할 정보">
+      <strong>채워야 할 정보</strong>
+      <ul>
+        {normalizedFields.map((item, index) => (
+          <li className={item.role} key={`${item.name}-${index}`}>
+            <span>{item.name}</span>
+            <em>{item.role === "required" ? "필수" : item.role === "fact" ? "사실 확인" : "선택"}</em>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function TechniqueList({ techniques }) {
+  const normalizedTechniques = normalizeMessageTechniques(techniques);
+  if (!normalizedTechniques.length) return null;
+
+  return (
+    <div className="technique-list" aria-label="참고한 프롬프트 기법">
+      <strong>참고한 프롬프트 기법</strong>
+      <ul>
+        {normalizedTechniques.map((item, index) => (
+          <li key={`${item.name}-${index}`}>
+            <span>{item.name}</span>
+            {item.reason && <small>{item.reason}</small>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EvidenceNotice({ ragStatus }) {
+  if (String(ragStatus || "").toLowerCase() !== "no_evidence") return null;
+  return <div className="evidence-notice">관련 근거를 찾지 못해 기본 개선 방식으로 작성했습니다.</div>;
+}
+
 function QuestionList({ questions, mode, summary }) {
   const normalizedQuestions = normalizeMessageQuestions(questions);
   if (!normalizedQuestions.length) return null;
@@ -236,6 +285,7 @@ function QuestionList({ questions, mode, summary }) {
         {normalizedQuestions.map((item, index) => (
           <li className={item.importance === "required" ? "required" : "recommended"} key={`${item.field || "question"}-${index}`}>
             <span>{item.question}</span>
+            <em>{item.importance === "required" ? "필수 정보" : "선택 정보"}</em>
             {item.reason && <small>{item.reason}</small>}
           </li>
         ))}
@@ -273,6 +323,50 @@ function normalizeMessageQuestions(questions) {
             question,
             reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
             importance: importance === "required" ? "required" : "recommended",
+          };
+        })
+        .filter(Boolean)
+    : [];
+}
+
+function normalizeMessageFields(fields) {
+  return Array.isArray(fields)
+    ? fields
+        .map((item, index) => {
+          if (typeof item === "string") {
+            const name = item.trim();
+            return name ? { name, role: "fact", status: "empty", value: "" } : null;
+          }
+          if (!item || typeof item !== "object") return null;
+          const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
+          if (!name) return null;
+          const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
+          const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
+          return {
+            name,
+            role: ["required", "fact", "framing"].includes(role) ? role : "fact",
+            status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
+            value: String(item.value || item.answer || "").trim(),
+          };
+        })
+        .filter(Boolean)
+    : [];
+}
+
+function normalizeMessageTechniques(techniques) {
+  return Array.isArray(techniques)
+    ? techniques
+        .map((item) => {
+          if (typeof item === "string") {
+            const name = item.trim();
+            return name ? { name, reason: "" } : null;
+          }
+          if (!item || typeof item !== "object") return null;
+          const name = String(item.name || item.technique || item.title || item.label || "").trim();
+          if (!name) return null;
+          return {
+            name,
+            reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
           };
         })
         .filter(Boolean)

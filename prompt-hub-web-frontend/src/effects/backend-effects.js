@@ -219,14 +219,35 @@
     const {
       applyContext,
       canUseDemoFallback,
+      clearAuthenticatedSession,
       getApiFailureMessage,
+      getAuthToken,
       getMakeApi,
       getMakeApiToken,
+      hasBackendAuthToken,
+      handleBackendAccessError,
       render,
       state,
     } = ctx;
 
     if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+
+    if (typeof hasBackendAuthToken === "function" && !hasBackendAuthToken()) {
+      const wasLoggedIn = Boolean(state.isLoggedIn);
+      const hasAnyToken = Boolean(String(typeof getAuthToken === "function" ? getAuthToken() || "" : "").trim());
+      if (wasLoggedIn && !hasAnyToken && typeof clearAuthenticatedSession === "function") {
+        clearAuthenticatedSession({ keepRoute: true });
+        state.authView = "login";
+      }
+      state.makeBackendStatus = "fallback";
+      state.makeBackendMessage = wasLoggedIn && hasAnyToken
+        ? "데모 계정은 서버 대화 조회 없이 로컬 Make 대화를 사용합니다."
+        : wasLoggedIn
+          ? "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다."
+          : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.";
+      render();
+      return;
+    }
 
     const api = getMakeApi();
     if (!api?.getMakeThreads && !api?.getMakeFolders) {
@@ -262,6 +283,27 @@
     }
 
     const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
+    const rejectedReasons = [threadsResult, foldersResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    const unauthorizedReason = rejectedReasons.find((reason) => {
+      const status = Number(reason?.status || reason?.payload?.status || 0);
+      const code = String(reason?.payload?.code || reason?.code || "");
+      return status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED";
+    });
+
+    if (!anyConnected && unauthorizedReason && typeof handleBackendAccessError === "function") {
+      if (state.isLoggedIn && typeof clearAuthenticatedSession === "function") {
+        clearAuthenticatedSession({ keepRoute: true });
+        state.authView = "login";
+      }
+      state.makeBackendStatus = "fallback";
+      state.makeBackendMessage = "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.";
+      handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+      render();
+      return;
+    }
+
     state.makeBackendStatus = anyConnected ? "connected" : "fallback";
     state.makeBackendMessage = anyConnected
       ? "Make API 연결됨. GET /api/make/threads, /api/make/folders 요청을 확인했습니다."

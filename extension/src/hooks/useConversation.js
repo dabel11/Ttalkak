@@ -172,7 +172,12 @@ export function useConversation({
   }
 
   async function copyMessage(message) {
-    await copyText(message.executablePrompt || message.content);
+    const prompt = message.executablePrompt || "";
+    if (!prompt && message.role === "assistant") {
+      showNotice("실행 가능한 개선 프롬프트가 아직 없습니다.");
+      return;
+    }
+    await copyText(prompt || message.content);
     setCopiedId(message.id);
     showNotice("프롬프트를 복사했습니다.");
     window.setTimeout(() => setCopiedId(""), 1100);
@@ -230,7 +235,11 @@ export function useConversation({
   }
 
   async function executeMessage(message) {
-    const prompt = message.executablePrompt || message.content;
+    const prompt = message.executablePrompt || "";
+    if (!prompt) {
+      showNotice("실행 가능한 개선 프롬프트가 아직 없습니다.");
+      return;
+    }
     if (hasPromptPlaceholders(prompt)) {
       const proceed = window.confirm(
         "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다."
@@ -305,6 +314,8 @@ export function useConversation({
           answer: data.answer || "",
           questions: data.questions || [],
           changes: data.changes || [],
+          fields: data.fields || [],
+          techniques: data.techniques || data.techniquesApplied || [],
           summary: data.summary || "",
           executablePrompt: null,
           sourcePrompt: prompt,
@@ -335,6 +346,8 @@ export function useConversation({
           answer: data.answer || "",
           questions: data.questions || [],
           changes: data.changes || [],
+          fields: data.fields || [],
+          techniques: data.techniques || data.techniquesApplied || [],
           summary: data.summary || "",
           executablePrompt: data.improvedPrompt || null,
           sourcePrompt: prompt,
@@ -365,6 +378,8 @@ export function useConversation({
         answer: data.answer || "",
         questions: data.questions || [],
         changes: data.changes || [],
+        fields: data.fields || [],
+        techniques: data.techniques || data.techniquesApplied || [],
         summary: data.summary || "",
         executablePrompt: data.improvedPrompt || null,
         sourcePrompt: prompt,
@@ -518,6 +533,8 @@ export function useConversation({
         answer: data.answer || "",
         questions: data.questions || [],
         changes: data.changes || [],
+        fields: data.fields || [],
+        techniques: data.techniques || data.techniquesApplied || [],
         summary: data.summary || "",
         executablePrompt: data.mode === "ask" ? null : data.improvedPrompt || null,
         sourcePrompt: prompt,

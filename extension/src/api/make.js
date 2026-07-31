@@ -1,6 +1,6 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
-import { normalizeImproveQuestions } from "../utils/normalizeImproveResult";
+import { normalizeImproveFields, normalizeImproveQuestions, normalizeImproveTechniques } from "../utils/normalizeImproveResult";
 
 function normalizeChanges(value) {
   if (!Array.isArray(value)) return [];
@@ -27,17 +27,21 @@ function normalizeMakeMessage(item, index = 0) {
   const mode = ["ask", "improve"].includes(String(item?.mode || item?.type || "").toLowerCase())
     ? String(item.mode || item.type).toLowerCase()
     : "improve";
-  const improvedPrompt = item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.content || item?.text || "";
+  const improvedPrompt = mode === "ask"
+    ? ""
+    : item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.improved_prompt || "";
   return {
     id: String(item?.id || item?.messageId || `server-message-${index}`),
     role: item?.role || item?.sender || "assistant",
     content: String(item?.content || item?.text || item?.message || ""),
     answer: item?.answer || "",
     sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
-    executablePrompt: mode === "ask" ? "" : improvedPrompt,
+    executablePrompt: improvedPrompt,
     mode,
     questions: normalizeImproveQuestions(item?.questions),
     changes: normalizeChanges(item?.changes),
+    fields: normalizeImproveFields(item?.fields || item?.fieldState || item?.missingFields),
+    techniques: normalizeImproveTechniques(item?.techniques || item?.techniquesApplied || item?.techniques_applied),
     summary: item?.summary || "",
     sources: item?.sources || [],
     saved: Boolean(item?.saved || item?.isSaved),

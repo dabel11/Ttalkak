@@ -5,22 +5,25 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
     : "improve";
   const questions = normalizeImproveQuestions(result.questions || result.followUpQuestions || result.additionalQuestions);
   const answer = result.answer || result.explanation || result.summary || "";
+  const fields = normalizeImproveFields(result.fields || result.fieldState || result.missingFields);
+  const techniques = normalizeImproveTechniques(result.techniques || result.techniquesApplied || result.techniques_applied);
   const improvedText =
     mode === "ask"
       ? ""
       : result.improvedPrompt ||
         result.improved_prompt ||
-        result.text ||
-        result.content ||
-        answer ||
-        fallbackPrompt;
+        result.finalPrompt ||
+        result.final_prompt ||
+        "";
 
   return {
     mode,
     answer: answer || "프롬프트를 개선했습니다.",
     questions,
     summary: result.summary || "",
-    techniquesApplied: result.techniquesApplied || result.techniques_applied || [],
+    fields,
+    techniques,
+    techniquesApplied: techniques,
     changes: result.changes || [],
     score: result.score ?? null,
     improvedPrompt: improvedText,
@@ -60,4 +63,46 @@ export function normalizeImproveQuestion(item, index = 0) {
 export function normalizeImproveQuestions(value) {
   if (!Array.isArray(value)) return [];
   return value.map(normalizeImproveQuestion).filter(Boolean);
+}
+
+export function normalizeImproveFields(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => {
+      if (typeof item === "string") {
+        const name = item.trim();
+        return name ? { name, role: "fact", status: "empty", value: "" } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
+      if (!name) return null;
+      const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
+      const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
+      return {
+        name,
+        role: ["required", "fact", "framing"].includes(role) ? role : "fact",
+        status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
+        value: String(item.value || item.answer || "").trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+export function normalizeImproveTechniques(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        const name = item.trim();
+        return name ? { name, reason: "" } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || item.technique || item.title || item.label || "").trim();
+      if (!name) return null;
+      return {
+        name,
+        reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
+      };
+    })
+    .filter(Boolean);
 }

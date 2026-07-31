@@ -202,11 +202,13 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, role, summary } = data;
+    const { answer, changes, content, fields, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
+    const normalizedFields = normalizeMessageFields(fields);
     const normalizedQuestions = normalizeMessageQuestions(questions);
+    const normalizedTechniques = normalizeMessageTechniques(techniques);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
     const leadText = normalizedQuestions.length
@@ -218,14 +220,26 @@
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
       : "";
+    const fieldSection = normalizedFields.length
+      ? MessageFieldsView({ escapeHtml }, { fields: normalizedFields })
+      : "";
+    const techniqueSection = normalizedTechniques.length
+      ? MessageTechniquesView({ escapeHtml }, { techniques: normalizedTechniques })
+      : "";
+    const evidenceSection = isAssistant && String(ragStatus || "").toLowerCase() === "no_evidence"
+      ? MessageEvidenceNoticeView()
+      : "";
 
     if (isAssistant) {
       return `
         <div class="message-group assistant-group" data-message-id="${safeMessageId}">
           <article class="message assistant">
+            ${evidenceSection}
             <p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>
+            ${fieldSection}
             ${changeSection}
             ${questionSection}
+            ${techniqueSection}
           </article>
           ${hasExecutablePrompt ? `<footer class="message-actions">
               <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
@@ -282,6 +296,50 @@
       : [];
   }
 
+  function normalizeMessageFields(fields) {
+    return Array.isArray(fields)
+      ? fields
+          .map((item, index) => {
+            if (typeof item === "string") {
+              const name = item.trim();
+              return name ? { name, role: "fact", status: "empty", value: "" } : null;
+            }
+            if (!item || typeof item !== "object") return null;
+            const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
+            if (!name) return null;
+            const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
+            const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
+            return {
+              name,
+              role: ["required", "fact", "framing"].includes(role) ? role : "fact",
+              status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
+              value: String(item.value || item.answer || "").trim(),
+            };
+          })
+          .filter(Boolean)
+      : [];
+  }
+
+  function normalizeMessageTechniques(techniques) {
+    return Array.isArray(techniques)
+      ? techniques
+          .map((item) => {
+            if (typeof item === "string") {
+              const name = item.trim();
+              return name ? { name, reason: "" } : null;
+            }
+            if (!item || typeof item !== "object") return null;
+            const name = String(item.name || item.technique || item.title || item.label || "").trim();
+            if (!name) return null;
+            return {
+              name,
+              reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
+            };
+          })
+          .filter(Boolean)
+      : [];
+  }
+
   function normalizeMessageChanges(changes) {
     return Array.isArray(changes)
       ? changes
@@ -324,6 +382,7 @@
               (item) => `
                 <li class="${item.importance === "required" ? "required" : "recommended"}">
                   <span>${escapeHtml(item.question)}</span>
+                  <em>${item.importance === "required" ? "필수 정보" : "선택 정보"}</em>
                   ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ""}
                 </li>
               `,
@@ -331,6 +390,62 @@
             .join("")}
         </ol>
       </section>
+    `;
+  }
+
+  function MessageFieldsView(ctx, data) {
+    const { escapeHtml } = ctx;
+    const { fields } = data;
+    const visibleFields = fields.filter((item) => item.status !== "filled");
+    if (!visibleFields.length) return "";
+
+    return `
+      <section class="message-field-section" aria-label="채워야 할 정보">
+        <strong>채워야 할 정보</strong>
+        <ul>
+          ${visibleFields
+            .map(
+              (item) => `
+                <li class="${item.role}">
+                  <span>${escapeHtml(item.name)}</span>
+                  <em>${item.role === "required" ? "필수" : item.role === "fact" ? "사실 확인" : "선택"}</em>
+                </li>
+              `,
+            )
+            .join("")}
+        </ul>
+      </section>
+    `;
+  }
+
+  function MessageTechniquesView(ctx, data) {
+    const { escapeHtml } = ctx;
+    const { techniques } = data;
+
+    return `
+      <section class="message-technique-section" aria-label="참고한 프롬프트 기법">
+        <strong>참고한 프롬프트 기법</strong>
+        <ul>
+          ${techniques
+            .map(
+              (item) => `
+                <li>
+                  <span>${escapeHtml(item.name)}</span>
+                  ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ""}
+                </li>
+              `,
+            )
+            .join("")}
+        </ul>
+      </section>
+    `;
+  }
+
+  function MessageEvidenceNoticeView() {
+    return `
+      <div class="message-evidence-notice" role="note">
+        관련 근거를 찾지 못해 기본 개선 방식으로 작성했습니다.
+      </div>
     `;
   }
 
