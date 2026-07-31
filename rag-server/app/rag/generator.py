@@ -102,6 +102,38 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 또한 변환·가공할 원문이 주어진 요청은 (A)작업 종류와 (B)대상 내용이 **이미 다 갖춰진** 것이므로,
 목적·대상 독자·톤 같은 보조 항목을 캐묻지 말고 곧바로 [개선 모드]로 원문을 담은 개선안을 내세요.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 없는 사실은 지어내지 말고 '빈칸'으로 — 가장 중요한 안전 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+사용자가 주지 않은 **구체적 사실**(날짜·기간·가격·수치·스펙·기능·제품명·회사명·사람명·
+경력·수상·통계)은 **절대 그럴듯하게 지어내지 마세요.** 대신 개선안 안에
+`[항목명 입력]` 형태의 **빈칸**으로 남기고, 그 항목을 questions 로도 물으세요.
+  ❌ (환각) "제품명: AirSound Pro / 배터리: 최대 30시간 / IPX4 방수"  ← 사용자가 준 적 없음
+  ✅ (안전) "제품명: [제품명 입력] / 주요 스펙: [배터리 시간·방수 등급 입력]"
+반대로 **톤·대상 독자·분량·형식** 같은 방향 선택은 물어보지 말고 **합리적으로 가정**한 뒤
+"changes"에 한 줄로 밝히세요. (가정은 허용, 사실 창작은 금지)
+판별 기준: *"그 값이 틀리면 사용자가 '그건 사실이 아닌데'라고 할까?"* → 그렇다면 빈칸.
+
+※ 단, 사용자가 **직접 붙여넣은 원문**(회의록·코드·번역 대상)은 위 규칙과 무관합니다 —
+   그건 이미 받은 재료이므로 위 '원문 verbatim' 원칙대로 **그대로 전부** 넣으세요.
+※ 반대로 원문을 붙여넣지 **않고** "~하는 프롬프트를 만들어줘"처럼 **재사용할 템플릿**을 요청한
+   경우는, 원문이 없다고 되묻지 말고 그 자리에 `[회의록 원문 붙여넣기]` 같은 빈칸을 두고
+   **개선 모드**로 완성된 템플릿을 주세요. (원문은 사용자가 나중에 채워 넣습니다)
+   예) "이 회의록을 3줄 요약하는 프롬프트 만들어줘" → 회의록 본문이 없어도 개선 모드.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[요청 분석] 블록이 주어지면 — 그대로 따르세요
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+입력에 [요청 분석] 블록이 있으면, 각 필드를 이렇게 처리합니다.
+- `= 값`     (filled)   → 개선안 안에 조건·재료로 반영
+- `[fact] (없음)`       → 개선안에 `[항목명 입력]` 빈칸 + questions 에 해당 질문
+- `[framing] (없음)`    → 묻지 말고 가정 + "changes"에 명시
+- `[required] (분석기가 못 찾음)` → ⚠️ **분석은 보조 자료일 뿐 최종 판단은 당신이 합니다.**
+  원문을 직접 다시 읽어 그 값이 실제로 있는지 확인하세요.
+  · 원문에 있으면(예: "임영웅 콘서트 …" → 홍보 대상 = 임영웅 콘서트) → 그대로 쓰고 **개선 모드**
+  · 원문에도 정말 없을 때만 → 질문 모드
+분석 블록이 없으면 아래 [모드 선택] 기준으로 스스로 판단하세요.
+
 당신은 매 턴 [질문 모드]와 [개선 모드] 중 하나를 선택합니다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -139,17 +171,19 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 빈 항목을 채우기 위해 **한 번에 1~3개**의 짧고 구체적인 질문을 하세요.
 한 라운드로 부족하면 다음 턴에서 또 물어도 됩니다(최대 2~3라운드). 이미 받은 정보는 다시 묻지 마세요.
 
-**핵심: 사용자가 '무슨 정보를 채워야 하는지' 한눈에 알게 하세요.** 각 질문은 다음 3요소를 갖춥니다.
-  ① 채울 정보의 **이름(항목)**을 앞에 명시 (예: "대상 독자:", "주제:", "분량:")
-  ② **왜 필요한지** — 그 정보가 결과 프롬프트를 어떻게 바꾸는지 한 조각
-  ③ 답하기 쉬운 **보기/예시** 2~3개
-  예) ❌ "누구를 위한 건가요?" (항목·이유·보기 없음, 추상적)
-      ✅ "대상 독자: 누가 읽나요? 톤·난이도가 달라집니다. (예: 20대 잠재고객 / 사내 실무자 / 초등학생)"
+**핵심: 사용자가 '무슨 정보를 채워야 하는지' 한눈에 알게 하세요.** 각 질문 객체는:
+  · "field"    — 채울 정보의 항목명 (예: "주제", "대상 독자", "분량")
+  · "question" — 질문 + 답하기 쉬운 **보기/예시** 2~3개
+  · "reason"   — 그 정보가 결과 프롬프트를 어떻게 바꾸는지 한 줄
+  예) ❌ {"question": "누구를 위한 건가요?"} (항목·이유·보기 없음, 추상적)
+      ✅ {"field": "대상 독자",
+          "question": "누가 읽나요? (예: 20대 잠재고객 / 사내 실무자 / 초등학생)",
+          "reason": "톤·난이도가 달라집니다", "importance": "required"}
 
 "summary"에는 **파악한 작업 종류 + 무엇이 비어 특정 못 하는지**를 한 줄로 명시하세요.
   예) "'글쓰기' 요청은 파악했지만 '무엇에 대한 글'(주제)인지가 없어 개선안을 만들 수 없어요."
 
-이때 JSON 출력: "mode"="ask", "questions"에 위 ①②③ 형식의 질문 1~3개,
+이때 JSON 출력: "mode"="ask", "questions"에 위 형식의 질문 객체 1~3개,
 "summary"에 위 한 줄. "improved_prompt"는 ""(개선안 절대 금지).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -164,11 +198,14 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 - "improved_prompt": 'AI에게 작업을 시키는 지시문'만 작성한다. 결과물 자체를 쓰지 말 것.
   반드시 'AI에게 시키는 형태'(예: "…을 작성하라/생성하라")로 끝나고, 수집한 정보와
   사용자가 준 원문(요약·번역·리뷰 대상 텍스트/코드/데이터 등)은 빠짐없이 지시문 안의
-  조건·재료로 포함한다(원문은 그대로 인용, 생략·플레이스홀더 금지).
+  조건·재료로 포함한다. **사용자가 준 원문은 그대로 인용하고 절대 빈칸으로 대체하지 않는다.**
+  반대로 **사용자가 주지 않은 구체 사실**은 지어내지 말고 `[항목명 입력]` 빈칸으로 남긴다.
   바로 다른 AI에 붙여넣어 쓸 수 있는 완결된 형태로.
 - "techniques": 실제 적용한 [참고 기법] 1~5개, 각각 {"name": 기법명, "reason": 한 줄 적용 설명}.
 - "changes": 직전 버전 대비(첫 턴이면 원본 대비) 무엇이 달라졌는지 + 채우지 못해 가정한 부분. 줄당 한 항목.
 - "score": 원본 대비 개선 정도 자체 평가(1~10 정수).
+- "questions": 개선안에 `[…입력]` 빈칸을 남겼다면, 그 빈칸을 채우기 위한 질문을 **빈칸당 하나씩**
+  넣는다(최대 3개, 없으면 []). 개선안은 이미 실행 가능하므로 이 질문은 **선택 사항**이다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [출력 형식 — 반드시 JSON 객체 하나만]
@@ -184,11 +221,19 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
   "changes": ["개선 포인트·가정, 항목당 한 줄"],
   "score": 1,
   "summary": "한 줄 — improve: 무엇을 개선했는지 / ask: 파악한 작업 + 무엇이 비어 특정 못 하는지",
-  "questions": ["ask일 때 질문 1~3개 — 각 '항목명: 질문 + 왜 필요한지 (예: 보기1 / 보기2)' 형식"]
+  "questions": [
+    {"field": "채울 항목명(예: 제품명)",
+     "question": "질문 문장 + 왜 필요한지 (예: 보기1 / 보기2)",
+     "reason": "이 정보가 결과를 어떻게 바꾸는지 한 줄",
+     "importance": "required 또는 recommended"}
+  ]
 }
 
-- improve 모드: questions=[] · score는 1~10 정수. / ask 모드: improved_prompt="" ·
-  techniques=[] · changes=[] · score=null.
+- **questions 는 객체 배열**이다(위 4개 키). 최대 3개.
+  · ask 모드  : importance="required" (핵심이 비어 물음)
+  · improve 모드: importance="recommended" (개선안의 `[…입력]` 빈칸과 field 로 1:1 대응)
+- improve 모드: score는 1~10 정수. questions 는 빈칸이 있으면 채우고 없으면 [].
+  ask 모드: improved_prompt="" · techniques=[] · changes=[] · score=null.
 - JSON 문자열 이스케이프(따옴표·줄바꿈)를 정확히 지킵니다. 유효하지 않은 JSON은 실패입니다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -198,8 +243,10 @@ Claude처럼, 곧바로 결과를 내놓기보다 필요할 때는 먼저 질문
 - 같은 질문을 반복하지 마세요. 한 번 물었으면 답을 반영해 개선 모드로 넘어갑니다.
 - 이미 개선안을 제시한 뒤 "더 짧게/페르소나 빼줘" 같은 피드백이 오면, 질문하지 말고
   직전 개선 프롬프트를 기준으로 피드백을 반영해 [개선 모드]로 갱신안을 냅니다.
-- 컨텍스트가 부족한데 추측으로 개선안을 내놓는 것은 '실패'입니다. 확신이 없으면 먼저 물으세요.
+- **핵심 주제조차 없는데** 추측으로 개선안을 내놓는 것은 '실패'입니다. 그럴 땐 먼저 물으세요.
+  (핵심 주제가 있고 세부만 비었다면 물어보지 말고 개선안 + 빈칸 + 선택 질문으로 진행합니다.)
 - 단, 핵심이 다 채워졌는데도 사소한 것까지 끝없이 캐묻지는 마세요(질문 최대 2~3라운드).
+- 사용자가 빈칸을 채워 답하면, 그 값을 반영해 빈칸 없는 개선안으로 갱신하세요.
 - 참고 기법에 없는 내용은 함부로 추가하지 마세요. 핵심 의도는 항상 유지합니다."""
 
 
@@ -275,6 +322,31 @@ def _build_example_context(contexts: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def build_analysis_block(analysis: dict | None) -> str:
+    """1단계 분석기 결과 → 생성기에 넣을 '[요청 분석]' 블록 (규약 v3 §4).
+
+    생성기는 이 블록을 보고 filled=재료 / empty·fact=[빈칸]+질문 / empty·framing=가정
+    으로 처리한다. 분석이 없으면 빈 문자열 → 기존 단일 단계 동작으로 무회귀 폴백."""
+    if not analysis or not analysis.get("fields"):
+        return ""
+    lines = [f"작업유형: {analysis.get('taskType') or '(미상)'}"]
+    for f in analysis["fields"]:
+        role, status = f.get("role"), f.get("status")
+        if status == "filled":
+            lines.append(f"- {f['name']} [{role}] = {f.get('value')}")
+        elif role == "fact":
+            lines.append(f"- {f['name']} [fact] = (없음 → 지어내지 말고 [{f['name']} 입력] 빈칸 + 질문)")
+        elif role == "required":
+            # 분석기(8b)가 요청에 있는 값을 놓치는 경우가 있다(실측: "임영웅 콘서트 …"에서
+            # 홍보 대상을 empty 로 판정 → 잘못된 ask). 단정 대신 '확인 요청'으로 렌더해
+            # 원문을 함께 보는 생성기가 교정할 수 있게 한다.
+            lines.append(f"- {f['name']} [required] = (분석기가 못 찾음 — 원문을 다시 확인해 "
+                         f"있으면 그대로 쓰고 개선 모드로, 정말 없을 때만 질문)")
+        else:
+            lines.append(f"- {f['name']} [framing] = (없음 → 합리적으로 가정하고 changes 에 명시)")
+    return "[요청 분석]\n" + "\n".join(lines)
+
+
 def _build_context_blocks(contexts: list[dict]) -> str:
     """검색 컨텍스트를 '[참고 기법]' + (있으면) '[참고 예시]' 블록으로 조립.
     예시 컨텍스트(metadata.kind=='example')가 하나도 없으면 기존과 **완전히 동일한**
@@ -323,15 +395,18 @@ class GroqGenerator:
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
-                 history: list[dict] | None = None) -> str:
+                 history: list[dict] | None = None,
+                 analysis: dict | None = None) -> str:
         groq_model = self.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
 
-        if contexts:
+        blocks = [b for b in (build_analysis_block(analysis),
+                              _build_context_blocks(contexts) if contexts else "") if b]
+        if blocks:
             label = "원본 프롬프트" if not messages[1:] else "이번 요청"
-            user_msg = f"{_build_context_blocks(contexts)}\n\n[{label}]\n{query}"
+            user_msg = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
         else:
             # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
             user_msg = query
@@ -406,7 +481,8 @@ class GeminiGenerator:
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
-                 history: list[dict] | None = None) -> str:
+                 history: list[dict] | None = None,
+                 analysis: dict | None = None) -> str:
         model = _resolve_gemini_model(model)   # 무료 불가 모델(gemini-2.0-flash 등) → 실제 되는 모델
         # 대화 기록을 contents 배열의 정식 턴으로 전달 (Groq messages 와 구조 동일).
         # 과거엔 system+대화를 한 문자열로 평탄화 → 멀티턴에서 role 경계가 사라져
@@ -418,9 +494,11 @@ class GeminiGenerator:
                 role=role, parts=[types.Part.from_text(text=h["content"])],
             ))
 
-        if contexts:
+        blocks = [b for b in (build_analysis_block(analysis),
+                              _build_context_blocks(contexts) if contexts else "") if b]
+        if blocks:
             label = "원본 프롬프트" if not contents else "이번 요청"
-            current = f"{_build_context_blocks(contexts)}\n\n[{label}]\n{query}"
+            current = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
         else:
             # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달 (Groq 경로와 동일)
             current = query
@@ -510,7 +588,8 @@ class Generator:
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
-                 history: list[dict] | None = None) -> str:
+                 history: list[dict] | None = None,
+                 analysis: dict | None = None) -> str:
         backend = self._groq or self._gemini
 
         if self._groq and self._gemini:
@@ -523,7 +602,7 @@ class Generator:
             return backend.generate(
                 query=query, contexts=contexts,
                 model=model, max_tokens=max_tokens,
-                history=history,
+                history=history, analysis=analysis,
             )
         except RuntimeError:
             if backend is self._groq and self._gemini:
@@ -531,6 +610,6 @@ class Generator:
                 return self._gemini.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,
-                    history=history,
+                    history=history, analysis=analysis,
                 )
             raise

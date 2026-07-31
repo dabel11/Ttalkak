@@ -76,7 +76,10 @@ check("추출 실패 시 기본 8초", _retry_after_seconds(fake_err("알 수 �
 
 # ── _needs_long_context ──────────────────────────────────────
 # 토큰 추정은 실측 보정 계수(한글 ≈ 1tok/자) 기준 — 2026-07-23. TPM 12k에서
-# 'verbatim 재인용 가능' 경계는 한국어 원문 약 2,500자 부근이다.
+# 'verbatim 재인용 가능' 경계는 한국어 원문 약 2,500자 부근이었으나,
+# 2026-07-31 규약 v3로 SYSTEM_PROMPT가 2,766→4,091 토큰(+48%)이 되며 예산을 더 먹어
+# **경계가 약 1,500자로 내려왔다**. 즉 1,500~2,500자 입력이 이제 Gemini로 라우팅된다
+# (Gemini 일일 한도 압박 ↑ — SYSTEM_PROMPT 축소는 백로그).
 M70 = "llama-3.3-70b-versatile"   # TPM 12,000
 ctxs = [{"text": "기법 설명 " * 100} for _ in range(5)]   # 기법 5개 ≈ 3,000자
 
@@ -84,7 +87,8 @@ check("짧은 입력은 Groq 유지", not _needs_long_context("블로그 글 프
 # 30,000자 회의록 → 입력만으로 TPM 초과, verbatim 출력도 불가 → Gemini
 check("장문 원문은 Gemini 라우팅", _needs_long_context("회의록 요약해줘: " + "가" * 30000, ctxs, [], M70))
 # 경계 확인: 필요 출력(원문 재인용)이 남는 예산을 넘어서는 지점부터 라우팅
-check("2,000자 원문은 Groq 유지", not _needs_long_context("나" * 2000, ctxs, [], M70))
+check("1,500자 원문은 Groq 유지", not _needs_long_context("나" * 1500, ctxs, [], M70))
+check("2,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 2000, ctxs, [], M70))
 check("4,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 4000, ctxs, [], M70))
 
 print(f"\n전부 통과 ({_passed}개)")

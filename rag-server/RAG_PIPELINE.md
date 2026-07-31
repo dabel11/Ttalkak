@@ -2,7 +2,8 @@
 
 > `POST /query` 한 건이 들어와 응답이 나가기까지의 전체 흐름과 핵심 설계 포인트 정리.
 > 코드 위치는 `파일:줄`로 표기. 기준: `rag-server/` (FastAPI, bge-m3 + MySQL + reranker + LLM).
-> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_hyde=True`, `use_query_transform=False`, `min_score=0.40`.
+> 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_hyde=False`, `use_query_transform=False`, `min_score=0.40`.
+> 생성은 **2단계**(분석기 temp 0.2 → 생성기 temp 0.7) — 규약 v3, §1-[C0]/[C].
 
 ---
 
@@ -28,15 +29,21 @@ POST /query
 [B+] 예시 검색 (타입별)  main.py query()   (컬렉션 prompt_examples: 원본요청 매칭 dense top-N,
   │                                         리랭커 생략, example_min_score 컷 → 관련無면 0건)
   ▼
-[C] 생성 (LLM, JSON)    generator.py       (참고기법 + 참고예시 + 원본 → JSON {mode, improved_prompt, ...})
+[C0] 요청 분석 (1단계)   analyzer.py        (temp 0.2 · 별도 LLM 호출 — 이 요청에 필요한
+  │                                        필드를 동적 도출: {name, role, status, value})
+  │                                        role: required | fact | framing
+  ▼
+[C] 생성 (2단계, JSON)  generator.py       (temp 0.7 · [요청 분석] + 참고기법 + 참고예시 + 원본
+  │                                        → JSON {mode, improved_prompt, questions, ...})
+  │                                        filled=재료 / empty·fact=[빈칸]+질문 / empty·framing=가정
   ▼
 [D] 파싱·복원 → 응답    main.py run_generation() → postprocess.assemble_fields()
   ▼                       (JSON 파싱 → 필드 조립 + answer 마크다운 복원, 실패 시 정규식 폴백)
 QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
-                changes, score, summary, questions }
+                changes, score, summary, questions[{field,question,reason,importance}], fields }
 ```
 
-- **응답의 mode 가 프론트 분기의 단일 기준** — `"improve"`(개선안) / `"ask"`(추가 질문). 프론트는 `improved_prompt==""` 같은 추측 대신 `mode` 로 분기하고, `mode=="ask"` 면 구조화 `questions[]` 를 렌더한다(상세 계약은 별도 공유하는 백엔드/프론트 계약 문서 참조).
+- **응답의 mode 가 프론트 분기의 단일 기준** — `"improve"`(개선안) / `"ask"`(추가 질문). 프론트는 `improved_prompt==""` 같은 추측 대신 `mode` 로 분기한다. **`questions[]` 는 두 모드 모두에서 렌더**한다 — `ask`면 핵심 질문, `improve`면 개선안과 함께 보여주는 **선택 질문**(하이브리드). 상세 계약은 별도 공유하는 백엔드/프론트 계약 문서(`CONTRACT_MAKE_PIPELINE.md`) 참조.
 
 - **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3) · 생성 LLM(Groq/Gemini)
 - **저장소**: MySQL `rag_chunk` (Spring 백엔드와 **동일 DB** `ttalkak` 공유)
@@ -75,7 +82,20 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   - **HyDE 상시 적용(기본)의 부수효과**: hyde가 쿼리를 카드 장르로 맞춰 거의 모든 입력이 0.6~0.8로 통과하므로 이 컷은 **관련성 게이트로는 사실상 무력화**된다(쓰레기 입력 "asdf"도 0.77). 결과적으로 **첫 턴 404는 hyde 폴백(한도 초과 등)+원본마저 0.40 미만인 드문 경우에만 발동**. 무의미 입력의 최종 게이트는 404가 아니라 **생성 단계의 `mode=ask`**(무엇을 개선할지 되물음)가 담당한다.
 - **결과**: 관련 기법 청크 ≤5개 `{text, metadata{technique, category, source, chunk_id}, score, rerank_score}`
 
-### [C] 생성 — `generator.py`
+### [C0] 요청 분석 (1단계) — `analyzer.py` (규약 v3, 2026-07-31)
+- **별도 LLM 호출 · `temp 0.2` · `llama-3.1-8b-instant`** — 요청에 필요한 필드를 **동적으로 도출**(고정 표 아님).
+  출력 `{taskType, fields:[{name, role, status, value}]}`
+- **역할 3종**: `required`(비면 무엇을 만들지 안 정해짐) / `fact`(지어내면 거짓 — 날짜·가격·수치·스펙·고유명사) / `framing`(가정 가능 — 톤·대상·분량·형식)
+- **왜 2단계로 분리**: 분석은 결정적이어야(저temp), 생성은 자연스러워야(고temp) — 최적 온도가 반대. 한 호출로 합치면 필드·mode 판정이 흔들림(실측: 한 호출 일관성 0.23~0.75 → 분리 0.86~1.00)
+- **프롬프트 설계 주의**(전수조사로 확인): ①구체 시나리오 예시를 길게 쓰면 8b가 무관한 요청에 복사(오염) → 짧은 목록만 제시 ②"포함 핵심내용" 류 만능 필드를 만들면 항상 required+empty로 잡혀 강제 ask → 프롬프트 금지 + `_sanitize()`로 코드 차단 ③fact 분류 예시를 필드명으로 복사하는 오염도 발생 → "분류 기준일 뿐 필드명 아님" 명시
+- **status 판정이 mode 정확도를 지배**: 단서가 있으면 filled(관대), 단 결과물 '종류'를 가리키는 말(대본·제품·글)은 주제가 아님. 전수조사 mode 정확도 0.78→0.72→**0.83**(gen_set 18)
+- **실패 시 `None`** → 분석 없이 기존 단일 단계로 진행(무회귀)
+- ⚠️ **비용**: 요청당 LLM 호출 +1(≈1~4초). 8b는 TPM 6,000이라 동시 트래픽에서 429 가능 — 그때는 `None` 폴백이라 기능은 유지되나 분석 이점이 사라진다(모델/티어 상향은 백로그)
+- **멀티턴**: `history`를 함께 넣어 매 턴 필드 상태를 재구성 → 이전 턴에 답한 항목은 `filled`가 되어 **같은 질문 반복을 구조적으로 차단**
+
+### [C] 생성 (2단계) — `generator.py`
+- **`[요청 분석]` 블록 소비**(`build_analysis_block`): filled=재료 / empty·fact=**`[항목명 입력]` 빈칸 + 질문** / empty·framing=가정 후 `changes` 명시
+- **환각 방지 핵심 규칙**: 사용자가 **주지 않은** 구체 사실은 창작 금지·빈칸. 사용자가 **준** 원문(회의록·코드)은 verbatim·빈칸 금지 (두 규칙이 충돌하지 않도록 SYSTEM_PROMPT에서 명시 구분)
 - **백엔드 자동선택 + 요청 단위 라우팅** (`Generator`, `generator.py:391`)
   - `GROQ_API_KEY` 있으면 **Groq 우선**, 없으면 Gemini (현재 `.env`엔 Groq만 → Groq)
   - **장문 라우팅** (`_needs_long_context`, 375): Groq TPM 예산으로 verbatim 원문 출력이 불가능한 긴 입력은 **Gemini로 라우팅** — 두 키가 모두 설정된 경우에만 작동(2026-07-23)
@@ -89,9 +109,11 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   - Groq `response_format=json_object` / Gemini `response_mime_type=application/json` — **JSON 출력 강제**. Gemini는 `system_instruction` + `contents` 배열(정식 멀티턴) 사용 — 과거의 한 문자열 평탄화 제거(2026-07-23)
   - **Groq 에러 매핑**: 429는 대기시간 짧으면(≤20s) 1회 재시도, 그 외/재시도 소진은 `RuntimeError`로 변환 → `/query`가 **503**으로 응답(기존엔 그대로 500) (2026-07-23)
 - **두 모드 중 하나로 응답** (SYSTEM_PROMPT [출력 형식 — JSON]이 스키마 정의, 2026-07-05)
-  - **개선 모드**(기본): `{mode:"improve", improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary}`
+  - **개선 모드**(기본): `{mode:"improve", improved_prompt, techniques[{name,reason}], changes[], score(1~10), summary, questions[]}`
   - **원문 보존 원칙**: 사용자가 가공·변환할 원문(회의록·이메일·코드 등)을 주면 improved_prompt에 **원문 그대로(verbatim) 포함** (SYSTEM_PROMPT 규칙, 2026-06-26)
-  - **질문 모드**(예외): (A)작업종류·(B)핵심주제 특정 불가 시 `{mode:"ask", questions[], summary}`. 질문은 **`항목명: 질문 + 왜 필요한지 (예: 보기)`** 형식으로 '채워야 할 정보'를 명시(방식1 강화, 2026-07-23). summary=파악한 작업+무엇이 비었는지
+  - **질문 모드**(예외): 핵심 주제 특정 불가 시 `{mode:"ask", questions[], summary}`. summary=파악한 작업+무엇이 비었는지
+  - ⭐ **하이브리드(규약 v3, XOR 폐기)**: `improve`에도 `questions`가 붙을 수 있다 — 개선안은 이미 실행 가능하고, 질문은 개선안의 `[…입력]` 빈칸을 채우기 위한 **선택 사항**. 빈칸 ↔ 질문은 `field`로 1:1 대응. (종전 "improve면 questions=[]" 규칙 폐기 — 세부가 조금 비었다고 통째로 질문 모드로 빠져 Execute가 안 나오던 문제 해소)
+  - **questions 스키마**: `[{field, question, reason, importance}]` 객체 배열(종전 문자열 배열). `postprocess.normalize_questions()`가 구형 문자열도 객체로 승격(하위호환), 프론트도 양쪽 수용
 - 후처리: `_strip_cjk_noise`로 **한글에 직접 붙은** 한자 오염 토큰만 제거 (`generator.py:19`, Groq·Gemini 공통). ⚠️ 공백·따옴표로 분리된 외국어(번역 원문 등)는 보존(2026-06-27 수정)
 
 ### [D] 파싱·복원·응답 — `main.py run_generation()` → `postprocess.assemble_fields()` (§2-(4) 상세)

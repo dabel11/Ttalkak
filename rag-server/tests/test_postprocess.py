@@ -83,7 +83,11 @@ f_ask = assemble_fields(
     '"questions":["어떤 주제?","독자는 누구?"],"techniques":[],"changes":[],"score":null}'
 )
 check("ask: mode 통과", f_ask["mode"] == "ask")
-check("ask: questions 구조화 통과", f_ask["questions"] == ["어떤 주제?", "독자는 누구?"])
+# 규약 v3: questions 는 객체 배열. 구형 문자열 출력도 객체로 승격돼야 한다(하위호환).
+check("ask: questions 객체 승격", [q["question"] for q in f_ask["questions"]]
+      == ["어떤 주제?", "독자는 누구?"])
+check("ask: questions 스키마 4키", all(
+    set(q) == {"field", "question", "reason", "importance"} for q in f_ask["questions"]))
 check("ask: summary 통과", f_ask["summary"] == "주제가 비어 무엇을 쓸지 모름")
 check("ask: improved_prompt 비움(Execute 숨김)", f_ask["improved_prompt"] == "")
 check("ask: 구조화 플래그", f_ask["structured"] is True)
@@ -99,6 +103,23 @@ check("improve: questions 비움", f_imp["questions"] == [])
 check("improve: improved_prompt 채움", f_imp["improved_prompt"].startswith("너는 카피라이터다."))
 check("improve: score 정수", f_imp["score"] == 7)
 check("improve: summary 통과", f_imp["summary"] == "역할·형식 보강")
+
+# ── 하이브리드(규약 v3 §5): improve 에도 빈칸 대응 선택 질문이 붙을 수 있다 ──
+# 기존 XOR("improve면 questions=[]")를 폐기했으므로, 개선안과 질문이 함께 살아남아야 한다.
+f_hyb = assemble_fields(
+    '{"mode":"improve","improved_prompt":"제품명: [제품명 입력]을 홍보하는 글을 작성하라.",'
+    '"techniques":[{"name":"Role Prompting","reason":"역할 부여"}],'
+    '"changes":["톤을 정중체로 가정"],"score":6,"summary":"역할·형식 보강",'
+    '"questions":[{"field":"제품명","question":"실제 제품명은?","reason":"제목에 들어감",'
+    '"importance":"recommended"}]}'
+)
+check("하이브리드: improve + questions 공존", f_hyb["mode"] == "improve"
+      and len(f_hyb["questions"]) == 1)
+check("하이브리드: field 보존", f_hyb["questions"][0]["field"] == "제품명")
+check("하이브리드: improved_prompt 유지(Execute 가능)",
+      f_hyb["improved_prompt"].startswith("제품명: [제품명 입력]"))
+check("하이브리드: 마크다운에 선택질문 렌더", "실제 제품명은?" in f_hyb["answer"])
+check("하이브리드: 객체가 그대로 찍히지 않음", "{'field'" not in f_hyb["answer"])
 
 # 폴백(JSON 파싱 실패): 개선 블록 유무로 mode 추정, questions/summary 는 빈 값
 f_fb_imp = assemble_fields("---\n**개선된 프롬프트:**\n\n너는 번역가다. 번역하라.\n\n---\n**적용한 기법:**\n• Tone")

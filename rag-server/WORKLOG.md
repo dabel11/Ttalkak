@@ -1043,3 +1043,69 @@ eval/  run_eval.py(+__init__.py)
 - **mode_accuracy는 이 평가셋에서 오도적 지표**: OFF의 1.00은 "improve해야 할 것을 improve"가 아니라 "창작해서라도 improve"를 보상한다(이어폰 스펙). 안전(환각) 기준으론 ON의 ask가 더 보수적.
 - **하이브리드 설계 함의**: 하이브리드('항상 개선안+선택질문')는 13-15를 improve로 강제 → 이어폰형 스펙 창작을 유발. 채택 시 **미상 구체값을 그럴듯한 가짜(30시간)가 아니라 명시적 플레이스홀더([배터리 시간 입력])로 강제**하는 제약이 필요. (OFF 생성이 제품명엔 "(가칭)"을 붙인 걸 보면 유도 가능.)
 - gen_eval 토글은 유지 — 이후 hyde on/off 회귀 비교의 표준 경로. judge 한계는 --sleep 상향 또는 판정 모델 분리로 후속.
+
+---
+
+## [2026-07-31] MAKE 파이프라인 2단계화 — 요청 분석기(1단계) + 하이브리드 생성(2단계)
+**목적**: (1) 정보가 없으면 모델이 **가짜 사실을 창작**하던 문제(실측: 이어폰 요청에 "AirSound Pro"·"최대 30시간"·"IPX4" 날조) 차단. (2) 세부가 조금만 비어도 통째로 질문 모드로 빠져 **Execute가 안 나오던** UX 해소. (3) ask/improve 판정 흔들림(mode_accuracy 0.78) 개선.
+
+**Before**
+- 단일 LLM 호출(temp 0.7)이 mode 판정 + 개선안 + 질문을 한 번에. borderline 입력에서 판정이 흔들림.
+- `improve`면 `questions=[]`(XOR) → 개선안과 질문이 공존 불가.
+- `questions`는 문자열 배열 → 어떤 항목을 묻는지 코드가 알 수 없음(반복 질문 방지 불가).
+- 정보 부족 시 그럴듯한 구체값을 창작.
+
+**After** — 규약 v3(`CONTRACT_MAKE_PIPELINE.md`, git 미추적)
+- **1단계 분석기**(`app/rag/analyzer.py` 신규, temp 0.2, llama-3.1-8b): 요청마다 필요한 필드를 **동적 도출** → `{name, role(required|fact|framing), status, value}`. 실패 시 `None` → 기존 단일 단계로 무회귀 폴백.
+- **2단계 생성기**(temp 0.7): `[요청 분석]` 블록 소비 → filled=재료 / **empty·fact=`[항목명 입력]` 빈칸 + 질문** / empty·framing=가정 후 changes 명시.
+- **하이브리드(XOR 폐기)**: `improve`에도 `questions` 공존. 실행 가능한 개선안 + 선택 질문.
+- **questions 객체화**: `[{field, question, reason, importance}]`. `normalize_questions()`가 구형 문자열도 승격(하위호환). 응답에 `fields[]`(분석 결과) 추가.
+
+**변경 파일**
+- 신규 `app/rag/analyzer.py`
+- `app/rag/generator.py`: `build_analysis_block()` 추가, 3개 generate()에 `analysis` 파라미터, SYSTEM_PROMPT 개정(빈칸 안전규칙·분석블록 소비·하이브리드·questions 객체 스키마)
+- `app/rag/postprocess.py`: `normalize_questions()` 추가, `build_answer` 객체 렌더 + improve 선택질문 섹션, `assemble_fields` 문자열 강제변환 제거
+- `app/main.py`: `run_generation`에 분석기 배선, `QueryResponse.questions: list[dict]` + `fields` 신설
+- `tests/test_postprocess.py`: 하이브리드 6케이스 추가 (43개 전부 통과)
+- `RAG_PIPELINE.md`: [C0] 분석 단계 신설·[C] 개정
+
+**검증 — 분석기 전수조사(gen_set 18문항, `derive_mode` 프록시)**
+| 반복 | mode | role | 만능필드 | 예시오염 | 조치 |
+|---|---|---|---|---|---|
+| v1 | 0.78 | 0.96 | 11건 | 2건 | 초기 프롬프트 |
+| v2 | 0.72 | 0.95 | 0 | 0 | 오염 제거·만능필드 금지 |
+| v3 | 0.83 | 0.95 | 0 | 0 | status 판정 규칙(단서 있으면 filled) |
+| v4 | 0.83 | 0.93 | 0 | 0 | 일반명사 ≠ 주제 규칙 |
+| v5 | 0.78 | **1.00** | 0 | 0 | 코드 가드(역할 강제·required 상한) |
+| v6 | **0.94** | 0.96 | 0 | 0 | framing 가드를 정확매칭으로 축소 |
+| v7~v9 | 0.83 | 0.96 | 0 | 0 | 규칙 6-1(결과물에 필요한 fact 도출) 추가 — **빈칸 기능을 얻는 대가로 프록시 −0.11** |
+
+- v6(0.94)는 빈칸을 못 만들었다(빈 fact 도출 0건) → 하이브리드의 핵심인 **환각 방지 빈칸이 작동 안 함**. 규칙 6-1로 fact 도출을 살리자 프록시가 0.83으로 내려갔으나, **빈칸·질문이 실제로 생성**되므로 이쪽을 채택.
+- ⚠️ **프록시(`derive_mode`)는 end-to-end 를 과소평가한다**: v9에서 프록시가 틀린 `[1] 임영웅 콘서트`·`[4] 회의록 템플릿`을 라이브 `/query`로 확인하니 **생성기가 둘 다 improve 로 교정**했다(분석 블록을 '단정'이 아닌 '확인 요청'으로 렌더 + 생성기가 원문을 재확인하도록 지시). 최종 판단 주체는 생성기다.
+
+- ⭐ **핵심 교훈: 8b는 프롬프트 예시를 무관한 요청의 필드명으로 복사한다**("환불 거절 이메일"→"글 써줘", "자기소개서"→"부산 여행"). 문장 규칙으로는 두더지잡기 → **하드 제약은 코드로**(`_sanitize`: 만능필드·작업유형어 제거, 대상/톤/분량→framing 강제, required 상한 2).
+- ⚠️ v5 회귀 원인: framing 가드가 부분 문자열이라 `"홍보 대상"`(마케팅의 required)까지 강등 → `required=[]` → improve 오판. **정확 매칭 + '독자' 포함**으로 수정해 0.94.
+- 남은 오답 1건: `"이거 좀 개선해줘"`(지시대명사를 주제 filled로 오판).
+
+**검증 — end-to-end 라이브 `/query`**
+| 입력 | mode | 결과 |
+|---|---|---|
+| 신제품 무선 이어폰 소개 글 | improve | `[제품명 입력]`·`[핵심 사양 입력]` **빈칸** + 대응 질문 2개. **창작 스펙 0** (Before: AirSound Pro·30시간·IPX4 날조) |
+| 제주도 여행 블로그 글 | improve | 실행 가능한 개선안(framing만 가정). 이전 세션에서 5/5 ask로 막히던 케이스 해소 |
+| 글 써줘 | ask | 주제 질문 1개, improved_prompt="" |
+| 임영웅 콘서트(정보 충분) | improve | 분석기가 홍보대상을 empty로 오판해도 **생성기가 원문 재확인 후 교정** |
+| 회의록 요약 **템플릿** 요청(원문 미첨부) | improve | `[회의록 원문 붙여넣기]` 빈칸으로 완성 템플릿 제공 |
+| 회의록 **원문 붙여넣음** | improve | 원문 verbatim 포함 확인, 빈칸으로 대체되지 않음(무회귀) |
+
+**부작용 — SYSTEM_PROMPT 증가(실측 2,766 → 4,091 토큰, +48%)**
+- 장문 라우팅 경계가 **한국어 원문 약 2,500자 → 약 1,500자**로 하향. 1,500~2,500자 입력이 이제 Gemini로 라우팅 → **Gemini 일일 한도 압박 증가**.
+- 테스트 기준선 갱신: `test_token_budget`(2766→4091 실측 재측정), `test_generator_guards`(경계 1,500/2,000).
+- 백로그: SYSTEM_PROMPT 축소(중복 서술 통합)로 예산 회복.
+
+**결정·근거**
+- **왜 2단계인가**: 분석은 결정적이어야(저temp), 생성은 자연스러워야(고temp) — 최적 온도가 반대. 한 호출 일관성 0.23~0.75 vs 분리 0.86~1.00(실측).
+- **verbatim vs 빈칸 충돌 해소**: 사용자가 **준** 원문은 verbatim·빈칸 금지 / 사용자가 **안 준** 사실은 창작 금지·빈칸. SYSTEM_PROMPT에 명시 구분(종전 "플레이스홀더 금지" 한 줄이 새 규칙과 충돌했음).
+- **프론트 영향 없음**: 전수조사 결과 확장(`ChatFeed.jsx normalizeMessageQuestions`)·웹 프론트가 **이미 `{field,question,reason,importance}` 객체를 지원**(문자열도 수용). 계약 개정 부담 최소.
+- ⚠️ **비용**: 요청당 LLM 호출 +1(≈1~4초), 8b TPM 6,000이라 동시 트래픽 시 429 → `None` 폴백(기능 유지, 분석 이점 상실). 모델/티어 상향은 백로그.
+- ⚠️ **백엔드 미구현**: `questions`/`mode` passthrough 없음(grep 0건) — 여전히 P0 병목.
+- 백로그: 지시대명사 엣지케이스, `gen_eval` end-to-end mode/환각 재측정, 분석기 모델 상향 검토.

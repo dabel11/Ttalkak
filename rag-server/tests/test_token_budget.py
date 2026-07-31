@@ -39,7 +39,10 @@ _KO_CASUAL = ("임영웅 콘서트 인스타 홍보 문구 프롬프트 만들�
 _EN_PROSE  = ("The quarterly report shows steady growth in user engagement metrics across all "
               "product lines, with particular strength in the mobile segment. ") * 8
 
-check("실측 하한: 시스템프롬프트(2766tok)", _est_tokens(SYSTEM_PROMPT) >= 2766,
+# SYSTEM_PROMPT 실측 기준선: 2766 → 4091 (2026-07-31, 규약 v3로 빈칸 안전규칙·[요청 분석]
+# 소비·하이브리드 questions 스키마가 추가되며 +48%). 프롬프트를 고칠 때마다 usage.prompt_tokens
+# 로 다시 재고 이 상수를 갱신할 것 — 추정치로 대체하면 이 테스트의 의미가 사라진다.
+check("실측 하한: 시스템프롬프트(4091tok)", _est_tokens(SYSTEM_PROMPT) >= 4091,
       f"got {_est_tokens(SYSTEM_PROMPT)}")
 check("실측 하한: 한국어 문어체(461tok)", _est_tokens(_KO_FORMAL) >= 461)
 check("실측 하한 근접: 한국어 구어체(596tok, −5% 허용)", _est_tokens(_KO_CASUAL) >= 596 * 0.95,
@@ -47,7 +50,7 @@ check("실측 하한 근접: 한국어 구어체(596tok, −5% 허용)", _est_to
 check("실측 하한: 영어 산문(220tok)", _est_tokens(_EN_PROSE) >= 220)
 check("과대추정 상한 40%", all(
     _est_tokens(t) <= m * 1.40
-    for t, m in [(SYSTEM_PROMPT, 2766), (_KO_FORMAL, 461), (_KO_CASUAL, 596), (_EN_PROSE, 220)]))
+    for t, m in [(SYSTEM_PROMPT, 4091), (_KO_FORMAL, 461), (_KO_CASUAL, 596), (_EN_PROSE, 220)]))
 check("빈 문자열 0", _est_tokens("") == 0)
 
 

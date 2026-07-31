@@ -10,7 +10,7 @@ from typing import Optional
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
-from app.rag import query_transform
+from app.rag import query_transform, analyzer
 # 파싱·복원 순수 함수 (eval 스크립트 하위호환 위해 동일 이름 재노출)
 from app.rag.postprocess import (
     parse_generation, build_answer, assemble_fields,
@@ -68,11 +68,10 @@ class QueryRequest(BaseModel):
     use_reranker:        bool = True    # 2단계 리랭크 (검증: 단독이 최고)
     use_hybrid:          bool = False   # dense+BM25 하이브리드 — 이 코퍼스에선 악화로 기본 off(opt-in)
     use_query_transform: bool = False   # 키워드 쿼리변환 — 카드 장르 미스매치로 hyde보다 열등, off
-    use_hyde:            bool = True    # HyDE(기법 카드형 가상문서로 검색) — 기본 on.
-    # 근거(2026-07-29): 거친 작업지시(예 "제주도 여행 블로그 글 써줘")와 코퍼스(기법 설명 카드)는
-    # 문체 장르가 달라 주제가 맞아도 dense 코사인이 0.34~0.48 좁은 띠에 눌려 min_score=0.40 컷에
-    # 걸린다("아이랑 3박4일" 덧붙이면 0.36으로 떨어져 첫 턴 404). hyde가 쿼리를 카드 장르로 재작성해
-    # 0.69~0.84로 끌어올리고 더 정확한 기법을 회수(자소서 → Analyst-Then-Writer #1). 8b라 저지연.
+    use_hyde:            bool = False   # HyDE — 기본 off (2026-07-30 재평가).
+    # HyDE는 dense 코사인/404는 개선하지만 R@5 정확도를 크게 해친다(170코퍼스 실측: raw R@5 0.763
+    # vs +HyDE 0.441, Hit@1 0.627 vs 0.271). 카드 장르로 재작성하는 성질이 제네릭 카드 오회수를
+    # 유발. 404(장르 미스매치) 문제는 min_score 하향 또는 하드404 폐지로 별도 해결 예정(미결).
     min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
     # ── C(타입별 멀티 컬렉션): 기법 카드에 더해 '유사 요청 개선 사례'를 함께 주입 ──
     # A안 헤드투헤드 검증(2026-07-23): 예시 승률 66.7%·Δ+0.83(방향 신호). min_score 미달 시
@@ -91,24 +90,39 @@ class QueryResponse(BaseModel):
     changes:             list[str] = []  # 개선 포인트 줄 목록 (개선 모드)
     score:               Optional[int] = None  # LLM 자체 평가(1~10, 개선 모드만)
     summary:             str = ""       # 한 줄 요약 (개선: 무엇을 개선했는지 / 질문: 파악내용+왜 묻는지)
-    questions:           list[str] = []  # 추가 질문 1~3개 (질문 모드 전용, 개선 모드는 [])
+    # 규약 v3 §10: questions 는 객체 배열 {field, question, reason, importance}.
+    # field 로 빈칸(플레이스홀더)·후속 답변과 1:1 연결한다. 하이브리드라 improve 모드에서도
+    # 비어있지 않을 수 있다(실행 가능한 개선안 + 더 정확하게 만들 선택 질문).
+    questions:           list[dict] = []
+    # 1단계 분석기가 도출한 필드 상태(검증·디버깅용). 분석 실패 시 [].
+    fields:              list[dict] = []
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
-                   history: list[dict]) -> dict:
-    """검색 결과 → 생성 → 구조화 필드 조립까지의 공용 경로 (/query·eval 공유).
+                   history: list[dict], use_analyzer: bool = True) -> dict:
+    """검색 결과 → (1단계 분석) → 생성 → 구조화 필드 조립 (/query·eval 공유).
+
+    규약 v3: 1단계 분석기(temp 0.2)가 요청에 필요한 필드를 동적으로 도출하고,
+    2단계 생성기(temp 0.7)가 그 필드 상태를 소비해 개선안·빈칸·질문을 만든다.
+    분석 실패(키 없음·한도 초과 등)면 analysis=None 으로 기존 단일 단계와 동일 동작.
+
     반환: {mode, answer, improved_prompt, techniques_applied, changes, score,
-           summary, questions, structured}.
+           summary, questions, fields, structured}.
     필드 조립은 순수 함수 assemble_fields() 가 담당(LLM 없이 단위 테스트됨).
     JSON 파싱 실패 시 레거시 정규식 추출로 폴백(structured=False)."""
-    raw = generator.generate(query=query, contexts=contexts, model=model, history=history)
+    analysis = analyzer.analyze(query, history) if use_analyzer else None
+
+    raw = generator.generate(query=query, contexts=contexts, model=model,
+                             history=history, analysis=analysis)
     if not (raw and raw.strip()):
         raise RuntimeError("생성 결과가 비어 있습니다.")
 
-    fields = assemble_fields(raw)
-    if not fields["structured"]:
+    result = assemble_fields(raw)
+    if not result["structured"]:
         print("[Main] 구조화 JSON 파싱 실패 → 정규식 폴백")
-    return fields
+    # 1단계 분석 결과를 응답에 함께 노출(검증·디버깅용). 분석 없으면 [].
+    result["fields"] = (analysis or {}).get("fields", [])
+    return result
 
 
 # ── 엔드포인트 ───────────────────────────────────────────────
@@ -200,6 +214,7 @@ def query(req: QueryRequest):
         score=gen["score"],
         summary=gen["summary"],
         questions=gen["questions"],
+        fields=gen.get("fields", []),
     )
 
 

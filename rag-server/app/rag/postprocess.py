@@ -33,6 +33,46 @@ def parse_generation(raw: str) -> dict | None:
     return obj
 
 
+def normalize_questions(raw_questions) -> list[dict]:
+    """questions 를 객체 배열 {field, question, reason, importance} 로 정규화.
+
+    규약 v3 §10: questions 는 객체 배열이다(field 로 빈칸·답변과 1:1 연결).
+    구형(문자열 배열) 출력도 그대로 받아 객체로 승격한다 — 모델이 옛 형식을 내도
+    깨지지 않게. 프론트(normalizeMessageQuestions)도 양쪽을 받으므로 하위호환.
+    """
+    if not isinstance(raw_questions, list):
+        return []
+    out: list[dict] = []
+    for i, q in enumerate(raw_questions, 1):
+        if isinstance(q, str):
+            text = q.strip()
+            if not text:
+                continue
+            # 구형 "항목명: 질문 …" 형식이면 앞의 항목명을 field 로 승격
+            field = ""
+            head, sep, _rest = text.partition(":")
+            if sep and 0 < len(head.strip()) <= 20:
+                field = head.strip()
+            out.append({"field": field, "question": text,
+                        "reason": "", "importance": "recommended"})
+            continue
+        if not isinstance(q, dict):
+            continue
+        text = str(q.get("question") or q.get("text") or "").strip()
+        if not text:
+            continue
+        importance = str(q.get("importance") or "recommended").strip().lower()
+        if importance not in ("required", "recommended"):
+            importance = "recommended"
+        out.append({
+            "field":      str(q.get("field") or q.get("name") or f"question_{i}").strip(),
+            "question":   text,
+            "reason":     str(q.get("reason") or "").strip(),
+            "importance": importance,
+        })
+    return out
+
+
 def build_answer(p: dict) -> str:
     """구조화 JSON → 기존 화면 표시용 마크다운 복원.
     익스텐션 UI·history 왕복(assistant 턴 저장) 형식을 기존과 동일하게 유지한다."""
@@ -40,12 +80,12 @@ def build_answer(p: dict) -> str:
         lines = ["**확인이 필요해요 🤔**"]
         if p.get("summary"):
             lines.append(str(p["summary"]))
-        qs = p.get("questions") or []
+        qs = normalize_questions(p.get("questions"))
         if qs:
             # '무엇을 채워야 하는지'를 명시 — 방식1(리스트) 강화. 문구에 '개선된 프롬프트'
             # 마커를 넣지 않아 extract_improved_prompt 가 이 블록을 오인하지 않는다.
             lines.append("아래 정보를 알려주시면 이어서 만들어 드릴게요:")
-            lines += [f"• {q}" for q in qs]
+            lines += [f"• {q['question']}" for q in qs]   # 객체를 그대로 찍지 않는다
         return "\n".join(lines)
 
     parts = ["---", "**개선된 프롬프트:**", "", str(p.get("improved_prompt") or ""), "",
@@ -57,6 +97,11 @@ def build_answer(p: dict) -> str:
     changes = p.get("changes") or []
     if changes:
         parts += ["", "**개선 포인트:**"] + [f"- {c}" for c in changes]
+    # 하이브리드(규약 v3 §5): improve 에도 선택 질문이 붙을 수 있다.
+    # 개선안은 이미 실행 가능하고, 아래 질문은 '더 정확하게' 만들기 위한 선택지다.
+    qs = normalize_questions(p.get("questions"))
+    if qs:
+        parts += ["", "**더 알려주시면 정확해져요 (선택):**"] + [f"- {q['question']}" for q in qs]
     parts.append("---")
     return "\n".join(parts)
 
@@ -88,7 +133,9 @@ def assemble_fields(raw: str) -> dict:
             "changes":            [str(c) for c in (p.get("changes") or [])],
             "score":              int(score) if isinstance(score, (int, float)) else None,
             "summary":            str(p.get("summary") or ""),
-            "questions":          [str(q) for q in (p.get("questions") or []) if str(q).strip()],
+            # 규약 v3: 객체 배열로 보존(문자열 강제 변환 금지 — 프론트가 field 로 답변을 수집한다).
+            # 하이브리드라 improve 모드에서도 비어있지 않을 수 있다.
+            "questions":          normalize_questions(p.get("questions")),
             "structured":         True,
         }
 
