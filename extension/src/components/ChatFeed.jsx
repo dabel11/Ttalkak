@@ -180,7 +180,7 @@ function MessageCard({
           <div className="card-actions">
             <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "복사됨" : "복사"} onClick={() => onCopy(message)} />
             <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />
-            {message.executablePrompt && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
+            {hasExecutablePrompt(message) && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
           </div>
         )}
         {canEdit && !isEditing && (
@@ -267,9 +267,42 @@ function TechniqueList({ techniques }) {
   );
 }
 
+function hasExecutablePrompt(message) {
+  if (!message?.executablePrompt || message.mode === "ask") return false;
+  const combinedText = [
+    message.executablePrompt,
+    message.content,
+    message.answer,
+    message.summary,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return !isAskOnlyResponse(combinedText);
+}
+
+function isAskOnlyResponse(text) {
+  const value = String(text || "").trim();
+  if (!value) return true;
+  return [
+    /확인이\s*필요/i,
+    /답변이\s*필요/i,
+    /추가\s*정보가\s*필요/i,
+    /정보를\s*보완해\s*주세요/i,
+    /개선안(?:을)?\s*만들\s*수\s*없/i,
+    /만들\s*수\s*없어요/i,
+    /아래\s*정보를\s*알려주시면/i,
+    /어떤\s*주제/i,
+    /무엇에\s*대한\s*글/i,
+  ].some((pattern) => pattern.test(value));
+}
+
 function EvidenceNotice({ ragStatus }) {
   if (String(ragStatus || "").toLowerCase() !== "no_evidence") return null;
-  return <div className="evidence-notice">관련 근거를 찾지 못해 기본 개선 방식으로 작성했습니다.</div>;
+  return (
+    <div className="evidence-notice">
+      <span>참고 근거 없이 기본 방식으로 다듬었습니다.</span>
+    </div>
+  );
 }
 
 function QuestionList({ questions, mode, summary }) {

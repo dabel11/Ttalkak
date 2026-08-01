@@ -54,6 +54,12 @@ if (typeof bindAppEvents !== "function") {
   throw new Error("TTALKAK 이벤트 바인더를 불러오지 못했습니다.");
 }
 
+const { bindMakeFeedScrollEvents, scrollToMakeLatestMessage } = window.TtalkakMakeScrollEvents || {};
+
+if ([bindMakeFeedScrollEvents, scrollToMakeLatestMessage].some((fn) => typeof fn !== "function")) {
+  throw new Error("TTALKAK Make scroll events failed to load.");
+}
+
 const {
   applyBackendHomePromptsResult,
   applyBackendHomeTagsResult,
@@ -709,6 +715,7 @@ let adminTagSearchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let pendingLatestMessageScrollId = null;
+let pendingLatestMakeScrollMode = "";
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -826,23 +833,18 @@ function restorePendingMessageScroll() {
 }
 
 function scrollToPendingLatestMessage() {
-  if (pendingMessageScrollId || !pendingLatestMessageScrollId) return;
+  if (pendingMessageScrollId) return;
   const messageId = pendingLatestMessageScrollId;
+  if (!messageId) return;
   pendingLatestMessageScrollId = null;
-  const safeId = String(messageId).replace(/"/g, '\\"');
-  const target = document.querySelector(`[data-message-id="${safeId}"]`);
-  if (!target) return;
-  const feed = target.closest(".chat-feed");
-  if (feed) {
-    const feedRect = feed.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    feed.scrollTo({
-      top: feed.scrollTop + targetRect.bottom - feedRect.bottom + 16,
-      behavior: "auto",
-    });
-    return;
-  }
-  target.scrollIntoView({ behavior: "auto", block: "end" });
+  const shouldClearFinalMode = pendingLatestMakeScrollMode === "final";
+  scrollToMakeLatestMessage(state, { behavior: "smooth" });
+  if (shouldClearFinalMode) pendingLatestMakeScrollMode = "";
+}
+
+function queueLatestMakeScroll(messageId = "", { mode = "immediate" } = {}) {
+  if (messageId) pendingLatestMessageScrollId = messageId;
+  pendingLatestMakeScrollMode = mode;
 }
 
 function navigateTo(route) {
@@ -1566,7 +1568,7 @@ function MessageBubble(message) {
       answer: message.answer || "",
       changes: message.changes || [],
       fields: message.fields || [],
-      hasExecutablePrompt: isAssistant && Boolean(getFinalPromptText(message)),
+      hasExecutablePrompt: isAssistant && isExecutableMakeMessage(message),
       id: message.id,
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
@@ -1579,6 +1581,37 @@ function MessageBubble(message) {
       techniques: message.techniques || [],
     },
   );
+}
+
+function isExecutableMakeMessage(message) {
+  const prompt = getFinalPromptText(message);
+  if (!prompt || message?.mode === "ask") return false;
+
+  const combinedText = [
+    prompt,
+    message?.content,
+    message?.answer,
+    message?.summary,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return !isAskOnlyMakeResponse(combinedText);
+}
+
+function isAskOnlyMakeResponse(text) {
+  const value = String(text || "").trim();
+  if (!value) return true;
+  return [
+    /확인이\s*필요/i,
+    /답변이\s*필요/i,
+    /추가\s*정보가\s*필요/i,
+    /정보를\s*보완해\s*주세요/i,
+    /개선안(?:을)?\s*만들\s*수\s*없/i,
+    /만들\s*수\s*없어요/i,
+    /아래\s*정보를\s*알려주시면/i,
+    /어떤\s*주제/i,
+    /무엇에\s*대한\s*글/i,
+  ].some((pattern) => pattern.test(value));
 }
 
 function SavedPage() {
@@ -4471,6 +4504,7 @@ function toggleLibraryDemoData() {
 
 function bindMakeEvents() {
   bindMakeComposerEvents();
+  bindMakeFeedScrollEvents({ state });
   bindMakeTemplateEvents();
   bindMakeMessageActionEvents();
   bindMakeThreadEvents();
@@ -4785,7 +4819,7 @@ async function submitMakePrompt(composer) {
   const history = buildMakeImproveHistory(state.messages);
   state.composerDraft = "";
   appendMakeUserMessageState(state, threadId, { id: userMessageId, role: "user", content: value });
-  pendingLatestMessageScrollId = userMessageId;
+  queueLatestMakeScroll(userMessageId, { mode: "immediate" });
   updateRecentThread(threadId);
   render();
   let improvedPrompt = "";
@@ -4796,7 +4830,7 @@ async function submitMakePrompt(composer) {
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
     handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
-    renderPreservingMakeScroll();
+    render();
     return;
   }
   appendMakeAssistantMessageState(state, {
@@ -4816,7 +4850,6 @@ async function submitMakePrompt(composer) {
     ragMessage: improvedPrompt.ragMessage || "",
     sourcePrompt: value,
   });
-  pendingLatestMessageScrollId = assistantMessageId;
   updateRecentThread(threadId);
   applyPendingImproveThreadId(threadId);
   if (shouldUseImproveThreadSync()) {
@@ -4878,7 +4911,7 @@ async function resendEditedMessage(messageId, value) {
         category: "prompt_techniques",
       });
       state.editingMessageId = null;
-      const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true });
+      const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
       if (!refreshedThread) render();
       showNotice("수정한 메시지로 다시 개선했습니다.");
     } catch (error) {
@@ -4921,7 +4954,7 @@ async function resendEditedMessage(messageId, value) {
     ragMessage: improvedPrompt.ragMessage || "",
     sourcePrompt: cleanValue,
   });
-  pendingLatestMessageScrollId = assistantMessageId;
+  queueLatestMakeScroll(assistantMessageId, { mode: "immediate" });
   updateRecentThread(threadId);
   applyPendingImproveThreadId(threadId);
   if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
@@ -7223,7 +7256,7 @@ async function refreshMakeThreadsFromBackend({ shouldRender = true, quiet = fals
   }
 }
 
-async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false } = {}) {
+async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false, scrollToLatest = false } = {}) {
   const api = getMakeApi();
   const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
   const renderThread = () => {
@@ -7247,6 +7280,7 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
         ].slice(0, 8);
         normalizeRecentThreads();
         openRecentMakeThreadState(state, refreshedThread);
+        if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);
         renderThread();
         return refreshedThread;
       }
@@ -7267,9 +7301,18 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
 
   if (refreshedThread) {
     openRecentMakeThreadState(state, refreshedThread);
+    if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);
   }
   renderThread();
   return refreshedThread;
+}
+
+function queueLatestMakeThreadScroll(thread) {
+  const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;
+  const latestMessage = [...messages].reverse().find((message) => message?.id);
+  if (latestMessage?.id) {
+    queueLatestMakeScroll(latestMessage.id, { mode: "final" });
+  }
 }
 
 function getBackendDataEffectContext() {

@@ -611,7 +611,8 @@ button:disabled {
 
 .assumption-list > strong {
   color: var(--deep);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -621,6 +622,7 @@ button:disabled {
   margin: 0;
   padding-left: 18px;
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.5;
 }
 
@@ -638,7 +640,8 @@ button:disabled {
 .field-list > strong,
 .technique-list > strong {
   color: var(--deep);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -653,14 +656,31 @@ button:disabled {
 
 .field-list li,
 .technique-list li {
-  display: grid;
-  gap: 4px;
-  padding: 8px 9px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.76);
+  position: relative;
+  min-height: 18px;
+  padding: 0 0 0 12px;
+  border-radius: 0;
+  background: transparent;
   color: var(--deep);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.technique-list li::before {
+  position: absolute;
+  top: 0.72em;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  opacity: 0.62;
+}
+
+.technique-list li span {
+  display: inline;
+  font-weight: 600;
 }
 
 .field-list li {
@@ -693,15 +713,27 @@ button:disabled {
 }
 
 .evidence-notice {
-  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  box-sizing: border-box;
   max-width: 100%;
-  margin-bottom: 10px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: #fff7e6;
-  color: #8f4f00;
-  font-size: 11px;
+  margin-bottom: 12px;
+  min-height: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(143, 79, 0, 0.14);
+  border-radius: 10px;
+  background: #fff9ed;
+  color: #7a4700;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.1;
+}
+
+.evidence-notice > span {
+  display: inline-block;
+  font-weight: 700;
+  transform: translateY(-1px);
 }
 
 .ask-message {
