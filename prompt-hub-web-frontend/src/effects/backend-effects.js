@@ -224,6 +224,7 @@
       getAuthToken,
       getMakeApi,
       getMakeApiToken,
+      getMakeInteractionVersion,
       hasBackendAuthToken,
       handleBackendAccessError,
       render,
@@ -231,6 +232,7 @@
     } = ctx;
 
     if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+    const hydrationVersion = typeof getMakeInteractionVersion === "function" ? getMakeInteractionVersion() : 0;
 
     if (typeof hasBackendAuthToken === "function" && !hasBackendAuthToken()) {
       const wasLoggedIn = Boolean(state.isLoggedIn);
@@ -266,6 +268,8 @@
       api.getMakeThreads?.(getMakeApiToken()),
       api.getMakeFolders?.(getMakeApiToken()),
     ]);
+
+    if (typeof getMakeInteractionVersion === "function" && getMakeInteractionVersion() !== hydrationVersion) return;
 
     let shouldRender = false;
     const backendDataContext = applyContext();

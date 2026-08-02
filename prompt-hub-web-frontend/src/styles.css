@@ -2229,6 +2229,11 @@ h1 {
   margin-right: auto;
 }
 
+.message-group.make-thinking-indicator {
+  width: auto;
+  max-width: max-content;
+}
+
 .user-group {
   align-self: stretch;
   align-items: flex-end;
@@ -2288,12 +2293,80 @@ h1 {
   background: #eef4ef;
 }
 
+.thinking-message {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  min-width: 0;
+  max-width: max-content;
+  padding: 10px 14px;
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(13, 58, 48, 0.08);
+  color: #31544a;
+}
+
+.thinking-label {
+  white-space: nowrap;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.34;
+  animation: thinking-dot 1.05s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.9;
+    transform: translateY(-3px);
+  }
+}
+
 .message p {
   margin: 0;
   max-width: 100%;
   line-height: inherit;
   overflow-wrap: anywhere;
   word-break: keep-all;
+}
+
+.message-failure-status {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #f1d7c2;
+  border-radius: 8px;
+  background: #fff8ef;
+  color: #8a4b17;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .prompt-placeholder-chip {
@@ -4826,6 +4899,12 @@ input[type="checkbox"] {
   box-shadow:
     inset 0 0 0 1px rgba(5, 5, 16, 0.035),
     0 0 18px 2px rgba(5, 5, 16, 0.06);
+}
+
+.chat-feed .message.assistant.thinking-message {
+  width: auto;
+  max-width: max-content;
+  padding: 10px 14px;
 }
 
 .card-meta {

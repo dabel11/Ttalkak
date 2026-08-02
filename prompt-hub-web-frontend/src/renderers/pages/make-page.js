@@ -9,6 +9,7 @@
     MessageTechniquesView,
     normalizeMessageChanges,
     normalizeMessageFields,
+    normalizeLegacyAskAnswer,
     normalizeMessageQuestions,
     normalizeMessageTechniques,
     renderPromptTextWithPlaceholders,
@@ -23,6 +24,7 @@
       MessageTechniquesView,
       normalizeMessageChanges,
       normalizeMessageFields,
+      normalizeLegacyAskAnswer,
       normalizeMessageQuestions,
       normalizeMessageTechniques,
       renderPromptTextWithPlaceholders,
@@ -49,7 +51,7 @@
 
   function MakeFeedView(ctx, data) {
     const { icons } = ctx;
-    const { hasMessages, messages, renderMessageBubble, templateBarHtml } = data;
+    const { hasMessages, isThinking, messages, renderMessageBubble, templateBarHtml } = data;
 
     return `
       <div class="chat-feed">
@@ -63,7 +65,19 @@
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
               </div>`
         }
+        ${isThinking ? MessageThinkingView() : ""}
         ${hasMessages ? `<button class="make-scroll-latest" type="button" data-scroll-latest-message aria-label="최신 대화로 이동">${icons.send}</button>` : ""}
+      </div>
+    `;
+  }
+
+  function MessageThinkingView() {
+    return `
+      <div class="message-group assistant-group make-thinking-indicator make-message-enter" data-make-thinking-indicator>
+        <article class="message assistant thinking-message" aria-live="polite">
+          <span class="thinking-label">\uC0DD\uAC01 \uC911</span>
+          <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        </article>
       </div>
     `;
   }
@@ -247,20 +261,24 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, fields, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, changes, content, failureMessage, fields, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
     const normalizedFields = normalizeMessageFields(fields);
-    const normalizedQuestions = normalizeMessageQuestions(questions);
+    const legacyAsk = !hasExecutablePrompt ? normalizeLegacyAskAnswer(answer || content) : { leadText: "", questions: [] };
+    const effectiveIsAsk = isAsk || (!hasExecutablePrompt && legacyAsk.questions.length > 0);
+    const normalizedQuestions = normalizeMessageQuestions(questions).concat(
+      normalizeMessageQuestions(legacyAsk.questions),
+    );
     const normalizedTechniques = normalizeMessageTechniques(techniques);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
     const leadText = normalizedQuestions.length
-      ? String(summary || answer || (isAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
+      ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
       : content;
     const questionSection = normalizedQuestions.length
-      ? MessageQuestionsView({ escapeHtml }, { isAsk, questions: normalizedQuestions })
+      ? MessageQuestionsView({ escapeHtml }, { isAsk: effectiveIsAsk, questions: normalizedQuestions })
       : "";
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
@@ -309,6 +327,7 @@
               </form>`
             : `<article class="message ${escapeAttr(role)}">
                 <p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>
+                ${failureMessage ? `<div class="message-failure-status" role="status">${escapeHtml(failureMessage)}</div>` : ""}
                 <div class="user-message-actions">
                   <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
                 </div>

@@ -80,6 +80,45 @@
       : [];
   }
 
+  function normalizeLegacyAskAnswer(text) {
+    const source = String(text || "").trim();
+    if (!source) return { leadText: "", questions: [] };
+    const lines = source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const questionLines = [];
+    const leadLines = [];
+    let foundQuestion = false;
+
+    lines.forEach((line) => {
+      const match = line.match(/^[•*-]\s*([^:：]{1,40})[:：]\s*(.+)$/);
+      if (match) {
+        foundQuestion = true;
+        questionLines.push({
+          field: match[1].trim(),
+          question: match[2].trim(),
+          reason: "",
+          importance: "required",
+        });
+        return;
+      }
+      if (!foundQuestion) leadLines.push(line);
+    });
+
+    if (!questionLines.length) return { leadText: source, questions: [] };
+
+    const leadText = leadLines
+      .map((line) => line.replace(/\*\*/g, "").trim())
+      .filter((line) => !/^아래\s+정보를/.test(line))
+      .join("\n");
+
+    return {
+      leadText,
+      questions: questionLines,
+    };
+  }
+
   function renderPromptTextWithPlaceholders(text, escapeHtml) {
     const source = String(text || "");
     const pattern = /\[[^\]\n]{1,80}\]/g;
@@ -199,6 +238,7 @@
     MessageTechniquesView,
     normalizeMessageChanges,
     normalizeMessageFields,
+    normalizeLegacyAskAnswer,
     normalizeMessageQuestions,
     normalizeMessageTechniques,
     renderPromptTextWithPlaceholders,

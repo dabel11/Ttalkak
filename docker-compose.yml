@@ -28,6 +28,7 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --max-allowed-packet=64M
 
     volumes:
       # 이름 고정(ttalkak_ttalkak-mysql-data): 이미 인덱싱된 rag_chunk 코퍼스가 이 볼륨에 있다.

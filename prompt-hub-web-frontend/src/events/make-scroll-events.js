@@ -1,6 +1,9 @@
 (function attachMakeScrollEvents(global) {
   "use strict";
 
+  let pendingLatestMessageScrollId = "";
+  let pendingLatestMakeScrollMode = "";
+
   function bindMakeFeedScrollEvents({ state }) {
     const feed = document.querySelector(".chat-feed");
     if (!feed) return;
@@ -33,25 +36,83 @@
 
   function scrollToMakeLatestMessage(state, { behavior = "smooth" } = {}) {
     const latestId = [...(state?.messages || [])].reverse().find((message) => message?.id)?.id || "";
-    if (!latestId) return;
+    if (!latestId) return false;
     const safeId = String(latestId).replace(/"/g, '\\"');
-    const target = document.querySelector(`[data-message-id="${safeId}"]`);
-    if (!target) return;
+    const target = document.querySelector("[data-make-thinking-indicator]") || document.querySelector(`[data-message-id="${safeId}"]`);
+    if (!target) return false;
     const feed = target.closest(".chat-feed");
     if (feed) {
-      const feedRect = feed.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
       feed.scrollTo({
-        top: feed.scrollTop + targetRect.bottom - feedRect.bottom + 18,
+        top: feed.scrollHeight - feed.clientHeight,
         behavior,
       });
-      return;
+      return true;
     }
     target.scrollIntoView({ behavior, block: "end" });
+    return true;
+  }
+
+  function captureMakeScrollSnapshot() {
+    const root = document.scrollingElement || document.documentElement;
+    return {
+      rootLeft: root?.scrollLeft || 0,
+      rootTop: root?.scrollTop || 0,
+      panels: [".chat-feed", ".make-side-panel"].map((selector) => {
+        const element = document.querySelector(selector);
+        return {
+          left: element?.scrollLeft || 0,
+          selector,
+          top: element?.scrollTop || 0,
+        };
+      }),
+    };
+  }
+
+  function restoreMakeScrollSnapshot(snapshot) {
+    if (!snapshot) return;
+    requestAnimationFrame(() => {
+      const root = document.scrollingElement || document.documentElement;
+      root?.scrollTo({ left: snapshot.rootLeft, top: snapshot.rootTop, behavior: "auto" });
+      snapshot.panels.forEach(({ selector, left, top }) => {
+        document.querySelector(selector)?.scrollTo({ left, top, behavior: "auto" });
+      });
+    });
+  }
+
+  function renderWithPreservedMakeScroll(render) {
+    if (typeof render !== "function") return;
+    const snapshot = captureMakeScrollSnapshot();
+    render();
+    restoreMakeScrollSnapshot(snapshot);
+  }
+
+  function scrollToPendingLatestMakeMessage(state, { behavior = "smooth", hasPendingMessageScroll } = {}) {
+    if (typeof hasPendingMessageScroll === "function" && hasPendingMessageScroll()) return;
+    if (!pendingLatestMessageScrollId) return;
+    const shouldClearFinalMode = pendingLatestMakeScrollMode === "final";
+    const didScroll = scrollToMakeLatestMessage(state, { behavior });
+    if (!didScroll) return;
+    pendingLatestMessageScrollId = "";
+    if (shouldClearFinalMode) pendingLatestMakeScrollMode = "";
+  }
+
+  function queueLatestMakeScroll(messageId = "", { mode = "immediate" } = {}) {
+    if (messageId) pendingLatestMessageScrollId = String(messageId);
+    pendingLatestMakeScrollMode = mode;
+  }
+
+  function scheduleMakeLatestScroll(state, { behavior = "smooth" } = {}) {
+    requestAnimationFrame(() => {
+      scrollToMakeLatestMessage(state, { behavior });
+    });
   }
 
   global.TtalkakMakeScrollEvents = Object.freeze({
     bindMakeFeedScrollEvents,
+    queueLatestMakeScroll,
+    renderWithPreservedMakeScroll,
+    scheduleMakeLatestScroll,
     scrollToMakeLatestMessage,
+    scrollToPendingLatestMakeMessage,
   });
 })(window);
