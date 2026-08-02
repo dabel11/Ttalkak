@@ -39,9 +39,10 @@ _KO_CASUAL = ("임영웅 콘서트 인스타 홍보 문구 프롬프트 만들�
 _EN_PROSE  = ("The quarterly report shows steady growth in user engagement metrics across all "
               "product lines, with particular strength in the mobile segment. ") * 8
 
-# SYSTEM_PROMPT 실측 기준선: 2766 → 4091 (2026-07-31, 규약 v3로 빈칸 안전규칙·[요청 분석]
-# 소비·하이브리드 questions 스키마가 추가되며 +48%). 프롬프트를 고칠 때마다 usage.prompt_tokens
-# 로 다시 재고 이 상수를 갱신할 것 — 추정치로 대체하면 이 테스트의 의미가 사라진다.
+# SYSTEM_PROMPT 실측 기준선 이력: 2,766 → 4,091(규약 v3 추가, 2026-07-31).
+# ⚠️ 축소 시도(2,323tok, −43%)는 이어폰 빈칸 0/3·verbatim 1/3 회귀로 **되돌렸다** — WORKLOG 참조.
+# 프롬프트를 고칠 때마다 usage.prompt_tokens 로 다시 재고 이 상수를 갱신할 것 —
+# 추정치로 대체하면 이 테스트(과소추정 금지)의 의미가 사라진다.
 check("실측 하한: 시스템프롬프트(4091tok)", _est_tokens(SYSTEM_PROMPT) >= 4091,
       f"got {_est_tokens(SYSTEM_PROMPT)}")
 check("실측 하한: 한국어 문어체(461tok)", _est_tokens(_KO_FORMAL) >= 461)
