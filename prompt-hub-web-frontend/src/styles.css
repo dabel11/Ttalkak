@@ -2220,8 +2220,8 @@ h1 {
 }
 
 .make-message-enter {
-  animation: message-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  will-change: opacity, transform;
+  animation: message-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform, filter;
 }
 
 .assistant-group {
@@ -2243,11 +2243,65 @@ h1 {
 @keyframes message-enter {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.992);
+    filter: blur(2px);
+    transform: translateY(12px) scale(0.992);
   }
   to {
     opacity: 1;
+    filter: blur(0);
     transform: translateY(0) scale(1);
+  }
+}
+
+.assistant-group.make-message-enter .message.assistant:not(.thinking-message) {
+  animation: assistant-reply-card-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: left bottom;
+  will-change: opacity, transform, filter, clip-path;
+}
+
+.assistant-group.make-message-enter .message.assistant:not(.thinking-message) > * {
+  animation: assistant-reply-content-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.assistant-group.make-message-enter .message.assistant:not(.thinking-message) > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.assistant-group.make-message-enter .message.assistant:not(.thinking-message) > *:nth-child(3) {
+  animation-delay: 75ms;
+}
+
+.assistant-group.make-message-enter .message.assistant:not(.thinking-message) > *:nth-child(n + 4) {
+  animation-delay: 105ms;
+}
+
+@keyframes assistant-reply-card-in {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    clip-path: inset(0 0 18% 0 round 12px);
+    transform: translate3d(0, 18px, 0) scale(0.985);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    clip-path: inset(0 0 0 0 round 12px);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes assistant-reply-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
