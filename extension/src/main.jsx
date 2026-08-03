@@ -11,6 +11,7 @@ import { useConversation } from "./hooks/useConversation";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import "./styles.css";
+import "./styles/response.css";
 
 function App() {
   const [activeTab, setActiveTab] = useState("search");
