@@ -26,6 +26,9 @@ const {
   makePreview,
   sanitizeMakeBackendMessage,
 } = window.TtalkakMakePreview || {};
+const {
+  recoverActiveMakeThreadAfterFailure,
+} = window.TtalkakMakeFailureRecoveryEffects || {};
 
 if (
   [
@@ -39,6 +42,7 @@ if (
     parseTimestamp,
     makePreview,
     sanitizeMakeBackendMessage,
+    recoverActiveMakeThreadAfterFailure,
   ].some((fn) => typeof fn !== "function")
 ) {
   throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
@@ -4836,7 +4840,11 @@ async function submitMakePrompt(composer) {
   } catch (error) {
     isMakeThinking = false;
     const localMessagesSnapshot = [...state.messages];
-    const recoveredThread = await recoverActiveMakeThreadAfterFailure(threadId, value, localMessagesSnapshot);
+    const recoveredThread = await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
+      threadId,
+      prompt: value,
+      localMessagesSnapshot,
+    });
     if (recoveredThread) {
       makeFailedMessageId = "";
       makeFailedMessageText = "";
@@ -4945,7 +4953,11 @@ async function resendEditedMessage(messageId, value) {
       if (Number(error?.status || 0) === 404) {
         await refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {});
       } else {
-        await recoverActiveMakeThreadAfterFailure(threadId, cleanValue, [...state.messages]).catch(() => null);
+        await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
+          threadId,
+          prompt: cleanValue,
+          localMessagesSnapshot: [...state.messages],
+        }).catch(() => null);
       }
       handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
       render();
@@ -7346,27 +7358,21 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
   return refreshedThread;
 }
 
-async function recoverActiveMakeThreadAfterFailure(threadId, prompt, localMessagesSnapshot = state.messages) {
-  if (!shouldUseImproveThreadSync()) return null;
-  const backendThreadId = getMakeBackendThreadId(threadId);
-  if (!backendThreadId) return null;
-
-  const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
-  const hasSubmittedPrompt = Array.isArray(refreshedThread?.messages)
-    && refreshedThread.messages.some((message) => message?.role === "user" && String(message.content || "").trim() === String(prompt || "").trim());
-
-  if (hasSubmittedPrompt) return refreshedThread;
-
-  state.messages = localMessagesSnapshot;
-  return null;
-}
-
 function queueLatestMakeThreadScroll(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;
   const latestMessage = [...messages].reverse().find((message) => message?.id);
   if (latestMessage?.id) {
     queueLatestMakeScroll(latestMessage.id, { mode: "final" });
   }
+}
+
+function getMakeFailureRecoveryContext() {
+  return {
+    getMakeBackendThreadId,
+    refreshActiveMakeThreadFromBackend,
+    shouldUseImproveThreadSync,
+    state,
+  };
 }
 
 function getBackendDataEffectContext() {
