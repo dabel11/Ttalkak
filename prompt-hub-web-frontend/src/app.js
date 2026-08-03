@@ -1504,6 +1504,10 @@ function MakeSidePanel() {
     state.activeFolderId === "all"
       ? state.recentThreads
       : state.recentThreads.filter((thread) => (thread.folderId || "uncategorized") === state.activeFolderId);
+  const previewThreads = visibleThreads.map((thread) => ({
+    ...thread,
+    preview: makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
+  }));
 
   return MakeSidePanelView(
     { icons, escapeAttr, escapeHtml, formatShortDate },
@@ -1518,13 +1522,13 @@ function MakeSidePanel() {
       customFolderCount,
       folders: state.makeFolders,
       getThreadFolderId,
-      makeBackendMessage: state.makeBackendMessage,
+      makeBackendMessage: sanitizeMakeBackendMessage(state.makeBackendMessage),
       maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS,
       openThreadMenuId: state.openThreadMenuId,
       renderFolderButton: MakeFolderButton,
       threadCount: state.recentThreads.length,
       visibleFolders: visibleFolders.map((folder) => ({ ...folder, threadCount: countThreadsInFolder(folder.id) })),
-      visibleThreads,
+      visibleThreads: previewThreads,
     },
   );
 }
@@ -5168,9 +5172,47 @@ function makePromptTitle(text) {
 }
 
 function makePreview(text) {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = cleanMakePreviewText(text);
   if (!clean) return "대화 내용 없음";
   return clean.length > 44 ? `${clean.slice(0, 44)}...` : clean;
+}
+
+function cleanMakePreviewText(text) {
+  const section = extractMakePreviewSection(String(text || ""));
+  return section
+    .replace(/^---+\s*$/gm, " ")
+    .replace(/\*\*/g, "")
+    .replace(/(?:^|\s)(개선된\s*프롬프트|적용한\s*기법|참고한\s*프롬프트\s*기법|개선\s*포인트|가정한\s*부분)[:：]?\s*/gim, " ")
+    .replace(/^[•*-]\s*/gm, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sanitizeMakeBackendMessage(message) {
+  const value = String(message || "").trim();
+  if (!value) return "";
+  const looksLikeAiBody =
+    value.length > 120 ||
+    /---|\*\*|개선된\s*프롬프트|적용한\s*기법|참고한\s*프롬프트\s*기법|개선\s*포인트|가정한\s*부분/.test(value);
+  return looksLikeAiBody ? "" : value;
+}
+
+function extractMakePreviewSection(text) {
+  const source = String(text || "");
+  const normalized = source
+    .replace(/\r\n/g, "\n")
+    .replace(/^---+\s*$/gm, "\n")
+    .trim();
+  const improvedMatch = normalized.match(
+    /\*\*\s*개선된\s*프롬프트\s*[:：]?\s*\*\*([\s\S]*?)(?=\n\s*\*\*\s*(?:적용한\s*기법|참고한\s*프롬프트\s*기법|개선\s*포인트|가정한\s*부분|필요한\s*정보|확인이\s*필요)|$)/i,
+  );
+  if (improvedMatch?.[1]?.trim()) return improvedMatch[1];
+  const askMatch = normalized.match(/\*\*\s*확인이\s*필요해요?.*?\*\*([\s\S]*?)(?=\n\s*[•*-]\s|$)/i);
+  if (askMatch?.[1]?.trim()) return askMatch[1];
+  return normalized.replace(
+    /\n?\s*\*\*\s*(?:적용한\s*기법|참고한\s*프롬프트\s*기법|개선\s*포인트|가정한\s*부분)[:：]?\s*\*\*[\s\S]*$/i,
+    "",
+  );
 }
 
 function truncateText(text, maxLength = 80) {
@@ -7044,7 +7086,7 @@ async function createBackendMakeThread(thread) {
   try {
     const payload = {
         title: thread.title || makePromptTitle(messages.find((message) => message.role === "user")?.content || "새 대화"),
-        preview: thread.preview || makePreview(messages[messages.length - 1]?.content || ""),
+        preview: makePreview(thread.preview || messages[messages.length - 1]?.content || ""),
         folderId: getBackendFolderId(thread.folderId),
         messages: messages.map((message) => ({
           role: message.role,
@@ -7199,10 +7241,8 @@ async function improvePromptWithBackend(prompt, {
     applyImproveThreadId(threadId, improved);
     const improvedText = typeof improved === "string" ? improved : improved?.text || "";
     const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
-    const ragMessage = typeof improved === "object" && improved ? String(improved.ragMessage || improved.rag_message || improved.answer || "").trim() : "";
     if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
-      state.makeBackendMessage =
-        ragMessage || "Make API 연결됨: 관련 프롬프팅 기법 근거가 없어 기본 첨삭 결과를 반영했습니다.";
+      state.makeBackendMessage = "Make API 연결됨: 관련 근거 없이 기본 방식으로 다듬었습니다.";
     } else {
       state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
     }

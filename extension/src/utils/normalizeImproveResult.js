@@ -1,12 +1,23 @@
+import { parseLegacyImproveAnswer } from "./legacyImproveAnswer";
+
 export function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
+  const legacy = parseLegacyImproveAnswer(result.answer || result.explanation || "");
   const mode = ["ask", "improve"].includes(String(result.mode || result.type || "").toLowerCase())
     ? String(result.mode || result.type).toLowerCase()
     : "improve";
-  const questions = normalizeImproveQuestions(result.questions || result.followUpQuestions || result.additionalQuestions);
-  const answer = result.answer || result.explanation || result.summary || "";
+  const questions = normalizeImproveQuestions(
+    firstNonEmptyArray(result.questions, result.followUpQuestions, result.additionalQuestions, legacy.questions),
+  );
+  const hasLegacySections = Boolean(
+    legacy.improvedPrompt || legacy.questions.length || legacy.changes.length || legacy.techniques.length,
+  );
+  const answer = legacy.lead || (hasLegacySections ? result.summary || "" : result.answer || result.explanation || result.summary || "");
   const fields = normalizeImproveFields(result.fields || result.fieldState || result.missingFields);
-  const techniques = normalizeImproveTechniques(result.techniques || result.techniquesApplied || result.techniques_applied);
+  const techniques = normalizeImproveTechniques(
+    firstNonEmptyArray(result.techniques, result.techniquesApplied, result.techniques_applied, legacy.techniques),
+  );
+  const changes = normalizeImproveChanges(firstNonEmptyArray(result.changes, legacy.changes));
   const improvedText =
     mode === "ask"
       ? ""
@@ -14,6 +25,7 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
         result.improved_prompt ||
         result.finalPrompt ||
         result.final_prompt ||
+        legacy.improvedPrompt ||
         "";
 
   return {
@@ -24,7 +36,7 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
     fields,
     techniques,
     techniquesApplied: techniques,
-    changes: result.changes || [],
+    changes,
     score: result.score ?? null,
     improvedPrompt: improvedText,
     sources: result.sources || result.references || result.documents || [],
@@ -32,6 +44,10 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
     ragMessage: result.ragMessage || result.rag_message || "",
     threadId: String(result.threadId || payload?.threadId || ""),
   };
+}
+
+function firstNonEmptyArray(...values) {
+  return values.find((value) => Array.isArray(value) && value.length) || [];
 }
 
 export function normalizeImproveQuestion(item, index = 0) {
@@ -84,6 +100,17 @@ export function normalizeImproveFields(value) {
         status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
         value: String(item.value || item.answer || "").trim(),
       };
+    })
+    .filter(Boolean);
+}
+
+export function normalizeImproveChanges(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
     })
     .filter(Boolean);
 }

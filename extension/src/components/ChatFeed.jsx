@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, Check, Copy, Edit3, Play, Plus, X } from "lucide-react";
 import { EXAMPLE_QUERIES, TIPS } from "../constants";
+import { parseLegacyImproveAnswer } from "../utils/legacyImproveAnswer";
 
 export function ChatFeed({
   messages,
@@ -135,25 +136,10 @@ function MessageCard({
               </button>
             </div>
           </form>
-        ) : isAssistant && Array.isArray(message.questions) && message.questions.length ? (
-          <>
-            <EvidenceNotice ragStatus={message.ragStatus} />
-            <p style={{ whiteSpace: "pre-wrap" }}>
-              <PromptText text={isAsk ? message.summary || message.answer || "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : message.content} />
-            </p>
-            <FieldList fields={message.fields} />
-            <ChangeList changes={message.changes} />
-            <QuestionList questions={message.questions} mode={message.mode} summary={message.summary} />
-            <TechniqueList techniques={message.techniques || message.techniquesApplied} />
-          </>
+        ) : isAssistant ? (
+          <AssistantResponse message={message} isAsk={isAsk} />
         ) : (
-          <>
-            {isAssistant && <EvidenceNotice ragStatus={message.ragStatus} />}
-            <p style={{ whiteSpace: "pre-wrap" }}><PromptText text={message.content} /></p>
-            {isAssistant && <FieldList fields={message.fields} />}
-            {isAssistant && <ChangeList changes={message.changes} />}
-            {isAssistant && <TechniqueList techniques={message.techniques || message.techniquesApplied} />}
-          </>
+          <p style={{ whiteSpace: "pre-wrap" }}><PromptText text={message.content} /></p>
         )}
         {hasSources && (
           <div className="sources-section">
@@ -191,6 +177,42 @@ function MessageCard({
       </div>
     </article>
   );
+}
+
+function AssistantResponse({ message, isAsk }) {
+  const parsed = parseAssistantSections(message);
+  const content =
+    parsed.improvedPrompt ||
+    (isAsk ? message.summary || message.answer || parsed.lead : parsed.lead || message.content);
+  const questions = mergeLists(message.questions, parsed.questions);
+  const changes = mergeLists(message.changes, parsed.changes);
+  const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
+
+  return (
+    <>
+      <EvidenceNotice ragStatus={message.ragStatus} />
+      {content && (
+        <p style={{ whiteSpace: "pre-wrap" }}>
+          <PromptText text={content} />
+        </p>
+      )}
+      <FieldList fields={message.fields} />
+      <ChangeList changes={changes} />
+      <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
+      <TechniqueList techniques={techniques} />
+    </>
+  );
+}
+
+function mergeLists(primary, secondary) {
+  return [
+    ...(Array.isArray(primary) ? primary : []),
+    ...(Array.isArray(secondary) ? secondary : []),
+  ];
+}
+
+function parseAssistantSections(message) {
+  return parseLegacyImproveAnswer(message?.content || message?.answer || "");
 }
 
 function PromptText({ text }) {
@@ -269,6 +291,7 @@ function TechniqueList({ techniques }) {
 
 function hasExecutablePrompt(message) {
   if (!message?.executablePrompt || message.mode === "ask") return false;
+  if (isUtilityOnlyPrompt(message.executablePrompt)) return false;
   const combinedText = [
     message.executablePrompt,
     message.content,
@@ -280,16 +303,28 @@ function hasExecutablePrompt(message) {
   return !isAskOnlyResponse(combinedText);
 }
 
+function isUtilityOnlyPrompt(text) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+  if (!value) return true;
+  return [
+    "관련 프롬프트 기법 근거를 찾지 못했습니다",
+    "관련 기법 근거 없이",
+    "개선안을 만들 수 없",
+    "확인이 필요",
+  ].some((fragment) => value.includes(fragment));
+}
+
 function isAskOnlyResponse(text) {
   const value = String(text || "").trim();
   if (!value) return true;
+  if (isUtilityOnlyPrompt(value)) return true;
   return [
     /확인이\s*필요/i,
     /답변이\s*필요/i,
     /추가\s*정보가\s*필요/i,
     /정보를\s*보완해\s*주세요/i,
-    /개선안(?:을)?\s*만들\s*수\s*없/i,
-    /만들\s*수\s*없어요/i,
+    /개선안을?\s*만들\s*수\s*없/i,
+    /만들\s*수\s*없어/i,
     /아래\s*정보를\s*알려주시면/i,
     /어떤\s*주제/i,
     /무엇에\s*대한\s*글/i,
@@ -418,7 +453,7 @@ function ActionButton({ icon, label, onClick }) {
 function TypingIndicator() {
   return (
     <div className="message-row assistant">
-      <div className="typing-message" aria-label="Improving prompt"><span /><span /><span /></div>
+      <div className="typing-message" aria-label="프롬프트 개선 중"><span /><span /><span /></div>
     </div>
   );
 }

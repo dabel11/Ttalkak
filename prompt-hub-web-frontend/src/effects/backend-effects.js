@@ -129,7 +129,7 @@
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
       title: thread.title || "새 대화",
-      preview: thread.preview || makePreview(thread.messages?.at(-1)?.content || ""),
+      preview: makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],

@@ -7,6 +7,8 @@ import { isAuthExpiredError } from "../utils/apiErrors";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
 
 function buildNoEvidenceMessage(prompt, data) {
+  const executablePrompt = getExecutablePrompt(data);
+  if (executablePrompt) return executablePrompt;
   if (data.answer || data.ragMessage) return data.answer || data.ragMessage;
   const examples = EXAMPLE_QUERIES.map((example) => `- ${example}`).join("\n");
   return `관련 기법 근거 없이 기본 첨삭을 수행했습니다.\n\n"${prompt}"에 대한 직접 근거는 찾지 못했지만, 기본 개선 결과를 아래에 반영했습니다.\n\n이런 요청으로 다시 시도해볼 수 있습니다:\n${examples}`;
@@ -29,6 +31,25 @@ function getQuestionText(question) {
 
 function hasPromptPlaceholders(text) {
   return /\[[^\]\n]{1,80}\]/.test(String(text || ""));
+}
+
+const NON_EXECUTABLE_PROMPT_FRAGMENTS = [
+  "\uad00\ub828 \ud504\ub86c\ud504\ud2b8 \uae30\ubc95 \uadfc\uac70\ub97c \ucc3e\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4",
+  "\uad00\ub828 \uae30\ubc95 \uadfc\uac70 \uc5c6\uc774",
+  "\uac1c\uc120\uc548\uc744 \ub9cc\ub4e4 \uc218 \uc5c6",
+  "\ud655\uc778\uc774 \ud544\uc694",
+];
+
+function isUtilityOnlyPrompt(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  return NON_EXECUTABLE_PROMPT_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+}
+
+function getExecutablePrompt(data) {
+  const candidate = String(data?.improvedPrompt || "").trim();
+  if (!candidate || isUtilityOnlyPrompt(candidate)) return null;
+  return candidate;
 }
 
 function getServerEditErrorMessage(error) {
@@ -349,7 +370,7 @@ export function useConversation({
           fields: data.fields || [],
           techniques: data.techniques || data.techniquesApplied || [],
           summary: data.summary || "",
-          executablePrompt: data.improvedPrompt || null,
+          executablePrompt: getExecutablePrompt(data),
           sourcePrompt: prompt,
           sources: data.sources || [],
           saved: false,
@@ -374,14 +395,14 @@ export function useConversation({
         id: `assistant-${Date.now()}`,
         role: "assistant",
         mode: data.mode || "improve",
-        content: data.answer || data.improvedPrompt,
+        content: data.improvedPrompt || data.answer,
         answer: data.answer || "",
         questions: data.questions || [],
         changes: data.changes || [],
         fields: data.fields || [],
         techniques: data.techniques || data.techniquesApplied || [],
         summary: data.summary || "",
-        executablePrompt: data.improvedPrompt || null,
+        executablePrompt: getExecutablePrompt(data),
         sourcePrompt: prompt,
         sources: data.sources || [],
         saved: false,
@@ -529,14 +550,14 @@ export function useConversation({
             ? buildAskMessage(data)
             : data.ragStatus === "no_evidence"
             ? buildNoEvidenceMessage(prompt, data)
-            : data.answer || data.improvedPrompt,
+            : data.improvedPrompt || data.answer,
         answer: data.answer || "",
         questions: data.questions || [],
         changes: data.changes || [],
         fields: data.fields || [],
         techniques: data.techniques || data.techniquesApplied || [],
         summary: data.summary || "",
-        executablePrompt: data.mode === "ask" ? null : data.improvedPrompt || null,
+        executablePrompt: getExecutablePrompt(data),
         sourcePrompt: prompt,
         sources: data.sources || [],
         saved: false,
