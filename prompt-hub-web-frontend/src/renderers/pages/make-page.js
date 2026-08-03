@@ -102,12 +102,12 @@
 
   function MakeComposerView(ctx, data) {
     const { icons, escapeHtml } = ctx;
-    const { composerDraft, hasMessages } = data;
+    const { composerDraft, hasMessages, isThinking } = data;
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
-        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요...">${escapeHtml(composerDraft)}</textarea>
-        <button class="send-button" type="submit" aria-label="보내기">${icons.send}</button>
+        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
+        <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
     `;
   }

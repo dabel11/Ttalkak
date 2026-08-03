@@ -29,6 +29,7 @@ export function useConversation({
   const [localRecentThreads, setLocalRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
   const [serverRecentThreads, setServerRecentThreads] = useState([]);
   const activeThreadId = useRef(null);
+  const improveRequestInFlight = useRef(false);
   const isLoggedIn = Boolean(authSession?.accessToken);
   const recentThreads = isLoggedIn ? serverRecentThreads : localRecentThreads;
   const {
@@ -206,7 +207,11 @@ export function useConversation({
 
   async function submitPrompt() {
     const prompt = composerValue.trim();
-    if (!prompt || isLoading) return;
+    if (!prompt || isLoading || improveRequestInFlight.current) {
+      if (prompt && improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+      return;
+    }
+    improveRequestInFlight.current = true;
     const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
@@ -365,6 +370,7 @@ export function useConversation({
         },
       ]);
     } finally {
+      improveRequestInFlight.current = false;
       setIsLoading(false);
     }
   }
@@ -383,7 +389,10 @@ export function useConversation({
   async function submitEditedMessage(event, messageId) {
     event?.preventDefault?.();
     if (isLoggedIn) {
-      if (isLoading) return;
+      if (isLoading || improveRequestInFlight.current) {
+        if (improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+        return;
+      }
       const prompt = editingDraft.trim();
       const threadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
       if (!prompt) return;
@@ -392,6 +401,7 @@ export function useConversation({
         return;
       }
 
+      improveRequestInFlight.current = true;
       setEditingMessageId("");
       setEditingDraft("");
       setIsLoading(true);
@@ -421,15 +431,20 @@ export function useConversation({
         }
         showNotice(getServerEditErrorMessage(error));
       } finally {
+        improveRequestInFlight.current = false;
         setIsLoading(false);
       }
       return;
     }
-    if (isLoading) return;
+    if (isLoading || improveRequestInFlight.current) {
+      if (improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+      return;
+    }
 
     const prompt = editingDraft.trim();
     const index = messages.findIndex((message) => message.id === messageId && message.role === "user");
     if (index < 0 || !prompt) return;
+    improveRequestInFlight.current = true;
 
     const baseMessages = messages.slice(0, index);
     const editedUserMsg = {
@@ -518,6 +533,7 @@ export function useConversation({
         },
       ]);
     } finally {
+      improveRequestInFlight.current = false;
       setIsLoading(false);
     }
   }

@@ -745,6 +745,7 @@ let adminTagSearchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
+let makeRequestInFlight = false;
 let makeInteractionVersion = 0;
 let makeFailedMessageId = "";
 let makeFailedMessageText = "";
@@ -1502,6 +1503,7 @@ function MakeComposer(hasMessages) {
     {
       composerDraft: state.composerDraft,
       hasMessages,
+      isThinking: isMakeThinking || makeRequestInFlight,
     },
   );
 }
@@ -4814,6 +4816,10 @@ function submitMakeComposer(composer) {
 
 async function submitMakePrompt(composer) {
   if (guardAdminUserAction()) return;
+  if (isMakeThinking || makeRequestInFlight) {
+    showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+    return;
+  }
   const value = String(new FormData(composer).get("prompt") || "").trim();
   if (!value) return;
   makeInteractionVersion += 1;
@@ -4830,6 +4836,7 @@ async function submitMakePrompt(composer) {
   const userMessageId = `user-${now}`;
   const assistantMessageId = `make-${now}`;
   const history = buildMakeImproveHistory(state.messages);
+  makeRequestInFlight = true;
   state.composerDraft = "";
   appendMakeUserMessageState(state, threadId, { id: userMessageId, role: "user", content: value });
   isMakeThinking = true;
@@ -4844,6 +4851,7 @@ async function submitMakePrompt(composer) {
     improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
   } catch (error) {
     isMakeThinking = false;
+    makeRequestInFlight = false;
     const localMessagesSnapshot = [...state.messages];
     const recoveredThread = await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
       threadId,
@@ -4868,6 +4876,7 @@ async function submitMakePrompt(composer) {
     return;
   }
   isMakeThinking = false;
+  makeRequestInFlight = false;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
   appendMakeAssistantMessageState(state, {
@@ -4929,6 +4938,10 @@ async function resendEditedMessage(messageId, value) {
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
   if (guardAdminUserAction()) return;
+  if (isMakeThinking || makeRequestInFlight) {
+    showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+    return;
+  }
 
   const now = Date.now();
   const assistantMessageId = `make-${now}`;
@@ -4942,6 +4955,7 @@ async function resendEditedMessage(messageId, value) {
       return;
     }
 
+    makeRequestInFlight = true;
     try {
       await improvePromptWithBackend(cleanValue, {
         threadId,
@@ -4966,10 +4980,13 @@ async function resendEditedMessage(messageId, value) {
       }
       handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
       render();
+    } finally {
+      makeRequestInFlight = false;
     }
     return;
   }
 
+  makeRequestInFlight = true;
   applyEditedMakeMessageState(state, index, cleanValue, now);
   isMakeThinking = true;
   makeFailedMessageId = "";
@@ -4982,6 +4999,7 @@ async function resendEditedMessage(messageId, value) {
     improvedPrompt = await improvePromptWithBackend(cleanValue, { history, threadId });
   } catch (error) {
     isMakeThinking = false;
+    makeRequestInFlight = false;
     makeFailedMessageId = messageId;
     makeFailedMessageText = "수정한 메시지로 다시 개선하지 못했습니다. 잠시 후 다시 시도해주세요.";
     state.makeBackendStatus = "fallback";
@@ -4992,6 +5010,7 @@ async function resendEditedMessage(messageId, value) {
     return;
   }
   isMakeThinking = false;
+  makeRequestInFlight = false;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
   finishEditedMakeMessageState(state, {
