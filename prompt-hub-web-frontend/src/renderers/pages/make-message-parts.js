@@ -221,8 +221,8 @@
     const { changes } = data;
 
     return `
-      <section class="message-changes-section" aria-label="가정한 부분">
-        <strong>가정한 부분</strong>
+      <section class="message-changes-section" aria-label="가정 및 개선 포인트">
+        <strong>가정 및 개선 포인트</strong>
         <ul>
           ${changes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>

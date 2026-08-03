@@ -76,6 +76,16 @@ export function useConversation({
     return activeThread;
   }
 
+  async function recoverActiveServerThreadAfterFailure(prompt) {
+    if (!isLoggedIn || !activeThreadId.current) return false;
+    const activeThread = await refreshActiveServerThread(String(activeThreadId.current));
+    return Boolean(
+      activeThread?.messages?.some(
+        (message) => message?.role === "user" && String(message.content || "").trim() === String(prompt || "").trim(),
+      ),
+    );
+  }
+
   useEffect(() => {
     if (!isLoggedIn) saveStorage(STORAGE.RECENTS, localRecentThreads);
   }, [isLoggedIn, localRecentThreads]);
@@ -372,8 +382,16 @@ export function useConversation({
     } catch (err) {
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
-      if (isAuthExpiredError(err)) await onAuthExpired();
+      if (isAuthExpiredError(err)) {
+        await onAuthExpired();
+        return;
+      }
       if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+      const recovered = await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
+      if (recovered) {
+        showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -441,6 +459,8 @@ export function useConversation({
         }
         if (Number(error?.status || 0) === 404) {
           await refreshServerThreads().catch(() => {});
+        } else {
+          await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
         }
         showNotice(getServerEditErrorMessage(error));
       } finally {

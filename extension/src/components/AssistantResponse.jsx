@@ -75,8 +75,8 @@ function ChangeList({ changes }) {
   if (!normalizedChanges.length) return null;
 
   return (
-    <div className="assumption-list" aria-label="가정한 부분">
-      <strong>가정한 부분</strong>
+    <div className="assumption-list" aria-label="가정 및 개선 포인트">
+      <strong>가정 및 개선 포인트</strong>
       <ul>
         {normalizedChanges.map((item, index) => (
           <li key={`${item}-${index}`}>{item}</li>

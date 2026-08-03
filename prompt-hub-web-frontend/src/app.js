@@ -4835,8 +4835,17 @@ async function submitMakePrompt(composer) {
     improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
   } catch (error) {
     isMakeThinking = false;
+    const localMessagesSnapshot = [...state.messages];
+    const recoveredThread = await recoverActiveMakeThreadAfterFailure(threadId, value, localMessagesSnapshot);
+    if (recoveredThread) {
+      makeFailedMessageId = "";
+      makeFailedMessageText = "";
+      showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
+      return;
+    }
+
     makeFailedMessageId = userMessageId;
-    makeFailedMessageText = "AI 응답을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    makeFailedMessageText = "AI 응답을 생성하지 못했습니다. 이 메시지는 전송 위치에 남겨두었습니다.";
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
@@ -4935,6 +4944,8 @@ async function resendEditedMessage(messageId, value) {
       state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
       if (Number(error?.status || 0) === 404) {
         await refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {});
+      } else {
+        await recoverActiveMakeThreadAfterFailure(threadId, cleanValue, [...state.messages]).catch(() => null);
       }
       handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
       render();
@@ -7333,6 +7344,21 @@ async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadI
   }
   renderThread();
   return refreshedThread;
+}
+
+async function recoverActiveMakeThreadAfterFailure(threadId, prompt, localMessagesSnapshot = state.messages) {
+  if (!shouldUseImproveThreadSync()) return null;
+  const backendThreadId = getMakeBackendThreadId(threadId);
+  if (!backendThreadId) return null;
+
+  const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
+  const hasSubmittedPrompt = Array.isArray(refreshedThread?.messages)
+    && refreshedThread.messages.some((message) => message?.role === "user" && String(message.content || "").trim() === String(prompt || "").trim());
+
+  if (hasSubmittedPrompt) return refreshedThread;
+
+  state.messages = localMessagesSnapshot;
+  return null;
 }
 
 function queueLatestMakeThreadScroll(thread) {
