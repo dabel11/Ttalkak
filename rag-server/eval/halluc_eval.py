@@ -52,6 +52,9 @@ _PROPER_STOP = {"AI", "API", "CTA", "SEO", "SNS", "USP", "CEO", "IT", "QA", "PM"
 _PLACEHOLDER = r"\[[^\]]*\]"      # [제품명 입력] 등 — 이 안의 내용은 환각 아님
 _EXAMPLE = r"\(\s*예[:：][^)]*\)|\(\s*e\.g\.[^)]*\)"   # "(예: 990g)" — 예시 명시는 창작 아님
 _HEADER = r"^\s*(?:#{1,6}\s+.*|\[[^\]]+\]\s*|[-*]?\s*[^:\n]{1,20}:\s*)$"  # 섹션 헤더·라벨 줄
+# 금지·배제 지시문 안의 값은 '쓰지 말라'는 뜻이므로 창작이 아니다
+# (실측: "'무조건 100% 수익' 같은 과장 표현은 배제하고" → 100% 를 환각으로 오판했음)
+_NEGATION = r"배제|금지|피하|삼가|하지\s*마|쓰지\s*마|말\s*것|없이|지양"
 
 # 기법 이름은 RAG 코퍼스에서 인용하는 것이라 창작이 아니다. 실행 시 DB에서 로드해 제외한다.
 _TECHNIQUE_NAMES: set[str] = set()
@@ -81,9 +84,10 @@ def load_technique_names() -> set[str]:
             n = (meta or {}).get("technique") or (meta or {}).get("source")
             if n:
                 names.add(str(n).strip())
-                for w in str(n).split():        # 부분 매칭도 제외("Analyst-Then-Writer" → Analyst 등)
+                # 하이픈·슬래시로도 쪼갠다 — 정규식이 "Self-Refine"을 Self/Refine 로 따로 뽑기 때문
+                for w in re.split(r"[\s\-/·,()]+", str(n)):
                     if len(w) > 2:
-                        names.add(w.strip("-·,()"))
+                        names.add(w)
         _TECHNIQUE_NAMES = names
     except Exception as e:
         print(f"[halluc_eval] 기법명 로드 실패(제외 없이 진행): {e}")
@@ -97,7 +101,8 @@ def _strip_placeholders(text: str) -> str:
     셋 다 '단정된 사실'이 아니므로 환각으로 세면 거짓 양성이 된다."""
     t = re.sub(_PLACEHOLDER, " ", text or "")
     t = re.sub(_EXAMPLE, " ", t)
-    t = "\n".join(l for l in t.split("\n") if not re.match(_HEADER, l))
+    t = "\n".join(l for l in t.split("\n")
+                  if not re.match(_HEADER, l) and not re.search(_NEGATION, l))
     return t
 
 
@@ -128,17 +133,20 @@ def find_fabrications(improved: str, query: str, given: list[str]) -> dict:
     for label, pat in _LOW.items():
         for m in unseen(re.findall(pat, body)):
             low.append(f"{label}:{m}")
-    # 영문 고유명사(제품명·브랜드 창작) — 기법명·표준용어·헤더는 제외
+    # 영문 고유명사는 **HIGH 로 세지 않는다**(suspect 로 분리).
+    # 한국어 프롬프트에서 영문 대문자 연쇄는 기법명·섹션헤더·일반 도메인용어(Large Language Model,
+    # Introduction, Key Drivers …)가 압도적이라 오탐이 심하다. 브랜드/제품명 창작 판정은
+    # 문맥을 보는 judge 에 맡기고, 여기서는 후보만 남긴다.
     techs = load_technique_names()
+    suspect = []
     for m in unseen(re.findall(_PROPER, body)):
         if len(m) < 4 or m in _PROPER_STOP or m in _COMMON_TERMS or m in techs:
             continue
         words = m.split()
-        # 구성 단어가 전부 기법명/표준용어면 창작이 아니다
         if all(w in techs or w in _COMMON_TERMS or w in _PROPER_STOP for w in words):
             continue
-        high.append(f"고유명사:{m}")
-    return {"high": sorted(set(high)), "low": sorted(set(low))}
+        suspect.append(m)
+    return {"high": sorted(set(high)), "low": sorted(set(low)), "suspect": sorted(set(suspect))}
 
 
 # ── LLM judge (선택) ─────────────────────────────────────────
@@ -243,9 +251,10 @@ def main():
                     jr = f" | judge실패({str(e)[:20]})"
 
             mark = "🔴" if has_high else ("🟡" if fab["low"] else "✅")
+            sus = f" 의심{fab['suspect'][:3]}" if fab.get("suspect") else ""
             print(f"  {mark} [{it['id']:6} #{r+1}] mode={gen.get('mode'):7} "
                   f"빈칸{len(re.findall(_PLACEHOLDER, improved))} "
-                  f"HIGH={fab['high'] if fab['high'] else '없음'}{jr}")
+                  f"HIGH={fab['high'] if fab['high'] else '없음'}{sus}{jr}")
             time.sleep(args.sleep)
 
     print("\n" + "=" * 66)
