@@ -81,42 +81,7 @@
   }
 
   function normalizeLegacyAskAnswer(text) {
-    const source = String(text || "").trim();
-    if (!source) return { leadText: "", questions: [] };
-    const lines = source
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const questionLines = [];
-    const leadLines = [];
-    let foundQuestion = false;
-
-    lines.forEach((line) => {
-      const match = line.match(/^[•*-]\s*([^:：]{1,40})[:：]\s*(.+)$/);
-      if (match) {
-        foundQuestion = true;
-        questionLines.push({
-          field: match[1].trim(),
-          question: match[2].trim(),
-          reason: "",
-          importance: "required",
-        });
-        return;
-      }
-      if (!foundQuestion) leadLines.push(line);
-    });
-
-    if (!questionLines.length) return { leadText: source, questions: [] };
-
-    const leadText = leadLines
-      .map((line) => line.replace(/\*\*/g, "").trim())
-      .filter((line) => !/^아래\s+정보를/.test(line))
-      .join("\n");
-
-    return {
-      leadText,
-      questions: questionLines,
-    };
+    return global.TtalkakMakeMessageModel.parseLegacyQuestions(text);
   }
 
   function renderPromptTextWithPlaceholders(text, escapeHtml) {
@@ -137,13 +102,14 @@
 
   function MessageQuestionsView(ctx, data) {
     const { escapeAttr, escapeHtml } = ctx;
-    const { isAsk, messageId, questions } = data;
+    const { isAsk, isThinking, messageId, questions } = data;
     const title = isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요";
+    const progressId = `ask-${messageId}-progress`;
 
     return `
       <section class="message-question-section" aria-label="${escapeHtml(title)}" ${isAsk ? 'aria-live="polite"' : ""}>
         <strong>${escapeHtml(title)}</strong>
-        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" novalidate><div class="ask-answer-progress" data-ask-answer-progress role="status">필수 답변을 입력해주세요.</div>` : ""}
+        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" aria-busy="${isThinking ? "true" : "false"}" novalidate><div id="${escapeAttr(progressId)}" class="ask-answer-progress" data-ask-answer-progress role="status">${isThinking ? "답변을 전송하고 있습니다." : "필수 답변을 입력해주세요."}</div>` : ""}
         <ol>
           ${questions
             .map((item, index) => {
@@ -152,14 +118,14 @@
               return `
                 <li class="${item.importance === "required" ? "required" : "recommended"}">
                   <label for="${escapeAttr(inputId)}"><span>${escapeHtml(item.question)}</span><em>${item.importance === "required" ? "필수" : "선택"}</em></label>
-                  ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} ${item.reason ? `aria-describedby="${escapeAttr(reasonId)}"` : ""} />` : ""}
+                  ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} aria-describedby="${escapeAttr([item.reason ? reasonId : "", progressId].filter(Boolean).join(" "))}" ${isThinking ? "disabled" : ""} />` : ""}
                   ${item.reason ? `<small id="${escapeAttr(reasonId)}">${escapeHtml(item.reason)}</small>` : ""}
                 </li>
               `;
             })
             .join("")}
         </ol>
-        ${isAsk ? '<button class="ask-answer-submit" type="submit">답변 제출</button></form>' : ""}
+        ${isAsk ? `<button class="ask-answer-submit" type="submit" ${isThinking ? "disabled" : ""}>${isThinking ? "전송 중" : "답변 제출"}</button></form>` : ""}
       </section>
     `;
   }

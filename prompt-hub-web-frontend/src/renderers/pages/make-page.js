@@ -272,7 +272,7 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -288,7 +288,7 @@
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
       : recoveredContent;
     const questionSection = normalizedQuestions.length
-      ? MessageQuestionsView({ escapeAttr, escapeHtml }, { isAsk: effectiveIsAsk, messageId: id, questions: normalizedQuestions })
+      ? MessageQuestionsView({ escapeAttr, escapeHtml }, { isAsk: effectiveIsAsk, isThinking, messageId: id, questions: normalizedQuestions })
       : "";
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })

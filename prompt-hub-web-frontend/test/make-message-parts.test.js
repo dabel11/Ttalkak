@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 global.window = {};
+global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
 require("../src/renderers/pages/make-message-parts.js");
 require("../src/renderers/pages/make-page.js");
 
@@ -22,10 +23,23 @@ test("ask questions render accessible required and optional inputs", () => {
 
   assert.match(html, /aria-live="polite"/);
   assert.match(html, /required aria-required="true"/);
+  assert.match(html, /aria-describedby="ask-assistant-1-purpose-reason ask-assistant-1-progress"/);
   assert.match(html, />필수</);
   assert.match(html, />선택</);
   assert.match(html, /data-ask-answer-form="assistant-1"/);
-  assert.match(html, /type="submit">답변 제출/);
+  assert.match(html, /type="submit"\s*>답변 제출/);
+});
+
+test("ask answer controls expose a busy and disabled state while sending", () => {
+  const html = MessageQuestionsView({ escapeAttr, escapeHtml }, {
+    isAsk: true,
+    isThinking: true,
+    messageId: "assistant-busy",
+    questions: [{ field: "purpose", question: "목적은 무엇인가요?", importance: "required" }],
+  });
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /data-ask-answer-input[^>]*disabled/);
+  assert.match(html, /type="submit" disabled>전송 중/);
 });
 
 test("improve suggestions do not render answer inputs", () => {

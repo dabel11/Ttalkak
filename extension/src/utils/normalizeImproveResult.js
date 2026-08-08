@@ -1,4 +1,7 @@
 import { parseLegacyImproveAnswer } from "./legacyImproveAnswer.js";
+import "../../../prompt-hub-web-frontend/src/utils/make-message-model.js";
+
+const MakeMessageModel = globalThis.TtalkakMakeMessageModel;
 
 export function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
@@ -50,49 +53,17 @@ function firstNonEmptyArray(...values) {
 }
 
 export function normalizeImproveQuestion(item, index = 0) {
-  if (typeof item === "string") {
-    const question = item.trim();
-    return question
-      ? {
-          field: "",
-          question,
-          reason: "",
-          importance: "recommended",
-        }
-      : null;
-  }
-
-  if (!item || typeof item !== "object") return null;
-  const question = String(item.question || item.text || item.content || item.label || "").trim();
-  if (!question) return null;
-  const importance = String(item.importance || item.priority || "recommended").toLowerCase();
-
-  return {
-    field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
-    question,
-    reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
-    importance: importance === "required" ? "required" : "recommended",
-  };
+  const normalized = MakeMessageModel.normalizeQuestions([item])[0] || null;
+  if (normalized?.field === "question_1" && index > 0) normalized.field = `question_${index + 1}`;
+  return normalized;
 }
 
 export function normalizeImproveQuestions(value) {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set();
-  return value.map(normalizeImproveQuestion).filter((item) => {
-    if (!item) return false;
-    const key = `${normalizeQuestionKey(item.field)}\u0000${normalizeQuestionKey(item.question)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return MakeMessageModel.normalizeQuestions(value);
 }
 
 export function mergeImproveQuestions(...values) {
   return normalizeImproveQuestions(values.flatMap((value) => Array.isArray(value) ? value : []));
-}
-
-function normalizeQuestionKey(value) {
-  return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 export function normalizeImproveFields(value) {

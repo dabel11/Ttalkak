@@ -1590,6 +1590,7 @@ function MessageBubble(message) {
       failureMessage: !isAssistant && makeFailedMessageId === message.id ? makeFailedMessageText : "",
       failureRetryable: !isAssistant && makeFailedMessageId === message.id && makeFailedRetryable,
       isSaved: isAssistant && isPromptSaved(message.id),
+      isThinking: isMakeThinking || makeRequestInFlight,
       mode: message.mode || "improve",
       questions: message.questions || [],
       ragStatus: message.ragStatus || "",
@@ -4935,12 +4936,13 @@ async function submitMakePrompt(composer) {
   if (shouldUseImproveThreadSync()) {
     const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
     if (!refreshedThread) render();
+    if (improvedPrompt.mode === "ask") focusLatestAskAnswer();
     return;
   }
   syncMakeThreadWithBackend(threadId);
   render();
   if (improvedPrompt.mode === "ask") {
-    window.setTimeout(() => document.querySelector(`[data-ask-answer-form="${CSS.escape(assistantMessageId)}"] [data-ask-answer-input]`)?.focus(), 0);
+    focusLatestAskAnswer();
   }
   scheduleMakeLatestScroll({ behavior: "auto" });
 }
@@ -5077,6 +5079,7 @@ async function resendEditedMessage(messageId, value) {
   if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
   showNotice("수정한 메시지로 다시 개선했습니다.");
   render();
+  if (improvedPrompt.mode === "ask") focusLatestAskAnswer();
 }
 function openShareFromMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
@@ -7150,27 +7153,35 @@ function buildMakeImproveHistory(messages = state.messages) {
 
 function submitAskAnswerForm(form) {
   const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
-  const invalid = inputs.filter((input) => input.required && !input.value.trim());
+  const questions = inputs.map((input) => ({
+    field: input.name,
+    question: input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name,
+    importance: input.required ? "required" : "recommended",
+  }));
+  const values = Object.fromEntries(inputs.map((input) => [input.name, input.value]));
+  const result = window.TtalkakMakeMessageModel.composeAskAnswers(questions, values);
+  const invalid = inputs.filter((input) => result.missingFields.includes(input.name));
   inputs.forEach((input) => input.toggleAttribute("aria-invalid", invalid.includes(input)));
-  if (invalid.length) {
-    invalid[0].focus();
+  if (result.missingFields.length) {
+    invalid[0]?.focus();
     const progress = form.querySelector("[data-ask-answer-progress]");
-    if (progress) progress.textContent = `필수 답변 ${invalid.length}개를 더 입력해주세요.`;
+    if (progress) progress.textContent = `필수 답변 ${result.missingFields.length}개를 더 입력해주세요.`;
     return;
   }
-  const answers = inputs.map((input) => {
-    const value = input.value.trim();
-    if (!value) return "";
-    const question = input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name;
-    return `- ${question}: ${value}`;
-  }).filter(Boolean);
-  if (!answers.length) return;
+  if (!result.message) return;
   const composer = document.querySelector("[data-make-composer]");
   const textarea = composer?.querySelector('[name="prompt"]');
   if (!composer || !textarea) return;
-  textarea.value = `추가 정보:\n${answers.join("\n")}`;
+  textarea.value = result.message;
   state.composerDraft = textarea.value;
   submitMakeComposer(composer);
+}
+
+function focusLatestAskAnswer() {
+  window.setTimeout(() => {
+    const inputs = document.querySelectorAll("[data-ask-answer-form] [data-ask-answer-input]:not(:disabled)");
+    inputs[inputs.length - 1]?.focus();
+  }, 0);
 }
 
 function getMakeThreadById(threadId = state.activeThreadId) {
@@ -7394,6 +7405,7 @@ function normalizePersistedLikeCounts() {
 
 function normalizeRecentThreads() {
   const seen = new Set();
+  window.TtalkakMakeMessageModel.migratePersistedMakeState(state);
 
   state.recentThreads = state.recentThreads.filter((thread, index) => {
     if (!thread.id) {
@@ -7403,10 +7415,8 @@ function normalizeRecentThreads() {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     thread.dedupeKey = key;
-    thread.messages = window.TtalkakMakeMessageModel.migrateMakeMessages(thread.messages);
     return true;
   });
-  state.messages = window.TtalkakMakeMessageModel.migrateMakeMessages(state.messages);
 }
 
 function normalizeAssistantPromptOutputs() {
@@ -7465,6 +7475,7 @@ loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
 normalizeRecentThreads();
+persistState();
 ensureDemoComments();
 render();
 hydrateBackendHomeData();

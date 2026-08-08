@@ -14,6 +14,13 @@ test("legacy assistant content is restored and empty messages are removed", () =
   assert.deepEqual(model.migrateMakeMessages([{ role: "assistant" }]), []);
 });
 
+test("legacy answer questions migrate into structured ask data", () => {
+  const message = model.migrateMakeMessage({ role: "assistant", mode: "ask", answer: "추가 정보가 필요합니다.\n- 목적: 무엇을 만들까요?\n- 대상: 누가 읽나요?" });
+  assert.equal(message.questions.length, 2);
+  assert.equal(message.questions[0].field, "목적");
+  assert.equal(message.content, "추가 정보가 필요합니다.");
+});
+
 test("question duplicates and history are normalized", () => {
   assert.equal(model.normalizeQuestions([{ field: "purpose", question: "목적은?" }, { field: " purpose ", question: " 목적은? " }]).length, 1);
   assert.deepEqual(model.buildImproveHistory([{ role: "user", content: "글 써줘" }, { role: "assistant", mode: "ask", answer: "목적은?" }]), [{ role: "user", content: "글 써줘" }, { role: "assistant", content: "목적은?" }]);
@@ -22,10 +29,34 @@ test("question duplicates and history are normalized", () => {
 test("errors are separated into actionable states", () => {
   assert.equal(model.classifyMakeError({ code: "AI_INVALID_RESPONSE" }).kind, "contract");
   assert.equal(model.classifyMakeError({ status: 503 }).kind, "ai");
+  assert.equal(model.classifyMakeError({ code: "AI_SERVICE_UNAVAILABLE" }).kind, "ai");
+  assert.equal(model.classifyMakeError({ code: "AI_RATE_LIMIT_EXCEEDED" }).kind, "rate_limit");
+  assert.equal(model.classifyMakeError({ status: 401 }).kind, "auth");
+  assert.equal(model.classifyMakeError({ status: 500 }).kind, "server");
   assert.equal(model.classifyMakeError({}).kind, "network");
 });
 
 test("ask fixture contains required and optional questions", () => {
   assert.equal(model.fixtures.ask.mode, "ask");
   assert.deepEqual(model.fixtures.ask.questions.map((item) => item.importance), ["required", "recommended"]);
+});
+
+test("ask fixture validates required answers and composes the follow-up message", () => {
+  const missing = model.composeAskAnswers(model.fixtures.ask.questions, { audience: "신규 사용자" });
+  assert.deepEqual(missing.missingFields, ["purpose"]);
+  const complete = model.composeAskAnswers(model.fixtures.ask.questions, { purpose: "제품 출시 안내", audience: "신규 사용자" });
+  assert.deepEqual(complete.missingFields, []);
+  assert.equal(complete.message, "추가 정보:\n- 이 글의 목적은 무엇인가요?: 제품 출시 안내\n- 주요 독자는 누구인가요?: 신규 사용자");
+  assert.equal(model.fixtures.improve.mode, "improve");
+});
+
+test("persisted make state receives schema versions and removes empty messages", () => {
+  const state = {
+    messages: [{ role: "assistant", improvedPrompt: "복원 본문" }, { role: "assistant" }],
+    recentThreads: [{ id: "thread-1", messages: [{ role: "assistant", answer: "질문\n- 목적: 무엇인가요?", mode: "ask" }] }],
+  };
+  model.migratePersistedMakeState(state);
+  assert.equal(state.messages.length, 1);
+  assert.equal(state.messages[0].schemaVersion, model.SCHEMA_VERSION);
+  assert.equal(state.recentThreads[0].messages[0].questions.length, 1);
 });

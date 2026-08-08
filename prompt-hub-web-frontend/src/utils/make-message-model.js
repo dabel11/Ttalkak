@@ -5,6 +5,30 @@
   const normalizeText = (value) => String(value || "").trim();
   const normalizeKey = (value) => normalizeText(value).replace(/\s+/g, " ").toLocaleLowerCase();
 
+  function parseLegacyQuestions(value) {
+    const source = normalizeText(value);
+    if (!source) return { leadText: "", questions: [] };
+    const lead = [];
+    const questions = [];
+    let foundQuestion = false;
+    source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
+      const pair = line.match(/^(?:[-*•]|\d+[.)])?\s*([^:：]{1,48})[:：]\s*(.+)$/);
+      const bulletQuestion = line.match(/^(?:[-*•]|\d+[.)])\s*(.+[?？])$/);
+      if (pair || bulletQuestion) {
+        foundQuestion = true;
+        questions.push({
+          field: pair ? pair[1].replace(/\*\*/g, "").trim() : "",
+          question: pair ? pair[2].trim() : bulletQuestion[1].trim(),
+          reason: "",
+          importance: "required",
+        });
+      } else if (!foundQuestion) {
+        lead.push(line.replace(/\*\*/g, "").trim());
+      }
+    });
+    return { leadText: questions.length ? lead.join("\n") : source, questions: normalizeQuestions(questions) };
+  }
+
   function normalizeQuestions(value) {
     if (!Array.isArray(value)) return [];
     const seen = new Set();
@@ -30,11 +54,16 @@
   function migrateMakeMessage(raw = {}, index = 0) {
     const rawMode = String(raw.mode || raw.type || "").toLowerCase();
     const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
-    const questions = normalizeQuestions(raw.questions || raw.followUpQuestions || raw.additionalQuestions);
+    const legacy = parseLegacyQuestions(raw.answer || raw.content);
+    const structuredQuestions = raw.questions || raw.followUpQuestions || raw.additionalQuestions;
+    const questions = normalizeQuestions([
+      ...(Array.isArray(structuredQuestions) ? structuredQuestions : []),
+      ...legacy.questions,
+    ]);
     const improvedPrompt = mode === "ask" ? "" : normalizeText(raw.executablePrompt || raw.finalPrompt || raw.improvedPrompt || raw.improved_prompt);
     const answer = normalizeText(raw.answer);
     const summary = normalizeText(raw.summary);
-    const content = normalizeText(raw.content || raw.text || raw.message || answer || summary || improvedPrompt || (questions.length ? "정확한 결과를 위해 추가 정보가 필요합니다." : ""));
+    const content = normalizeText(raw.content || raw.text || raw.message || legacy.leadText || answer || summary || improvedPrompt || (questions.length ? "정확한 결과를 위해 추가 정보가 필요합니다." : ""));
     return {
       ...raw,
       schemaVersion: SCHEMA_VERSION,
@@ -81,12 +110,33 @@
     return { kind: "server", message: "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", retryable: true };
   }
 
+  function composeAskAnswers(questions, values = {}) {
+    const normalized = normalizeQuestions(questions);
+    const missingFields = normalized
+      .filter((item) => item.importance === "required" && !normalizeText(values[item.field]))
+      .map((item) => item.field);
+    const lines = normalized.map((item) => {
+      const value = normalizeText(values[item.field]);
+      return value ? `- ${item.question}: ${value}` : "";
+    }).filter(Boolean);
+    return { missingFields, message: lines.length ? `추가 정보:\n${lines.join("\n")}` : "" };
+  }
+
+  function migratePersistedMakeState(state = {}) {
+    state.messages = migrateMakeMessages(state.messages);
+    state.recentThreads = (Array.isArray(state.recentThreads) ? state.recentThreads : []).map((thread) => ({
+      ...thread,
+      messages: migrateMakeMessages(thread?.messages),
+    }));
+    return state;
+  }
+
   const fixtures = Object.freeze({
     ask: { mode: "ask", answer: "정확한 결과를 위해 추가 정보가 필요합니다.", summary: "목적과 대상 독자를 확인해주세요.", improvedPrompt: "", questions: [{ field: "purpose", question: "이 글의 목적은 무엇인가요?", reason: "결과의 방향을 정하는 데 필요합니다.", importance: "required" }, { field: "audience", question: "주요 독자는 누구인가요?", reason: "어휘 수준을 조정하는 데 필요합니다.", importance: "recommended" }], fields: [], ragStatus: "ok" },
     improve: { mode: "improve", answer: "요청을 구체화했습니다.", improvedPrompt: "신규 사용자를 대상으로 제품 출시 안내문을 작성하라.", questions: [], fields: [], ragStatus: "ok" },
   });
 
-  const api = Object.freeze({ SCHEMA_VERSION, normalizeQuestions, migrateMakeMessage, migrateMakeMessages, isRenderableMessage, buildImproveHistory, classifyMakeError, fixtures });
+  const api = Object.freeze({ SCHEMA_VERSION, normalizeQuestions, parseLegacyQuestions, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers, fixtures });
   global.TtalkakMakeMessageModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
