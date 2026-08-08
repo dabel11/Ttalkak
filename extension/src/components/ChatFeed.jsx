@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, Check, Copy, Edit3, Play, Plus, X } from "lucide-react";
 import { EXAMPLE_QUERIES, TIPS } from "../constants";
-import { AssistantResponse, hasExecutablePrompt, PromptText } from "./AssistantResponse";
+import { AssistantResponse, PromptText } from "./AssistantResponse";
 import { getMessageActionVisibility } from "../utils/messageActions";
 
 export function ChatFeed({
@@ -104,7 +104,7 @@ function MessageCard({
 }) {
   const isAssistant = message.role === "assistant";
   const isAsk = message.mode === "ask";
-  const actionVisibility = getMessageActionVisibility(message, hasExecutablePrompt(message));
+  const actionVisibility = getMessageActionVisibility(message);
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;

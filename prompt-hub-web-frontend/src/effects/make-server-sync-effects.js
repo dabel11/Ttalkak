@@ -174,9 +174,9 @@
         const improvedText = typeof improved === "string" ? improved : improved?.text || "";
         const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
         if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
-          state.makeBackendMessage = "Make API 연결됨: 관련 근거 없이 기본 방식으로 다듬었습니다.";
+          global.TtalkakMakeState.setMakeBackendState(state, "connected", "Make API 연결됨: 관련 근거 없이 기본 방식으로 다듬었습니다.");
         } else {
-          state.makeBackendMessage = "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.";
+          global.TtalkakMakeState.setMakeBackendState(state, "connected", "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.");
         }
         return typeof improved === "object" && improved
           ? { ...improved, text: improvedText || polishPrompt(prompt), mode: improved.mode || "improve" }
@@ -195,9 +195,9 @@
         } else if (canUseDemoFallback()) {
           fallbackMessage = `${normalizedError.message} 지금은 데모 첨삭을 표시합니다.`;
         }
-        state.makeBackendMessage = canUseDemoFallback()
+        global.TtalkakMakeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
           ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
-          : getApiFailureMessage("Make 첨삭 API");
+          : getApiFailureMessage("Make 첨삭 API"));
         handleBackendAccessError(error, fallbackMessage);
         console.warn("[TTALKAK] /api/prompts/improve 연동에 실패했습니다.", error);
         if (!canUseDemoFallback()) throw error;

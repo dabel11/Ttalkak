@@ -1,5 +1,5 @@
 import { EXAMPLE_QUERIES } from "../constants";
-import { classifyMakeError } from "../../../shared/make-message-model.js";
+import { classifyMakeError, isExecutableMessage } from "../../../shared/make-message-model.js";
 
 export function buildNoEvidenceMessage(prompt, data) {
   const executablePrompt = getExecutablePrompt(data);
@@ -26,8 +26,7 @@ export function hasPromptPlaceholders(text) {
 
 export function getExecutablePrompt(data) {
   const candidate = String(data?.improvedPrompt || "").trim();
-  if (!candidate || isUtilityOnlyPrompt(candidate)) return null;
-  return candidate;
+  return isExecutableMessage({ ...data, executablePrompt: candidate }) ? candidate : null;
 }
 
 export function getServerEditErrorMessage(error) {
@@ -42,17 +41,4 @@ export function getServerEditErrorMessage(error) {
 
 function getQuestionText(question) {
   return String(question?.question || question || "").trim();
-}
-
-const NON_EXECUTABLE_PROMPT_FRAGMENTS = [
-  "\uad00\ub828 \ud504\ub86c\ud504\ud2b8 \uae30\ubc95 \uadfc\uac70\ub97c \ucc3e\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4",
-  "\uad00\ub828 \uae30\ubc95 \uadfc\uac70 \uc5c6\uc774",
-  "\uac1c\uc120\uc548\uc744 \ub9cc\ub4e4 \uc218 \uc5c6",
-  "\ud655\uc778\uc774 \ud544\uc694",
-];
-
-function isUtilityOnlyPrompt(text) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
-  if (!normalized) return true;
-  return NON_EXECUTABLE_PROMPT_FRAGMENTS.some((fragment) => normalized.includes(fragment));
 }

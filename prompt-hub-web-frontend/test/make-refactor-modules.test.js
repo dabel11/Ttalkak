@@ -1,11 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 global.window = { setTimeout: (callback) => callback() };
 require("../src/make/make-state.js");
 require("../src/make/make-persistence.js");
 require("../src/make/make-controller.js");
 require("../src/make/make-events.js");
+require("../src/effects/error-effects.js");
 
 test("Make request state transitions are centralized", () => {
   const api = global.window.TtalkakMakeState;
@@ -25,6 +28,49 @@ test("Make state mutations use named helpers", () => {
   api.setMakeEditingMessage(state, "message-1");
   api.setMakeBackendFailure(state, "offline");
   assert.deepEqual(state, { composerDraft: "draft", editingMessageId: "message-1", makeBackendStatus: "fallback", makeBackendMessage: "offline" });
+});
+
+test("Make backend status changes use one state API", () => {
+  const state = {};
+  global.window.TtalkakMakeState.setMakeBackendState(state, "checking", "connecting");
+  assert.deepEqual(state, { makeBackendStatus: "checking", makeBackendMessage: "connecting" });
+  global.window.TtalkakMakeState.setMakeBackendFailure(state, "offline");
+  assert.deepEqual(state, { makeBackendStatus: "fallback", makeBackendMessage: "offline" });
+});
+
+test("backend UI policy consumes the shared normalized error model", () => {
+  const notices = [];
+  let cleared = 0;
+  const state = { isLoggedIn: true };
+  const ctx = {
+    clearAuthenticatedSession: () => { cleared += 1; },
+    getAuthToken: () => "expired-token",
+    getBackendErrorCode: (error) => error.code,
+    getBackendErrorMessage: () => "",
+    isDemoAuthToken: () => false,
+    showNotice: (message) => notices.push(message),
+    state,
+  };
+  global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
+  global.window.TtalkakErrorEffects.handleBackendAccessErrorEffect(ctx, { status: 401, code: "LOGIN_REQUIRED" });
+  assert.equal(cleared, 1);
+  assert.equal(state.authView, "login");
+  assert.match(notices[0], /로그인/);
+});
+
+test("strict Make architecture has no duplicated execution, state, or error policy", () => {
+  const root = path.resolve(__dirname, "..", "..");
+  const backendEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/backend-effects.js"), "utf8");
+  const syncEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/make-server-sync-effects.js"), "utf8");
+  const errorEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/error-effects.js"), "utf8");
+  const messageActions = fs.readFileSync(path.join(root, "extension/src/utils/messageActions.js"), "utf8");
+  const conversationMessages = fs.readFileSync(path.join(root, "extension/src/utils/conversationMessages.js"), "utf8");
+  assert.doesNotMatch(`${backendEffects}\n${syncEffects}`, /state\.(makeBackendStatus|makeBackendMessage)\s*=/);
+  assert.match(errorEffects, /switch \(normalized\.kind\)/);
+  assert.doesNotMatch(errorEffects, /AI_SERVICE_UNAVAILABLE|AI_RATE_LIMIT_EXCEEDED|AI_INVALID_RESPONSE/);
+  assert.match(messageActions, /isExecutableMessage\(message\)/);
+  assert.match(conversationMessages, /isExecutableMessage\(/);
+  assert.doesNotMatch(`${messageActions}\n${conversationMessages}`, /NON_EXECUTABLE_PROMPT_FRAGMENTS|isUtilityOnlyPrompt|isAskOnlyResponse/);
 });
 
 test("edited-message retry orchestration lives in the Make controller", async () => {

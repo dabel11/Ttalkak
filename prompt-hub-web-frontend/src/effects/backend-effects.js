@@ -239,28 +239,25 @@
         clearAuthenticatedSession({ keepRoute: true });
         state.authView = "login";
       }
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = wasLoggedIn && hasAnyToken
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
         ? "데모 계정은 서버 대화 조회 없이 로컬 Make 대화를 사용합니다."
         : wasLoggedIn
           ? "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다."
-          : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.";
+          : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.");
       render();
       return;
     }
 
     const api = getMakeApi();
     if (!api?.getMakeThreads && !api?.getMakeFolders) {
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = canUseDemoFallback()
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
         ? "Make demo data 표시 중: Make API wrapper가 없어 데모 데이터를 표시합니다."
-        : getApiFailureMessage("Make API");
+        : getApiFailureMessage("Make API"));
       render();
       return;
     }
 
-    state.makeBackendStatus = "checking";
-    state.makeBackendMessage = "Make API 연결 확인 중";
+    global.TtalkakMakeState.setMakeBackendState(state, "checking", "Make API 연결 확인 중");
 
     const [threadsResult, foldersResult] = await Promise.allSettled([
       api.getMakeThreads?.(getMakeApiToken()),
@@ -299,19 +296,17 @@
         clearAuthenticatedSession({ keepRoute: true });
         state.authView = "login";
       }
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.";
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
       render();
       return;
     }
 
-    state.makeBackendStatus = anyConnected ? "connected" : "fallback";
-    state.makeBackendMessage = anyConnected
+    global.TtalkakMakeState.setMakeBackendState(state, anyConnected ? "connected" : "fallback", anyConnected
       ? "Make API 연결됨. GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
       : canUseDemoFallback()
         ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 데이터를 표시합니다."
-        : getApiFailureMessage("Make API");
+        : getApiFailureMessage("Make API"));
 
     if (shouldRender || state.route === "make") render();
   }

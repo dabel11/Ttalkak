@@ -6,7 +6,8 @@
   function completeMakeRequest(value) { value.inFlight = false; value.failedMessageId = ""; value.failure = null; }
   function setMakeComposerDraft(state, value) { state.composerDraft = String(value || ""); }
   function setMakeEditingMessage(state, messageId = null) { state.editingMessageId = messageId || null; }
-  function setMakeBackendFailure(state, message) { state.makeBackendStatus = "fallback"; state.makeBackendMessage = String(message || ""); }
+  function setMakeBackendState(state, status, message = "") { state.makeBackendStatus = String(status || "idle"); state.makeBackendMessage = String(message || ""); }
+  function setMakeBackendFailure(state, message) { setMakeBackendState(state, "fallback", message); }
   function setMakeRecentThreads(state, threads) { state.recentThreads = Array.isArray(threads) ? threads : []; }
-  global.TtalkakMakeState = Object.freeze({ createMakeRequestState, startMakeRequest, failMakeRequest, completeMakeRequest, setMakeComposerDraft, setMakeEditingMessage, setMakeBackendFailure, setMakeRecentThreads });
+  global.TtalkakMakeState = Object.freeze({ createMakeRequestState, startMakeRequest, failMakeRequest, completeMakeRequest, setMakeComposerDraft, setMakeEditingMessage, setMakeBackendState, setMakeBackendFailure, setMakeRecentThreads });
 })(window);

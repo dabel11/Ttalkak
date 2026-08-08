@@ -31,7 +31,6 @@ export function AssistantResponse({ message, isAsk }) {
     </>
   );
 }
-
 export function PromptText({ text }) {
   const source = String(text || "");
   const pattern = /\[[^\]\n]{1,80}\]/g;
@@ -50,20 +49,6 @@ export function PromptText({ text }) {
 
   if (cursor < source.length) parts.push(source.slice(cursor));
   return <>{parts.length ? parts : source}</>;
-}
-
-export function hasExecutablePrompt(message) {
-  if (!message?.executablePrompt || message.mode === "ask") return false;
-  if (isUtilityOnlyPrompt(message.executablePrompt)) return false;
-  const combinedText = [
-    message.executablePrompt,
-    message.content,
-    message.answer,
-    message.summary,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  return !isAskOnlyResponse(combinedText);
 }
 
 function mergeLists(primary, secondary) {
@@ -160,32 +145,4 @@ function QuestionList({ questions, mode, summary }) {
       </ol>
     </div>
   );
-}
-
-function isUtilityOnlyPrompt(text) {
-  const value = String(text || "").replace(/\s+/g, " ").trim();
-  if (!value) return true;
-  return [
-    "관련 프롬프트 기법 근거를 찾지 못했습니다",
-    "관련 기법 근거 없이",
-    "개선안을 만들 수 없",
-    "확인이 필요",
-  ].some((fragment) => value.includes(fragment));
-}
-
-function isAskOnlyResponse(text) {
-  const value = String(text || "").trim();
-  if (!value) return true;
-  if (isUtilityOnlyPrompt(value)) return true;
-  return [
-    /확인이\s*필요/i,
-    /답변이\s*필요/i,
-    /추가\s*정보가\s*필요/i,
-    /정보를\s*보완해\s*주세요/i,
-    /개선안을?\s*만들\s*수\s*없/i,
-    /만들\s*수\s*없어/i,
-    /아래\s*정보를\s*알려주시면/i,
-    /어떤\s*주제/i,
-    /무엇에\s*대한\s*글/i,
-  ].some((pattern) => pattern.test(value));
 }

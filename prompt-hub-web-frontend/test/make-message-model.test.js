@@ -68,6 +68,12 @@ test("errors are separated into actionable states", () => {
   assert.equal(model.classifyMakeError({}).kind, "network");
 });
 
+test("executable policy rejects ask-only and utility-only responses", () => {
+  assert.equal(model.isExecutableMessage({ role: "assistant", mode: "improve", executablePrompt: "관련 기법 근거 없이 기본 방식으로 다듬었습니다." }), false);
+  assert.equal(model.isExecutableMessage({ role: "assistant", mode: "improve", executablePrompt: "추가 정보가 필요합니다. 대상 독자는 누구인가요?" }), false);
+  assert.equal(model.isExecutableMessage({ role: "assistant", mode: "improve", executablePrompt: "신규 사용자를 위한 출시 안내문을 작성하세요." }), true);
+});
+
 test("ask fixture contains required and optional questions", () => {
   assert.equal(fixtures.ask.mode, "ask");
   assert.deepEqual(fixtures.ask.questions.map((item) => item.importance), ["required", "recommended"]);
