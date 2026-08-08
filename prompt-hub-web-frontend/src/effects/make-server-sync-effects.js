@@ -184,35 +184,16 @@
       } catch (error) {
         const status = Number(error?.status || error?.payload?.status || 0);
         const code = String(error?.payload?.code || error?.code || "").toUpperCase();
-        let fallbackMessage = canUseDemoFallback()
-          ? "프롬프트 첨삭 요청에 실패해 데모 첨삭을 표시합니다."
-          : "프롬프트 첨삭 요청에 실패했습니다.";
+        const normalizedError = global.TtalkakMakeMessageModel.classifyMakeError(error);
+        let fallbackMessage = normalizedError.message;
         if (status === 404) {
           fallbackMessage = canUseDemoFallback()
             ? "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다."
             : "요청한 프롬프트 또는 리소스를 찾지 못했습니다.";
-        } else if (status === 429) {
-          if (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED") {
-            fallbackMessage = canUseDemoFallback()
-              ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요. 지금은 데모 첨삭을 표시합니다."
-              : "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
-          } else {
-            fallbackMessage = canUseDemoFallback()
-              ? "요청이 많습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
-              : "요청이 많습니다. 잠시 후 다시 시도해주세요.";
-          }
-        } else if (status === 500) {
-          fallbackMessage = canUseDemoFallback()
-            ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
-            : "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-        } else if (status === 503 || code === "AI_SERVICE_UNAVAILABLE") {
-          fallbackMessage = canUseDemoFallback()
-            ? "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
-            : "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
-        } else if (status === 504 || code === "AI_TIMEOUT") {
-          fallbackMessage = canUseDemoFallback()
-            ? "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요. 지금은 데모 첨삭을 표시합니다."
-            : "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+        } else if (status === 429 && (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED")) {
+          fallbackMessage = "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
+        } else if (canUseDemoFallback()) {
+          fallbackMessage = `${normalizedError.message} 지금은 데모 첨삭을 표시합니다.`;
         }
         state.makeBackendMessage = canUseDemoFallback()
           ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
@@ -268,14 +249,14 @@
         try {
           const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
           if (refreshedThread?.id) {
-            state.recentThreads = [
+            global.TtalkakMakeState.setMakeRecentThreads(state, [
               refreshedThread,
               ...state.recentThreads.filter((thread) => {
                 const id = String(thread.id || "");
                 const serverId = String(thread.serverId || "");
                 return id !== String(refreshedThread.id) && serverId !== String(refreshedThread.serverId || refreshedThread.id);
               }),
-            ].slice(0, 8);
+            ].slice(0, 8));
             normalizeRecentThreads();
             openRecentMakeThreadState(state, refreshedThread);
             if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);

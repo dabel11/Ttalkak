@@ -42,14 +42,7 @@
       case "INVALID_STATE":
         return "현재 상태에서는 처리할 수 없습니다.";
       case "REQUEST_TIMEOUT":
-      case "AI_TIMEOUT":
         return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_SERVICE_UNAVAILABLE":
-        return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_RATE_LIMIT_EXCEEDED":
-        return "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_INVALID_RESPONSE":
-        return "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
       case "RATE_LIMIT_EXCEEDED":
@@ -125,11 +118,11 @@
 
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
-      state.recentThreads = [];
+      global.TtalkakMakeState.setMakeRecentThreads(state, []);
       return true;
     }
 
-    state.recentThreads = validThreads.map((thread) => ({
+    global.TtalkakMakeState.setMakeRecentThreads(state, validThreads.map((thread) => ({
       id: thread.id,
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
@@ -138,7 +131,7 @@
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
-    }));
+    })));
     normalizeRecentThreads();
     return true;
   }

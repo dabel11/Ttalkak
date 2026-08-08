@@ -2317,15 +2317,8 @@ function bindGlobalNavigationEvents() {
 
 function bindGlobalMenuDismissEvents() {
   document.querySelector("#app")?.addEventListener("click", (event) => {
-    const shouldCloseFolderMenu = state.openFolderMenuId && !event.target.closest("[data-folder-item]");
-    const shouldCloseThreadMenu = state.openThreadMenuId && !event.target.closest("[data-thread-item]");
     const shouldClosePromptCardMenu = state.openPromptCardMenuId && !event.target.closest(".prompt-card-menu-wrap");
-    if (!shouldCloseFolderMenu && !shouldCloseThreadMenu && !shouldClosePromptCardMenu) return;
-    if (shouldCloseFolderMenu) state.openFolderMenuId = null;
-    if (shouldCloseThreadMenu) {
-      state.openThreadMenuId = null;
-      state.creatingThreadFolderId = null;
-    }
+    if (!shouldClosePromptCardMenu) return;
     if (shouldClosePromptCardMenu) state.openPromptCardMenuId = null;
     render();
   });
@@ -4514,65 +4507,25 @@ function bindMakeEvents() {
 }
 
 function bindDelegatedMakeEvents() {
-  const root = document.getElementById("app");
-  window.TtalkakMakeEvents.bindDelegatedMakeEvents(root, {
-    input(event) {
-      const textarea = event.target.closest?.("[data-autosize-textarea]");
-      if (!textarea) return;
-      window.TtalkakMakeState.setMakeComposerDraft(state, textarea.value);
-      autosizeTextarea(textarea);
-    },
-    keydown(event) {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-      const form = event.target.closest?.("[data-composer], [data-edit-message-form]");
-      if (!form) return;
-      event.preventDefault();
-      submitMakeComposer(form);
-    },
-    submit(event) {
-      const form = event.target.closest?.("form");
-      if (!form) return;
-      if (form.matches("[data-composer]")) { event.preventDefault(); submitMakePrompt(form); }
-      else if (form.matches("[data-ask-answer-form]")) { event.preventDefault(); submitAskAnswerForm(form); }
-      else if (form.matches("[data-edit-message-form]")) { event.preventDefault(); resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message")); }
-      else if (form.matches("[data-folder-create-form]")) { event.preventDefault(); createMakeFolder(new FormData(form).get("folderName")); }
-      else if (form.matches("[data-thread-folder-create-form]")) { event.preventDefault(); createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName")); }
-      else if (form.matches("[data-folder-edit-form]")) { event.preventDefault(); renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName")); }
-    },
-    change(event) {
-      const select = event.target.closest?.("[data-thread-folder]");
-      if (!select) return;
-      if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); render(); return; }
-      state.openThreadMenuId = null;
-      moveThreadToFolder(select.dataset.threadFolder, select.value);
-    },
-    click(event) {
-      const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-retry-message], [data-copy-message], [data-edit-message], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
-      if (!target) return;
-      if (target.matches("[data-template]")) applyTemplate(target.dataset.template);
-      else if (target.matches("[data-toggle-templates]")) toggleTemplateBar(target);
-      else if (target.matches("[data-retry-message]")) { const message = state.messages.find((item) => item.id === target.dataset.retryMessage && item.role === "user"); if (message) resendEditedMessage(message.id, message.content); }
-      else if (target.matches("[data-copy-message]")) copyMakeMessage(target.dataset.copyMessage);
-      else if (target.matches("[data-edit-message]")) { window.TtalkakMakeState.setMakeEditingMessage(state, target.dataset.editMessage); pendingMessageScrollId = target.dataset.editMessage; render(); }
-      else if (target.matches("[data-cancel-message-edit]")) { const form = target.closest("[data-edit-message-form]"); pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId; window.TtalkakMakeState.setMakeEditingMessage(state); render(); }
-      else if (target.matches("[data-save-message]")) saveMakeMessage(target.dataset.saveMessage);
-      else if (target.matches("[data-share-message]")) openShareFromMakeMessage(target.dataset.shareMessage);
-      else if (target.matches("[data-execute-message]")) openExecuteModal(target.dataset.executeMessage);
-      else if (target.matches("[data-new-chat]")) startNewChat();
-      else if (target.matches("[data-thread-menu]")) { event.preventDefault(); event.stopPropagation(); const id = target.dataset.threadMenu; state.openThreadMenuId = state.openThreadMenuId === id ? null : id; if (state.openThreadMenuId !== id) state.creatingThreadFolderId = null; render(); }
-      else if (target.matches("[data-open-thread]")) { state.openThreadMenuId = null; openRecentThread(target.dataset.openThread); }
-      else if (target.matches("[data-delete-thread]")) { event.preventDefault(); event.stopPropagation(); state.openThreadMenuId = null; openConfirmAction({ type: "delete-thread", targetId: target.dataset.deleteThread, title: "대화 삭제", message: "이 대화를 최근 대화 목록에서 삭제할까요?", confirmLabel: "삭제", danger: true }); }
-      else if (target.matches("[data-show-folder-form]")) { if (guardAdminUserAction()) return; if (!state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } state.creatingFolder = true; render(); window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0); }
-      else if (target.matches("[data-cancel-folder-create]")) { state.creatingFolder = false; render(); }
-      else if (target.matches("[data-open-folder]")) { state.activeFolderId = target.dataset.openFolder; state.openFolderMenuId = null; render(); }
-      else if (target.matches("[data-folder-menu]")) { event.preventDefault(); event.stopPropagation(); if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } const id = target.dataset.folderMenu; state.openFolderMenuId = state.openFolderMenuId === id ? null : id; render(); }
-      else if (target.matches("[data-edit-folder]")) { event.preventDefault(); event.stopPropagation(); state.editingFolderId = target.dataset.editFolder; state.openFolderMenuId = null; render(); }
-      else if (target.matches("[data-cancel-folder-edit]")) { state.editingFolderId = null; render(); }
-      else if (target.matches("[data-delete-folder]")) { event.preventDefault(); event.stopPropagation(); state.openFolderMenuId = null; openConfirmAction({ type: "delete-folder", targetId: target.dataset.deleteFolder, title: "폴더 삭제", message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?", confirmLabel: "삭제", danger: true }); }
-      else if (target.matches("[data-start-thread-folder-create]")) { event.preventDefault(); event.stopPropagation(); if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) { showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`); return; } state.creatingThreadFolderId = target.dataset.startThreadFolderCreate; render(); window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0); }
-      else if (target.matches("[data-cancel-thread-folder-create]")) { event.preventDefault(); event.stopPropagation(); state.creatingThreadFolderId = null; render(); }
+  const handlers = window.TtalkakMakeEvents.createDelegatedMakeHandlers({
+    state,
+    maxFolders: MAX_CUSTOM_MAKE_FOLDERS,
+    actions: {
+      guard: guardAdminUserAction, notice: showNotice, render,
+      setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value),
+      setEditing: (id) => window.TtalkakMakeState.setMakeEditingMessage(state, id),
+      setPendingScroll: (id) => { pendingMessageScrollId = id; },
+      autosize: autosizeTextarea, submitComposer: submitMakeComposer, submitPrompt: submitMakePrompt,
+      submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
+      createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
+      renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
+      applyTemplate, toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
+      share: openShareFromMakeMessage, execute: openExecuteModal, newChat: startNewChat,
+      openThread: openRecentThread, confirm: openConfirmAction, folderCount: getCustomMakeFolderCount,
+      focusLater: (selector) => window.setTimeout(() => document.querySelector(selector)?.focus(), 0),
     },
   });
+  window.TtalkakMakeEvents.bindDelegatedMakeEvents(document.getElementById("app"), handlers);
 }
 
 function submitMakeComposer(composer) {
@@ -6965,19 +6918,12 @@ function normalizePersistedLikeCounts() {
 }
 
 function normalizeRecentThreads() {
-  const seen = new Set();
-  window.TtalkakMakePersistence.migrateAndPersistMakeState(state, window.TtalkakMakeMessageModel, persistState);
-
-  window.TtalkakMakeState.setMakeRecentThreads(state, state.recentThreads.filter((thread, index) => {
-    if (!thread.id) {
-      thread.id = `legacy-thread-${Date.now()}-${index}`;
-    }
-    const key = thread.id;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    thread.dedupeKey = key;
-    return true;
-  }));
+  window.TtalkakMakePersistence.normalizeAndPersistMakeState(
+    state,
+    window.TtalkakMakeMessageModel,
+    window.TtalkakMakeState,
+    persistState,
+  );
 }
 
 function normalizeAssistantPromptOutputs() {

@@ -5,6 +5,7 @@ global.window = { setTimeout: (callback) => callback() };
 require("../src/make/make-state.js");
 require("../src/make/make-persistence.js");
 require("../src/make/make-controller.js");
+require("../src/make/make-events.js");
 
 test("Make request state transitions are centralized", () => {
   const api = global.window.TtalkakMakeState;
@@ -44,4 +45,32 @@ test("edited-message retry orchestration lives in the Make controller", async ()
   };
   await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "after");
   assert.deepEqual(calls, ["start", "apply", "thinking:true", "thinking:false", "complete", "after", "sync"]);
+});
+
+test("Make persistence owns migration, deduplication, and persistence", () => {
+  const state = { messages: [], recentThreads: [{ id: "same" }, { id: "same" }, {}] };
+  let persisted = 0;
+  global.window.TtalkakMakePersistence.normalizeAndPersistMakeState(
+    state,
+    { migratePersistedMakeState: (value) => value },
+    global.window.TtalkakMakeState,
+    () => { persisted += 1; },
+  );
+  assert.equal(state.recentThreads.length, 2);
+  assert.match(state.recentThreads[1].id, /^legacy-thread-/);
+  assert.equal(persisted, 1);
+});
+
+test("Make event routing is defined outside app.js", () => {
+  const calls = [];
+  const state = { isLoggedIn: true, messages: [] };
+  const actions = new Proxy({}, { get: (_target, key) => {
+    if (key === "guard") return () => false;
+    if (key === "folderCount") return () => 0;
+    return (...args) => calls.push([key, ...args]);
+  } });
+  const handlers = global.window.TtalkakMakeEvents.createDelegatedMakeHandlers({ state, maxFolders: 5, actions });
+  const button = { dataset: {}, matches: (selector) => selector === "[data-new-chat]" };
+  handlers.click({ target: { closest: () => button } });
+  assert.deepEqual(calls, [["newChat"]]);
 });

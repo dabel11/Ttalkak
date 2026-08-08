@@ -4,6 +4,7 @@ const model = require("../src/utils/make-message-model.js");
 const fixtures = require("./fixtures/make-responses.js");
 const fs = require("node:fs");
 const vm = require("node:vm");
+const { transform, sourcePath } = require("../../scripts/build-make-message-model.cjs");
 
 function loadCanonicalSharedModel() {
   const filename = require.resolve("../../shared/make-message-model.js");
@@ -33,6 +34,11 @@ test("browser distribution stays in parity with the canonical shared model", () 
     assert.deepEqual(model.migrateMakeMessage(sample), JSON.parse(JSON.stringify(shared.migrateMakeMessage(sample))));
   }
   assert.deepEqual(model.classifyMakeError({ code: "AI_RATE_LIMIT_EXCEEDED", status: 429 }), JSON.parse(JSON.stringify(shared.classifyMakeError({ code: "AI_RATE_LIMIT_EXCEEDED", status: 429 }))));
+});
+
+test("browser message model is generated exactly from the canonical shared source", () => {
+  const generated = fs.readFileSync(require.resolve("../src/utils/make-message-model.js"), "utf8");
+  assert.equal(generated, transform(fs.readFileSync(sourcePath, "utf8")));
 });
 
 test("legacy assistant content is restored and empty messages are removed", () => {

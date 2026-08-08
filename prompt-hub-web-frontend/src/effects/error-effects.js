@@ -14,6 +14,7 @@
     const status = Number(error?.status || error?.payload?.status || 0);
     const code = getBackendErrorCode(error);
     const backendMessage = getBackendErrorMessage(error);
+    const normalizedError = global.TtalkakMakeMessageModel?.classifyMakeError(error);
     const keepSession = Boolean(options.keepSession);
 
     return (
@@ -34,10 +35,10 @@
       handleNotFoundError({ status, code, backendMessage, showNotice }) ||
       handleInvalidRequestError({ status, code, backendMessage, showNotice }) ||
       handleConflictError({ status, code, backendMessage, showNotice }) ||
-      handleRateLimitError({ status, code, backendMessage, showNotice }) ||
-      handleTimeoutError({ status, code, backendMessage, showNotice }) ||
-      handleAiUnavailableError({ status, code, backendMessage, showNotice }) ||
-      handleServerError({ status, code, backendMessage, showNotice }) ||
+      handleRateLimitError({ status, code, backendMessage, normalizedError, showNotice }) ||
+      handleTimeoutError({ status, code, backendMessage, normalizedError, showNotice }) ||
+      handleAiUnavailableError({ status, code, backendMessage, normalizedError, showNotice }) ||
+      handleServerError({ status, code, backendMessage, normalizedError, showNotice }) ||
       handleFallbackBackendError({ backendMessage, fallbackMessage, showNotice })
     );
   }
@@ -122,7 +123,7 @@
     return true;
   }
 
-  function handleRateLimitError({ status, code, backendMessage, showNotice }) {
+  function handleRateLimitError({ status, code, backendMessage, normalizedError, showNotice }) {
     if (
       status !== 429 &&
       code !== "RATE_LIMIT_EXCEEDED" &&
@@ -137,30 +138,30 @@
         (code === "FREE_TRIAL_LIMIT_EXCEEDED"
           ? "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요."
           : code === "AI_RATE_LIMIT_EXCEEDED"
-            ? "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            ? normalizedError?.message
             : "요청이 많습니다. 잠시 후 다시 시도해주세요."),
     );
     return true;
   }
 
-  function handleTimeoutError({ status, code, backendMessage, showNotice }) {
+  function handleTimeoutError({ status, code, backendMessage, normalizedError, showNotice }) {
     if (status !== 0 && status !== 504 && code !== "REQUEST_TIMEOUT" && code !== "AI_TIMEOUT") return false;
 
-    showNotice(backendMessage || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
+    showNotice(backendMessage || normalizedError?.message);
     return true;
   }
 
-  function handleAiUnavailableError({ status, code, backendMessage, showNotice }) {
+  function handleAiUnavailableError({ status, code, backendMessage, normalizedError, showNotice }) {
     if (status !== 503 && code !== "AI_SERVICE_UNAVAILABLE") return false;
 
-    showNotice(backendMessage || "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    showNotice(backendMessage || normalizedError?.message);
     return true;
   }
 
-  function handleServerError({ status, code, backendMessage, showNotice }) {
+  function handleServerError({ status, code, backendMessage, normalizedError, showNotice }) {
     if (status < 500 && code !== "INTERNAL_SERVER_ERROR") return false;
 
-    showNotice(backendMessage || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    showNotice(backendMessage || normalizedError?.message);
     return true;
   }
 

@@ -2,6 +2,7 @@
   "name": "ttalkak-web-frontend",
   "private": true,
   "scripts": {
+    "build:shared": "node ../scripts/build-make-message-model.cjs",
     "test": "node --test test/*.test.js"
   }
 }
