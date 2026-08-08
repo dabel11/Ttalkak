@@ -272,7 +272,7 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, failureMessage, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -288,7 +288,7 @@
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
       : recoveredContent;
     const questionSection = normalizedQuestions.length
-      ? MessageQuestionsView({ escapeHtml }, { isAsk: effectiveIsAsk, questions: normalizedQuestions })
+      ? MessageQuestionsView({ escapeAttr, escapeHtml }, { isAsk: effectiveIsAsk, messageId: id, questions: normalizedQuestions })
       : "";
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
@@ -337,7 +337,7 @@
               </form>`
             : `<article class="message ${escapeAttr(role)}">
                 <p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>
-                ${failureMessage ? `<div class="message-failure-status" role="status">${escapeHtml(failureMessage)}</div>` : ""}
+                ${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}
                 <div class="user-message-actions">
                   <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
                 </div>

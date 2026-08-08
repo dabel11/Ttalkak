@@ -136,26 +136,30 @@
   }
 
   function MessageQuestionsView(ctx, data) {
-    const { escapeHtml } = ctx;
-    const { isAsk, questions } = data;
+    const { escapeAttr, escapeHtml } = ctx;
+    const { isAsk, messageId, questions } = data;
     const title = isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요";
 
     return `
-      <section class="message-question-section" aria-label="${escapeHtml(title)}">
+      <section class="message-question-section" aria-label="${escapeHtml(title)}" ${isAsk ? 'aria-live="polite"' : ""}>
         <strong>${escapeHtml(title)}</strong>
+        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" novalidate><div class="ask-answer-progress" data-ask-answer-progress role="status">필수 답변을 입력해주세요.</div>` : ""}
         <ol>
           ${questions
-            .map(
-              (item) => `
+            .map((item, index) => {
+              const inputId = `ask-${messageId}-${item.field || index}`;
+              const reasonId = `${inputId}-reason`;
+              return `
                 <li class="${item.importance === "required" ? "required" : "recommended"}">
-                  <span>${escapeHtml(item.question)}</span>
-                  <em>${item.importance === "required" ? "필수 정보" : "선택 정보"}</em>
-                  ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ""}
+                  <label for="${escapeAttr(inputId)}"><span>${escapeHtml(item.question)}</span><em>${item.importance === "required" ? "필수" : "선택"}</em></label>
+                  ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} ${item.reason ? `aria-describedby="${escapeAttr(reasonId)}"` : ""} />` : ""}
+                  ${item.reason ? `<small id="${escapeAttr(reasonId)}">${escapeHtml(item.reason)}</small>` : ""}
                 </li>
-              `,
-            )
+              `;
+            })
             .join("")}
         </ol>
+        ${isAsk ? '<button class="ask-answer-submit" type="submit">답변 제출</button></form>' : ""}
       </section>
     `;
   }

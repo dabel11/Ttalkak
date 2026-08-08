@@ -749,6 +749,7 @@ let makeRequestInFlight = false;
 let makeInteractionVersion = 0;
 let makeFailedMessageId = "";
 let makeFailedMessageText = "";
+let makeFailedRetryable = false;
 let makeServerSyncEffects = null;
 
 const icons = {
@@ -1587,6 +1588,7 @@ function MessageBubble(message) {
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
       failureMessage: !isAssistant && makeFailedMessageId === message.id ? makeFailedMessageText : "",
+      failureRetryable: !isAssistant && makeFailedMessageId === message.id && makeFailedRetryable,
       isSaved: isAssistant && isPromptSaved(message.id),
       mode: message.mode || "improve",
       questions: message.questions || [],
@@ -4565,6 +4567,32 @@ function bindMakeTemplateEvents() {
 }
 
 function bindMakeMessageActionEvents() {
+  document.querySelectorAll("[data-ask-answer-form]").forEach((form) => {
+    const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
+    const progress = form.querySelector("[data-ask-answer-progress]");
+    const updateProgress = () => {
+      const required = inputs.filter((input) => input.required);
+      const completed = required.filter((input) => input.value.trim()).length;
+      if (progress) progress.textContent = required.length ? `필수 답변 ${completed}/${required.length}개 입력` : "답변을 입력해주세요.";
+    };
+    inputs.forEach((input) => input.addEventListener("input", () => {
+      input.removeAttribute("aria-invalid");
+      updateProgress();
+    }));
+    updateProgress();
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitAskAnswerForm(form);
+    });
+  });
+
+  document.querySelectorAll("[data-retry-message]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = state.messages.find((item) => item.id === button.dataset.retryMessage && item.role === "user");
+      if (message) resendEditedMessage(message.id, message.content);
+    });
+  });
+
   document.querySelectorAll("[data-copy-message]").forEach((button) => {
     button.addEventListener("click", () => {
       copyMakeMessage(button.dataset.copyMessage);
@@ -4843,6 +4871,7 @@ async function submitMakePrompt(composer) {
   isMakeThinking = true;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
+  makeFailedRetryable = false;
   updateRecentThread(threadId);
   render();
   scheduleMakeLatestScroll({ behavior: "auto" });
@@ -4862,12 +4891,15 @@ async function submitMakePrompt(composer) {
     if (recoveredThread) {
       makeFailedMessageId = "";
       makeFailedMessageText = "";
+      makeFailedRetryable = false;
       showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
       return;
     }
 
+    const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
     makeFailedMessageId = userMessageId;
-    makeFailedMessageText = "AI 응답을 생성하지 못했습니다. 이 메시지는 전송 위치에 남겨두었습니다.";
+    makeFailedMessageText = failure.message;
+    makeFailedRetryable = failure.retryable;
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
@@ -4880,6 +4912,7 @@ async function submitMakePrompt(composer) {
   makeRequestInFlight = false;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
+  makeFailedRetryable = false;
   appendMakeAssistantMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
@@ -4906,6 +4939,9 @@ async function submitMakePrompt(composer) {
   }
   syncMakeThreadWithBackend(threadId);
   render();
+  if (improvedPrompt.mode === "ask") {
+    window.setTimeout(() => document.querySelector(`[data-ask-answer-form="${CSS.escape(assistantMessageId)}"] [data-ask-answer-input]`)?.focus(), 0);
+  }
   scheduleMakeLatestScroll({ behavior: "auto" });
 }
 async function copyMakeMessage(messageId) {
@@ -4992,6 +5028,7 @@ async function resendEditedMessage(messageId, value) {
   isMakeThinking = true;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
+  makeFailedRetryable = false;
   queueLatestMakeScroll(messageId, { mode: "immediate" });
   render();
   let improvedPrompt = "";
@@ -5001,8 +5038,10 @@ async function resendEditedMessage(messageId, value) {
   } catch (error) {
     isMakeThinking = false;
     makeRequestInFlight = false;
+    const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
     makeFailedMessageId = messageId;
-    makeFailedMessageText = "수정한 메시지로 다시 개선하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    makeFailedMessageText = failure.message;
+    makeFailedRetryable = failure.retryable;
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
     handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
@@ -5014,6 +5053,7 @@ async function resendEditedMessage(messageId, value) {
   makeRequestInFlight = false;
   makeFailedMessageId = "";
   makeFailedMessageText = "";
+  makeFailedRetryable = false;
   finishEditedMakeMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
@@ -7105,12 +7145,32 @@ function isBackendNumericId(value) {
 }
 
 function buildMakeImproveHistory(messages = state.messages) {
-  return (Array.isArray(messages) ? messages : [])
-    .filter((message) => message && (message.role === "user" || message.role === "assistant") && String(message.content || "").trim())
-    .map((message) => ({
-      role: message.role,
-      content: String(message.role === "assistant" ? message.answer || message.content || "" : message.content || ""),
-    }));
+  return window.TtalkakMakeMessageModel.buildImproveHistory(messages);
+}
+
+function submitAskAnswerForm(form) {
+  const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
+  const invalid = inputs.filter((input) => input.required && !input.value.trim());
+  inputs.forEach((input) => input.toggleAttribute("aria-invalid", invalid.includes(input)));
+  if (invalid.length) {
+    invalid[0].focus();
+    const progress = form.querySelector("[data-ask-answer-progress]");
+    if (progress) progress.textContent = `필수 답변 ${invalid.length}개를 더 입력해주세요.`;
+    return;
+  }
+  const answers = inputs.map((input) => {
+    const value = input.value.trim();
+    if (!value) return "";
+    const question = input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name;
+    return `- ${question}: ${value}`;
+  }).filter(Boolean);
+  if (!answers.length) return;
+  const composer = document.querySelector("[data-make-composer]");
+  const textarea = composer?.querySelector('[name="prompt"]');
+  if (!composer || !textarea) return;
+  textarea.value = `추가 정보:\n${answers.join("\n")}`;
+  state.composerDraft = textarea.value;
+  submitMakeComposer(composer);
 }
 
 function getMakeThreadById(threadId = state.activeThreadId) {
@@ -7343,8 +7403,10 @@ function normalizeRecentThreads() {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     thread.dedupeKey = key;
+    thread.messages = window.TtalkakMakeMessageModel.migrateMakeMessages(thread.messages);
     return true;
   });
+  state.messages = window.TtalkakMakeMessageModel.migrateMakeMessages(state.messages);
 }
 
 function normalizeAssistantPromptOutputs() {

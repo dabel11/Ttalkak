@@ -225,3 +225,13 @@
   color: #b45309;
   font-weight: 800;
 }
+
+.ask-answer-form { display: grid; gap: 12px; }
+.ask-answer-progress { color: #536b65; font-size: 0.82rem; }
+.ask-answer-form label { display: flex; gap: 8px; align-items: baseline; }
+.ask-answer-form label em { color: #8a4b08; font-size: 0.75rem; font-style: normal; }
+.ask-answer-form input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid rgba(11, 81, 67, 0.22); border-radius: 10px; background: #fff; color: #173f36; }
+.ask-answer-form input:focus { outline: 3px solid rgba(24, 122, 101, 0.2); border-color: #187a65; }
+.ask-answer-form input[aria-invalid="true"] { border-color: #b42318; }
+.ask-answer-submit { justify-self: end; padding: 9px 14px; border: 0; border-radius: 10px; background: #0b5143; color: #fff; font-weight: 700; cursor: pointer; }
+.message-failure-status button { margin-left: 8px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; font-weight: 700; cursor: pointer; }

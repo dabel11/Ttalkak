@@ -1,5 +1,6 @@
 (function () {
   const { unwrapItems } = window.TTALKAK_API_CORE;
+  const { migrateMakeMessage, migrateMakeMessages } = window.TtalkakMakeMessageModel;
 
   function normalizeTags(value) {
     if (Array.isArray(value)) {
@@ -321,7 +322,7 @@
     const improvedPrompt = mode === "ask"
       ? ""
       : String(item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.improved_prompt || "").trim();
-    return {
+    return migrateMakeMessage({
       id: String(item?.id || item?.messageId || `backend-message-${index}`),
       role: item?.role || item?.sender || "assistant",
       content: String(item?.content || item?.text || item?.message || ""),
@@ -336,11 +337,11 @@
       sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
       createdAt: toTimestamp(item?.createdAt, item?.createdDate, item?.timestamp),
       raw: item,
-    };
+    }, index);
   }
 
   function normalizeMakeThread(item, index = 0) {
-    const messages = unwrapItems(item?.messages || item?.chatMessages || item?.conversation).map(normalizeMakeMessage);
+    const messages = migrateMakeMessages(unwrapItems(item?.messages || item?.chatMessages || item?.conversation).map(normalizeMakeMessage));
     const lastMessage = messages[messages.length - 1];
     const serverId = item?.id || item?.threadId || item?.conversationId || "";
     return {
