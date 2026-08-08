@@ -2,12 +2,37 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const model = require("../src/utils/make-message-model.js");
 const fixtures = require("./fixtures/make-responses.js");
+const fs = require("node:fs");
+const vm = require("node:vm");
+
+function loadCanonicalSharedModel() {
+  const filename = require.resolve("../../shared/make-message-model.js");
+  const source = fs.readFileSync(filename, "utf8")
+    .replace(/export default MakeMessageModel;?/g, "")
+    .replace(/export\s+(?=(const|function)\s)/g, "")
+    .concat("\nthis.__model = MakeMessageModel;");
+  const context = {};
+  vm.runInNewContext(source, context, { filename });
+  return context.__model;
+}
 
 test("question aliases migrate to ask and disable executable prompt", () => {
   const message = model.migrateMakeMessage({ type: "question", improvedPrompt: "실행 금지", questions: ["목적은 무엇인가요?"] });
   assert.equal(message.mode, "ask");
   assert.equal(message.improvedPrompt, "");
   assert.equal(message.questions.length, 1);
+});
+
+test("browser distribution stays in parity with the canonical shared model", () => {
+  const shared = loadCanonicalSharedModel();
+  const samples = [
+    { role: "assistant", type: "question", answer: "추가 정보가 필요합니다.\n- 목적: 무엇을 만들까요?", questions: [{ field: "purpose", question: "무엇을 만들까요?" }] },
+    { role: "assistant", mode: "improve", improvedPrompt: "정리된 프롬프트", fields: { tone: "professional" }, changes: ["구조 개선"] },
+  ];
+  for (const sample of samples) {
+    assert.deepEqual(model.migrateMakeMessage(sample), JSON.parse(JSON.stringify(shared.migrateMakeMessage(sample))));
+  }
+  assert.deepEqual(model.classifyMakeError({ code: "AI_RATE_LIMIT_EXCEEDED", status: 429 }), JSON.parse(JSON.stringify(shared.classifyMakeError({ code: "AI_RATE_LIMIT_EXCEEDED", status: 429 }))));
 });
 
 test("legacy assistant content is restored and empty messages are removed", () => {

@@ -4509,8 +4509,6 @@ function toggleLibraryDemoData() {
 function bindMakeEvents() {
   bindDelegatedMakeEvents();
   bindMakeFeedScrollEvents({ state });
-  bindMakeThreadEvents();
-  bindMakeFolderEvents();
   document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
   document.querySelectorAll("[data-ask-answer-input]").forEach(window.TtalkakMakeEvents.updateAskProgress);
 }
@@ -4537,9 +4535,19 @@ function bindDelegatedMakeEvents() {
       if (form.matches("[data-composer]")) { event.preventDefault(); submitMakePrompt(form); }
       else if (form.matches("[data-ask-answer-form]")) { event.preventDefault(); submitAskAnswerForm(form); }
       else if (form.matches("[data-edit-message-form]")) { event.preventDefault(); resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message")); }
+      else if (form.matches("[data-folder-create-form]")) { event.preventDefault(); createMakeFolder(new FormData(form).get("folderName")); }
+      else if (form.matches("[data-thread-folder-create-form]")) { event.preventDefault(); createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName")); }
+      else if (form.matches("[data-folder-edit-form]")) { event.preventDefault(); renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName")); }
+    },
+    change(event) {
+      const select = event.target.closest?.("[data-thread-folder]");
+      if (!select) return;
+      if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); render(); return; }
+      state.openThreadMenuId = null;
+      moveThreadToFolder(select.dataset.threadFolder, select.value);
     },
     click(event) {
-      const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-retry-message], [data-copy-message], [data-edit-message], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message]");
+      const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-retry-message], [data-copy-message], [data-edit-message], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
       if (!target) return;
       if (target.matches("[data-template]")) applyTemplate(target.dataset.template);
       else if (target.matches("[data-toggle-templates]")) toggleTemplateBar(target);
@@ -4550,314 +4558,20 @@ function bindDelegatedMakeEvents() {
       else if (target.matches("[data-save-message]")) saveMakeMessage(target.dataset.saveMessage);
       else if (target.matches("[data-share-message]")) openShareFromMakeMessage(target.dataset.shareMessage);
       else if (target.matches("[data-execute-message]")) openExecuteModal(target.dataset.executeMessage);
+      else if (target.matches("[data-new-chat]")) startNewChat();
+      else if (target.matches("[data-thread-menu]")) { event.preventDefault(); event.stopPropagation(); const id = target.dataset.threadMenu; state.openThreadMenuId = state.openThreadMenuId === id ? null : id; if (state.openThreadMenuId !== id) state.creatingThreadFolderId = null; render(); }
+      else if (target.matches("[data-open-thread]")) { state.openThreadMenuId = null; openRecentThread(target.dataset.openThread); }
+      else if (target.matches("[data-delete-thread]")) { event.preventDefault(); event.stopPropagation(); state.openThreadMenuId = null; openConfirmAction({ type: "delete-thread", targetId: target.dataset.deleteThread, title: "대화 삭제", message: "이 대화를 최근 대화 목록에서 삭제할까요?", confirmLabel: "삭제", danger: true }); }
+      else if (target.matches("[data-show-folder-form]")) { if (guardAdminUserAction()) return; if (!state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } state.creatingFolder = true; render(); window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0); }
+      else if (target.matches("[data-cancel-folder-create]")) { state.creatingFolder = false; render(); }
+      else if (target.matches("[data-open-folder]")) { state.activeFolderId = target.dataset.openFolder; state.openFolderMenuId = null; render(); }
+      else if (target.matches("[data-folder-menu]")) { event.preventDefault(); event.stopPropagation(); if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } const id = target.dataset.folderMenu; state.openFolderMenuId = state.openFolderMenuId === id ? null : id; render(); }
+      else if (target.matches("[data-edit-folder]")) { event.preventDefault(); event.stopPropagation(); state.editingFolderId = target.dataset.editFolder; state.openFolderMenuId = null; render(); }
+      else if (target.matches("[data-cancel-folder-edit]")) { state.editingFolderId = null; render(); }
+      else if (target.matches("[data-delete-folder]")) { event.preventDefault(); event.stopPropagation(); state.openFolderMenuId = null; openConfirmAction({ type: "delete-folder", targetId: target.dataset.deleteFolder, title: "폴더 삭제", message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?", confirmLabel: "삭제", danger: true }); }
+      else if (target.matches("[data-start-thread-folder-create]")) { event.preventDefault(); event.stopPropagation(); if (guardAdminUserAction() || !state.isLoggedIn) { showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return; } if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) { showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`); return; } state.creatingThreadFolderId = target.dataset.startThreadFolderCreate; render(); window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0); }
+      else if (target.matches("[data-cancel-thread-folder-create]")) { event.preventDefault(); event.stopPropagation(); state.creatingThreadFolderId = null; render(); }
     },
-  });
-}
-
-function bindMakeComposerEvents() {
-  const composer = document.querySelector("[data-composer]");
-  if (!composer) return;
-
-  const composerTextarea = composer.querySelector("[data-autosize-textarea]");
-  if (composerTextarea) {
-    autosizeTextarea(composerTextarea);
-    composerTextarea.addEventListener("input", () => {
-      state.composerDraft = composerTextarea.value;
-      autosizeTextarea(composerTextarea);
-    });
-    composerTextarea.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-      event.preventDefault();
-      submitMakeComposer(composer);
-    });
-  }
-
-  composer.addEventListener("submit", (event) => {
-    event.preventDefault();
-    submitMakePrompt(composer);
-  });
-}
-
-function bindMakeTemplateEvents() {
-  document.querySelectorAll("[data-template]").forEach((button) => {
-    button.addEventListener("click", () => {
-      applyTemplate(button.dataset.template);
-    });
-  });
-
-  document.querySelectorAll("[data-toggle-templates]").forEach((button) => {
-    button.addEventListener("click", () => {
-      toggleTemplateBar(button);
-    });
-  });
-}
-
-function bindMakeMessageActionEvents() {
-  document.querySelectorAll("[data-ask-answer-form]").forEach((form) => {
-    const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
-    const progress = form.querySelector("[data-ask-answer-progress]");
-    const updateProgress = () => {
-      const required = inputs.filter((input) => input.required);
-      const completed = required.filter((input) => input.value.trim()).length;
-      if (progress) progress.textContent = required.length ? `필수 답변 ${completed}/${required.length}개 입력` : "답변을 입력해주세요.";
-    };
-    inputs.forEach((input) => input.addEventListener("input", () => {
-      input.removeAttribute("aria-invalid");
-      updateProgress();
-    }));
-    updateProgress();
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      submitAskAnswerForm(form);
-    });
-  });
-
-  document.querySelectorAll("[data-retry-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const message = state.messages.find((item) => item.id === button.dataset.retryMessage && item.role === "user");
-      if (message) resendEditedMessage(message.id, message.content);
-    });
-  });
-
-  document.querySelectorAll("[data-copy-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      copyMakeMessage(button.dataset.copyMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingMessageId = button.dataset.editMessage;
-      pendingMessageScrollId = button.dataset.editMessage;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-message-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const form = button.closest("[data-edit-message-form]");
-      pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId;
-      state.editingMessageId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-message-form]").forEach((form) => {
-    bindMakeMessageEditForm(form);
-  });
-
-  document.querySelectorAll("[data-save-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      saveMakeMessage(button.dataset.saveMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-share-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openShareFromMakeMessage(button.dataset.shareMessage);
-    });
-  });
-
-  document.querySelectorAll("[data-execute-message]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openExecuteModal(button.dataset.executeMessage);
-    });
-  });
-}
-
-function bindMakeMessageEditForm(form) {
-  const textarea = form.querySelector('textarea[name="message"]');
-  textarea?.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-    event.preventDefault();
-    submitMakeComposer(form);
-  });
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message"));
-  });
-}
-
-function bindMakeThreadEvents() {
-  document.querySelectorAll("[data-new-chat]").forEach((button) => {
-    button.addEventListener("click", startNewChat);
-  });
-
-  document.querySelectorAll("[data-thread-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const threadId = button.dataset.threadMenu;
-      state.openThreadMenuId = state.openThreadMenuId === threadId ? null : threadId;
-      if (state.openThreadMenuId !== threadId) state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-open-thread]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.openThreadMenuId = null;
-      openRecentThread(button.dataset.openThread);
-    });
-  });
-
-  document.querySelectorAll("[data-delete-thread]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openThreadMenuId = null;
-      openConfirmAction({
-        type: "delete-thread",
-        targetId: button.dataset.deleteThread,
-        title: "대화 삭제",
-        message: "이 대화를 최근 대화 목록에서 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-}
-
-function bindMakeFolderEvents() {
-  document.querySelectorAll("[data-show-folder-form]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      state.creatingFolder = true;
-      render();
-      window.setTimeout(() => document.querySelector("[data-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-create]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.creatingFolder = false;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolder(new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-open-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.activeFolderId = button.dataset.openFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-folder-menu]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      const folderId = button.dataset.folderMenu;
-      state.openFolderMenuId = state.openFolderMenuId === folderId ? null : folderId;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-edit-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.editingFolderId = button.dataset.editFolder;
-      state.openFolderMenuId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-folder-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-delete-folder]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.openFolderMenuId = null;
-      openConfirmAction({
-        type: "delete-folder",
-        targetId: button.dataset.deleteFolder,
-        title: "폴더 삭제",
-        message: "폴더를 삭제해도 대화는 미분류로 이동합니다. 삭제할까요?",
-        confirmLabel: "삭제",
-        danger: true,
-      });
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder]").forEach((select) => {
-    select.addEventListener("change", () => {
-      if (guardAdminUserAction()) {
-        render();
-        return;
-      }
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        render();
-        return;
-      }
-      state.openThreadMenuId = null;
-      moveThreadToFolder(select.dataset.threadFolder, select.value);
-    });
-  });
-
-  document.querySelectorAll("[data-start-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (guardAdminUserAction()) return;
-      if (!state.isLoggedIn) {
-        showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-        return;
-      }
-      if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-        showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
-        return;
-      }
-      state.creatingThreadFolderId = button.dataset.startThreadFolderCreate;
-      render();
-      window.setTimeout(() => document.querySelector("[data-thread-folder-create-form] input")?.focus(), 0);
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-thread-folder-create]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.creatingThreadFolderId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-thread-folder-create-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      createMakeFolderAndMoveThread(form.dataset.threadFolderCreateForm, new FormData(form).get("folderName"));
-    });
-  });
-
-  document.querySelectorAll("[data-folder-edit-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      renameMakeFolder(form.dataset.folderEditForm, new FormData(form).get("folderName"));
-    });
   });
 }
 
@@ -4870,97 +4584,60 @@ function submitMakeComposer(composer) {
 }
 
 async function submitMakePrompt(composer) {
-  if (guardAdminUserAction()) return;
-  if (isMakeThinking || makeRequestState.inFlight) {
-    showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
-    return;
-  }
-  const value = String(new FormData(composer).get("prompt") || "").trim();
-  if (!value) return;
-  makeInteractionVersion += 1;
-  if (!state.isLoggedIn && state.guestImproveCount >= FREE_MAKE_LIMIT) {
-    state.authView = "login";
-    renderPreservingMakeScroll();
-    return;
-  }
-  if (!state.isLoggedIn) {
-    state.guestImproveCount += 1;
-  }
-  const now = Date.now();
-  const threadId = state.activeThreadId || `thread-${now}`;
-  const userMessageId = `user-${now}`;
-  const assistantMessageId = `make-${now}`;
-  const history = buildMakeImproveHistory(state.messages);
-  window.TtalkakMakeState.startMakeRequest(makeRequestState);
-  state.composerDraft = "";
-  appendMakeUserMessageState(state, threadId, { id: userMessageId, role: "user", content: value });
-  isMakeThinking = true;
-  updateRecentThread(threadId);
-  render();
-  scheduleMakeLatestScroll({ behavior: "auto" });
-  let improvedPrompt = "";
-  try {
-    await waitForThinkingIndicatorPaint();
-    improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
-  } catch (error) {
-    isMakeThinking = false;
-    makeRequestState.inFlight = false;
-    const localMessagesSnapshot = [...state.messages];
-    const recoveredThread = await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
-      threadId,
-      prompt: value,
-      localMessagesSnapshot,
-    });
-    if (recoveredThread) {
-      window.TtalkakMakeState.completeMakeRequest(makeRequestState);
-      showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
-      return;
-    }
-
-    const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
-    window.TtalkakMakeState.failMakeRequest(makeRequestState, userMessageId, failure);
-    if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
-    state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
-    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
-    render();
-    scheduleMakeLatestScroll({ behavior: "auto" });
-    return;
-  }
-  isMakeThinking = false;
-  window.TtalkakMakeState.completeMakeRequest(makeRequestState);
-  appendMakeAssistantMessageState(state, {
-    id: assistantMessageId,
-    role: "assistant",
-    mode: improvedPrompt.mode || "improve",
-    content: improvedPrompt.text || "",
-    answer: improvedPrompt.answer || "",
-    improvedPrompt: improvedPrompt.improvedPrompt || "",
-    questions: improvedPrompt.questions || [],
-    changes: improvedPrompt.changes || [],
-    fields: improvedPrompt.fields || [],
-    techniques: improvedPrompt.techniques || [],
-    summary: improvedPrompt.summary || "",
-    sources: improvedPrompt.sources || [],
-    ragStatus: improvedPrompt.ragStatus || "",
-    ragMessage: improvedPrompt.ragMessage || "",
-    sourcePrompt: value,
-  });
-  updateRecentThread(threadId);
-  applyPendingImproveThreadId(threadId);
-  if (shouldUseImproveThreadSync()) {
-    const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
-    if (!refreshedThread) render();
-    if (improvedPrompt.mode === "ask") focusLatestAskAnswer();
-    return;
-  }
-  syncMakeThreadWithBackend(threadId);
-  render();
-  if (improvedPrompt.mode === "ask") {
-    focusLatestAskAnswer();
-  }
-  scheduleMakeLatestScroll({ behavior: "auto" });
+  return window.TtalkakMakeController.submitPrompt(getMakeControllerContext(), composer);
 }
+
+function getMakeControllerContext() {
+  return {
+    state,
+    freeLimit: FREE_MAKE_LIMIT,
+    guard: guardAdminUserAction,
+    isBusy: () => isMakeThinking || makeRequestState.inFlight,
+    notice: showNotice,
+    bumpInteraction: () => { makeInteractionVersion += 1; },
+    renderPreservingScroll: renderPreservingMakeScroll,
+    buildHistory: buildMakeImproveHistory,
+    startRequest: () => window.TtalkakMakeState.startMakeRequest(makeRequestState),
+    completeRequest: () => window.TtalkakMakeState.completeMakeRequest(makeRequestState),
+    failRequest: (id, failure) => window.TtalkakMakeState.failMakeRequest(makeRequestState, id, failure),
+    stopInFlight: () => { makeRequestState.inFlight = false; },
+    setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value),
+    appendUser: (threadId, message) => appendMakeUserMessageState(state, threadId, message),
+    appendAssistant: (message) => appendMakeAssistantMessageState(state, message),
+    setThinking: (value) => { isMakeThinking = value; },
+    updateThread: updateRecentThread,
+    render,
+    scrollLatest: () => scheduleMakeLatestScroll({ behavior: "auto" }),
+    waitForPaint: waitForThinkingIndicatorPaint,
+    improve: improvePromptWithBackend,
+    recover: (options) => recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), options),
+    classifyError: window.TtalkakMakeMessageModel.classifyMakeError,
+    setBackendFailure: () => window.TtalkakMakeState.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
+    handleError: handleBackendAccessError,
+    applyPendingThread: applyPendingImproveThreadId,
+    shouldSync: shouldUseImproveThreadSync,
+    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true }),
+    syncThread: syncMakeThreadWithBackend,
+    focusAsk: focusLatestAskAnswer,
+    findEditableMessage: (messageId) => state.messages.findIndex((message) => message.id === messageId && message.role === "user"),
+    getMessages: () => state.messages,
+    getActiveThreadId: () => state.activeThreadId,
+    getBackendThreadId: getMakeBackendThreadId,
+    clearEditing: () => window.TtalkakMakeState.setMakeEditingMessage(state),
+    refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
+    applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
+    finishEdit: finishEditedMakeMessageState,
+    queueScroll: (messageId) => queueLatestMakeScroll(messageId, { mode: "immediate" }),
+    messages: {
+      busy: "이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.",
+      missingThread: "서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.",
+      edited: "수정한 메시지로 다시 개선했습니다.",
+      editFailed: "수정 실패: 잠시 후 다시 시도해주세요.",
+      improveFailed: "프롬프트 개선 요청에 실패했습니다.",
+    },
+  };
+}
+
 async function copyMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
   if (!message) return;
@@ -4988,105 +4665,7 @@ function saveMakeMessage(messageId) {
   render();
 }
 async function resendEditedMessage(messageId, value) {
-  const cleanValue = String(value || "").trim();
-  const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
-  if (index < 0 || !cleanValue) return;
-  if (guardAdminUserAction()) return;
-  if (isMakeThinking || makeRequestState.inFlight) {
-    showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
-    return;
-  }
-
-  const now = Date.now();
-  const assistantMessageId = `make-${now}`;
-  const history = buildMakeImproveHistory(state.messages.slice(0, index));
-  const threadId = state.activeThreadId || `thread-${now}`;
-
-  if (shouldUseImproveThreadSync()) {
-    const backendThreadId = getMakeBackendThreadId(threadId);
-    if (!backendThreadId) {
-      showNotice("서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.");
-      return;
-    }
-
-    window.TtalkakMakeState.startMakeRequest(makeRequestState);
-    try {
-      await improvePromptWithBackend(cleanValue, {
-        threadId,
-        messageId,
-        category: "prompt_techniques",
-      });
-      state.editingMessageId = null;
-      const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
-      if (!refreshedThread) render();
-      showNotice("수정한 메시지로 다시 개선했습니다.");
-    } catch (error) {
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
-      if (Number(error?.status || 0) === 404) {
-        await refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {});
-      } else {
-        await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
-          threadId,
-          prompt: cleanValue,
-          localMessagesSnapshot: [...state.messages],
-        }).catch(() => null);
-      }
-      handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
-      render();
-    } finally {
-      makeRequestState.inFlight = false;
-    }
-    return;
-  }
-
-  window.TtalkakMakeState.startMakeRequest(makeRequestState);
-  applyEditedMakeMessageState(state, index, cleanValue, now);
-  isMakeThinking = true;
-  queueLatestMakeScroll(messageId, { mode: "immediate" });
-  render();
-  let improvedPrompt = "";
-  try {
-    await waitForThinkingIndicatorPaint();
-    improvedPrompt = await improvePromptWithBackend(cleanValue, { history, threadId });
-  } catch (error) {
-    isMakeThinking = false;
-    makeRequestState.inFlight = false;
-    const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
-    window.TtalkakMakeState.failMakeRequest(makeRequestState, messageId, failure);
-    state.makeBackendStatus = "fallback";
-    state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
-    handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
-    queueLatestMakeScroll(messageId, { mode: "immediate" });
-    render();
-    return;
-  }
-  isMakeThinking = false;
-  window.TtalkakMakeState.completeMakeRequest(makeRequestState);
-  finishEditedMakeMessageState(state, {
-    id: assistantMessageId,
-    role: "assistant",
-    mode: improvedPrompt.mode || "improve",
-    content: improvedPrompt.text || "",
-    answer: improvedPrompt.answer || "",
-    improvedPrompt: improvedPrompt.improvedPrompt || "",
-    questions: improvedPrompt.questions || [],
-    changes: improvedPrompt.changes || [],
-    fields: improvedPrompt.fields || [],
-    techniques: improvedPrompt.techniques || [],
-    summary: improvedPrompt.summary || "",
-    sources: improvedPrompt.sources || [],
-    ragStatus: improvedPrompt.ragStatus || "",
-    ragMessage: improvedPrompt.ragMessage || "",
-    sourcePrompt: cleanValue,
-  });
-  queueLatestMakeScroll(assistantMessageId, { mode: "immediate" });
-  updateRecentThread(threadId);
-  applyPendingImproveThreadId(threadId);
-  if (!shouldUseImproveThreadSync()) syncMakeThreadWithBackend(threadId);
-  showNotice("수정한 메시지로 다시 개선했습니다.");
-  render();
-  if (improvedPrompt.mode === "ask") focusLatestAskAnswer();
+  return window.TtalkakMakeController.resendEdited(getMakeControllerContext(), messageId, value);
 }
 function openShareFromMakeMessage(messageId) {
   const message = state.messages.find((item) => item.id === messageId);
@@ -5206,7 +4785,7 @@ function applyTemplate(templateId) {
   const template = promptTemplates.find((item) => item.id === templateId);
   if (!template) return;
 
-  state.composerDraft = template.prompt;
+  window.TtalkakMakeState.setMakeComposerDraft(state, template.prompt);
   render();
   window.setTimeout(() => {
     const textarea = document.querySelector("[data-autosize-textarea]");
@@ -7159,22 +6738,7 @@ function buildMakeImproveHistory(messages = state.messages) {
 }
 
 function submitAskAnswerForm(form) {
-  const { inputs, result } = window.TtalkakMakeController.collectAskAnswerPayload(form, window.TtalkakMakeMessageModel);
-  const invalid = inputs.filter((input) => result.missingFields.includes(input.name));
-  inputs.forEach((input) => input.toggleAttribute("aria-invalid", invalid.includes(input)));
-  if (result.missingFields.length) {
-    invalid[0]?.focus();
-    const progress = form.querySelector("[data-ask-answer-progress]");
-    if (progress) progress.textContent = `필수 답변 ${result.missingFields.length}개를 더 입력해주세요.`;
-    return;
-  }
-  if (!result.message) return;
-  const composer = document.querySelector("[data-composer]");
-  const textarea = composer?.querySelector('[name="prompt"]');
-  if (!composer || !textarea) return;
-  textarea.value = result.message;
-  window.TtalkakMakeState.setMakeComposerDraft(state, textarea.value);
-  submitMakeComposer(composer);
+  return window.TtalkakMakeController.submitAskAnswers({ model: window.TtalkakMakeMessageModel, root: document, setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value), submit: submitMakeComposer }, form);
 }
 
 function focusLatestAskAnswer() {
@@ -7404,7 +6968,7 @@ function normalizeRecentThreads() {
   const seen = new Set();
   window.TtalkakMakePersistence.migrateAndPersistMakeState(state, window.TtalkakMakeMessageModel, persistState);
 
-  state.recentThreads = state.recentThreads.filter((thread, index) => {
+  window.TtalkakMakeState.setMakeRecentThreads(state, state.recentThreads.filter((thread, index) => {
     if (!thread.id) {
       thread.id = `legacy-thread-${Date.now()}-${index}`;
     }
@@ -7413,7 +6977,7 @@ function normalizeRecentThreads() {
     seen.add(key);
     thread.dedupeKey = key;
     return true;
-  });
+  }));
 }
 
 function normalizeAssistantPromptOutputs() {

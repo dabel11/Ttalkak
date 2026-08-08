@@ -314,37 +314,34 @@
             ${questionSection}
             ${techniqueSection}
           </article>
-          ${hasExecutablePrompt ? `<footer class="message-actions">
-              <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
-              <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-              <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
-              <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
-            </footer>` : ""}
+          ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
         </div>
       `;
     }
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${
-          isEditing
-            ? `<form class="message-edit-form" data-edit-message-form="${safeMessageId}">
-                <textarea name="message" rows="3">${safeContent}</textarea>
-                <div class="message-edit-actions">
-                  <button type="button" data-cancel-message-edit>취소</button>
-                  <button type="submit">다시 전송</button>
-                </div>
-              </form>`
-            : `<article class="message ${escapeAttr(role)}">
-                <p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>
-                ${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}
-                <div class="user-message-actions">
-                  <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
-                </div>
-              </article>`
-        }
+        ${UserMessageView(ctx, { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
       </div>
     `;
+  }
+
+  function MessageActionsView(ctx, data) {
+    const { icons } = ctx;
+    const { isCopied, isSaved, messageId } = data;
+    return `<footer class="message-actions">
+      <button type="button" data-copy-message="${messageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
+      <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${messageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
+      <button type="button" data-share-message="${messageId}">${icons.share}<span>Share</span></button>
+      <button type="button" data-execute-message="${messageId}">${icons.play}<span>Execute</span></button>
+    </footer>`;
+  }
+
+  function UserMessageView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}<div class="user-message-actions"><button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   global.TtalkakRenderers = Object.freeze({
@@ -355,6 +352,8 @@
     MakePageView,
     MakeSidePanelView,
     MakeTemplateBarView,
+    MessageActionsView,
     MessageBubbleView,
+    UserMessageView,
   });
 })(window);

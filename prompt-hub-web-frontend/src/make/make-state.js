@@ -7,5 +7,6 @@
   function setMakeComposerDraft(state, value) { state.composerDraft = String(value || ""); }
   function setMakeEditingMessage(state, messageId = null) { state.editingMessageId = messageId || null; }
   function setMakeBackendFailure(state, message) { state.makeBackendStatus = "fallback"; state.makeBackendMessage = String(message || ""); }
-  global.TtalkakMakeState = Object.freeze({ createMakeRequestState, startMakeRequest, failMakeRequest, completeMakeRequest, setMakeComposerDraft, setMakeEditingMessage, setMakeBackendFailure });
+  function setMakeRecentThreads(state, threads) { state.recentThreads = Array.isArray(threads) ? threads : []; }
+  global.TtalkakMakeState = Object.freeze({ createMakeRequestState, startMakeRequest, failMakeRequest, completeMakeRequest, setMakeComposerDraft, setMakeEditingMessage, setMakeBackendFailure, setMakeRecentThreads });
 })(window);

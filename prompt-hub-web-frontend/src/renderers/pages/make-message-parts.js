@@ -2,82 +2,19 @@
   "use strict";
 
   function normalizeMessageQuestions(questions) {
-    return Array.isArray(questions)
-      ? questions
-          .map((item, index) => {
-            if (typeof item === "string") {
-              const question = item.trim();
-              return question ? { field: "", question, reason: "", importance: "recommended" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const question = String(item.question || item.text || item.content || item.label || "").trim();
-            if (!question) return null;
-            const importance = String(item.importance || item.priority || "recommended").toLowerCase();
-            return {
-              field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
-              question,
-              reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
-              importance: importance === "required" ? "required" : "recommended",
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeQuestions(questions);
   }
 
   function normalizeMessageFields(fields) {
-    return Array.isArray(fields)
-      ? fields
-          .map((item, index) => {
-            if (typeof item === "string") {
-              const name = item.trim();
-              return name ? { name, role: "fact", status: "empty", value: "" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
-            if (!name) return null;
-            const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
-            const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
-            return {
-              name,
-              role: ["required", "fact", "framing"].includes(role) ? role : "fact",
-              status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
-              value: String(item.value || item.answer || "").trim(),
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeFields(fields);
   }
 
   function normalizeMessageTechniques(techniques) {
-    return Array.isArray(techniques)
-      ? techniques
-          .map((item) => {
-            if (typeof item === "string") {
-              const name = item.trim();
-              return name ? { name, reason: "" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const name = String(item.name || item.technique || item.title || item.label || "").trim();
-            if (!name) return null;
-            return {
-              name,
-              reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeTechniques(techniques);
   }
 
   function normalizeMessageChanges(changes) {
-    return Array.isArray(changes)
-      ? changes
-          .map((item) => {
-            if (typeof item === "string") return item.trim();
-            if (!item || typeof item !== "object") return "";
-            return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeChanges(changes);
   }
 
   function normalizeLegacyAskAnswer(text) {
