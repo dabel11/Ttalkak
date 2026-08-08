@@ -272,7 +272,7 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, failureMessage, fields, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, changes, content, failureMessage, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -283,9 +283,10 @@
     const normalizedTechniques = normalizeMessageTechniques(techniques);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
+    const recoveredContent = String(content || answer || summary || improvedPrompt || "").trim();
     const leadText = normalizedQuestions.length
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
-      : content;
+      : recoveredContent;
     const questionSection = normalizedQuestions.length
       ? MessageQuestionsView({ escapeHtml }, { isAsk: effectiveIsAsk, questions: normalizedQuestions })
       : "";
@@ -307,7 +308,7 @@
         <div class="message-group assistant-group make-message-enter" data-message-id="${safeMessageId}">
           <article class="message assistant">
             ${evidenceSection}
-            <p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>
+            ${leadText ? `<p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>` : ""}
             ${fieldSection}
             ${changeSection}
             ${questionSection}

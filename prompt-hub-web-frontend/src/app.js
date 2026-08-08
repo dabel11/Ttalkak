@@ -1583,6 +1583,7 @@ function MessageBubble(message) {
       fields: message.fields || [],
       hasExecutablePrompt: isAssistant && isExecutableMakeMessage(message),
       id: message.id,
+      improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
       failureMessage: !isAssistant && makeFailedMessageId === message.id ? makeFailedMessageText : "",
