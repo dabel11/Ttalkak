@@ -3,9 +3,8 @@ import { parseLegacyImproveAnswer } from "./legacyImproveAnswer";
 export function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
   const legacy = parseLegacyImproveAnswer(result.answer || result.explanation || "");
-  const mode = ["ask", "improve"].includes(String(result.mode || result.type || "").toLowerCase())
-    ? String(result.mode || result.type).toLowerCase()
-    : "improve";
+  const rawMode = String(result.mode || result.type || "").toLowerCase();
+  const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
   const questions = normalizeImproveQuestions(
     firstNonEmptyArray(result.questions, result.followUpQuestions, result.additionalQuestions, legacy.questions),
   );

@@ -841,7 +841,7 @@ public class PromptController {
                 "type"
         );
 
-        if ("ask".equalsIgnoreCase(mode)) {
+        if ("ask".equalsIgnoreCase(mode) || "question".equalsIgnoreCase(mode)) {
             mode = "ask";
             improvedPrompt = "";
         } else {

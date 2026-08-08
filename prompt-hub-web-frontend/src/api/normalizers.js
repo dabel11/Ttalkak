@@ -312,7 +312,8 @@
   }
 
   function normalizeMakeMessage(item, index = 0) {
-    const mode = String(item?.mode || item?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
+    const rawMode = String(item?.mode || item?.type || "").toLowerCase();
+    const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(item?.questions);
     const changes = normalizeImproveChanges(item?.changes);
     const fields = normalizeImproveFields(item?.fields || item?.fieldState || item?.missingFields);
@@ -371,7 +372,8 @@
 
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
     const result = data?.result && typeof data.result === "object" ? data.result : data;
-    const mode = String(result?.mode || result?.type || "").toLowerCase() === "ask" ? "ask" : "improve";
+    const rawMode = String(result?.mode || result?.type || "").toLowerCase();
+    const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
     const questions = normalizeImproveQuestions(result?.questions || result?.followUpQuestions || result?.additionalQuestions);
     const changes = normalizeImproveChanges(result?.changes || result?.assumptions || result?.assumedChanges);
     const fields = normalizeImproveFields(result?.fields || result?.fieldState || result?.missingFields);

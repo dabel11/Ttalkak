@@ -24,9 +24,8 @@ function unwrapItems(payload) {
 }
 
 function normalizeMakeMessage(item, index = 0) {
-  const mode = ["ask", "improve"].includes(String(item?.mode || item?.type || "").toLowerCase())
-    ? String(item.mode || item.type).toLowerCase()
-    : "improve";
+  const rawMode = String(item?.mode || item?.type || "").toLowerCase();
+  const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
   const improvedPrompt = mode === "ask"
     ? ""
     : item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.improved_prompt || "";
