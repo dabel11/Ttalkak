@@ -164,7 +164,7 @@ function MessageCard({
         )}
         {isAssistant && !message.isError && (
           <div className="card-actions">
-            <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "복사됨" : "복사"} onClick={() => onCopy(message)} />
+            {!isAsk && <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "\uBCF5\uC0AC\uB428" : "\uBCF5\uC0AC"} onClick={() => onCopy(message)} />}
             <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />
             {hasExecutablePrompt(message) && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
           </div>

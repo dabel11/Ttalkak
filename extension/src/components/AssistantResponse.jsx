@@ -17,7 +17,7 @@ export function AssistantResponse({ message, isAsk }) {
 
   return (
     <>
-      <EvidenceNotice ragStatus={message.ragStatus} />
+      {!isAsk && <EvidenceNotice ragStatus={message.ragStatus} />}
       {content && (
         <p style={{ whiteSpace: "pre-wrap" }}>
           <PromptText text={content} />

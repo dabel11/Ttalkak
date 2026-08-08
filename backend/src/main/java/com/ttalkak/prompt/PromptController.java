@@ -766,11 +766,16 @@ public class PromptController {
                 "answer",
                 "관련 프롬프트 기법 근거를 찾지 못했습니다."
         );
+        body.put("mode", "improve");
+        body.put("summary", "");
         body.put("improvedPrompt", prompt);
         body.put("sources", List.of());
         body.put("ragStatus", "no_evidence");
         body.put("techniquesApplied", List.of());
         body.put("changes", List.of());
+        body.put("questions", List.of());
+        body.put("fields", List.of());
+        body.put("score", null);
 
         return body;
     }
@@ -829,13 +834,35 @@ public class PromptController {
                     : "ok";
         }
 
+
+        String mode = firstNonBlank(
+                ragResponse,
+                "mode",
+                "type"
+        );
+
+        if ("ask".equalsIgnoreCase(mode)) {
+            mode = "ask";
+            improvedPrompt = "";
+        } else {
+            mode = "improve";
+        }
+
         Map<String, Object> body =
                 new LinkedHashMap<>();
 
+        body.put("mode", mode);
         body.put("answer", answer);
         body.put("improvedPrompt", improvedPrompt);
         body.put("sources", sources);
         body.put("ragStatus", ragStatus);
+        body.put(
+                "summary",
+                firstNonBlank(
+                        ragResponse,
+                        "summary"
+                )
+        );
         body.put(
                 "techniquesApplied",
                 firstList(
@@ -848,6 +875,25 @@ public class PromptController {
                 "changes",
                 firstList(ragResponse, "changes")
         );
+        body.put(
+                "questions",
+                firstList(
+                        ragResponse,
+                        "questions",
+                        "followUpQuestions",
+                        "additionalQuestions"
+                )
+        );
+        body.put(
+                "fields",
+                firstList(
+                        ragResponse,
+                        "fields",
+                        "fieldState",
+                        "missingFields"
+                )
+        );
+        body.put("score", ragResponse.get("score"));
 
         return body;
     }

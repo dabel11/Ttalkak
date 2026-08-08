@@ -289,7 +289,7 @@
     const techniqueSection = normalizedTechniques.length
       ? MessageTechniquesView({ escapeHtml }, { techniques: normalizedTechniques })
       : "";
-    const evidenceSection = isAssistant && String(ragStatus || "").toLowerCase() === "no_evidence"
+    const evidenceSection = isAssistant && !isAsk && String(ragStatus || "").toLowerCase() === "no_evidence"
       ? MessageEvidenceNoticeView()
       : "";
 
