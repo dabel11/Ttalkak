@@ -588,6 +588,65 @@ class PromptImproveConversationTest {
 	}
 
 	@Test
+	void askResponseWithoutQuestionsGetsSafeFallbackQuestion() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "추가 정보가 필요합니다.",
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request("글을 써줘", null, null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		List<?> questions = (List<?>) response.get("questions");
+		assertEquals(1, questions.size());
+		assertEquals(
+				"details",
+				((Map<?, ?>) questions.get(0)).get("field"));
+	}
+
+	@Test
+	void loggedInAskTurnIsPersistedForFollowUpAndReload() throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "대상 독자를 알려주세요.",
+						  "questions": ["대상 독자는 누구인가요?"],
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request("온보딩 글을 써줘", null, null),
+				AUTHORIZATION);
+
+		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(MakeThread.class);
+		verify(makeThreadRepository).save(captor.capture());
+		MakeThread savedThread = captor.getValue();
+		List<Map<String, Object>> messages = readMessages(savedThread);
+
+		assertEquals(101L, response.get("threadId"));
+		assertEquals(2, messages.size());
+		assertEquals("user", messages.get(0).get("role"));
+		assertEquals("assistant", messages.get(1).get("role"));
+		assertEquals("대상 독자를 알려주세요.", messages.get(1).get("content"));
+		assertEquals("ask", messages.get(1).get("mode"));
+		assertEquals(1, ((List<?>) messages.get(1).get("questions")).size());
+	}
+
+	@Test
 	void ragServiceUnavailableDoesNotSaveThread() {
 		when(
 				authService.currentMemberIdOrNull(

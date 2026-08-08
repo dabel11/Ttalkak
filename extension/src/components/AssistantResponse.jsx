@@ -2,6 +2,7 @@ import { parseLegacyImproveAnswer } from "../utils/legacyImproveAnswer";
 import {
   normalizeImproveChanges as normalizeMessageChanges,
   normalizeImproveFields as normalizeMessageFields,
+  mergeImproveQuestions,
   normalizeImproveQuestions as normalizeMessageQuestions,
   normalizeImproveTechniques as normalizeMessageTechniques,
 } from "../utils/normalizeImproveResult";
@@ -11,7 +12,7 @@ export function AssistantResponse({ message, isAsk }) {
   const content =
     parsed.improvedPrompt ||
     (isAsk ? message.summary || message.answer || parsed.lead : parsed.lead || message.content);
-  const questions = mergeLists(message.questions, parsed.questions);
+  const questions = mergeImproveQuestions(message.questions, parsed.questions);
   const changes = mergeLists(message.changes, parsed.changes);
   const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
 

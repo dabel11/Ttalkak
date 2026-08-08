@@ -405,6 +405,7 @@ public class PromptController {
 				"ragStatus",
 				response.get("ragStatus")
 		);
+		copyImproveContractFields(assistantMessage, response);
 		assistantMessage.put("createdAt", now);
 
 		messages.add(assistantMessage);
@@ -452,10 +453,29 @@ public class PromptController {
                 "ragStatus",
                 response.get("ragStatus")
         );
+        copyImproveContractFields(assistantMessage, response);
         assistantMessage.put("createdAt", now);
 
         messages.add(userMessage);
         messages.add(assistantMessage);
+    }
+
+    private void copyImproveContractFields(
+            Map<String, Object> target,
+            Map<String, Object> response
+    ) {
+        for (String field : List.of(
+                "mode",
+                "answer",
+                "summary",
+                "questions",
+                "fields",
+                "changes",
+                "techniquesApplied",
+                "score"
+        )) {
+            target.put(field, response.get(field));
+        }
     }
 
     private List<Map<String, Object>> readMessages(String json) {
@@ -804,6 +824,17 @@ public class PromptController {
                 "followUpQuestions",
                 "additionalQuestions"
         );
+
+        if (askMode && questions.isEmpty()) {
+            questions = List.of(
+                    Map.of(
+                            "field", "details",
+                            "question", "원하는 결과를 더 정확히 만들기 위해 어떤 정보를 추가할 수 있나요?",
+                            "reason", "질문 모드 응답에 구체적인 후속 질문이 없어 기본 확인 질문을 제공합니다.",
+                            "importance", "required"
+                    )
+            );
+        }
 
         String improvedPrompt = firstNonBlank(
                 ragResponse,

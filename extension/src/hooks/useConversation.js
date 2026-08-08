@@ -5,6 +5,7 @@ import { STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
 import { buildAskMessage, buildNoEvidenceMessage, getExecutablePrompt, getServerEditErrorMessage, hasPromptPlaceholders } from "../utils/conversationMessages";
+import { buildImproveHistory } from "../utils/conversationHistory";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
 import { createServerThreadSync } from "./useServerThreads";
 
@@ -216,9 +217,7 @@ export function useConversation({
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
-    const history = messages
-      .filter((m) => !m.isError && !m.excludeFromHistory)
-      .map((m) => ({ role: m.role, content: m.role === "assistant" ? m.answer || m.content : m.content }));
+    const history = buildImproveHistory(messages);
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
     const improvePayload = {
       prompt,
@@ -452,12 +451,7 @@ export function useConversation({
       content: prompt,
       editedAt: new Date().toISOString(),
     };
-    const history = baseMessages
-      .filter((message) => !message.isError && !message.excludeFromHistory)
-      .map((message) => ({
-        role: message.role,
-        content: message.role === "assistant" ? message.answer || message.content : message.content,
-      }));
+    const history = buildImproveHistory(baseMessages);
     const guestSessionUuid = sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 

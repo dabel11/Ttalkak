@@ -1,4 +1,4 @@
-import { parseLegacyImproveAnswer } from "./legacyImproveAnswer";
+import { parseLegacyImproveAnswer } from "./legacyImproveAnswer.js";
 
 export function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
@@ -77,7 +77,22 @@ export function normalizeImproveQuestion(item, index = 0) {
 
 export function normalizeImproveQuestions(value) {
   if (!Array.isArray(value)) return [];
-  return value.map(normalizeImproveQuestion).filter(Boolean);
+  const seen = new Set();
+  return value.map(normalizeImproveQuestion).filter((item) => {
+    if (!item) return false;
+    const key = `${normalizeQuestionKey(item.field)}\u0000${normalizeQuestionKey(item.question)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function mergeImproveQuestions(...values) {
+  return normalizeImproveQuestions(values.flatMap((value) => Array.isArray(value) ? value : []));
+}
+
+function normalizeQuestionKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 export function normalizeImproveFields(value) {

@@ -484,7 +484,15 @@
 
   function normalizeImproveQuestions(value) {
     if (!Array.isArray(value)) return [];
-    return value.map(normalizeImproveQuestion).filter(Boolean);
+    const seen = new Set();
+    return value.map(normalizeImproveQuestion).filter((item) => {
+      if (!item) return false;
+      const normalizeKey = (text) => String(text || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+      const key = `${normalizeKey(item.field)}\u0000${normalizeKey(item.question)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   function normalizeImproveChanges(value) {

@@ -15,6 +15,17 @@
     renderPromptTextWithPlaceholders,
   } = global.TtalkakMakeMessageParts || {};
 
+  function mergeMessageQuestions(...values) {
+    const seen = new Set();
+    return normalizeMessageQuestions(values.flat()).filter((item) => {
+      const normalizeKey = (text) => String(text || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+      const key = `${normalizeKey(item.field)}\u0000${normalizeKey(item.question)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   if (
     [
       MessageChangesView,
@@ -268,9 +279,7 @@
     const normalizedFields = normalizeMessageFields(fields);
     const legacyAsk = !hasExecutablePrompt ? normalizeLegacyAskAnswer(answer || content) : { leadText: "", questions: [] };
     const effectiveIsAsk = isAsk || (!hasExecutablePrompt && legacyAsk.questions.length > 0);
-    const normalizedQuestions = normalizeMessageQuestions(questions).concat(
-      normalizeMessageQuestions(legacyAsk.questions),
-    );
+    const normalizedQuestions = mergeMessageQuestions(questions, legacyAsk.questions);
     const normalizedTechniques = normalizeMessageTechniques(techniques);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
