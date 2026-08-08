@@ -111,23 +111,24 @@
         <strong>${escapeHtml(title)}</strong>
         ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" aria-busy="${isThinking ? "true" : "false"}" novalidate><div id="${escapeAttr(progressId)}" class="ask-answer-progress" data-ask-answer-progress role="status">${isThinking ? "답변을 전송하고 있습니다." : "필수 답변을 입력해주세요."}</div>` : ""}
         <ol>
-          ${questions
-            .map((item, index) => {
-              const inputId = `ask-${messageId}-${item.field || index}`;
-              const reasonId = `${inputId}-reason`;
-              return `
-                <li class="${item.importance === "required" ? "required" : "recommended"}">
-                  <label for="${escapeAttr(inputId)}"><span>${escapeHtml(item.question)}</span><em>${item.importance === "required" ? "필수" : "선택"}</em></label>
-                  ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} aria-describedby="${escapeAttr([item.reason ? reasonId : "", progressId].filter(Boolean).join(" "))}" ${isThinking ? "disabled" : ""} />` : ""}
-                  ${item.reason ? `<small id="${escapeAttr(reasonId)}">${escapeHtml(item.reason)}</small>` : ""}
-                </li>
-              `;
-            })
-            .join("")}
+          ${questions.map((item, index) => AskQuestionItemView(ctx, { index, isAsk, isThinking, item, messageId, progressId })).join("")}
         </ol>
         ${isAsk ? `<button class="ask-answer-submit" type="submit" ${isThinking ? "disabled" : ""}>${isThinking ? "전송 중" : "답변 제출"}</button></form>` : ""}
       </section>
     `;
+  }
+
+  function AskQuestionItemView(ctx, data) {
+    const { escapeAttr, escapeHtml } = ctx;
+    const { index, isAsk, isThinking, item, messageId, progressId } = data;
+    const inputId = `ask-${messageId}-${item.field || index}`;
+    const reasonId = `${inputId}-reason`;
+    const describedBy = [item.reason ? reasonId : "", progressId].filter(Boolean).join(" ");
+    return `<li class="${item.importance === "required" ? "required" : "recommended"}">
+      <label for="${escapeAttr(inputId)}"><span>${escapeHtml(item.question)}</span><em>${item.importance === "required" ? "필수" : "선택"}</em></label>
+      ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} aria-describedby="${escapeAttr(describedBy)}" ${isThinking ? "disabled" : ""} />` : ""}
+      ${item.reason ? `<small id="${escapeAttr(reasonId)}">${escapeHtml(item.reason)}</small>` : ""}
+    </li>`;
   }
 
   function MessageFieldsView(ctx, data) {
@@ -202,6 +203,7 @@
 
   global.TtalkakMakeMessageParts = Object.freeze({
     MessageChangesView,
+    AskQuestionItemView,
     MessageEvidenceNoticeView,
     MessageFieldsView,
     MessageQuestionsView,

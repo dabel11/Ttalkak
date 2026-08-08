@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const model = require("../src/utils/make-message-model.js");
+const fixtures = require("./fixtures/make-responses.js");
 
 test("question aliases migrate to ask and disable executable prompt", () => {
   const message = model.migrateMakeMessage({ type: "question", improvedPrompt: "실행 금지", questions: ["목적은 무엇인가요?"] });
@@ -37,17 +38,17 @@ test("errors are separated into actionable states", () => {
 });
 
 test("ask fixture contains required and optional questions", () => {
-  assert.equal(model.fixtures.ask.mode, "ask");
-  assert.deepEqual(model.fixtures.ask.questions.map((item) => item.importance), ["required", "recommended"]);
+  assert.equal(fixtures.ask.mode, "ask");
+  assert.deepEqual(fixtures.ask.questions.map((item) => item.importance), ["required", "recommended"]);
 });
 
 test("ask fixture validates required answers and composes the follow-up message", () => {
-  const missing = model.composeAskAnswers(model.fixtures.ask.questions, { audience: "신규 사용자" });
+  const missing = model.composeAskAnswers(fixtures.ask.questions, { audience: "신규 사용자" });
   assert.deepEqual(missing.missingFields, ["purpose"]);
-  const complete = model.composeAskAnswers(model.fixtures.ask.questions, { purpose: "제품 출시 안내", audience: "신규 사용자" });
+  const complete = model.composeAskAnswers(fixtures.ask.questions, { purpose: "제품 출시 안내", audience: "신규 사용자" });
   assert.deepEqual(complete.missingFields, []);
   assert.equal(complete.message, "추가 정보:\n- 이 글의 목적은 무엇인가요?: 제품 출시 안내\n- 주요 독자는 누구인가요?: 신규 사용자");
-  assert.equal(model.fixtures.improve.mode, "improve");
+  assert.equal(fixtures.improve.mode, "improve");
 });
 
 test("persisted make state receives schema versions and removes empty messages", () => {
@@ -59,4 +60,22 @@ test("persisted make state receives schema versions and removes empty messages",
   assert.equal(state.messages.length, 1);
   assert.equal(state.messages[0].schemaVersion, model.SCHEMA_VERSION);
   assert.equal(state.recentThreads[0].messages[0].questions.length, 1);
+});
+
+test("message migrations advance version-by-version and keep v2 stable", () => {
+  const v1 = model.migrateV0ToV1({ type: "question" });
+  assert.equal(v1.schemaVersion, 1);
+  assert.equal(v1.mode, "ask");
+  const v2 = model.migrateV1ToV2({ ...v1, finalPrompt: "결과" });
+  assert.equal(v2.schemaVersion, 2);
+  assert.equal(v2.improvedPrompt, "결과");
+  assert.deepEqual(model.runMessageMigrations(v2), v2);
+});
+
+test("shared response normalization covers fields changes techniques and executable policy", () => {
+  const result = model.normalizeImproveResponse({ mode: "improve", improvedPrompt: "실행 프롬프트", fields: ["대상"], changes: [{ text: "구체화" }], techniques: [{ name: "역할 부여" }] });
+  assert.equal(result.fields[0].name, "대상");
+  assert.deepEqual(result.changes, ["구체화"]);
+  assert.equal(result.techniques[0].name, "역할 부여");
+  assert.equal(model.isExecutableMessage(result), true);
 });

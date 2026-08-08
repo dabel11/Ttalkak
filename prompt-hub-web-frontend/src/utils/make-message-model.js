@@ -51,7 +51,59 @@
     }).filter(Boolean);
   }
 
-  function migrateMakeMessage(raw = {}, index = 0) {
+  function normalizeFields(value) {
+    return (Array.isArray(value) ? value : []).map((item, index) => {
+      if (typeof item === "string") return item.trim() ? { name: item.trim(), role: "fact", status: "empty", value: "" } : null;
+      if (!item || typeof item !== "object") return null;
+      const name = normalizeText(item.name || item.field || item.key || item.label || `field_${index + 1}`);
+      const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
+      const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
+      return name ? { name, role: ["required", "fact", "framing"].includes(role) ? role : "fact", status: ["filled", "empty", "missing"].includes(status) ? status : "empty", value: normalizeText(item.value || item.answer) } : null;
+    }).filter(Boolean);
+  }
+
+  function normalizeChanges(value) {
+    return (Array.isArray(value) ? value : []).map((item) => typeof item === "string" ? item.trim() : normalizeText(item?.text || item?.message || item?.description || item?.change || item?.reason)).filter(Boolean);
+  }
+
+  function normalizeTechniques(value) {
+    return (Array.isArray(value) ? value : []).map((item) => {
+      if (typeof item === "string") return item.trim() ? { name: item.trim(), reason: "" } : null;
+      const name = normalizeText(item?.name || item?.technique || item?.title || item?.label);
+      return name ? { name, reason: normalizeText(item?.reason || item?.description || item?.effect || item?.summary) } : null;
+    }).filter(Boolean);
+  }
+
+  function normalizeImproveResponse(payload, fallbackPrompt = "") {
+    const result = payload?.result || payload?.data || payload || {};
+    if (typeof result === "string") return { mode: "improve", answer: "", summary: "", improvedPrompt: result, text: result, questions: [], fields: [], changes: [], techniques: [], sources: [], ragStatus: "ok", ragMessage: "", threadId: "" };
+    const rawMode = String(result.mode || result.type || "").toLowerCase();
+    const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
+    const answer = normalizeText(result.answer || result.explanation || result.summary);
+    const legacy = parseLegacyQuestions(answer);
+    const questions = normalizeQuestions([...(Array.isArray(result.questions || result.followUpQuestions || result.additionalQuestions) ? (result.questions || result.followUpQuestions || result.additionalQuestions) : []), ...legacy.questions]);
+    const improvedPrompt = mode === "ask" ? "" : normalizeText(result.improvedPrompt || result.improved_prompt || result.finalPrompt || result.final_prompt || fallbackPrompt);
+    return { mode, answer: legacy.leadText || answer, summary: normalizeText(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(), ragMessage: normalizeText(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || "") };
+  }
+
+  function migrateV0ToV1(raw = {}) {
+    return { ...raw, schemaVersion: 1, mode: String(raw.mode || raw.type || "").toLowerCase() === "question" ? "ask" : raw.mode };
+  }
+
+  function migrateV1ToV2(raw = {}) {
+    return { ...raw, schemaVersion: 2, improvedPrompt: raw.improvedPrompt || raw.improved_prompt || raw.finalPrompt || "" };
+  }
+
+  function runMessageMigrations(raw = {}) {
+    let value = { ...raw };
+    let version = Number(value.schemaVersion || 0);
+    if (version < 1) { value = migrateV0ToV1(value); version = 1; }
+    if (version < 2) value = migrateV1ToV2(value);
+    return value;
+  }
+
+  function migrateMakeMessage(input = {}, index = 0) {
+    const raw = runMessageMigrations(input);
     const rawMode = String(raw.mode || raw.type || "").toLowerCase();
     const mode = rawMode === "ask" || rawMode === "question" ? "ask" : "improve";
     const legacy = parseLegacyQuestions(raw.answer || raw.content);
@@ -75,9 +127,9 @@
       summary,
       improvedPrompt,
       questions,
-      fields: Array.isArray(raw.fields) ? raw.fields : [],
-      changes: Array.isArray(raw.changes) ? raw.changes : [],
-      techniques: Array.isArray(raw.techniques || raw.techniquesApplied) ? (raw.techniques || raw.techniquesApplied) : [],
+      fields: normalizeFields(raw.fields),
+      changes: normalizeChanges(raw.changes),
+      techniques: normalizeTechniques(raw.techniques || raw.techniquesApplied),
       ragStatus: String(raw.ragStatus || raw.rag_status || "ok").toLowerCase(),
     };
   }
@@ -99,15 +151,22 @@
       .filter((message) => message.content);
   }
 
+  function isExecutableMessage(message) {
+    const migrated = migrateMakeMessage(message);
+    if (migrated.mode === "ask" || (migrated.questions.length && !migrated.improvedPrompt)) return false;
+    return Boolean(normalizeText(message?.executablePrompt || message?.finalPrompt || migrated.improvedPrompt || migrated.content));
+  }
+
   function classifyMakeError(error) {
     const status = Number(error?.status || error?.payload?.status || 0);
     const code = String(error?.payload?.code || error?.code || "").toUpperCase();
-    if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return { kind: "auth", message: "로그인이 만료되었습니다. 다시 로그인해주세요.", retryable: false };
-    if (code === "AI_INVALID_RESPONSE") return { kind: "contract", message: "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", retryable: true };
-    if (status === 429 || code.includes("RATE_LIMIT")) return { kind: "rate_limit", message: "요청이 많습니다. 잠시 후 다시 시도해주세요.", retryable: true };
-    if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return { kind: "ai", message: "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", retryable: true };
-    if (!status) return { kind: "network", message: "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", retryable: true };
-    return { kind: "server", message: "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", retryable: true };
+    const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin });
+    if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true);
+    if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true);
+    if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true);
+    if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true);
+    if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true);
+    return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true);
   }
 
   function composeAskAnswers(questions, values = {}) {
@@ -131,12 +190,7 @@
     return state;
   }
 
-  const fixtures = Object.freeze({
-    ask: { mode: "ask", answer: "정확한 결과를 위해 추가 정보가 필요합니다.", summary: "목적과 대상 독자를 확인해주세요.", improvedPrompt: "", questions: [{ field: "purpose", question: "이 글의 목적은 무엇인가요?", reason: "결과의 방향을 정하는 데 필요합니다.", importance: "required" }, { field: "audience", question: "주요 독자는 누구인가요?", reason: "어휘 수준을 조정하는 데 필요합니다.", importance: "recommended" }], fields: [], ragStatus: "ok" },
-    improve: { mode: "improve", answer: "요청을 구체화했습니다.", improvedPrompt: "신규 사용자를 대상으로 제품 출시 안내문을 작성하라.", questions: [], fields: [], ragStatus: "ok" },
-  });
-
-  const api = Object.freeze({ SCHEMA_VERSION, normalizeQuestions, parseLegacyQuestions, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers, fixtures });
+  const api = Object.freeze({ SCHEMA_VERSION, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
   global.TtalkakMakeMessageModel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

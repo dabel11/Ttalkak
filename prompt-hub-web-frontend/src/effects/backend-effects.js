@@ -67,8 +67,13 @@
   function getBackendErrorMessage(error) {
     const payload = error?.payload;
     const codeMessage = getBackendErrorCodeMessage(getBackendErrorCode(error));
+    const code = getBackendErrorCode(error);
+    const sharedError = (!Number(error?.status || 0) || /^(AI_|RATE_LIMIT)/.test(code))
+      ? global.TtalkakMakeMessageModel?.classifyMakeError(error)
+      : null;
     return String(
       payload?.message ||
+        sharedError?.message ||
         codeMessage ||
         payload?.error ||
         payload?.code ||

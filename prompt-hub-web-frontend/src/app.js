@@ -745,11 +745,8 @@ let adminTagSearchCommitTimer = null;
 let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
-let makeRequestInFlight = false;
+const makeRequestState = window.TtalkakMakeState.createMakeRequestState();
 let makeInteractionVersion = 0;
-let makeFailedMessageId = "";
-let makeFailedMessageText = "";
-let makeFailedRetryable = false;
 let makeServerSyncEffects = null;
 
 const icons = {
@@ -1504,7 +1501,7 @@ function MakeComposer(hasMessages) {
     {
       composerDraft: state.composerDraft,
       hasMessages,
-      isThinking: isMakeThinking || makeRequestInFlight,
+      isThinking: isMakeThinking || makeRequestState.inFlight,
     },
   );
 }
@@ -1587,10 +1584,10 @@ function MessageBubble(message) {
       improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
-      failureMessage: !isAssistant && makeFailedMessageId === message.id ? makeFailedMessageText : "",
-      failureRetryable: !isAssistant && makeFailedMessageId === message.id && makeFailedRetryable,
+      failureMessage: !isAssistant && makeRequestState.failedMessageId === message.id ? makeRequestState.failure?.message || "" : "",
+      failureRetryable: !isAssistant && makeRequestState.failedMessageId === message.id && Boolean(makeRequestState.failure?.retryable),
       isSaved: isAssistant && isPromptSaved(message.id),
-      isThinking: isMakeThinking || makeRequestInFlight,
+      isThinking: isMakeThinking || makeRequestState.inFlight,
       mode: message.mode || "improve",
       questions: message.questions || [],
       ragStatus: message.ragStatus || "",
@@ -1602,18 +1599,7 @@ function MessageBubble(message) {
 }
 
 function isExecutableMakeMessage(message) {
-  const prompt = getFinalPromptText(message);
-  if (!prompt || message?.mode === "ask") return false;
-
-  const combinedText = [
-    prompt,
-    message?.content,
-    message?.answer,
-    message?.summary,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  return !isAskOnlyMakeResponse(combinedText);
+  return window.TtalkakMakeMessageModel.isExecutableMessage(message);
 }
 
 function isAskOnlyMakeResponse(text) {
@@ -4521,12 +4507,51 @@ function toggleLibraryDemoData() {
 }
 
 function bindMakeEvents() {
-  bindMakeComposerEvents();
+  bindDelegatedMakeEvents();
   bindMakeFeedScrollEvents({ state });
-  bindMakeTemplateEvents();
-  bindMakeMessageActionEvents();
   bindMakeThreadEvents();
   bindMakeFolderEvents();
+  document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
+  document.querySelectorAll("[data-ask-answer-input]").forEach(window.TtalkakMakeEvents.updateAskProgress);
+}
+
+function bindDelegatedMakeEvents() {
+  const root = document.getElementById("app");
+  window.TtalkakMakeEvents.bindDelegatedMakeEvents(root, {
+    input(event) {
+      const textarea = event.target.closest?.("[data-autosize-textarea]");
+      if (!textarea) return;
+      window.TtalkakMakeState.setMakeComposerDraft(state, textarea.value);
+      autosizeTextarea(textarea);
+    },
+    keydown(event) {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      const form = event.target.closest?.("[data-composer], [data-edit-message-form]");
+      if (!form) return;
+      event.preventDefault();
+      submitMakeComposer(form);
+    },
+    submit(event) {
+      const form = event.target.closest?.("form");
+      if (!form) return;
+      if (form.matches("[data-composer]")) { event.preventDefault(); submitMakePrompt(form); }
+      else if (form.matches("[data-ask-answer-form]")) { event.preventDefault(); submitAskAnswerForm(form); }
+      else if (form.matches("[data-edit-message-form]")) { event.preventDefault(); resendEditedMessage(form.dataset.editMessageForm, new FormData(form).get("message")); }
+    },
+    click(event) {
+      const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-retry-message], [data-copy-message], [data-edit-message], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message]");
+      if (!target) return;
+      if (target.matches("[data-template]")) applyTemplate(target.dataset.template);
+      else if (target.matches("[data-toggle-templates]")) toggleTemplateBar(target);
+      else if (target.matches("[data-retry-message]")) { const message = state.messages.find((item) => item.id === target.dataset.retryMessage && item.role === "user"); if (message) resendEditedMessage(message.id, message.content); }
+      else if (target.matches("[data-copy-message]")) copyMakeMessage(target.dataset.copyMessage);
+      else if (target.matches("[data-edit-message]")) { window.TtalkakMakeState.setMakeEditingMessage(state, target.dataset.editMessage); pendingMessageScrollId = target.dataset.editMessage; render(); }
+      else if (target.matches("[data-cancel-message-edit]")) { const form = target.closest("[data-edit-message-form]"); pendingMessageScrollId = form?.dataset.editMessageForm || state.editingMessageId; window.TtalkakMakeState.setMakeEditingMessage(state); render(); }
+      else if (target.matches("[data-save-message]")) saveMakeMessage(target.dataset.saveMessage);
+      else if (target.matches("[data-share-message]")) openShareFromMakeMessage(target.dataset.shareMessage);
+      else if (target.matches("[data-execute-message]")) openExecuteModal(target.dataset.executeMessage);
+    },
+  });
 }
 
 function bindMakeComposerEvents() {
@@ -4846,7 +4871,7 @@ function submitMakeComposer(composer) {
 
 async function submitMakePrompt(composer) {
   if (guardAdminUserAction()) return;
-  if (isMakeThinking || makeRequestInFlight) {
+  if (isMakeThinking || makeRequestState.inFlight) {
     showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
     return;
   }
@@ -4866,13 +4891,10 @@ async function submitMakePrompt(composer) {
   const userMessageId = `user-${now}`;
   const assistantMessageId = `make-${now}`;
   const history = buildMakeImproveHistory(state.messages);
-  makeRequestInFlight = true;
+  window.TtalkakMakeState.startMakeRequest(makeRequestState);
   state.composerDraft = "";
   appendMakeUserMessageState(state, threadId, { id: userMessageId, role: "user", content: value });
   isMakeThinking = true;
-  makeFailedMessageId = "";
-  makeFailedMessageText = "";
-  makeFailedRetryable = false;
   updateRecentThread(threadId);
   render();
   scheduleMakeLatestScroll({ behavior: "auto" });
@@ -4882,7 +4904,7 @@ async function submitMakePrompt(composer) {
     improvedPrompt = await improvePromptWithBackend(value, { history, threadId });
   } catch (error) {
     isMakeThinking = false;
-    makeRequestInFlight = false;
+    makeRequestState.inFlight = false;
     const localMessagesSnapshot = [...state.messages];
     const recoveredThread = await recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), {
       threadId,
@@ -4890,17 +4912,13 @@ async function submitMakePrompt(composer) {
       localMessagesSnapshot,
     });
     if (recoveredThread) {
-      makeFailedMessageId = "";
-      makeFailedMessageText = "";
-      makeFailedRetryable = false;
+      window.TtalkakMakeState.completeMakeRequest(makeRequestState);
       showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
       return;
     }
 
     const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
-    makeFailedMessageId = userMessageId;
-    makeFailedMessageText = failure.message;
-    makeFailedRetryable = failure.retryable;
+    window.TtalkakMakeState.failMakeRequest(makeRequestState, userMessageId, failure);
     if (!state.isLoggedIn) state.guestImproveCount = Math.max(0, state.guestImproveCount - 1);
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
@@ -4910,10 +4928,7 @@ async function submitMakePrompt(composer) {
     return;
   }
   isMakeThinking = false;
-  makeRequestInFlight = false;
-  makeFailedMessageId = "";
-  makeFailedMessageText = "";
-  makeFailedRetryable = false;
+  window.TtalkakMakeState.completeMakeRequest(makeRequestState);
   appendMakeAssistantMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
@@ -4977,7 +4992,7 @@ async function resendEditedMessage(messageId, value) {
   const index = state.messages.findIndex((message) => message.id === messageId && message.role === "user");
   if (index < 0 || !cleanValue) return;
   if (guardAdminUserAction()) return;
-  if (isMakeThinking || makeRequestInFlight) {
+  if (isMakeThinking || makeRequestState.inFlight) {
     showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
     return;
   }
@@ -4994,7 +5009,7 @@ async function resendEditedMessage(messageId, value) {
       return;
     }
 
-    makeRequestInFlight = true;
+    window.TtalkakMakeState.startMakeRequest(makeRequestState);
     try {
       await improvePromptWithBackend(cleanValue, {
         threadId,
@@ -5020,17 +5035,14 @@ async function resendEditedMessage(messageId, value) {
       handleBackendAccessError(error, "수정 실패: 잠시 후 다시 시도해주세요.");
       render();
     } finally {
-      makeRequestInFlight = false;
+      makeRequestState.inFlight = false;
     }
     return;
   }
 
-  makeRequestInFlight = true;
+  window.TtalkakMakeState.startMakeRequest(makeRequestState);
   applyEditedMakeMessageState(state, index, cleanValue, now);
   isMakeThinking = true;
-  makeFailedMessageId = "";
-  makeFailedMessageText = "";
-  makeFailedRetryable = false;
   queueLatestMakeScroll(messageId, { mode: "immediate" });
   render();
   let improvedPrompt = "";
@@ -5039,11 +5051,9 @@ async function resendEditedMessage(messageId, value) {
     improvedPrompt = await improvePromptWithBackend(cleanValue, { history, threadId });
   } catch (error) {
     isMakeThinking = false;
-    makeRequestInFlight = false;
+    makeRequestState.inFlight = false;
     const failure = window.TtalkakMakeMessageModel.classifyMakeError(error);
-    makeFailedMessageId = messageId;
-    makeFailedMessageText = failure.message;
-    makeFailedRetryable = failure.retryable;
+    window.TtalkakMakeState.failMakeRequest(makeRequestState, messageId, failure);
     state.makeBackendStatus = "fallback";
     state.makeBackendMessage = getApiFailureMessage("Make 개선 API");
     handleBackendAccessError(error, "프롬프트 개선 요청에 실패했습니다.");
@@ -5052,10 +5062,7 @@ async function resendEditedMessage(messageId, value) {
     return;
   }
   isMakeThinking = false;
-  makeRequestInFlight = false;
-  makeFailedMessageId = "";
-  makeFailedMessageText = "";
-  makeFailedRetryable = false;
+  window.TtalkakMakeState.completeMakeRequest(makeRequestState);
   finishEditedMakeMessageState(state, {
     id: assistantMessageId,
     role: "assistant",
@@ -7152,14 +7159,7 @@ function buildMakeImproveHistory(messages = state.messages) {
 }
 
 function submitAskAnswerForm(form) {
-  const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
-  const questions = inputs.map((input) => ({
-    field: input.name,
-    question: input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name,
-    importance: input.required ? "required" : "recommended",
-  }));
-  const values = Object.fromEntries(inputs.map((input) => [input.name, input.value]));
-  const result = window.TtalkakMakeMessageModel.composeAskAnswers(questions, values);
+  const { inputs, result } = window.TtalkakMakeController.collectAskAnswerPayload(form, window.TtalkakMakeMessageModel);
   const invalid = inputs.filter((input) => result.missingFields.includes(input.name));
   inputs.forEach((input) => input.toggleAttribute("aria-invalid", invalid.includes(input)));
   if (result.missingFields.length) {
@@ -7169,19 +7169,16 @@ function submitAskAnswerForm(form) {
     return;
   }
   if (!result.message) return;
-  const composer = document.querySelector("[data-make-composer]");
+  const composer = document.querySelector("[data-composer]");
   const textarea = composer?.querySelector('[name="prompt"]');
   if (!composer || !textarea) return;
   textarea.value = result.message;
-  state.composerDraft = textarea.value;
+  window.TtalkakMakeState.setMakeComposerDraft(state, textarea.value);
   submitMakeComposer(composer);
 }
 
 function focusLatestAskAnswer() {
-  window.setTimeout(() => {
-    const inputs = document.querySelectorAll("[data-ask-answer-form] [data-ask-answer-input]:not(:disabled)");
-    inputs[inputs.length - 1]?.focus();
-  }, 0);
+  window.TtalkakMakeFocus.focusLatestAskAnswer(document);
 }
 
 function getMakeThreadById(threadId = state.activeThreadId) {
@@ -7405,7 +7402,7 @@ function normalizePersistedLikeCounts() {
 
 function normalizeRecentThreads() {
   const seen = new Set();
-  window.TtalkakMakeMessageModel.migratePersistedMakeState(state);
+  window.TtalkakMakePersistence.migrateAndPersistMakeState(state, window.TtalkakMakeMessageModel, persistState);
 
   state.recentThreads = state.recentThreads.filter((thread, index) => {
     if (!thread.id) {
@@ -7475,7 +7472,6 @@ loadPersistedState();
 normalizeDemoCopy();
 normalizeAssistantPromptOutputs();
 normalizeRecentThreads();
-persistState();
 ensureDemoComments();
 render();
 hydrateBackendHomeData();
