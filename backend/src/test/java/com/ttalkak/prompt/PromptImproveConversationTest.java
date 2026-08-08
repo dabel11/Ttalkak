@@ -512,6 +512,81 @@ class PromptImproveConversationTest {
 				never()).save(any(MakeThread.class));
 	}
 
+
+	@Test
+	void askResponseWithoutAnswerStillReturnsQuestions() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "주제 정보가 필요합니다.",
+						  "questions": [
+						    {
+						      "field": "topic",
+						      "question": "어떤 주제로 작성할까요?",
+						      "reason": "방향을 정하기 위해 필요합니다.",
+						      "importance": "required"
+						    }
+						  ],
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request(
+						"글 써줘",
+						null,
+						null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		assertEquals("주제 정보가 필요합니다.", response.get("answer"));
+		assertEquals("주제 정보가 필요합니다.", response.get("summary"));
+		assertEquals(
+				1,
+				((List<?>) response.get("questions")).size());
+
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void questionAliasResponseIsTreatedAsAsk() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "type": "question",
+						  "answer": "추가 확인이 필요합니다.",
+						  "questions": ["대상 독자는 누구인가요?"],
+						  "improved_prompt": "실행되면 안 되는 프롬프트",
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request(
+						"좋은 글 써줘",
+						null,
+						null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		assertEquals(
+				1,
+				((List<?>) response.get("questions")).size());
+	}
+
 	@Test
 	void ragServiceUnavailableDoesNotSaveThread() {
 		when(

@@ -783,6 +783,28 @@ public class PromptController {
     private Map<String, Object> buildImproveResponse(
             Map<?, ?> ragResponse
     ) {
+        String mode = firstNonBlank(
+                ragResponse,
+                "mode",
+                "type"
+        );
+
+        boolean askMode =
+                "ask".equalsIgnoreCase(mode)
+                        || "question".equalsIgnoreCase(mode);
+
+        String summary = firstNonBlank(
+                ragResponse,
+                "summary"
+        );
+
+        List<?> questions = firstList(
+                ragResponse,
+                "questions",
+                "followUpQuestions",
+                "additionalQuestions"
+        );
+
         String improvedPrompt = firstNonBlank(
                 ragResponse,
                 "improvedPrompt",
@@ -799,7 +821,13 @@ public class PromptController {
                 "result"
         );
 
-        if (improvedPrompt == null && answer == null) {
+        if (askMode && answer == null) {
+            answer = summary == null || summary.isBlank()
+                    ? "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다."
+                    : summary;
+        }
+
+        if (!askMode && improvedPrompt == null && answer == null) {
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "AI_INVALID_RESPONSE",
@@ -835,13 +863,7 @@ public class PromptController {
         }
 
 
-        String mode = firstNonBlank(
-                ragResponse,
-                "mode",
-                "type"
-        );
-
-        if ("ask".equalsIgnoreCase(mode) || "question".equalsIgnoreCase(mode)) {
+        if (askMode) {
             mode = "ask";
             improvedPrompt = "";
         } else {
@@ -858,10 +880,7 @@ public class PromptController {
         body.put("ragStatus", ragStatus);
         body.put(
                 "summary",
-                firstNonBlank(
-                        ragResponse,
-                        "summary"
-                )
+                summary
         );
         body.put(
                 "techniquesApplied",
@@ -877,12 +896,7 @@ public class PromptController {
         );
         body.put(
                 "questions",
-                firstList(
-                        ragResponse,
-                        "questions",
-                        "followUpQuestions",
-                        "additionalQuestions"
-                )
+                questions
         );
         body.put(
                 "fields",
