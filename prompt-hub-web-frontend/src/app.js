@@ -45,6 +45,8 @@ const {
   sortComments: sortCommentsModel,
   syncPromptCommentCount: syncPromptCommentCountModel,
 } = window.TtalkakCommentModel || {};
+const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = window.TtalkakShareController || {};
+const { bindShareEvents } = window.TtalkakShareEvents || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -84,6 +86,9 @@ if (
     getCommentLikesModel,
     sortCommentsModel,
     syncPromptCommentCountModel,
+    createShareController,
+    getShareTagSuggestionsModel,
+    bindShareEvents,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -846,6 +851,14 @@ const promptEngagementController = createPromptEngagementController({
   confirm: openConfirmAction,
   deleteCommentState,
   refreshAdmin: refreshAdminAfterMutation,
+});
+
+const shareController = createShareController({
+  state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
+  escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: window.TTALKAK_API,
+  hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: removePromptById,
+  handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
+  applyShared: applySharedPromptState, notice: showNotice,
 });
 
 const icons = {
@@ -3296,51 +3309,7 @@ function bindAuthFormEvents() {
 }
 
 function bindShareFormEvents() {
-  const shareForm = document.querySelector(".share-form");
-  if (shareForm) {
-    shareForm.addEventListener("input", () => {
-      const formData = new FormData(shareForm);
-      updateShareDraft(formData);
-      updateSharePreview(formData);
-    });
-
-    const tagSearchInput = shareForm.querySelector("input[name='tagSearch']");
-    if (tagSearchInput) {
-      tagSearchInput.addEventListener("compositionstart", () => {
-        state.isComposingShareTag = true;
-      });
-      tagSearchInput.addEventListener("compositionend", () => {
-        state.isComposingShareTag = false;
-        updateShareTagQuery(tagSearchInput.value);
-      });
-      tagSearchInput.addEventListener("input", (event) => {
-        if (state.isComposingShareTag || event.isComposing) return;
-        updateShareTagQuery(tagSearchInput.value);
-      });
-      tagSearchInput.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || state.isComposingShareTag || event.isComposing) return;
-        event.preventDefault();
-        addShareTag(tagSearchInput.value);
-      });
-    }
-
-    shareForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      sharePrompt(new FormData(shareForm));
-    });
-  }
-
-  document.querySelectorAll("[data-remove-share-tag]").forEach((button) => {
-    button.addEventListener("click", () => {
-      removeShareTag(button.dataset.removeShareTag);
-    });
-  });
-
-  document.querySelectorAll("[data-add-share-tag]").forEach((button) => {
-    button.addEventListener("click", () => {
-      addShareTag(button.dataset.addShareTag);
-    });
-  });
+  bindShareEvents(document, shareController, state);
 }
 
 function bindReportAndCommentFormEvents() {
@@ -3520,114 +3489,8 @@ async function reportComment(commentId, reason) {
   refreshMyPageDataAfterMutation();
   render();
 }
-function openShareFromSaved(promptId) {
-  const prompt = savedPrompts.find((item) => item.id === promptId);
-  if (!prompt) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    return render();
-  }
-
-  state.shareDraft = {
-    promptId,
-    title: prompt.title,
-    text: prompt.text,
-    tags: prompt.tags?.filter((tag) => tag !== "내프롬프트" && tag !== "Make" && tag !== "첨삭") || [],
-  };
-  state.shareError = "";
-  state.route = "share";
-  render();
-}
-
-function updateShareDraft(formData) {
-  state.shareDraft = {
-    ...(state.shareDraft || {}),
-    title: String(formData.get("title") || ""),
-    text: String(formData.get("prompt") || ""),
-    tags: parseSharedTags(String(formData.get("tags") || "")),
-  };
-}
-
-function addShareTag(value) {
-  const tag = String(value || "").replace(/^#+/, "").trim();
-  if (!tag) return;
-  const currentTags = parseSharedTags(state.shareDraft?.tags?.join(", ") || document.querySelector("input[name='tags']")?.value || "");
-  const exists = currentTags.some((item) => normalizeTag(item) === normalizeTag(tag));
-  if (!exists) currentTags.push(tag);
-  state.shareDraft = { ...(state.shareDraft || {}), tags: currentTags };
-  state.shareTagQuery = "";
-  state.isComposingShareTag = false;
-  render();
-}
-
-function updateShareTagQuery(value) {
-  const nextQuery = String(value || "");
-  if (state.shareTagQuery === nextQuery) return;
-
-  state.shareTagQuery = nextQuery;
-  renderShareTagSuggestions();
-}
-
-function renderShareTagSuggestions() {
-  const suggestionBox = document.querySelector(".share-tag-suggestions");
-  if (!suggestionBox) return;
-
-  const selectedTags = parseSharedTags(document.querySelector("input[name='tags']")?.value || state.shareDraft?.tags?.join(", ") || "");
-  const suggestions = getShareTagSuggestions(state.shareTagQuery, selectedTags);
-  const query = state.shareTagQuery.trim();
-
-  if (suggestions.length > 0) {
-    suggestionBox.innerHTML = suggestions
-      .map((tag) => `<button type="button" data-add-share-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`)
-      .join("");
-  } else if (query) {
-    suggestionBox.innerHTML = `<button class="new-tag-suggestion" type="button" data-add-share-tag="${escapeAttr(query)}">새 태그로 추가: #${escapeHtml(query)}</button>`;
-  } else {
-    suggestionBox.innerHTML = `<span>기존 해시태그를 검색해 선택할 수 있습니다.</span>`;
-  }
-
-  suggestionBox.querySelectorAll("[data-add-share-tag]").forEach((button) => {
-    button.addEventListener("click", () => {
-      addShareTag(button.dataset.addShareTag);
-    });
-  });
-}
-
-function removeShareTag(value) {
-  const target = normalizeTag(value);
-  const currentTags = parseSharedTags(state.shareDraft?.tags?.join(", ") || "");
-  state.shareDraft = {
-    ...(state.shareDraft || {}),
-    tags: currentTags.filter((tag) => normalizeTag(tag) !== target),
-  };
-  render();
-}
-
 function getShareTagSuggestions(query, selectedTags = []) {
-  const normalizedQuery = normalizeTag(query || "");
-  const selected = new Set(selectedTags.map(normalizeTag));
-  return getKnownTags()
-    .filter((tag) => !selected.has(normalizeTag(tag)))
-    .filter((tag) => !normalizedQuery || normalizeTag(tag).includes(normalizedQuery))
-    .slice(0, 8);
-}
-
-function updateSharePreview(formData) {
-  const title = String(formData.get("title") || "").trim() || "프롬프트 제목 미리보기";
-  const text = String(formData.get("prompt") || "").trim() || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.";
-  const tags = parseSharedTags(String(formData.get("tags") || "")).slice(0, 4);
-  const previewTitle = document.querySelector("[data-share-preview-title]");
-  const previewText = document.querySelector("[data-share-preview-text]");
-  const previewTagRow = document.querySelector("[data-share-preview-tags]");
-
-  if (previewTitle) previewTitle.textContent = title;
-  if (previewText) previewText.textContent = text;
-  if (previewTagRow) {
-    previewTagRow.innerHTML = tags.length
-      ? tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")
-      : `<span class="tag-chip-empty">태그 없음</span>`;
-  }
+  return getShareTagSuggestionsModel(query, selectedTags, getKnownTags(), normalizeTag);
 }
 
 function updatePromptField(promptId, field, delta) {
@@ -5125,83 +4988,6 @@ function findPromptById(promptId) {
     ...savedPrompts,
     ...popularPrompts,
   ]).find((item) => item.id === promptId);
-}
-
-async function sharePrompt(formData) {
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    render();
-    return;
-  }
-
-  const title = formData.get("title").trim();
-  const text = formData.get("prompt").trim();
-  const tags = parseSharedTags(formData.get("tags"));
-
-  if (!title || !text) {
-    state.shareError = "제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.";
-    render();
-    return;
-  }
-
-  const promptId = state.shareDraft?.promptId || `shared-${Date.now()}`;
-  const existingPrompt = findPromptById(promptId);
-  const prompt = {
-    id: promptId,
-    title,
-    text,
-    tags,
-    views: 0,
-    comments: 0,
-    saves: 0,
-    author: state.currentUser || existingPrompt?.author || "익명 사용자",
-    owner: state.currentUser || existingPrompt?.owner || existingPrompt?.author || "익명 사용자",
-    source: "mine",
-    isShared: true,
-    savedByMe: Boolean(existingPrompt?.savedByMe),
-    createdAt: existingPrompt?.createdAt || Date.now(),
-  };
-
-  const existingSavedPrompt = savedPrompts.find((item) => item.id === prompt.id);
-  if (existingSavedPrompt) {
-    delete existingSavedPrompt.messages;
-  }
-
-  let finalPrompt = prompt;
-  const api = window.TTALKAK_API;
-  if (api?.sharePrompt && hasBackendAuthToken()) {
-    try {
-      const backendPrompt = await api.sharePrompt(
-        {
-          title: prompt.title,
-          text: prompt.text,
-          tags: prompt.tags,
-          isShared: true,
-        },
-        getAuthToken() || undefined,
-      );
-      finalPrompt = {
-        ...backendPrompt,
-        source: "mine",
-        isShared: true,
-        savedByMe: Boolean(existingPrompt?.savedByMe || backendPrompt.savedByMe),
-        author: state.currentUser || backendPrompt.author,
-        owner: state.currentUser || backendPrompt.owner || backendPrompt.author,
-      };
-      if (prompt.id !== finalPrompt.id) {
-        removePromptById(popularPrompts, prompt.id);
-        removePromptById(savedPrompts, prompt.id);
-      }
-    } catch (error) {
-      handleBackendAccessError(error, "프롬프트 공유 요청에 실패했습니다.");
-      return;
-    }
-  }
-
-  applySharedPromptState({ ...getCommentMutationStateContext(), existingPrompt }, prompt, finalPrompt);
-  showNotice("최종 프롬프트가 공유되었습니다. Home 최신 목록에서 확인할 수 있습니다.");
 }
 
 function upsertPrompt(list, prompt) {

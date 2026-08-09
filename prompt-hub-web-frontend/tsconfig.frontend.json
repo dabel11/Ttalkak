@@ -12,6 +12,7 @@
     "types/browser-globals.d.ts",
     "src/home/*.js",
     "src/interactions/*.js",
+    "src/share/*.js",
     "src/make/*.js"
   ]
 }
