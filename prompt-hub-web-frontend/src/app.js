@@ -52,6 +52,8 @@ const { createModalController } = window.TtalkakModalController || {};
 const { bindModalEvents } = window.TtalkakModalEvents || {};
 const { createAuthSession, normalizeAuthResult } = window.TtalkakAuthSession || {};
 const { getUserIdValidationMessage, isValidEmail } = window.TtalkakAuthValidation || {};
+const { createAuthController } = window.TtalkakAuthController || {};
+const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = window.TtalkakAuthEvents || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -101,6 +103,9 @@ if (
     normalizeAuthResult,
     getUserIdValidationMessage,
     isValidEmail,
+    createAuthController,
+    bindAuthControls,
+    bindAuthForm,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -839,7 +844,7 @@ const promptEngagementController = createPromptEngagementController({
   refreshMyPage: refreshMyPageDataAfterMutation,
   callApi: callBackendApi,
   hasBackendToken: hasBackendAuthToken,
-  hydrateComments: hydratePromptComments,
+  hydrateComments: (...args) => promptEngagementController.hydratePromptComments(...args),
   revisionKey: makeRevisionRequestKey,
   applyExistingSaved: applyExistingPromptSavedState,
   applyBackendUnsaved: applyBackendPromptUnsavedState,
@@ -861,7 +866,7 @@ const promptEngagementController = createPromptEngagementController({
   incrementViews: incrementPromptViews,
   syncCommentCount: commentRepository.syncCount,
   findCommentInList: commentRepository.findInList,
-  confirm: openConfirmAction,
+  confirm: (...args) => modalController.openConfirm(...args),
   deleteCommentState,
   refreshAdmin: refreshAdminAfterMutation,
 });
@@ -893,6 +898,8 @@ const applyAccountScope = authSession.applyScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: window.TTALKAK_API, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => console.warn(...args), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const openAuth = authController.open;
 const closeTopModal = modalController.closeTop;
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
@@ -909,7 +916,7 @@ const confirmActionHandlers = {
     clearAuthenticatedSession();
     showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
   },
-  withdraw: withdrawConfirmedAccount,
+  withdraw: authController.withdraw,
   "reset-demo": () => { resetDemoState(); return false; },
 };
 
@@ -2176,13 +2183,6 @@ function SharePage() {
   );
 }
 
-function openAuth(view = "login") {
-  state.authView = view;
-  state.authUserIdWarning = "";
-  state.authError = "";
-  render();
-}
-
 function AuthModal() {
   const isSignup = state.authView === "signup";
   const isFindId = state.authView === "find-id";
@@ -2215,80 +2215,6 @@ function AuthModal() {
       authUserIdWarning: state.authUserIdWarning,
     },
   );
-}
-
-function saveAuthDraftFromForm() {
-  if (state.authView !== "signup") return;
-  const form = document.querySelector("[data-auth-form]");
-  if (!form) return;
-  const formData = new FormData(form);
-  state.authDraft = {
-    nickname: String(formData.get("nickname") || ""),
-    name: String(formData.get("name") || ""),
-    userId: String(formData.get("userId") || ""),
-    email: String(formData.get("email") || ""),
-    phone: String(formData.get("phone") || ""),
-    birth: String(formData.get("birth") || ""),
-    password: String(formData.get("password") || ""),
-    passwordConfirm: String(formData.get("passwordConfirm") || ""),
-    terms: formData.has("terms"),
-    privacy: formData.has("privacy"),
-  };
-}
-
-function clearAuthFormError() {
-  state.authError = "";
-  const errorElement = document.querySelector("[data-auth-error]");
-  if (errorElement) {
-    errorElement.textContent = "";
-    errorElement.hidden = true;
-  }
-}
-
-function setAuthFormError(message) {
-  const text = String(message || "요청을 처리하지 못했습니다.").trim();
-  state.authError = text;
-  const form = document.querySelector("[data-auth-form]");
-  let errorElement = form?.querySelector("[data-auth-error]");
-  if (!errorElement && form) {
-    errorElement = document.createElement("p");
-    errorElement.className = "auth-form-error";
-    errorElement.setAttribute("role", "alert");
-    errorElement.dataset.authError = "";
-    const anchor = form.querySelector(".auth-divider") || form.querySelector(".auth-helper") || form.querySelector(".modal-head");
-    anchor?.insertAdjacentElement("afterend", errorElement);
-  }
-  if (errorElement) {
-    errorElement.textContent = text;
-    errorElement.hidden = false;
-  }
-}
-
-function isDuplicateAuthValue(field, value) {
-  const normalized = normalizeSearchText(value);
-  if (!normalized) return false;
-  const source = field === "nickname" ? DEMO_EXISTING_NICKNAMES : DEMO_EXISTING_USER_IDS;
-  return source.some((item) => normalizeSearchText(item) === normalized);
-}
-
-function applyAuthenticatedIdentity(authResult) {
-  applyAuthenticatedIdentityState(state, authResult);
-}
-
-function resetSessionBackendState() {
-  resetSessionBackendStateValue(state);
-}
-
-function clearSessionBackendData() {
-  clearSessionBackendDataState(state);
-}
-
-function clearTransientSessionUiState() {
-  clearTransientSessionUiStateValue(state);
-}
-
-function clearAuthenticatedIdentity() {
-  clearAuthenticatedIdentityState(state);
 }
 
 function getPromptMutationStateContext() {
@@ -2329,28 +2255,6 @@ function getMakeMutationStateContext() {
   };
 }
 
-function normalizeUserIdInput(input) {
-  if (!input) return "";
-  const lowered = input.value.toLowerCase();
-  if (input.value !== lowered) input.value = lowered;
-  return lowered.trim();
-}
-
-function updateUserIdWarning(input) {
-  const warning = getUserIdValidationMessage(input?.value);
-  state.authUserIdWarning = warning;
-  const warningElement = document.querySelector("[data-user-id-warning]");
-  if (warningElement) warningElement.textContent = warning;
-  return warning;
-}
-
-function updateCapsLockWarning(input, event) {
-  const warningElement = input.closest(".password-field")?.nextElementSibling;
-  if (!warningElement?.matches("[data-caps-warning]")) return;
-  const isOn = Boolean(event?.getModifierState?.("CapsLock"));
-  warningElement.hidden = !isOn;
-}
-
 function bindEvents() {
   bindAppEvents({
     bindCoreEvents,
@@ -2361,7 +2265,7 @@ function bindEvents() {
 function bindCoreEvents() {
   bindGlobalNavigationEvents();
   bindDiscoveryEvents();
-  bindAuthControlEvents();
+  bindAuthControls(document, authController);
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEngagementEvents(document, promptEngagementController);
@@ -2537,100 +2441,6 @@ function bindDiscoveryEvents() {
         return;
       }
       openAdminUserActivity(nickname, { memberId, keepQuery: true });
-    });
-  });
-}
-
-function bindAuthControlEvents() {
-  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
-    button.addEventListener("click", () => {
-      togglePasswordVisibility(button);
-    });
-  });
-
-  document.querySelectorAll("[data-google-auth]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const credential = String(button.dataset.googleCredential || window.TTALKAK_GOOGLE_CREDENTIAL || "").trim();
-      const api = window.TTALKAK_API;
-
-      if (credential && api?.googleLogin) {
-        try {
-          button.disabled = true;
-          const authResponse = await api.googleLogin(credential);
-          const authResult = normalizeAuthResult(authResponse, "google");
-          if (!authResult.token) {
-            throw new Error("Google 로그인 응답에 accessToken이 없습니다.");
-          }
-          applyAuthenticatedUser(authResult);
-          state.authView = null;
-          state.authError = "";
-          showNotice("Google 계정으로 로그인했습니다.");
-          render();
-          return;
-        } catch (error) {
-          setAuthFormError(error?.message || "Google 로그인에 실패했습니다.");
-        } finally {
-          button.disabled = false;
-        }
-      } else {
-        showNotice("Google OAuth credential이 없어 데모 Google 계정으로 전환합니다. 실제 연동은 Google Client ID 설정 후 확인하세요.");
-      }
-
-      applyAuthenticatedUser({
-        token: DEMO_AUTH_TOKEN,
-        user: {
-          id: "demo-google-user",
-          userId: "google",
-          nickname: "Google닉네임",
-          role: "user",
-        },
-      });
-      state.authView = null;
-      state.authError = "";
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-check-duplicate]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const row = button.closest(".auth-check-row");
-      const input = row?.querySelector("input");
-      const field = button.dataset.checkDuplicate;
-      if (field === "userId") normalizeUserIdInput(input);
-      const value = String(input?.value || "").trim();
-      saveAuthDraftFromForm();
-      if (!value) {
-        setAuthFormError("중복 확인할 값을 입력해주세요.");
-        return;
-      }
-      if (field === "userId") {
-        const warning = updateUserIdWarning(input);
-        if (warning) {
-          setAuthFormError(warning);
-          return;
-        }
-      }
-      let isDuplicate = isDuplicateAuthValue(field, value);
-      const api = window.TTALKAK_API;
-      const checkHandler = field === "nickname" ? api?.checkNickname : api?.checkUserId;
-      if (checkHandler) {
-        try {
-          const result = await checkHandler(value);
-          if (typeof result?.available === "boolean") {
-            isDuplicate = !result.available;
-          }
-        } catch (error) {
-          console.warn("[TTALKAK] 중복 확인 API 호출에 실패해 데모 중복 목록으로 확인합니다.", error);
-        }
-      }
-      if (isDuplicate) {
-        delete state.authDuplicateChecks[field];
-        setAuthFormError(field === "nickname" ? "이미 사용 중인 닉네임입니다." : "이미 사용 중인 아이디입니다.");
-        render();
-        return;
-      }
-      state.authDuplicateChecks[field] = value;
-      showNotice("사용 가능한 값입니다.");
     });
   });
 }
@@ -2933,249 +2743,9 @@ function bindPromptEditAndExecuteEvents() {
 }
 
 function bindFormSubmitEvents() {
-  bindAuthFormEvents();
+  bindAuthForm(document, authController, state);
   bindShareFormEvents();
   bindReportAndCommentFormEvents();
-}
-
-function bindAuthFormEvents() {
-  const authForm = document.querySelector("[data-auth-form]");
-  if (authForm) {
-    authForm.addEventListener("input", (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement)) return;
-      clearAuthFormError();
-
-      if (target.name === "userId") {
-        normalizeUserIdInput(target);
-        updateUserIdWarning(target);
-      }
-
-      if (state.authView === "signup") {
-        saveAuthDraftFromForm();
-        if ((target.name === "nickname" || target.name === "userId") && state.authDuplicateChecks[target.name] !== target.value.trim()) {
-          delete state.authDuplicateChecks[target.name];
-          const checkButton = target.closest(".auth-check-row")?.querySelector("[data-check-duplicate]");
-          if (checkButton) {
-            checkButton.textContent = "중복 확인";
-            checkButton.disabled = false;
-          }
-        }
-      }
-    });
-
-    authForm.querySelectorAll("input[type='password']").forEach((input) => {
-      input.addEventListener("keydown", (event) => updateCapsLockWarning(input, event));
-      input.addEventListener("keyup", (event) => updateCapsLockWarning(input, event));
-      input.addEventListener("blur", () => updateCapsLockWarning(input, null));
-    });
-
-    authForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      saveAuthDraftFromForm();
-      const formData = new FormData(authForm);
-      const isSignup = state.authView === "signup";
-      const isFindId = state.authView === "find-id";
-      const isFindPassword = state.authView === "find-password";
-      const isWithdraw = state.authView === "withdraw";
-      const userId = String(formData.get("userId") || "").trim();
-      const password = String(formData.get("password") || "").trim();
-      const userIdWarning = getUserIdValidationMessage(userId);
-
-      if (isWithdraw) {
-        if (!password) {
-          setAuthFormError("회원탈퇴를 위해 비밀번호를 입력해주세요.");
-          return;
-        }
-        openConfirmAction({
-          type: "withdraw",
-          title: "회원탈퇴",
-          message: "정말 회원탈퇴를 진행할까요? 탈퇴 후에는 이 계정으로 다시 로그인할 수 없습니다.",
-          confirmLabel: "회원탈퇴",
-          danger: true,
-          password,
-        });
-        return;
-      }
-
-      if (isFindId) {
-        const name = String(formData.get("name") || "").trim();
-        const phone = String(formData.get("phone") || "").trim();
-        const email = String(formData.get("email") || "").trim();
-        if (!name || !email) {
-          setAuthFormError("이름과 이메일을 입력해주세요.");
-          return;
-        }
-        if (!isValidEmail(email)) {
-          setAuthFormError("이메일 형식을 확인해주세요.");
-          return;
-        }
-        if (phone && !isValidPhone(phone)) {
-          setAuthFormError("전화번호 형식을 확인해주세요.");
-          return;
-        }
-        try {
-          const api = window.TTALKAK_API;
-          const result = api?.findId ? await api.findId({ method: "email", name, email, phone }) : null;
-          const maskedUserId = result?.maskedUserId || "";
-          showNotice(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
-        } catch (error) {
-          const backendMessage = error?.payload?.message || error?.message || "";
-          setAuthFormError(backendMessage || "아이디 찾기 요청에 실패했습니다.");
-          return;
-        }
-        state.authView = "login";
-        return;
-      }
-
-      if (isFindPassword) {
-        const phone = String(formData.get("phone") || "").trim();
-        const email = String(formData.get("email") || "").trim();
-        if (!userId || !email) {
-          setAuthFormError("아이디와 이메일을 입력해주세요.");
-          return;
-        }
-        if (userIdWarning) {
-          setAuthFormError(userIdWarning);
-          return;
-        }
-        if (!isValidEmail(email)) {
-          setAuthFormError("이메일 형식을 확인해주세요.");
-          return;
-        }
-        if (phone && !isValidPhone(phone)) {
-          setAuthFormError("전화번호 형식을 확인해주세요.");
-          return;
-        }
-        try {
-          const api = window.TTALKAK_API;
-          if (api?.requestPasswordReset) await api.requestPasswordReset({ userId, email, phone });
-          showNotice("비밀번호 재설정 요청을 보냈습니다.");
-        } catch (error) {
-          const backendMessage = error?.payload?.message || error?.message || "";
-          setAuthFormError(backendMessage || "비밀번호 재설정 요청에 실패했습니다.");
-          return;
-        }
-        state.authView = "login";
-        return;
-      }
-
-      if (isSignup) {
-        const nickname = String(formData.get("nickname") || "").trim();
-        const requiredFields = [
-          ["nickname", "닉네임"],
-          ["name", "이름"],
-          ["userId", "아이디"],
-          ["email", "이메일"],
-          ["password", "비밀번호"],
-          ["passwordConfirm", "비밀번호 확인"],
-        ];
-        const missingFields = requiredFields
-          .filter(([name]) => !String(formData.get(name) || "").trim())
-          .map(([, label]) => label);
-
-        if (missingFields.length > 0) {
-          setAuthFormError(`다음 정보를 입력해주세요: ${missingFields.join(", ")}`);
-          return;
-        }
-        if (userIdWarning) {
-          setAuthFormError(userIdWarning);
-          return;
-        }
-        const email = String(formData.get("email") || "").trim();
-        const phone = String(formData.get("phone") || "").trim();
-        if (!isValidEmail(email)) {
-          setAuthFormError("이메일 형식을 확인해주세요.");
-          return;
-        }
-        if (phone && !isValidPhone(phone)) {
-          setAuthFormError("전화번호 형식을 확인해주세요.");
-          return;
-        }
-
-        if (isDuplicateAuthValue("nickname", nickname)) {
-          setAuthFormError("이미 사용 중인 닉네임입니다.");
-          return;
-        }
-        if (isDuplicateAuthValue("userId", userId)) {
-          setAuthFormError("이미 사용 중인 아이디입니다.");
-          return;
-        }
-        if (state.authDuplicateChecks.nickname !== nickname || state.authDuplicateChecks.userId !== userId) {
-          setAuthFormError("닉네임과 아이디 중복 확인을 완료해주세요.");
-          return;
-        }
-
-        const birth = String(formData.get("birth") || "").trim();
-        if (isFutureDate(birth)) {
-          setAuthFormError("생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
-          return;
-        }
-        if (password.length < 8) {
-          setAuthFormError("비밀번호는 8자 이상 입력해주세요.");
-          return;
-        }
-        if (formData.get("terms") !== "on" || formData.get("privacy") !== "on") {
-          setAuthFormError("사이트 이용 약관과 개인정보 수집 및 이용에 동의해주세요.");
-          return;
-        }
-      } else if (!userId || !password) {
-        setAuthFormError("아이디와 비밀번호를 모두 입력해주세요.");
-        return;
-      } else if (userIdWarning) {
-        setAuthFormError(userIdWarning);
-        return;
-      }
-
-      if (isSignup && formData.get("password") !== formData.get("passwordConfirm")) {
-        setAuthFormError("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
-        return;
-      }
-
-      const api = window.TTALKAK_API;
-      if (!api?.login) {
-        setAuthFormError("백엔드 로그인 API를 찾을 수 없습니다. api.js 로드 순서를 확인해주세요.");
-        return;
-      }
-
-      try {
-        const authPayload = isSignup
-          ? {
-              nickname: String(formData.get("nickname") || "").trim(),
-              name: String(formData.get("name") || "").trim(),
-              userId,
-              email: String(formData.get("email") || "").trim(),
-              phone: String(formData.get("phone") || "").trim(),
-              birth: String(formData.get("birth") || "").trim(),
-              password,
-              passwordConfirm: String(formData.get("passwordConfirm") || "").trim(),
-              agreeTerms: formData.get("terms") === "on",
-              agreePrivacy: formData.get("privacy") === "on",
-            }
-          : { userId, password };
-        const authResponse = isSignup && api.signup ? await api.signup(authPayload) : await api.login(authPayload);
-        const authResult = normalizeAuthResult(authResponse, userId);
-
-        if (!authResult.token) {
-          setAuthFormError("로그인 응답에 accessToken이 없습니다. 백엔드 응답 형식을 확인해주세요.");
-          return;
-        }
-
-        applyAuthenticatedUser(authResult);
-        state.authView = null;
-        state.authDraft = {};
-        state.authDuplicateChecks = {};
-        state.authUserIdWarning = "";
-        state.authError = "";
-        showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
-        await hydrateBackendMakeDataIfNeeded();
-        render();
-      } catch (error) {
-        const backendMessage = error?.payload?.message || error?.message || "";
-        setAuthFormError(backendMessage || "로그인 요청에 실패했습니다.");
-      }
-    });
-  }
 }
 
 function bindShareFormEvents() {
@@ -3501,25 +3071,6 @@ async function updateAdminCommentHiddenState(commentId, shouldHide) {
   render();
 }
 
-async function withdrawConfirmedAccount(action) {
-    const api = window.TTALKAK_API;
-    if (!state.authToken && !state.token) {
-      state.authView = "login";
-      showNotice("로그인이 필요합니다.");
-      render();
-      return false;
-    }
-    try {
-      if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
-      const result = await api.withdrawAccount({ password: action.password || "" }, getAuthToken());
-      clearAuthenticatedSession();
-      showNotice(result?.message || "회원탈퇴가 완료되었습니다.");
-    } catch (error) {
-      handleBackendAccessError(error, "회원탈퇴 요청에 실패했습니다.");
-      render();
-      return false;
-    }
-}
 
 function performDeleteThreadLocal(threadId) {
   deleteMakeThreadState(state, threadId);
@@ -4265,17 +3816,6 @@ function normalizeSavedPage() {
   normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
 }
 
-function togglePasswordVisibility(button) {
-  const field = button.closest(".password-field");
-  const input = field?.querySelector("input");
-  if (!input) return;
-
-  const shouldShow = input.type === "password";
-  input.type = shouldShow ? "text" : "password";
-  button.innerHTML = shouldShow ? icons.eyeOff : icons.eye;
-  button.setAttribute("aria-label", shouldShow ? "비밀번호 숨기기" : "비밀번호 보기");
-  input.focus();
-}
 
 function restoreSearchFocus() {
   homeController.restoreSearchFocus();

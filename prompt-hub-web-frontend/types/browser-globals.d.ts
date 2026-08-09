@@ -11,6 +11,8 @@ interface Window {
   TtalkakModalEvents: unknown;
   TtalkakAuthSession: unknown;
   TtalkakAuthValidation: unknown;
+  TtalkakAuthController: unknown;
+  TtalkakAuthEvents: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;
