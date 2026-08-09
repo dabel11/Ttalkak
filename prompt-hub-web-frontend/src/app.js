@@ -31,6 +31,8 @@ const {
   uniquePrompts,
 } = window.TtalkakHomeSearchModel || {};
 const getUniquePrompts = uniquePrompts;
+const { createHomeController } = window.TtalkakHomeController || {};
+const { bindHomeEvents } = window.TtalkakHomeEvents || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -58,6 +60,8 @@ if (
     selectVisiblePrompts,
     sortPrompts,
     uniquePrompts,
+    createHomeController,
+    bindHomeEvents,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -754,15 +758,27 @@ const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 
 let templateToggleTimer = null;
 
-let searchCommitTimer = null;
 let adminPromptSearchCommitTimer = null;
 let adminTagSearchCommitTimer = null;
-let searchTipTimer = null;
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
 const makeRequestState = window.TtalkakMakeState.createMakeRequestState();
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
+
+const homeController = createHomeController({
+  state,
+  root: document,
+  document,
+  debounceMs: SEARCH_DEBOUNCE_MS,
+  validScope: getValidSearchScope,
+  applySearchQuery: (value) => applyHomeSearchQueryState(state, value),
+  applyScope: (value) => applyHomeSearchScopeState(state, value),
+  applySort: (value) => applyHomeSortState(state, value),
+  applyPage: (value) => applyHomePageState(state, value),
+  refresh: refreshBackendHomePrompts,
+  render,
+});
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -912,7 +928,7 @@ function navigateTo(route) {
 }
 
 function resetHomeView() {
-  window.clearTimeout(searchCommitTimer);
+  homeController.cancelSearchCommit();
   resetHomeViewState(state);
   if (state.backendStatus === "connected") refreshBackendHomePrompts();
 }
@@ -2790,67 +2806,7 @@ function bindPromptInteractionEvents() {
 }
 
 function bindHomeSearchEvents() {
-  const searchInput = document.querySelector("[data-tag-search]");
-  const searchScopeSelect = document.querySelector("[data-search-scope]");
-  if (searchScopeSelect) {
-    searchScopeSelect.addEventListener("change", () => {
-      applyHomeSearchScopeState(state, getValidSearchScope(searchScopeSelect.value));
-      refreshBackendHomePrompts();
-      render();
-      restoreSearchFocus();
-    });
-  }
-
-  if (searchInput) {
-    searchInput.addEventListener("focus", () => {
-      showSearchTipOnce();
-    });
-    searchInput.addEventListener("compositionstart", () => {
-      state.isComposingSearch = true;
-      window.clearTimeout(searchCommitTimer);
-    });
-    searchInput.addEventListener("compositionend", () => {
-      state.isComposingSearch = false;
-      scheduleSearchCommit(searchInput.value);
-    });
-    searchInput.addEventListener("input", (event) => {
-      if (state.isComposingSearch || event.isComposing) return;
-      scheduleSearchCommit(searchInput.value);
-    });
-    searchInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || state.isComposingSearch || event.isComposing) return;
-      event.preventDefault();
-      commitSearchQuery(searchInput.value);
-    });
-  }
-
-  const searchHelp = document.querySelector("[data-search-help]");
-  if (searchHelp) {
-    searchHelp.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      searchInput?.focus();
-    });
-  }
-
-  const popularSortSelect = document.querySelector("[data-popular-sort]");
-  if (popularSortSelect) {
-    popularSortSelect.addEventListener("change", () => {
-      applyHomeSortState(state, popularSortSelect.value);
-      refreshBackendHomePrompts();
-      render();
-    });
-  }
-
-  document.querySelectorAll("[data-page]").forEach((button) => {
-    button.addEventListener("click", () => {
-      applyHomePageState(state, button.dataset.page);
-      if (state.backendStatus === "connected") {
-        refreshBackendHomePrompts();
-      }
-      render();
-    });
-  });
+  bindHomeEvents(document, homeController, state);
 
   document.querySelectorAll("[data-saved-page]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -4990,21 +4946,7 @@ function togglePasswordVisibility(button) {
 }
 
 function restoreSearchFocus() {
-  if (state.detailPromptId || state.authView || state.reportPromptId || state.reportCommentId || state.confirmAction) return;
-
-  const nextInput = document.querySelector("[data-tag-search]");
-  if (!nextInput) return;
-
-  const activeElement = document.activeElement;
-  const isEditingField =
-    activeElement &&
-    activeElement !== document.body &&
-    activeElement !== nextInput &&
-    activeElement.matches?.("input, textarea, select, [contenteditable='true']");
-  if (isEditingField) return;
-
-  nextInput.focus();
-  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+  homeController.restoreSearchFocus();
 }
 
 function getSavedPagePrompts() {
@@ -5061,37 +5003,6 @@ function getSavedSorter() {
   return (a, b) => byRecent(a, b) || bySaves(a, b) || byViews(a, b);
 }
 
-function showSearchTipOnce() {
-  if (state.searchTipShown) return;
-
-  state.searchTipShown = true;
-  state.searchTipVisible = true;
-  window.clearTimeout(searchTipTimer);
-  render();
-  restoreSearchFocus();
-
-  searchTipTimer = window.setTimeout(() => {
-    state.searchTipVisible = false;
-    document.querySelector("[data-search-help]")?.classList.remove("show-tip");
-  }, 2000);
-}
-
-function scheduleSearchCommit(value) {
-  window.clearTimeout(searchCommitTimer);
-  searchCommitTimer = window.setTimeout(() => {
-    commitSearchQuery(value);
-  }, SEARCH_DEBOUNCE_MS);
-}
-
-function commitSearchQuery(value) {
-  window.clearTimeout(searchCommitTimer);
-  if (!applyHomeSearchQueryState(state, value)) return;
-
-  refreshBackendHomePrompts();
-  render();
-  restoreSearchFocus();
-}
-
 function scheduleAdminPromptSearchCommit(value) {
   window.clearTimeout(adminPromptSearchCommitTimer);
   adminPromptSearchCommitTimer = window.setTimeout(() => {
@@ -5146,7 +5057,7 @@ function searchByTag(tag) {
   const cleanTag = String(tag || "").replace(/^#+/, "").trim();
   if (!cleanTag) return;
 
-  window.clearTimeout(searchCommitTimer);
+  homeController.cancelSearchCommit();
   applyHomeTagSearchState(state, cleanTag);
   refreshBackendHomePrompts();
   render();
@@ -5157,7 +5068,7 @@ function searchByAuthor(author) {
   const cleanAuthor = String(author || "").trim();
   if (!cleanAuthor) return;
 
-  window.clearTimeout(searchCommitTimer);
+  homeController.cancelSearchCommit();
   applyHomeAuthorSearchState(state, cleanAuthor);
   refreshBackendHomePrompts();
   render();
