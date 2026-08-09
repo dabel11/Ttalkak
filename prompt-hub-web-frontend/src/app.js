@@ -47,6 +47,8 @@ const {
 } = window.TtalkakCommentModel || {};
 const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = window.TtalkakShareController || {};
 const { bindShareEvents } = window.TtalkakShareEvents || {};
+const { createModalController } = window.TtalkakModalController || {};
+const { bindModalEvents } = window.TtalkakModalEvents || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -89,6 +91,8 @@ if (
     createShareController,
     getShareTagSuggestionsModel,
     bindShareEvents,
+    createModalController,
+    bindModalEvents,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -860,6 +864,7 @@ const shareController = createShareController({
   handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
   applyShared: applySharedPromptState, notice: showNotice,
 });
+const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -1015,25 +1020,11 @@ function resetHomeView() {
 }
 
 function closeTopModal() {
-  const shouldPreserveMakeScroll = Boolean(state.executeMessageId || state.executePromptId);
-  if (closeTopModalState(state)) {
-    if (shouldPreserveMakeScroll) {
-      renderPreservingMakeScroll();
-      return;
-    }
-    render();
-  }
+  return modalController.closeTop();
 }
 
 function focusActiveModal() {
-  window.setTimeout(() => {
-    const modals = document.querySelectorAll(".modal");
-    const modal = modals[modals.length - 1];
-    if (modal?.classList.contains("prompt-detail-modal")) return;
-
-    const focusable = modal?.querySelector("input, textarea, button, [href], [tabindex]:not([tabindex='-1'])");
-    focusable?.focus();
-  }, 0);
+  modalController.focusActive();
 }
 
 function Sidebar() {
@@ -2695,78 +2686,7 @@ function bindAuthControlEvents() {
 }
 
 function bindModalControlEvents() {
-  document.querySelectorAll("[data-close-auth]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.authView = null;
-      state.authError = "";
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-admin-user-block]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.adminBlockTarget = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll(".modal-backdrop.visible").forEach((backdrop) => {
-    backdrop.addEventListener("mousedown", (event) => {
-      if (event.target !== backdrop) return;
-      closeTopModal();
-    });
-  });
-
-  document.querySelectorAll("[data-close-detail]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.detailPromptId = null;
-      state.detailHighlightCommentId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-prompt-edit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.editingPromptId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-revision-request]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.adminRequestTargetKey = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-report]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.reportPromptId = null;
-      state.reportCommentId = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-close-execute]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.executeMessageId = null;
-      state.executePromptId = null;
-      renderPreservingMakeScroll();
-    });
-  });
-
-  document.querySelectorAll("[data-cancel-confirm]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.confirmAction = null;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-confirm-action]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await runConfirmedAction();
-    });
-  });
+  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction }, state);
 }
 
 function bindPromptInteractionEvents() {
@@ -3677,8 +3597,7 @@ function canDeleteComment(comment) {
 }
 
 function openConfirmAction(action) {
-  state.confirmAction = action;
-  render();
+  modalController.openConfirm(action);
 }
 
 async function runConfirmedAction() {

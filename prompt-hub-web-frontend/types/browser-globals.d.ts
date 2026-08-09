@@ -7,6 +7,8 @@ interface Window {
   TtalkakCommentModel: unknown;
   TtalkakShareController: unknown;
   TtalkakShareEvents: unknown;
+  TtalkakModalController: unknown;
+  TtalkakModalEvents: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;

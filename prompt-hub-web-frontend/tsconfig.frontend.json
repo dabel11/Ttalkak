@@ -13,6 +13,7 @@
     "src/home/*.js",
     "src/interactions/*.js",
     "src/share/*.js",
+    "src/modal/*.js",
     "src/make/*.js"
   ]
 }
