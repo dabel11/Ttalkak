@@ -1,4 +1,5 @@
 interface Window {
+  TtalkakHomeSearchModel: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;

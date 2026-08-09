@@ -9,7 +9,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": [
-    "types/make-globals.d.ts",
+    "types/browser-globals.d.ts",
+    "src/home/*.js",
     "src/make/*.js"
   ]
 }

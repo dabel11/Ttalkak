@@ -23,6 +23,15 @@ function fallbackEscapeHtml(value) {
 const escapeHtml = typeof utilEscapeHtml === "function" ? utilEscapeHtml : fallbackEscapeHtml;
 const escapeAttr = typeof utilEscapeAttr === "function" ? utilEscapeAttr : escapeHtml;
 const {
+  collectPopularTags,
+  getValidSearchScope,
+  parsePromptSearchQuery,
+  selectVisiblePrompts,
+  sortPrompts,
+  uniquePrompts,
+} = window.TtalkakHomeSearchModel || {};
+const getUniquePrompts = uniquePrompts;
+const {
   makePreview,
   sanitizeMakeBackendMessage,
 } = window.TtalkakMakePreview || {};
@@ -43,6 +52,12 @@ if (
     formatNumber,
     formatShortDate,
     parseTimestamp,
+    collectPopularTags,
+    getValidSearchScope,
+    parsePromptSearchQuery,
+    selectVisiblePrompts,
+    sortPrompts,
+    uniquePrompts,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -1052,7 +1067,7 @@ function HomePage() {
   const isBackendHome = state.backendStatus === "connected";
   const canShowDemoHome = !isBackendHome && canUseDemoFallback();
   const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : canShowDemoHome ? getVisiblePopularPrompts() : []);
-  const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(getUniquePrompts(popularPrompts))));
+  const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(uniquePrompts(popularPrompts))));
   const displayTags = isBackendHome ? state.backendPopularTags : canShowDemoHome ? popularTags.length ? popularTags : fallbackPopularTags : [];
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
   const totalPages = isBackendHome ? getBackendHomeTotalPages() : getPopularTotalPages(prompts.length);
@@ -5601,76 +5616,25 @@ function parseSharedTags(value) {
 }
 
 function getVisiblePopularPrompts() {
-  const criteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
-  const prompts = getUniquePrompts(popularPrompts);
-
-  if (!hasPromptSearchCriteria(criteria)) {
-    return sortPopularPrompts(prompts);
-  }
-
-  return sortPopularPrompts(
-    prompts.filter((prompt) => {
-      if (criteria.tagTokens.length) {
-        const tags = prompt.tags.map(normalizeTag);
-        const matchesTags = criteria.tagTokens.every((token) => tags.some((tag) => tag.includes(token)));
-        if (!matchesTags) return false;
-      }
-
-      if (criteria.keywordTokens.length) {
-        const keywordHaystack = normalizeSearchText([prompt.title, prompt.text].join(" "));
-        const matchesKeywords = criteria.keywordTokens.every((token) => keywordHaystack.includes(token));
-        if (!matchesKeywords) return false;
-      }
-
-      if (criteria.authorTokens.length) {
-        const authorHaystack = normalizeSearchText(getDisplayPromptAuthor(prompt));
-        const matchesAuthor = criteria.authorTokens.every((token) => authorHaystack.includes(token));
-        if (!matchesAuthor) return false;
-      }
-
-      if (criteria.allTokens.length) {
-        const allHaystack = normalizeSearchText([prompt.title, prompt.text, getDisplayPromptAuthor(prompt), ...(prompt.tags || [])].join(" "));
-        return criteria.allTokens.every((token) => allHaystack.includes(token));
-      }
-
-      return true;
-    }),
-  );
+  return selectVisiblePrompts({
+    prompts: popularPrompts,
+    query: state.searchQuery,
+    scope: state.searchScope,
+    sort: state.popularSort,
+    normalizeTag,
+    normalizeText: normalizeSearchText,
+    getAuthor: getDisplayPromptAuthor,
+    metrics: getHomeSortMetrics(),
+  });
 }
 
 function getPopularTags(prompts) {
-  const counts = new Map();
-  const labels = new Map();
-  const recentUsedAt = new Map();
-  const createdOrder = new Map();
-
-  prompts.forEach((prompt, promptIndex) => {
-    const usedAt = new Date(getPromptCreatedAt(prompt) || 0).getTime() || 0;
-    (prompt.tags || []).forEach((tag) => {
-      const label = String(tag || "").replace(/^#+/, "").trim();
-      if (!label) return;
-      const key = normalizeTag(label);
-      if (getAdminTagStatus(label) !== "approved") return;
-      counts.set(key, (counts.get(key) || 0) + 1);
-      if (!labels.has(key)) labels.set(key, label);
-      if (!createdOrder.has(key)) createdOrder.set(key, promptIndex);
-      recentUsedAt.set(key, Math.max(recentUsedAt.get(key) || 0, usedAt));
-    });
+  return collectPopularTags(prompts, {
+    normalizeTag,
+    getCreatedAt: getPromptCreatedAt,
+    isApproved: (tag) => getAdminTagStatus(tag) === "approved",
+    limit: 8,
   });
-
-  return [...counts.entries()]
-    .sort((a, b) => {
-      const countDiff = b[1] - a[1];
-      if (countDiff) return countDiff;
-
-      const recentDiff = (recentUsedAt.get(b[0]) || 0) - (recentUsedAt.get(a[0]) || 0);
-      if (recentDiff) return recentDiff;
-
-      return (createdOrder.get(b[0]) || 0) - (createdOrder.get(a[0]) || 0);
-    })
-    .slice(0, 8)
-    .map(([key]) => labels.get(key))
-    .filter(Boolean);
 }
 
 function getKnownTags() {
@@ -6315,19 +6279,17 @@ function findCommentContextById(commentId) {
 }
 
 function sortPopularPrompts(prompts) {
-  const byViews = (a, b) => getPromptViewCount(b) - getPromptViewCount(a);
-  const bySaves = (a, b) => getPromptSaveCount(b) - getPromptSaveCount(a);
-  const byComments = (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a);
-  const byLikes = (a, b) => getPromptLikes(b) - getPromptLikes(a);
-  const sorters = {
-    popular: (a, b) => byViews(a, b) || byComments(a, b) || bySaves(a, b),
-    saves: (a, b) => bySaves(a, b) || byViews(a, b) || byComments(a, b),
-    comments: (a, b) => byComments(a, b) || byViews(a, b) || bySaves(a, b),
-    likes: (a, b) => byLikes(a, b) || byViews(a, b) || bySaves(a, b),
-    latest: (a, b) => getPromptCreatedAt(b) - getPromptCreatedAt(a) || byViews(a, b),
-  };
+  return sortPrompts(prompts, state.popularSort, getHomeSortMetrics());
+}
 
-  return [...prompts].sort(sorters[state.popularSort] || sorters.popular);
+function getHomeSortMetrics() {
+  return {
+    views: getPromptViewCount,
+    saves: getPromptSaveCount,
+    comments: getPromptCommentCount,
+    likes: getPromptLikes,
+    createdAt: getPromptCreatedAt,
+  };
 }
 
 function getPromptLikes(prompt) {
@@ -6347,17 +6309,6 @@ function getPromptCreatedAt(prompt) {
   if (sharedTimestamp) return Number(sharedTimestamp);
   const demoIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
   return demoIndex >= 0 ? popularPrompts.length - demoIndex : 0;
-}
-
-function getUniquePrompts(prompts) {
-  const seen = new Set();
-
-  return prompts.filter((prompt) => {
-    const key = prompt.id || `${prompt.title}-${prompt.text}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function applyReportedVisibility(prompts) {
@@ -6444,48 +6395,6 @@ function updateBackendHomePageMeta(payload = {}, fallbackPage = state.popularPag
     totalElements: Number.isFinite(rawTotalElements) && rawTotalElements >= 0 ? Math.floor(rawTotalElements) : popularPrompts.length,
   };
   state.popularPage = state.backendHomePage.page;
-}
-
-function parsePromptSearchQuery(query, scope = "all") {
-  const searchScope = getValidSearchScope(scope);
-  const tagTokens = [];
-  const keywordTokens = [];
-  const authorTokens = [];
-  const allTokens = [];
-
-  String(query || "")
-    .split(/[,\s]+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .forEach((token) => {
-      if (searchScope === "tag" || token.startsWith("#")) {
-        const tag = normalizeTag(token);
-        if (tag) tagTokens.push(tag);
-        return;
-      }
-
-      const keyword = normalizeSearchText(token);
-      if (!keyword) return;
-      if (searchScope === "keyword") {
-        keywordTokens.push(keyword);
-        return;
-      }
-      if (searchScope === "author") {
-        authorTokens.push(keyword);
-        return;
-      }
-      allTokens.push(keyword);
-    });
-
-  return { tagTokens, keywordTokens, authorTokens, allTokens };
-}
-
-function hasPromptSearchCriteria(criteria) {
-  return Boolean(criteria.tagTokens.length || criteria.keywordTokens.length || criteria.authorTokens.length || criteria.allTokens.length);
-}
-
-function getValidSearchScope(scope) {
-  return ["all", "tag", "keyword", "author"].includes(scope) ? scope : "all";
 }
 
 function polishPrompt(prompt) {

@@ -7,7 +7,7 @@
     "build": "node ../scripts/build-web.cjs",
     "build:prod": "node ../scripts/build-web.cjs --production",
     "lint": "eslint src test e2e playwright.config.js preview-server.cjs",
-    "typecheck": "tsc --project tsconfig.make.json",
+    "typecheck": "tsc --project tsconfig.frontend.json",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "verify": "npm run check:shared && npm run lint && npm run typecheck && npm test && npm run build:prod",
