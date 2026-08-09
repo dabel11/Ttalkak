@@ -13,8 +13,7 @@
       renderAdminInlineAuthorControl, AdminPageView, AdminReportsPanelView, AdminPromptsPanelView,
       AdminTagsPanelView, AdminUsersPanelView, AdminAuditPanelView,
     } = ctx;
-    /** @type {any} */
-    const icons = new Proxy({}, { get: (_target, key) => ctx.getIcons()[key] });
+    const icons = new Proxy(/** @type {Record<PropertyKey, unknown>} */ ({}), { get: (_target, key) => ctx.getIcons()[key] });
 
     function getAdminTabs() {
       const canShowAdminData = getAdminCanShowData();

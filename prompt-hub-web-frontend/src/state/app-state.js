@@ -1067,7 +1067,7 @@
     return "added";
   }
 
-  global.TtalkakState = Object.freeze({
+  global.TtalkakState = /** @type {TtalkakStateModule} */ (/** @type {unknown} */ (Object.freeze({
     ...(global.TtalkakState || {}),
     STORAGE_KEY,
     AUTH_TOKEN_KEY,
@@ -1142,5 +1142,5 @@
     updateRecentMakeThreadState,
     writePersistedPayload,
     writeStorageItem,
-  });
+  })));
 })(window);

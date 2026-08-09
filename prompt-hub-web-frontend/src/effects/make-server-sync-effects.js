@@ -160,8 +160,7 @@
           const fallbackText = polishPrompt(prompt);
           return { text: fallbackText, mode: "improve", improvedPrompt: fallbackText };
         }
-        const error = new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다.");
-        error.code = "API_NOT_CONFIGURED";
+        const error = Object.assign(new Error("Make 첨삭 API wrapper가 없어 서버 요청을 보낼 수 없습니다."), { code: "API_NOT_CONFIGURED" });
         throw error;
       }
 

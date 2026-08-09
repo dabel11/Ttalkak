@@ -232,7 +232,11 @@ async function runAdminApiMutation(action, args = [], options = {}) {
   if (!handler) return { ok: false, missing: true, value: null };
 
   try {
-    const value = await handler(...args, getAuthToken() || undefined);
+    const token = getAuthToken() || undefined;
+    const callArgs = options.tokenBeforeLast
+      ? [...args.slice(0, -1), token, args.at(-1)]
+      : [...args, token];
+    const value = await handler(...callArgs);
     return { ok: true, missing: false, value };
   } catch (error) {
     if (typeof options.onError === "function" && options.onError(error)) {
@@ -414,6 +418,7 @@ async function updateReportRecordStatus(key, status) {
         fallbackMessage: "신고 상태 변경 요청에 실패했습니다.",
         logMessage: "[TTALKAK] /api/admin/reports/{id}/status failed; cancelling local status change.",
         refreshOnFailure: true,
+        tokenBeforeLast: true,
       },
     );
     if (!result.ok) return;

@@ -4,13 +4,14 @@
   "scripts": {
     "build:shared": "node ../scripts/build-make-message-model.cjs",
     "check:shared": "node ../scripts/check-make-message-model.cjs",
+    "check:api": "node ../scripts/check-web-api-contracts.cjs",
     "build": "node ../scripts/build-web.cjs",
     "build:prod": "node ../scripts/build-web.cjs --production",
     "lint": "eslint src test e2e playwright.config.js preview-server.cjs",
     "typecheck": "tsc --project tsconfig.frontend.json",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
-    "verify": "npm run check:shared && npm run lint && npm run typecheck && npm test && npm run build:prod",
+    "verify": "npm run check:shared && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build:prod",
     "verify:full": "npm run verify && npm run test:e2e"
   },
   "devDependencies": {

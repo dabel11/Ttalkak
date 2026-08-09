@@ -2,8 +2,7 @@
   "use strict";
   function createCommentView(ctx) {
     const { state, canDeleteComment, canShowReportedState, escapeAttr, escapeHtml, formatNumber, formatShortDate, getCommentLikes, getSortedCommentReplies } = ctx;
-    /** @type {any} */
-    const icons = new Proxy({}, { get: (_target, key) => ctx.getIcons()[key] });
+    const icons = new Proxy(/** @type {Record<PropertyKey, unknown>} */ ({}), { get: (_target, key) => ctx.getIcons()[key] });
 
     function CommentItem(comment) {
       const isDeleted = Boolean(comment.deleted);

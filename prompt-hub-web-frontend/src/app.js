@@ -320,7 +320,7 @@ const {
   updateOwnCommentState,
   updateRecentMakeThreadState,
   writeStorageItem,
-} = window.TtalkakState || {};
+} = window.TtalkakState;
 
 if (
   !STORAGE_KEY ||
@@ -1955,7 +1955,7 @@ function bindDiscoveryEvents() {
   });
   adminUserSearchForm?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const nickname = String(new FormData(adminUserSearchForm).get("nickname") || "").trim();
+    const nickname = String(new FormData(/** @type {HTMLFormElement} */ (adminUserSearchForm)).get("nickname") || "").trim();
     if (!nickname) {
       state.adminUserQuery = "";
       state.adminUserActivityNickname = "";
@@ -2135,7 +2135,7 @@ function bindReportAndCommentFormEvents() {
   if (reportForm) {
     reportForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      submitReport(reportForm.dataset.reportType, reportForm.dataset.reportForm, new FormData(reportForm).get("reason"));
+      submitReport(reportForm.dataset.reportType, reportForm.dataset.reportForm, new FormData(/** @type {HTMLFormElement} */ (reportForm)).get("reason"));
     });
   }
 
@@ -2143,7 +2143,7 @@ function bindReportAndCommentFormEvents() {
   if (adminUserBlockForm) {
     adminUserBlockForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      const formData = new FormData(adminUserBlockForm);
+      const formData = new FormData(/** @type {HTMLFormElement} */ (adminUserBlockForm));
       updateAdminUserBlockState(
         adminUserBlockForm.dataset.adminUserBlockForm,
         true,
@@ -2157,7 +2157,7 @@ function bindReportAndCommentFormEvents() {
   if (promptEditForm) {
     promptEditForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      updateOwnPrompt(promptEditForm.dataset.promptEditForm, new FormData(promptEditForm));
+      updateOwnPrompt(promptEditForm.dataset.promptEditForm, new FormData(/** @type {HTMLFormElement} */ (promptEditForm)));
     });
   }
 
@@ -2165,7 +2165,7 @@ function bindReportAndCommentFormEvents() {
   if (adminRevisionRequestForm) {
     adminRevisionRequestForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      requestPromptRevision(adminRevisionRequestForm.dataset.adminRevisionRequestForm, new FormData(adminRevisionRequestForm).get("reason"));
+      requestPromptRevision(adminRevisionRequestForm.dataset.adminRevisionRequestForm, new FormData(/** @type {HTMLFormElement} */ (adminRevisionRequestForm)).get("reason"));
     });
   }
 
@@ -2367,7 +2367,7 @@ function bindMakeEvents() {
   bindDelegatedMakeEvents();
   bindMakeFeedScrollEvents({ state });
   document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
-  document.querySelectorAll("[data-ask-answer-input]").forEach(window.TtalkakMakeEvents.updateAskProgress);
+  document.querySelectorAll("[data-ask-answer-input]").forEach((input) => window.TtalkakMakeEvents.updateAskProgress(input));
 }
 
 function bindDelegatedMakeEvents() {
@@ -2961,15 +2961,17 @@ function polishPrompt(prompt) {
   return `역할: 당신은 해당 분야의 전문 어시스턴트입니다.\n\n목표: ${prompt}\n\n요구사항:\n- 요청의 목적을 먼저 파악하고 필요한 경우 합리적인 가정을 명시하세요.\n- 구체적인 단계, 출력 형식, 확인 기준을 포함해 답변하세요.\n- 모호한 표현은 명확한 기준과 예시로 바꿔 설명하세요.\n- 바로 사용할 수 있는 형태로 결과물을 작성하세요.\n\n출력 형식:\n1. 최종 답변\n2. 핵심 근거\n3. 필요 시 다음 액션`;
 }
 
+let noticeTimer = 0;
+
 function showNotice(message) {
   state.notice = message;
-  window.clearTimeout(showNotice.timer);
+  window.clearTimeout(noticeTimer);
   if (state.route === "make") {
     renderPreservingMakeScroll();
   } else {
     render();
   }
-  showNotice.timer = window.setTimeout(() => {
+  noticeTimer = window.setTimeout(() => {
     state.notice = "";
     if (state.route === "make") {
       renderPreservingMakeScroll();

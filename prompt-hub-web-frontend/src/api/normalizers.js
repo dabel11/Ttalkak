@@ -346,7 +346,7 @@
     return window.TtalkakMakeMessageModel.normalizeImproveResponse(payload, fallbackPrompt);
   }
 
-  window.TTALKAK_API_NORMALIZERS = {
+  window.TTALKAK_API_NORMALIZERS = /** @type {TtalkakApiNormalizers} */ (/** @type {unknown} */ ({
     normalizeTags,
     toNumber,
     toTimestamp,
@@ -370,5 +370,5 @@
     normalizeMakeThread,
     normalizeMakeFolder,
     normalizeImproveResult,
-  };
+  }));
 })();

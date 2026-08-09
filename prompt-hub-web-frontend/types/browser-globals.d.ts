@@ -1,6 +1,49 @@
 type TtalkakId = string | number;
 type TtalkakToken = string | undefined;
 type TtalkakPayload = Record<string, unknown>;
+type TtalkakCallableModule = Record<string, Function>;
+type TtalkakStateModule = TtalkakCallableModule & {
+  STORAGE_KEY: string;
+  AUTH_TOKEN_KEY: string;
+  DEMO_AUTH_TOKEN: string;
+};
+type TtalkakRecord = Record<string, unknown>;
+interface TtalkakApiNormalizers {
+  normalizeTags(value: unknown): string[];
+  toNumber(...values: unknown[]): number;
+  toTimestamp(...values: unknown[]): number;
+  normalizeAuthor(...values: unknown[]): unknown;
+  normalizePrompt(value: unknown): TtalkakRecord;
+  normalizeComment(value: unknown): TtalkakRecord;
+  normalizePopularTag(value: unknown): TtalkakRecord;
+  normalizeAdminTag(value: unknown): TtalkakRecord;
+  normalizeRevisionRequest(value: unknown): TtalkakRecord;
+  normalizeAdminUserActivity(value: unknown): TtalkakRecord;
+  normalizeAdminUser(value: unknown): TtalkakRecord;
+  normalizeAdminUserActivitySummary(value: unknown): TtalkakRecord;
+  normalizeAdminUserPromptActivity(value: unknown): TtalkakRecord;
+  normalizeAdminUserCommentActivity(value: unknown): TtalkakRecord;
+  normalizeAdminUserReportActivity(value: unknown): TtalkakRecord;
+  makePreviewText(...values: unknown[]): string;
+  getPageItems(value: unknown): TtalkakRecord[];
+  normalizeAdminAuditLog(value: unknown): TtalkakRecord;
+  normalizeReport(value: unknown): TtalkakRecord;
+  normalizeMakeMessage(value: unknown): TtalkakRecord;
+  normalizeMakeThread(value: unknown): TtalkakRecord;
+  normalizeMakeFolder(value: unknown): TtalkakRecord;
+  normalizeImproveResult(...values: unknown[]): TtalkakRecord;
+}
+interface TtalkakApiCore {
+  request(path: string, options?: RequestInit & { token?: string }): Promise<TtalkakRecord | TtalkakRecord[] | null>;
+  unwrapItems(payload: unknown): TtalkakRecord[];
+  unwrapPageMeta(payload: unknown): Record<string, unknown>;
+}
+interface TtalkakApiContext {
+  request: TtalkakApiCore["request"];
+  unwrapItems: TtalkakApiCore["unwrapItems"];
+  unwrapPageMeta: TtalkakApiCore["unwrapPageMeta"];
+  normalizers: TtalkakApiNormalizers;
+}
 
 interface TtalkakApi {
   login(payload: TtalkakPayload): Promise<unknown>;
@@ -84,15 +127,15 @@ interface Window {
   __API_BASE_URL__?: string;
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
-  TTALKAK_API_CORE: any;
-  TTALKAK_API_NORMALIZERS: any;
-  TTALKAK_AUTH_API: (context: any) => any;
-  TTALKAK_PROMPT_API: (context: any) => any;
-  TTALKAK_COMMENT_API: (context: any) => any;
-  TTALKAK_MYPAGE_API: (context: any) => any;
-  TTALKAK_MAKE_API: (context: any) => any;
-  TTALKAK_ADMIN_API: (context: any) => any;
-  TtalkakMakeMessageModel: any;
+  TTALKAK_API_CORE: TtalkakApiCore;
+  TTALKAK_API_NORMALIZERS: TtalkakApiNormalizers;
+  TTALKAK_AUTH_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TTALKAK_PROMPT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TTALKAK_COMMENT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TTALKAK_MYPAGE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TTALKAK_MAKE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TTALKAK_ADMIN_API: (context: TtalkakApiContext) => TtalkakCallableModule;
+  TtalkakMakeMessageModel: TtalkakCallableModule;
   TTALKAK_API: TtalkakApi;
   TtalkakApiContract: {
     assertApiContract(api: unknown): TtalkakApi;
@@ -102,37 +145,73 @@ interface Window {
     wrapApiResponses(api: TtalkakApi): TtalkakApi;
   };
   TTALKAK_GOOGLE_CREDENTIAL?: string;
-  TtalkakHomeSearchModel: unknown;
-  TtalkakHomeController: unknown;
-  TtalkakHomeEvents: unknown;
-  TtalkakPromptEngagementController: unknown;
-  TtalkakPromptEngagementEvents: unknown;
-  TtalkakCommentModel: unknown;
-  TtalkakCommentView: unknown;
-  TtalkakPromptWorkflows: unknown;
-  TtalkakShareController: unknown;
-  TtalkakShareEvents: unknown;
-  TtalkakModalController: unknown;
-  TtalkakModalEvents: unknown;
-  TtalkakModalView: unknown;
-  TtalkakAuthSession: unknown;
-  TtalkakAuthValidation: unknown;
-  TtalkakAuthController: unknown;
-  TtalkakAuthEvents: unknown;
-  TtalkakAuthView: unknown;
-  TtalkakAdminEvents: unknown;
-  TtalkakAdminSelectors: unknown;
-  TtalkakAdminController: unknown;
-  TtalkakAdminView: unknown;
-  TtalkakAppBootstrap: unknown;
-  TtalkakMakeController: unknown;
-  TtalkakMakeEvents: unknown;
-  TtalkakMakeFocus: unknown;
-  TtalkakMakePersistence: unknown;
-  TtalkakMakeState: unknown;
-  TtalkakMakeWorkflows: unknown;
-  TtalkakMakeSyncWorkflows: unknown;
-  TtalkakMakeFolderWorkflows: unknown;
-  TtalkakMakeExecutionWorkflows: unknown;
-  TtalkakMakeRecentWorkflows: unknown;
+  TtalkakUtils: TtalkakCallableModule;
+  TtalkakHomeSearchModel: TtalkakCallableModule;
+  TtalkakHomeController: TtalkakCallableModule;
+  TtalkakHomeEvents: TtalkakCallableModule;
+  TtalkakPromptEngagementController: TtalkakCallableModule;
+  TtalkakPromptEngagementEvents: TtalkakCallableModule;
+  TtalkakCommentModel: TtalkakCallableModule;
+  TtalkakCommentView: TtalkakCallableModule;
+  TtalkakPromptWorkflows: TtalkakCallableModule;
+  TtalkakShareController: TtalkakCallableModule;
+  TtalkakShareEvents: TtalkakCallableModule;
+  TtalkakModalController: TtalkakCallableModule;
+  TtalkakModalEvents: TtalkakCallableModule;
+  TtalkakModalView: TtalkakCallableModule;
+  TtalkakAuthSession: TtalkakCallableModule;
+  TtalkakAuthValidation: TtalkakCallableModule;
+  TtalkakAuthController: TtalkakCallableModule;
+  TtalkakAuthEvents: TtalkakCallableModule;
+  TtalkakAuthView: TtalkakCallableModule;
+  TtalkakAdminEvents: TtalkakCallableModule;
+  TtalkakAdminSelectors: TtalkakCallableModule;
+  TtalkakAdminController: TtalkakCallableModule;
+  TtalkakAdminView: TtalkakCallableModule;
+  TtalkakAppBootstrap: TtalkakCallableModule;
+  TtalkakMakeController: TtalkakCallableModule;
+  TtalkakMakeEvents: TtalkakCallableModule;
+  TtalkakMakeFocus: TtalkakCallableModule;
+  TtalkakMakePersistence: TtalkakCallableModule;
+  TtalkakMakeState: TtalkakCallableModule;
+  TtalkakMakeWorkflows: TtalkakCallableModule;
+  TtalkakMakeSyncWorkflows: TtalkakCallableModule;
+  TtalkakMakeFolderWorkflows: TtalkakCallableModule;
+  TtalkakMakeExecutionWorkflows: TtalkakCallableModule;
+  TtalkakMakeRecentWorkflows: TtalkakCallableModule;
+  TtalkakMakePreview: TtalkakCallableModule;
+  TtalkakMakeFailureRecoveryEffects: TtalkakCallableModule;
+  TtalkakMakeServerSyncEffects: TtalkakCallableModule;
+  TtalkakComponents: TtalkakCallableModule;
+  TtalkakEvents: TtalkakCallableModule;
+  TtalkakMakeScrollEvents: TtalkakCallableModule;
+  TtalkakBackendEffects: TtalkakCallableModule;
+  TtalkakAdminEffects: TtalkakCallableModule;
+  TtalkakErrorEffects: TtalkakCallableModule;
+  TtalkakState: TtalkakStateModule;
+  TtalkakRenderers: TtalkakCallableModule;
+  TtalkakRouting: TtalkakCallableModule;
+  TtalkakMakeMessageParts: TtalkakCallableModule;
+  TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
+  TTALKAK_DEMO_COPY?: {
+    fallbackPopularTags?: string[];
+    promptOverrides?: Record<string, string>;
+    commentOverrides?: Record<string, string>;
+  };
+}
+
+interface EventTarget {
+  closest(selectors: string): Element | null;
+}
+
+interface Element {
+  readonly dataset: DOMStringMap;
+  value: string;
+  checked: boolean;
+  focus(options?: FocusOptions): void;
+  setSelectionRange(start: number, end: number): void;
+}
+
+interface Event {
+  readonly key: string;
 }

@@ -19,6 +19,14 @@
     "src/auth/*.js",
     "src/admin/*.js",
     "src/bootstrap/*.js",
-    "src/make/*.js"
+    "src/make/*.js",
+    "src/state/*.js",
+    "src/effects/*.js",
+    "src/renderers/*.js",
+    "src/renderers/pages/*.js",
+    "src/events/*.js",
+    "src/routing/*.js",
+    "src/components.js",
+    "src/app.js"
   ]
 }

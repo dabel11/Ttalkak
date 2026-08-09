@@ -34,6 +34,7 @@
     return feed.scrollHeight - feed.scrollTop - feed.clientHeight > 220;
   }
 
+  /** @param {{ messages?: Array<{ id?: unknown }> }} state @param {{ behavior?: ScrollBehavior }} [options] */
   function scrollToMakeLatestMessage(state, { behavior = "smooth" } = {}) {
     const latestId = [...(state?.messages || [])].reverse().find((message) => message?.id)?.id || "";
     if (!latestId) return false;
@@ -86,6 +87,7 @@
     restoreMakeScrollSnapshot(snapshot);
   }
 
+  /** @param {unknown} state @param {{ behavior?: ScrollBehavior, hasPendingMessageScroll?: () => boolean }} [options] */
   function scrollToPendingLatestMakeMessage(state, { behavior = "smooth", hasPendingMessageScroll } = {}) {
     if (typeof hasPendingMessageScroll === "function" && hasPendingMessageScroll()) return;
     if (!pendingLatestMessageScrollId) return;
@@ -101,6 +103,7 @@
     pendingLatestMakeScrollMode = mode;
   }
 
+  /** @param {{ messages?: Array<{ id?: unknown }> }} state @param {{ behavior?: ScrollBehavior }} [options] */
   function scheduleMakeLatestScroll(state, { behavior = "smooth" } = {}) {
     requestAnimationFrame(() => {
       scrollToMakeLatestMessage(state, { behavior });
