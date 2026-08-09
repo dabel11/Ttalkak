@@ -62,6 +62,7 @@ const { bindAdminEvents } = window.TtalkakAdminEvents || {};
 const { createAdminSelectors } = window.TtalkakAdminSelectors || {};
 const { createAdminController } = window.TtalkakAdminController || {};
 const { createAdminView } = window.TtalkakAdminView || {};
+const { createAppBootstrap } = window.TtalkakAppBootstrap || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -123,6 +124,7 @@ if (
     createAdminSelectors,
     createAdminController,
     createAdminView,
+    createAppBootstrap,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -826,6 +828,16 @@ let isMakeThinking = false;
 const makeRequestState = window.TtalkakMakeState.createMakeRequestState();
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
+let appBootstrap = null;
+const getBackendDataEffectContext = (...args) => appBootstrap.getBackendDataEffectContext(...args);
+const getBackendHydrationEffectContext = (...args) => appBootstrap.getBackendHydrationEffectContext(...args);
+const hydrateBackendMakeDataIfNeeded = (...args) => appBootstrap.hydrateBackendMakeDataIfNeeded(...args);
+const refreshMyPageDataAfterMutation = (...args) => appBootstrap.refreshMyPageDataAfterMutation(...args);
+const hydrateBackendMyPageDataIfNeeded = (...args) => appBootstrap.hydrateBackendMyPageDataIfNeeded(...args);
+const getAdminHydrationEffectContext = (...args) => appBootstrap.getAdminHydrationEffectContext(...args);
+const hydrateBackendAdminDataIfNeeded = (...args) => appBootstrap.hydrateBackendAdminDataIfNeeded(...args);
+const hydrateBackendHomeData = (...args) => appBootstrap.hydrateBackendHomeData(...args);
+const refreshBackendHomePrompts = (...args) => appBootstrap.refreshBackendHomePrompts(...args);
 
 const homeController = createHomeController({
   state,
@@ -3169,71 +3181,10 @@ function getMakeServerSyncContext() {
   };
 }
 
-function getBackendDataEffectContext() {
-  return {
-    isBackendNumericId,
-    makePreview,
-    normalizeMakeFolders,
-    normalizePersistedLikeCounts,
-    normalizeRecentThreads,
-    popularPrompts,
-    savedPrompts,
-    state,
-    updateBackendHomePageMeta,
-    upsertPrompt,
-  };
-}
 
-function getBackendHydrationEffectContext() {
-  return {
-    api: window.TTALKAK_API,
-    applyContext: getBackendDataEffectContext,
-    canUseDemoFallback,
-    clearAuthenticatedSession,
-    getApiFailureMessage,
-    getAuthToken,
-    hasBackendAuthToken,
-    getMakeApi,
-    getMakeApiToken,
-    getMakeInteractionVersion: () => makeInteractionVersion,
-    getValidSearchScope,
-    handleBackendAccessError,
-    homePageSize: HOME_PAGE_SIZE,
-    render,
-    state,
-  };
-}
 
-async function hydrateBackendMakeDataIfNeeded() {
-  if (isMakeThinking) return;
-  return hydrateBackendMakeDataEffect(getBackendHydrationEffectContext());
-}
-function refreshMyPageDataAfterMutation() {
-  if (!state.isLoggedIn || state.myBackendStatus !== "connected") return Promise.resolve();
-  state.myBackendStatus = "idle";
-  return hydrateBackendMyPageDataIfNeeded({ force: true });
-}
 
-async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
-  return hydrateBackendMyPageDataEffect(getBackendHydrationEffectContext(), { force });
-}
-function getAdminHydrationEffectContext() {
-  return {
-    api: window.TTALKAK_API,
-    canUseDemoFallback,
-    formatShortDate,
-    getAuthToken,
-    getReportRecord,
-    hasBackendAuthToken,
-    mapBackendReportStatus,
-    render,
-    state,
-  };
-}
 
-async function hydrateBackendAdminDataIfNeeded(options = {}) {
-  return hydrateBackendAdminData(getAdminHydrationEffectContext(), options);
-}
 
 
 function persistState() {
@@ -3347,17 +3298,16 @@ function normalizeDemoCopy() {
   });
 }
 
-async function hydrateBackendHomeData() {
-  return hydrateBackendHomeDataEffect(getBackendHydrationEffectContext());
-}
 
-async function refreshBackendHomePrompts() {
-  return refreshBackendHomePromptsEffect(getBackendHydrationEffectContext());
-}
-loadPersistedState();
-normalizeDemoCopy();
-normalizeAssistantPromptOutputs();
-normalizeRecentThreads();
-ensureDemoComments();
-render();
-hydrateBackendHomeData();
+appBootstrap = createAppBootstrap({
+  state, popularPrompts, savedPrompts, isBackendNumericId, makePreview, normalizeMakeFolders,
+  normalizePersistedLikeCounts, normalizeRecentThreads, updateBackendHomePageMeta, upsertPrompt,
+  canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken,
+  hasBackendAuthToken, getMakeApi, getMakeApiToken, getMakeInteractionVersion: () => makeInteractionVersion,
+  getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render,
+  isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,
+  formatShortDate, getReportRecord, mapBackendReportStatus, hydrateBackendAdminData,
+  hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, normalizeDemoCopy,
+  normalizeAssistantPromptOutputs, ensureDemoComments,
+});
+appBootstrap.bootstrap();

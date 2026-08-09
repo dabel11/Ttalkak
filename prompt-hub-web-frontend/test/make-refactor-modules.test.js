@@ -2,6 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+require("../src/make/make-sync-workflows.js");
+require("../src/make/make-folder-workflows.js");
+require("../src/make/make-execution-workflows.js");
+require("../src/make/make-recent-workflows.js");
 const { createMakeWorkflows } = require("../src/make/make-workflows.js");
 
 global.window = { setTimeout: (callback) => callback() };
@@ -22,6 +26,7 @@ test("Make request state transitions are centralized", () => {
   assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null });
 });
 test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
+test("Make workflow composition loads four focused submodules", () => { const root = path.resolve(__dirname, ".."); const html = fs.readFileSync(path.join(root, "index.html"), "utf8"); ["make-folder-workflows.js", "make-execution-workflows.js", "make-recent-workflows.js", "make-sync-workflows.js"].forEach((file) => assert.match(html, new RegExp(file))); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.js"), "utf8"); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
 test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
 
 test("Make state mutations use named helpers", () => {

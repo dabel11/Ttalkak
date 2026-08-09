@@ -16,6 +16,7 @@
     "src/modal/*.js",
     "src/auth/*.js",
     "src/admin/*.js",
+    "src/bootstrap/*.js",
     "src/make/*.js"
   ]
 }

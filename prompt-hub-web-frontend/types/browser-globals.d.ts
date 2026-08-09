@@ -23,10 +23,15 @@ interface Window {
   TtalkakAdminSelectors: unknown;
   TtalkakAdminController: unknown;
   TtalkakAdminView: unknown;
+  TtalkakAppBootstrap: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;
   TtalkakMakePersistence: unknown;
   TtalkakMakeState: unknown;
   TtalkakMakeWorkflows: unknown;
+  TtalkakMakeSyncWorkflows: unknown;
+  TtalkakMakeFolderWorkflows: unknown;
+  TtalkakMakeExecutionWorkflows: unknown;
+  TtalkakMakeRecentWorkflows: unknown;
 }
