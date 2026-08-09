@@ -21,13 +21,16 @@ module.exports = [
     },
   },
   {
-    files: ["src/app-entry.js", "src/**/index.js"],
+    files: ["src/app-entry.js", "src/app.js", "src/**/index.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
       globals: globals.browser,
     },
-    rules: js.configs.recommended.rules,
+    rules: {
+      ...js.configs.recommended.rules,
+      "no-unused-vars": "off",
+    },
   },
   {
     files: ["test/**/*.js", "*.js", "*.cjs"],

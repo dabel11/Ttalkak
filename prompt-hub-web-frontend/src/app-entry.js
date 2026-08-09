@@ -17,8 +17,9 @@ import { effects } from "./effects/index.js";
 import { state, domains } from "./state/index.js";
 import { renderers } from "./renderers/index.js";
 import { routing } from "./routing/index.js";
+import { startApp } from "./app.js";
 
-window.TtalkakModules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
-await import("./app.js");
+const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
+startApp(modules);
 
-export { admin, api, apiContract, auth, bootstrap, components, createDiscoveryController, createSavedLibraryController, domains, effects, events, home, interactions, make, modal, renderers, routing, share, state, utils };
+export { admin, api, apiContract, auth, bootstrap, components, createDiscoveryController, createSavedLibraryController, domains, effects, events, home, interactions, make, modal, renderers, routing, share, startApp, state, utils };

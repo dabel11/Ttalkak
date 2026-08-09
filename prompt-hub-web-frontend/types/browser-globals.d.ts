@@ -281,7 +281,6 @@ interface TtalkakApi {
 }
 
 interface Window {
-  TtalkakModules?: TtalkakModuleRegistry;
   __API_BASE_URL__?: string;
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;

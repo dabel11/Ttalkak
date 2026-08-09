@@ -1,5 +1,6 @@
-const modules = window.TtalkakModules;
-if (!modules) throw new Error("TTALKAK module registry is not initialized");
+/** @param {TtalkakModuleRegistry} modules */
+export function startApp(modules) {
+if (!modules) throw new Error("TTALKAK application modules are not initialized");
 
 const {
   normalizeSearchText,
@@ -3261,3 +3262,4 @@ appBootstrap = createAppBootstrap({
   normalizeAssistantPromptOutputs, ensureDemoComments,
 });
 appBootstrap.bootstrap();
+}
