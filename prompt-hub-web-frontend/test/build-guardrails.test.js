@@ -7,6 +7,11 @@ const { assertBundleBudgets } = require("../../scripts/check-web-bundle-size.cjs
 const { assertLegacyGlobalBaseline, auditLegacyGlobals } = require("../../scripts/check-web-legacy-globals.cjs");
 const { assertConsoleWarningBoundary } = require("../../scripts/check-web-observability.cjs");
 
+test("preview server serves ESM module files with a JavaScript MIME type", () => {
+  const previewServer = fs.readFileSync(path.resolve(__dirname, "../preview-server.cjs"), "utf8");
+  assert.match(previewServer, /["']\.mjs["']\s*:\s*["']text\/javascript; charset=utf-8["']/);
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));
