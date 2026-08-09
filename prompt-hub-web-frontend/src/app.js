@@ -1,3 +1,6 @@
+const modules = window.TtalkakModules;
+if (!modules) throw new Error("TTALKAK module registry is not initialized");
+
 const {
   normalizeSearchText,
   normalizeTag,
@@ -9,7 +12,7 @@ const {
   formatNumber,
   formatShortDate,
   parseTimestamp,
-} = window.TtalkakUtils || {};
+} = modules.utils || {};
 
 function fallbackEscapeHtml(value) {
   return String(value ?? "")
@@ -29,12 +32,14 @@ const {
   selectVisiblePrompts,
   sortPrompts,
   uniquePrompts,
-} = window.TtalkakHomeSearchModel || {};
+} = modules.home.model || {};
 const getUniquePrompts = uniquePrompts;
-const { createHomeController } = window.TtalkakHomeController || {};
-const { bindHomeEvents } = window.TtalkakHomeEvents || {};
-const { createPromptEngagementController } = window.TtalkakPromptEngagementController || {};
-const { bindPromptEngagementEvents } = window.TtalkakPromptEngagementEvents || {};
+const { createHomeController } = modules.home.controller || {};
+const { bindHomeEvents } = modules.home.events || {};
+const { createSavedLibraryController } = modules.saved || {};
+const { createDiscoveryController } = modules.discovery || {};
+const { createPromptEngagementController } = modules.interactions.engagement || {};
+const { bindPromptEngagementEvents } = modules.interactions.events || {};
 const {
   canDeleteComment: canDeleteCommentModel,
   countCommentThread: countCommentThreadModel,
@@ -45,35 +50,42 @@ const {
   getCommentLikes: getCommentLikesModel,
   sortComments: sortCommentsModel,
   syncPromptCommentCount: syncPromptCommentCountModel,
-} = window.TtalkakCommentModel || {};
-const { createCommentView } = window.TtalkakCommentView || {};
-const { createPromptWorkflows } = window.TtalkakPromptWorkflows || {};
-const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = window.TtalkakShareController || {};
-const { bindShareEvents } = window.TtalkakShareEvents || {};
-const { createModalController } = window.TtalkakModalController || {};
-const { bindModalEvents } = window.TtalkakModalEvents || {};
-const { createModalView } = window.TtalkakModalView || {};
-const { createAuthSession, normalizeAuthResult } = window.TtalkakAuthSession || {};
-const { getUserIdValidationMessage, isValidEmail } = window.TtalkakAuthValidation || {};
-const { createAuthController } = window.TtalkakAuthController || {};
-const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = window.TtalkakAuthEvents || {};
-const { createAuthView } = window.TtalkakAuthView || {};
-const { bindAdminEvents } = window.TtalkakAdminEvents || {};
-const { createAdminSelectors } = window.TtalkakAdminSelectors || {};
-const { createAdminController } = window.TtalkakAdminController || {};
-const { createAdminView } = window.TtalkakAdminView || {};
-const { createAppBootstrap } = window.TtalkakAppBootstrap || {};
+} = modules.interactions.comments || {};
+const { createCommentView } = modules.interactions.commentView || {};
+const { createPromptWorkflows } = modules.interactions.workflows || {};
+const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = modules.share.controller || {};
+const { bindShareEvents } = modules.share.events || {};
+const { createModalController } = modules.modal.controller || {};
+const { bindModalEvents } = modules.modal.events || {};
+const { createModalView } = modules.modal.view || {};
+const { createAuthSession, normalizeAuthResult } = modules.auth.session || {};
+const { getUserIdValidationMessage, isValidEmail } = modules.auth.validation || {};
+const { createAuthController } = modules.auth.controller || {};
+const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = modules.auth.events || {};
+const { createAuthView } = modules.auth.view || {};
+const { bindAdminEvents } = modules.admin.events || {};
+const { createAdminSelectors } = modules.admin.selectors || {};
+const { createAdminController } = modules.admin.controller || {};
+const { createAdminView } = modules.admin.view || {};
+const { createAppBootstrap } = modules.bootstrap || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
-} = window.TtalkakMakePreview || {};
+} = modules.make.preview || {};
 const {
   recoverActiveMakeThreadAfterFailure,
-} = window.TtalkakMakeFailureRecoveryEffects || {};
+} = modules.effects.makeFailureRecovery || {};
 const {
   createMakeServerSyncEffects,
-} = window.TtalkakMakeServerSyncEffects || {};
-const { createMakeWorkflows } = window.TtalkakMakeWorkflows || {};
+} = modules.effects.makeServerSync || {};
+const { createMakeWorkflows } = modules.make.workflows || {};
+const apiClient = modules.api;
+const makeControllerModule = modules.make.controller;
+const makeEventsModule = modules.make.events;
+const makeFocusModule = modules.make.focus;
+const makeMessageModel = modules.make.messageModel;
+const makePersistenceModule = modules.make.persistence;
+const makeStateModule = modules.make.state;
 
 if (
   [
@@ -93,6 +105,8 @@ if (
     uniquePrompts,
     createHomeController,
     bindHomeEvents,
+    createSavedLibraryController,
+    createDiscoveryController,
     createPromptEngagementController,
     bindPromptEngagementEvents,
     canDeleteCommentModel,
@@ -139,13 +153,13 @@ const {
   AdminUserBlockDialog,
   ConfirmDialog,
   Pagination: BasePagination,
-} = window.TtalkakComponents || {};
+} = modules.components || {};
 
 if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
 }
 
-const { bindAppEvents } = window.TtalkakEvents || {};
+const { bindAppEvents } = modules.events.app || {};
 
 if (typeof bindAppEvents !== "function") {
   throw new Error("TTALKAK 이벤트 바인더를 불러오지 못했습니다.");
@@ -158,7 +172,7 @@ const {
   scheduleMakeLatestScroll: scheduleMakeLatestScrollEffect,
   scrollToMakeLatestMessage,
   scrollToPendingLatestMakeMessage,
-} = window.TtalkakMakeScrollEvents || {};
+} = modules.events.makeScroll || {};
 
 if (
   [
@@ -190,7 +204,7 @@ const {
   hydrateBackendMakeDataEffect,
   hydrateBackendMyPageDataEffect,
   refreshBackendHomePromptsEffect,
-} = window.TtalkakBackendEffects || {};
+} = modules.effects.backend || {};
 
 if (
   [
@@ -225,7 +239,7 @@ const {
   refreshAdminAfterMutationEffect,
   refreshAdminAuditLogsEffect,
   resolveAdminTagStatus,
-} = window.TtalkakAdminEffects || {};
+} = modules.effects.admin || {};
 
 if (
   [
@@ -243,7 +257,7 @@ if (
   throw new Error("TTALKAK admin effects failed to load.");
 }
 
-const { handleBackendAccessErrorEffect } = window.TtalkakErrorEffects || {};
+const { handleBackendAccessErrorEffect } = modules.effects.error || {};
 
 if (typeof handleBackendAccessErrorEffect !== "function") {
   throw new Error("TTALKAK error effects failed to load.");
@@ -320,7 +334,7 @@ const {
   updateOwnCommentState,
   updateRecentMakeThreadState,
   writeStorageItem,
-} = window.TtalkakState;
+} = modules.state.api;
 
 if (
   !STORAGE_KEY ||
@@ -430,13 +444,13 @@ const {
   HeaderView,
   SidebarView,
   renderAppShell,
-} = window.TtalkakRenderers || {};
+} = modules.renderers || {};
 
 if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
 }
 
-const { resolvePageView } = window.TtalkakRouting || {};
+const { resolvePageView } = modules.routing || {};
 
 if (typeof resolvePageView !== "function") {
   throw new Error("TTALKAK 라우팅 헬퍼를 불러오지 못했습니다.");
@@ -562,8 +576,6 @@ const savedPrompts = [
     isShared: false,
   },
 ].sort((a, b) => b.saves - a.saves);
-
-normalizeSavedPromptOwnership();
 
 const DEMO_LIBRARY_PROMPT_IDS = new Set(savedPrompts.map((prompt) => prompt.id));
 
@@ -821,11 +833,9 @@ const demoCommentBackfill = {
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 
 
-let adminPromptSearchCommitTimer = null;
-let adminTagSearchCommitTimer = null;
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
-const makeRequestState = window.TtalkakMakeState.createMakeRequestState();
+const makeRequestState = makeStateModule.createMakeRequestState();
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
 let appBootstrap = null;
@@ -851,6 +861,30 @@ const homeController = createHomeController({
   applyPage: (value) => applyHomePageState(state, value),
   refresh: refreshBackendHomePrompts,
   render,
+});
+
+const savedLibraryController = createSavedLibraryController({
+  state,
+  savedPrompts,
+  popularPrompts,
+  demoPromptIds: DEMO_LIBRARY_PROMPT_IDS,
+  uniquePrompts: getUniquePrompts,
+  canUseDemoFallback,
+  getLikes: getPromptLikes,
+  getCommentCount: (...args) => getPromptCommentCount(...args),
+});
+normalizeSavedPromptOwnership();
+
+const discoveryController = createDiscoveryController({
+  state,
+  document,
+  searchDebounceMs: SEARCH_DEBOUNCE_MS,
+  cancelHomeSearch: () => homeController.cancelSearchCommit(),
+  applyTag: applyHomeTagSearchState,
+  applyAuthor: applyHomeAuthorSearchState,
+  refresh: refreshBackendHomePrompts,
+  render,
+  restoreHomeFocus: () => homeController.restoreSearchFocus(),
 });
 
 const commentRepository = createCommentRepository({ state, commentsByPrompt, promptLists: [popularPrompts, savedPrompts] });
@@ -889,7 +923,7 @@ const promptEngagementController = createPromptEngagementController({
   toggleEditState: toggleEditCommentState,
   updateCommentState: updateOwnCommentState,
   commentsByPrompt,
-  api: window.TTALKAK_API,
+  api: apiClient,
   getToken: getAuthToken,
   warn: (...args) => console.warn(...args),
   incrementViews: incrementPromptViews,
@@ -936,7 +970,7 @@ const {
 
 const shareController = createShareController({
   state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
-  escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: window.TTALKAK_API,
+  escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
   hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: (...args) => promptWorkflows.removePromptById(...args),
   handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
   applyShared: applySharedPromptState, notice: showNotice,
@@ -950,11 +984,11 @@ const applyAccountScope = authSession.applyScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
-const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: window.TTALKAK_API, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => console.warn(...args), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => console.warn(...args), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons });
 const { AuthModal } = authView;
 const adminController = createAdminController({
-  state, api: window.TTALKAK_API, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
+  state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
   normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, popularPrompts, savedPrompts, getUniquePrompts,
   applyAdminUserActivityRefreshState, applyAdminUserBlockActivityState, applyAdminTagDecisionState, applyAdminReportStatusState,
   applyAdminRevisionRequestState, applyAdminPromptHiddenState, canTransitionAdminTagStatus, getAdminTagStatus,
@@ -1332,35 +1366,23 @@ function Pagination(totalPages, currentPage) {
 }
 
 function normalizeSavedPromptOwnership() {
-  savedPrompts.forEach((prompt) => {
-    if (prompt.savedByMe != null) return;
-    prompt.savedByMe = prompt.source === "community" || (!prompt.isShared && prompt.saves > 0);
-  });
-  normalizeSavedCounts();
+  savedLibraryController.normalizeOwnership();
 }
 
 function isPromptSaved(promptId) {
-  if (!state.isLoggedIn) return false;
-  const prompt = savedPrompts.find((item) => item.id === promptId);
-  if (isHiddenDemoLibraryPrompt(prompt)) return false;
-  return Boolean(prompt?.savedByMe) && !state.pendingUnsaveIds.has(promptId);
+  return savedLibraryController.isSaved(promptId);
 }
 
 function isHiddenDemoLibraryPrompt(prompt) {
-  return Boolean(prompt && DEMO_LIBRARY_PROMPT_IDS.has(prompt.id) && !state.libraryDemoSeeded && !state.userLibraryPromptIds.has(prompt.id));
+  return savedLibraryController.isHiddenDemoLibraryPrompt(prompt);
 }
 
 function getPromptSaveCount(prompt) {
-  const saves = Number(prompt?.saves || 0);
-  return isPromptSaved(prompt?.id) ? Math.max(1, saves) : saves;
+  return savedLibraryController.getSaveCount(prompt);
 }
 
 function normalizeSavedCounts() {
-  savedPrompts.forEach((prompt) => {
-    if (prompt.savedByMe && Number(prompt.saves || 0) < 1) {
-      prompt.saves = 1;
-    }
-  });
+  savedLibraryController.normalizeSavedCounts();
 }
 
 function isPromptPendingUnsave(promptId) {
@@ -1579,7 +1601,7 @@ function MessageBubble(message) {
 }
 
 function isExecutableMakeMessage(message) {
-  return window.TtalkakMakeMessageModel.isExecutableMessage(message);
+  return makeMessageModel.isExecutableMessage(message);
 }
 
 function isAskOnlyMakeResponse(text) {
@@ -1795,9 +1817,9 @@ function bindCoreEvents() {
   bindHomeSearchEvents();
   bindAdminEvents(document, { state, actions: {
     togglePromptHidden: toggleAdminPromptHidden,
-    cancelPromptSearch: () => window.clearTimeout(adminPromptSearchCommitTimer),
+    cancelPromptSearch: () => discoveryController.cancelAdminPromptSearch(),
     schedulePromptSearch: scheduleAdminPromptSearchCommit,
-    cancelTagSearch: () => window.clearTimeout(adminTagSearchCommitTimer),
+    cancelTagSearch: () => discoveryController.cancelAdminTagSearch(),
     scheduleTagSearch: scheduleAdminTagSearchCommit,
     updateReportStatus: updateReportRecordStatus,
     updateTag: updateAdminTagDecision,
@@ -2367,17 +2389,17 @@ function bindMakeEvents() {
   bindDelegatedMakeEvents();
   bindMakeFeedScrollEvents({ state });
   document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
-  document.querySelectorAll("[data-ask-answer-input]").forEach((input) => window.TtalkakMakeEvents.updateAskProgress(input));
+  document.querySelectorAll("[data-ask-answer-input]").forEach((input) => makeEventsModule.updateAskProgress(input));
 }
 
 function bindDelegatedMakeEvents() {
-  const handlers = window.TtalkakMakeEvents.createDelegatedMakeHandlers({
+  const handlers = makeEventsModule.createDelegatedMakeHandlers({
     state,
     maxFolders: MAX_CUSTOM_MAKE_FOLDERS,
     actions: {
       guard: guardAdminUserAction, notice: showNotice, render,
-      setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value),
-      setEditing: (id) => window.TtalkakMakeState.setMakeEditingMessage(state, id),
+      setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value),
+      setEditing: (id) => makeStateModule.setMakeEditingMessage(state, id),
       setPendingScroll: (id) => { pendingMessageScrollId = id; },
       autosize: autosizeTextarea, submitComposer: submitMakeComposer, submitPrompt: submitMakePrompt,
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
@@ -2389,7 +2411,7 @@ function bindDelegatedMakeEvents() {
       focusLater: (selector) => window.setTimeout(() => document.querySelector(selector)?.focus(), 0),
     },
   });
-  window.TtalkakMakeEvents.bindDelegatedMakeEvents(document.getElementById("app"), handlers);
+  makeEventsModule.bindDelegatedMakeEvents(document.getElementById("app"), handlers);
 }
 
 function submitMakeComposer(composer) {
@@ -2401,7 +2423,7 @@ function submitMakeComposer(composer) {
 }
 
 async function submitMakePrompt(composer) {
-  return window.TtalkakMakeController.submitPrompt(getMakeControllerContext(), composer);
+  return makeControllerModule.submitPrompt(getMakeControllerContext(), composer);
 }
 
 function getMakeControllerContext() {
@@ -2414,11 +2436,11 @@ function getMakeControllerContext() {
     bumpInteraction: () => { makeInteractionVersion += 1; },
     renderPreservingScroll: renderPreservingMakeScroll,
     buildHistory: buildMakeImproveHistory,
-    startRequest: () => window.TtalkakMakeState.startMakeRequest(makeRequestState),
-    completeRequest: () => window.TtalkakMakeState.completeMakeRequest(makeRequestState),
-    failRequest: (id, failure) => window.TtalkakMakeState.failMakeRequest(makeRequestState, id, failure),
+    startRequest: () => makeStateModule.startMakeRequest(makeRequestState),
+    completeRequest: () => makeStateModule.completeMakeRequest(makeRequestState),
+    failRequest: (id, failure) => makeStateModule.failMakeRequest(makeRequestState, id, failure),
     stopInFlight: () => { makeRequestState.inFlight = false; },
-    setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value),
+    setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value),
     appendUser: (threadId, message) => appendMakeUserMessageState(state, threadId, message),
     appendAssistant: (message) => appendMakeAssistantMessageState(state, message),
     setThinking: (value) => { isMakeThinking = value; },
@@ -2428,8 +2450,8 @@ function getMakeControllerContext() {
     waitForPaint: waitForThinkingIndicatorPaint,
     improve: improvePromptWithBackend,
     recover: (options) => recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), options),
-    classifyError: window.TtalkakMakeMessageModel.classifyMakeError,
-    setBackendFailure: () => window.TtalkakMakeState.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
+    classifyError: makeMessageModel.classifyMakeError,
+    setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
     handleError: handleBackendAccessError,
     applyPendingThread: applyPendingImproveThreadId,
     shouldSync: shouldUseImproveThreadSync,
@@ -2440,7 +2462,7 @@ function getMakeControllerContext() {
     getMessages: () => state.messages,
     getActiveThreadId: () => state.activeThreadId,
     getBackendThreadId: getMakeBackendThreadId,
-    clearEditing: () => window.TtalkakMakeState.setMakeEditingMessage(state),
+    clearEditing: () => makeStateModule.setMakeEditingMessage(state),
     refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
     applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
     finishEdit: finishEditedMakeMessageState,
@@ -2524,30 +2546,11 @@ function restoreSearchFocus() {
 }
 
 function getSavedPagePrompts() {
-  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
-  const localSavedPrompts = getLocalSavedPagePrompts();
-  if (state.myBackendStatus === "connected") {
-    return getUniquePrompts([...state.backendLibraryPrompts, ...state.backendLikedPrompts, ...localSavedPrompts]);
-  }
-
-  return localSavedPrompts;
+  return savedLibraryController.getPagePrompts();
 }
 
 function getLocalSavedPagePrompts() {
-  const merged = savedPrompts.filter(
-    (prompt) =>
-      !isHiddenDemoLibraryPrompt(prompt) &&
-      (prompt.savedByMe || state.pendingUnsaveIds.has(prompt.id) || state.likedPromptIds.has(prompt.id)),
-  );
-  const seen = new Set(merged.map((prompt) => prompt.id));
-
-  popularPrompts.forEach((prompt) => {
-    if (!state.likedPromptIds.has(prompt.id) || seen.has(prompt.id)) return;
-    merged.push({ ...prompt, source: prompt.source === "mine" ? "mine" : "community" });
-    seen.add(prompt.id);
-  });
-
-  return merged;
+  return savedLibraryController.getLocalPrompts();
 }
 
 function hasUserLibraryContent() {
@@ -2555,98 +2558,43 @@ function hasUserLibraryContent() {
 }
 
 function matchesSavedFilter(prompt) {
-  const matchesSource =
-    (prompt.source === "community" && state.savedFilter.community) ||
-    (prompt.source === "mine" && state.savedFilter.mine);
-
-  if (!state.savedFilter.liked) return matchesSource;
-  return state.likedPromptIds.has(prompt.id) && matchesSource;
+  return savedLibraryController.matchesFilter(prompt);
 }
 
 function getSavedSorter() {
-  const byRecent = (a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0);
-  const bySaves = (a, b) => getPromptSaveCount(b) - getPromptSaveCount(a);
-  const byLikes = (a, b) => getPromptLikes(b) - getPromptLikes(a);
-  const byComments = (a, b) => getPromptCommentCount(b) - getPromptCommentCount(a);
-  const byViews = (a, b) => Number(b.views || 0) - Number(a.views || 0);
-
-  if (state.savedSort === "saves") return (a, b) => bySaves(a, b) || byRecent(a, b) || byViews(a, b);
-  if (state.savedSort === "comments") return (a, b) => byComments(a, b) || bySaves(a, b) || byRecent(a, b);
-  if (state.savedSort === "likes") return (a, b) => byLikes(a, b) || bySaves(a, b) || byRecent(a, b);
-  if (state.savedSort === "views") return (a, b) => byViews(a, b) || bySaves(a, b) || byRecent(a, b);
-  return (a, b) => byRecent(a, b) || bySaves(a, b) || byViews(a, b);
+  return savedLibraryController.getSorter();
 }
 
 function scheduleAdminPromptSearchCommit(value) {
-  window.clearTimeout(adminPromptSearchCommitTimer);
-  adminPromptSearchCommitTimer = window.setTimeout(() => {
-    commitAdminPromptSearchQuery(value);
-  }, SEARCH_DEBOUNCE_MS);
+  discoveryController.scheduleAdminPromptSearch(value);
 }
 
 function commitAdminPromptSearchQuery(value) {
-  const nextQuery = String(value || "");
-  window.clearTimeout(adminPromptSearchCommitTimer);
-  if (state.adminPromptQuery === nextQuery) return;
-
-  state.adminPromptQuery = nextQuery;
-  render();
-  restoreAdminPromptSearchFocus();
+  discoveryController.commitAdminPromptSearch(value);
 }
 
 function restoreAdminPromptSearchFocus() {
-  const nextInput = document.querySelector("[data-admin-prompt-search]");
-  if (!nextInput) return;
-
-  nextInput.focus();
-  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+  discoveryController.restoreAdminPromptFocus();
 }
 
 function scheduleAdminTagSearchCommit(value) {
-  window.clearTimeout(adminTagSearchCommitTimer);
-  adminTagSearchCommitTimer = window.setTimeout(() => {
-    commitAdminTagSearchQuery(value);
-  }, SEARCH_DEBOUNCE_MS);
+  discoveryController.scheduleAdminTagSearch(value);
 }
 
 function commitAdminTagSearchQuery(value) {
-  const nextQuery = String(value || "");
-  window.clearTimeout(adminTagSearchCommitTimer);
-  if (state.adminTagQuery === nextQuery) return;
-
-  state.adminTagQuery = nextQuery;
-  render();
-  restoreAdminTagSearchFocus();
+  discoveryController.commitAdminTagSearch(value);
 }
 
 function restoreAdminTagSearchFocus() {
-  const nextInput = document.querySelector("[data-admin-tag-search]");
-  if (!nextInput) return;
-
-  nextInput.focus();
-  nextInput.setSelectionRange(nextInput.value.length, nextInput.value.length);
+  discoveryController.restoreAdminTagFocus();
 }
 
 function searchByTag(tag) {
-  const cleanTag = String(tag || "").replace(/^#+/, "").trim();
-  if (!cleanTag) return;
-
-  homeController.cancelSearchCommit();
-  applyHomeTagSearchState(state, cleanTag);
-  refreshBackendHomePrompts();
-  render();
-  restoreSearchFocus();
+  discoveryController.searchByTag(tag);
 }
 
 function searchByAuthor(author) {
-  const cleanAuthor = String(author || "").trim();
-  if (!cleanAuthor) return;
-
-  homeController.cancelSearchCommit();
-  applyHomeAuthorSearchState(state, cleanAuthor);
-  refreshBackendHomePrompts();
-  render();
-  restoreSearchFocus();
+  discoveryController.searchByAuthor(author);
 }
 
 
@@ -3022,7 +2970,7 @@ function guardAdminUserAction() {
 }
 
 function callBackendApi(action, ...args) {
-  const api = window.TTALKAK_API;
+  const api = apiClient;
   const handler = api?.[action];
   if (typeof handler !== "function") return Promise.resolve(null);
 
@@ -3047,7 +2995,7 @@ function callBackendApi(action, ...args) {
 async function runPromptStateMutation(action, promptId, fallbackMessage) {
   if (!isBackendNumericId(promptId) || state.backendStatus !== "connected") return true;
 
-  const api = window.TTALKAK_API;
+  const api = apiClient;
   const handler = api?.[action];
   if (typeof handler !== "function") return true;
 
@@ -3070,7 +3018,7 @@ async function runPromptStateMutation(action, promptId, fallbackMessage) {
 }
 
 function getMakeApi() {
-  return window.TTALKAK_API || {};
+  return apiClient || {};
 }
 
 function getMakeApiToken() {
@@ -3093,15 +3041,15 @@ function isBackendNumericId(value) {
 }
 
 function buildMakeImproveHistory(messages = state.messages) {
-  return window.TtalkakMakeMessageModel.buildImproveHistory(messages);
+  return makeMessageModel.buildImproveHistory(messages);
 }
 
 function submitAskAnswerForm(form) {
-  return window.TtalkakMakeController.submitAskAnswers({ model: window.TtalkakMakeMessageModel, root: document, setDraft: (value) => window.TtalkakMakeState.setMakeComposerDraft(state, value), submit: submitMakeComposer }, form);
+  return makeControllerModule.submitAskAnswers({ model: makeMessageModel, root: document, setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value), submit: submitMakeComposer }, form);
 }
 
 function focusLatestAskAnswer() {
-  window.TtalkakMakeFocus.focusLatestAskAnswer(document);
+  makeFocusModule.focusLatestAskAnswer(document);
 }
 
 function getMakeThreadById(threadId = state.activeThreadId) {
@@ -3247,10 +3195,10 @@ function normalizePersistedLikeCounts() {
 }
 
 function normalizeRecentThreads() {
-  window.TtalkakMakePersistence.normalizeAndPersistMakeState(
+  makePersistenceModule.normalizeAndPersistMakeState(
     state,
-    window.TtalkakMakeMessageModel,
-    window.TtalkakMakeState,
+    makeMessageModel,
+    makeStateModule,
     persistState,
   );
 }

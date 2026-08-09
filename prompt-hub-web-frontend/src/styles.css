@@ -1750,7 +1750,7 @@ h1 {
 .recent-thread span,
 .recent-thread small,
 .recent-empty {
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
 }
 
@@ -3763,7 +3763,7 @@ input[type="checkbox"] {
   display: grid;
   place-items: center;
   margin: 0 0 14px;
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
 }
 
@@ -4557,13 +4557,13 @@ input[type="checkbox"] {
   left: 14px;
   top: 50%;
   z-index: 1;
-  color: var(--muted);
+  color: var(--muted-dark);
   pointer-events: none;
   transform: translateY(-50%);
 }
 
 .date-field:not(.has-value):not(:focus-within) input {
-  color: transparent;
+  color: var(--muted-dark);
 }
 
 .date-field:not(.has-value):not(:focus-within) input::-webkit-datetime-edit,
@@ -4571,7 +4571,7 @@ input[type="checkbox"] {
 .date-field:not(.has-value):not(:focus-within) input::-webkit-datetime-edit-year-field,
 .date-field:not(.has-value):not(:focus-within) input::-webkit-datetime-edit-month-field,
 .date-field:not(.has-value):not(:focus-within) input::-webkit-datetime-edit-day-field {
-  color: transparent;
+  color: var(--muted-dark);
 }
 
 .date-field.has-value input,
@@ -5176,7 +5176,7 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
 }
 
@@ -6309,14 +6309,14 @@ input[type="checkbox"] {
 
 .make-folder-limit {
   margin: 8px 0 0;
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .make-backend-note {
   margin: 8px 0 0;
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 11px;
   line-height: 1.45;
 }

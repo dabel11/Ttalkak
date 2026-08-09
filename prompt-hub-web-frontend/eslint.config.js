@@ -21,6 +21,15 @@ module.exports = [
     },
   },
   {
+    files: ["src/app-entry.js", "src/**/index.js"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: globals.browser,
+    },
+    rules: js.configs.recommended.rules,
+  },
+  {
     files: ["test/**/*.js", "*.js", "*.cjs"],
     languageOptions: {
       ecmaVersion: "latest",

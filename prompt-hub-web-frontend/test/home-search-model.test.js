@@ -61,11 +61,15 @@ test("popular tags respect approval, usage and recency", () => {
 
 test("browser loads the Home model and app delegates extracted search logic", () => {
   const frontendRoot = path.resolve(__dirname, "..");
-  const indexHtml = fs.readFileSync(path.join(frontendRoot, "index.html"), "utf8");
+  const entry = fs.readFileSync(path.join(frontendRoot, "src", "app-entry.js"), "utf8");
+  const homeEntry = fs.readFileSync(path.join(frontendRoot, "src", "home", "index.js"), "utf8");
   const appSource = fs.readFileSync(path.join(frontendRoot, "src", "app.js"), "utf8");
 
-  assert.match(indexHtml, /src\/home\/home-search-model\.js/);
-  assert.match(appSource, /window\.TtalkakHomeSearchModel/);
+  assert.match(entry, /home\/index\.js/);
+  assert.match(homeEntry, /home-search-model\.js/);
+  assert.match(homeEntry, /export const home/);
+  assert.match(appSource, /modules\.home\.model/);
+  assert.doesNotMatch(appSource, /window\.TtalkakHomeSearchModel/);
   assert.doesNotMatch(appSource, /function parsePromptSearchQuery\s*\(/);
   assert.doesNotMatch(appSource, /function getValidSearchScope\s*\(/);
 });

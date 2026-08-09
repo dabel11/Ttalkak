@@ -73,11 +73,11 @@ export function normalizeImproveResponse(payload, fallbackPrompt = "") {
   return { mode, answer: legacy.leadText || answer, summary: text(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(), ragMessage: text(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || "") };
 }
 
-export const migrateV0ToV1 = (raw = {}) => ({ ...raw, schemaVersion: 1, mode: String(raw.mode || raw.type || "").toLowerCase() === "question" ? "ask" : raw.mode });
-export const migrateV1ToV2 = (raw = {}) => ({ ...raw, schemaVersion: 2, improvedPrompt: raw.improvedPrompt || raw.improved_prompt || raw.finalPrompt || "" });
-export function runMessageMigrations(raw = {}) { let value = { ...raw }; let version = Number(value.schemaVersion || 0); if (version < 1) { value = migrateV0ToV1(value); version = 1; } if (version < 2) value = migrateV1ToV2(value); return value; }
+export const migrateV0ToV1 = (/** @type {Record<string, *>} */ raw = {}) => ({ ...raw, schemaVersion: 1, mode: String(raw.mode || raw.type || "").toLowerCase() === "question" ? "ask" : raw.mode });
+export const migrateV1ToV2 = (/** @type {Record<string, *>} */ raw = {}) => ({ ...raw, schemaVersion: 2, improvedPrompt: raw.improvedPrompt || raw.improved_prompt || raw.finalPrompt || "" });
+export function runMessageMigrations(/** @type {Record<string, *>} */ raw = {}) { let value = { ...raw }; let version = Number(value.schemaVersion || 0); if (version < 1) { value = migrateV0ToV1(value); version = 1; } if (version < 2) value = migrateV1ToV2(value); return value; }
 
-export function migrateMakeMessage(input = {}, index = 0) {
+export function migrateMakeMessage(/** @type {Record<string, *>} */ input = {}, index = 0) {
   const raw = runMessageMigrations(input);
   const mode = ["ask", "question"].includes(String(raw.mode || raw.type || "").toLowerCase()) ? "ask" : "improve";
   const legacy = parseLegacyQuestions(raw.answer || raw.content);
@@ -91,7 +91,7 @@ export function migrateMakeMessage(input = {}, index = 0) {
 
 export function isRenderableMessage(message) { const value = migrateMakeMessage(message); return Boolean(text(value.content || value.answer || value.summary || value.improvedPrompt) || [value.questions, value.fields, value.changes, value.techniques].some((items) => items.length)); }
 export function migrateMakeMessages(messages) { return (Array.isArray(messages) ? messages : []).map(migrateMakeMessage).filter(isRenderableMessage); }
-export function migratePersistedMakeState(state = {}) { state.messages = migrateMakeMessages(state.messages); state.recentThreads = (Array.isArray(state.recentThreads) ? state.recentThreads : []).map((thread) => ({ ...thread, messages: migrateMakeMessages(thread?.messages) })); return state; }
+export function migratePersistedMakeState(/** @type {Record<string, *>} */ state = {}) { state.messages = migrateMakeMessages(state.messages); state.recentThreads = (Array.isArray(state.recentThreads) ? state.recentThreads : []).map((thread) => ({ ...thread, messages: migrateMakeMessages(thread?.messages) })); return state; }
 export function buildImproveHistory(messages) { return migrateMakeMessages(messages).filter((message) => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role, content: text(message.role === "assistant" ? message.answer || message.content : message.content) })).filter((message) => message.content); }
 const NON_EXECUTABLE_PROMPT_FRAGMENTS = ["관련 프롬프트 기법 근거를 찾지 못했습니다", "관련 기법 근거 없이", "개선안을 만들 수 없", "확인이 필요"];
 const ASK_ONLY_PATTERNS = [/확인이\s*필요/i, /답변이\s*필요/i, /추가\s*정보가\s*필요/i, /정보를\s*보완해\s*주세요/i, /개선안을?\s*만들\s*수\s*없/i, /만들\s*수\s*없어/i, /아래\s*정보를\s*알려주시면/i, /어떤\s*주제/i, /무엇에\s*대한\s*글/i];

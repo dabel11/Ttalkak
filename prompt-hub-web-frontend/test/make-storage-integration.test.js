@@ -10,6 +10,7 @@ global.window = {
     removeItem: (key) => values.delete(key),
   },
 };
+["persistence", "core", "interaction", "prompt", "admin", "make"].forEach((domain) => require(`../src/state/state-${domain}.js`));
 require("../src/state/app-state.js");
 
 test("legacy localStorage messages are migrated and saved with schemaVersion", () => {

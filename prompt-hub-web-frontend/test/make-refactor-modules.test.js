@@ -26,7 +26,7 @@ test("Make request state transitions are centralized", () => {
   assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null });
 });
 test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
-test("Make workflow composition loads four focused submodules", () => { const root = path.resolve(__dirname, ".."); const html = fs.readFileSync(path.join(root, "index.html"), "utf8"); ["make-folder-workflows.js", "make-execution-workflows.js", "make-recent-workflows.js", "make-sync-workflows.js"].forEach((file) => assert.match(html, new RegExp(file))); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.js"), "utf8"); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
+test("Make workflow composition loads four focused submodules", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); ["make-folder-workflows.js", "make-execution-workflows.js", "make-recent-workflows.js", "make-sync-workflows.js"].forEach((file) => assert.match(makeEntry, new RegExp(file))); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.js"), "utf8"); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
 test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
 
 test("Make state mutations use named helpers", () => {
@@ -36,6 +36,18 @@ test("Make state mutations use named helpers", () => {
   api.setMakeEditingMessage(state, "message-1");
   api.setMakeBackendFailure(state, "offline");
   assert.deepEqual(state, { composerDraft: "draft", editingMessageId: "message-1", makeBackendStatus: "fallback", makeBackendMessage: "offline" });
+});
+
+test("application state is composed from focused domain modules", () => {
+  const root = path.resolve(__dirname, "..");
+  const appState = fs.readFileSync(path.join(root, "src/state/app-state.js"), "utf8");
+  const entry = fs.readFileSync(path.join(root, "src/state/index.js"), "utf8");
+  ["persistence", "core", "prompt", "admin", "interaction", "make"].forEach((domain) => {
+    assert.match(entry, new RegExp(`state-${domain}\\.js`));
+    assert.match(appState, new RegExp(`domains\\.${domain}`));
+  });
+  assert.ok(appState.split(/\r?\n/).length < 250, "app-state.js should remain a small compatibility facade");
+  assert.doesNotMatch(appState, /function\s+(?:apply|delete|create|persist|load)[A-Z]/);
 });
 
 test("Make backend status changes use one state API", () => {

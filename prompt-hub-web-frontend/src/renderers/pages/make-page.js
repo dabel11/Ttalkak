@@ -106,7 +106,7 @@
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
-        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
+        <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
         <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
     `;

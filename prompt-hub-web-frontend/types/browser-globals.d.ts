@@ -2,12 +2,169 @@ type TtalkakId = string | number;
 type TtalkakToken = string | undefined;
 type TtalkakPayload = Record<string, unknown>;
 type TtalkakCallableModule = Record<string, Function>;
+type TtalkakGlobal = typeof globalThis & { TtalkakStateDomains?: Record<string, TtalkakCallableModule> };
+declare function require(path: string): unknown;
 type TtalkakStateModule = TtalkakCallableModule & {
   STORAGE_KEY: string;
   AUTH_TOKEN_KEY: string;
   DEMO_AUTH_TOKEN: string;
 };
 type TtalkakRecord = Record<string, unknown>;
+interface TtalkakPromptRecord {
+  id: TtalkakId;
+  source?: string;
+  saves?: number;
+  views?: number;
+  createdAt?: number;
+  savedByMe?: boolean;
+  isShared?: boolean;
+  [key: string]: unknown;
+}
+interface TtalkakStateEntity {
+  id?: TtalkakId;
+  key?: string;
+  type?: string;
+  role?: string;
+  source?: string;
+  status?: string;
+  name?: string;
+  title?: string;
+  content?: string;
+  text?: string;
+  preview?: string;
+  nickname?: string;
+  memberId?: TtalkakId;
+  backendId?: TtalkakId;
+  folderId?: TtalkakId | null;
+  threadId?: TtalkakId | null;
+  messages?: TtalkakStateEntity[];
+  replies?: TtalkakStateEntity[];
+  prompts?: TtalkakStateEntity[];
+  comments?: number | TtalkakStateEntity[];
+  reportsMade?: TtalkakStateEntity[];
+  reportsReceived?: TtalkakStateEntity[];
+  likes?: number;
+  saves?: number;
+  views?: number;
+  createdAt?: number;
+  updatedAt?: number;
+  requestedAt?: number;
+  reason?: string;
+  message?: string;
+  blocked?: boolean;
+  hidden?: boolean;
+  deleted?: boolean;
+  savedByMe?: boolean;
+  likedByMe?: boolean;
+  isShared?: boolean;
+  [key: string]: unknown;
+}
+interface TtalkakApplicationState {
+  [key: string]: unknown;
+  route: string; searchQuery: string; searchScope: string; popularSort: string; popularPage: number; savedSort: string; savedPage: number;
+  isLoggedIn: boolean; currentUser: string | null; currentUserId: TtalkakId | null; currentUserRole: string; authToken: string; token: string;
+  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; guestImproveCount: number; templateCollapsed: boolean;
+  detailPromptId: TtalkakId | null; detailHighlightCommentId: TtalkakId | null; editingPromptId: TtalkakId | null; editingCommentId: TtalkakId | null;
+  replyingCommentId: TtalkakId | null; reportPromptId: TtalkakId | null; reportCommentId: TtalkakId | null; executePromptId: TtalkakId | null;
+  executeMessageId: TtalkakId | null; editingMessageId: TtalkakId | null; copiedMessageId: TtalkakId | null; confirmAction: TtalkakStateEntity | null;
+  creatingFolder: boolean; creatingThreadFolderId: TtalkakId | null; editingFolderId: TtalkakId | null; openFolderMenuId: TtalkakId | null;
+  openPromptCardMenuId: TtalkakId | null; openThreadMenuId: TtalkakId | null; activeFolderId: TtalkakId; activeThreadId: TtalkakId | null;
+  composerDraft: string; makeBackendStatus: string; myBackendStatus: string; adminBackendStatus: string; myPageTab: string;
+  shareError: string; shareDraft: TtalkakStateEntity | null; libraryDemoSeeded: boolean;
+  messages: TtalkakStateEntity[]; recentThreads: TtalkakStateEntity[]; makeFolders: TtalkakStateEntity[];
+  backendLibraryPrompts: TtalkakStateEntity[]; backendLikedPrompts: TtalkakStateEntity[]; backendMyPrompts: TtalkakStateEntity[];
+  backendMyComments: TtalkakStateEntity[]; backendMyReports: TtalkakStateEntity[]; backendAdminReports: TtalkakStateEntity[]; backendAdminTags: TtalkakStateEntity[];
+  backendAdminReportsLoaded: boolean; backendAdminUserActivities: Record<string, TtalkakStateEntity>;
+  userLibraryPromptIds: Set<TtalkakId>; backendLibraryPromptIds: Set<TtalkakId>; likedPromptIds: Set<TtalkakId>; likedCommentIds: Set<TtalkakId>;
+  pendingUnsaveIds: Set<TtalkakId>; reportedPromptIds: Set<TtalkakId>; reportedCommentIds: Set<TtalkakId>; expandedComments: Record<string, boolean>;
+  adminHiddenPromptIds: Set<TtalkakId>; adminPromptRevisionRequests: Record<string, TtalkakStateEntity>; adminTagDecisions: Record<string, string>;
+  reportRecords: Record<string, TtalkakStateEntity>; accountScopes: Record<string, unknown>;
+  adminRequestTargetKey: string | null; adminBlockTarget: TtalkakStateEntity | null; adminUserActivityNickname: string; adminUserQuery: string;
+  adminPromptQuery: string; adminPromptFilter: string; adminTagQuery: string; adminTagFilter: string; adminTagSort: string; adminTagPromptKey: string;
+  adminReportFilter: string; adminTab: string;
+}
+interface TtalkakStateContext {
+  state: TtalkakApplicationState;
+  popularPrompts: TtalkakStateEntity[];
+  savedPrompts: TtalkakStateEntity[];
+  commentsByPrompt: Record<string, TtalkakStateEntity[]>;
+  existingPrompt?: TtalkakStateEntity | null;
+  findPromptById(id: TtalkakId): TtalkakStateEntity | undefined;
+  upsertPrompt(list: TtalkakStateEntity[], prompt: TtalkakStateEntity): void;
+  updatePromptField(id: TtalkakId, field: string, value: unknown): void;
+  getSavedFilteredCount(): number;
+  makePreview(value: unknown): string;
+  makePromptTitle(value: unknown): string;
+  updateRecentThread(thread: TtalkakId | TtalkakStateEntity): void;
+  saveCurrentAccountScope(): void;
+  getCurrentAccountScopeKey(): string;
+  getValidSearchScope(value: unknown): string;
+  normalizeMakeFolders(value: unknown): TtalkakStateEntity[];
+  normalizePersistedLikeCounts(): void;
+  normalizeSavedPromptOwnership(): void;
+  restoreCurrentAccountScope(): void;
+  getAdminUserActivity(nickname: string): TtalkakStateEntity;
+  normalizeAdminSearchText(value: string): string;
+}
+interface TtalkakModuleRegistry {
+  utils: TtalkakCallableModule;
+  home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  saved: { createSavedLibraryController: Function };
+  discovery: { createDiscoveryController: Function };
+  interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  share: { controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  modal: { controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
+  auth: { session: TtalkakCallableModule; validation: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
+  admin: { events: TtalkakCallableModule; selectors: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule };
+  make: { preview: TtalkakCallableModule; messageModel: TtalkakCallableModule; state: TtalkakCallableModule; controller: TtalkakCallableModule; focus: TtalkakCallableModule; persistence: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  bootstrap: TtalkakCallableModule;
+  components: TtalkakCallableModule;
+  events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule };
+  effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
+  renderers: TtalkakCallableModule;
+  routing: TtalkakCallableModule;
+  api: TtalkakApi;
+  apiContract: Window["TtalkakApiContract"];
+  state: { api: TtalkakStateModule; domains: Readonly<Record<string, TtalkakCallableModule>> };
+}
+interface TtalkakSavedState {
+  isLoggedIn: boolean;
+  libraryDemoSeeded: boolean;
+  userLibraryPromptIds: Set<TtalkakId>;
+  pendingUnsaveIds: Set<TtalkakId>;
+  likedPromptIds: Set<TtalkakId>;
+  savedFilter: { community: boolean; mine: boolean; liked: boolean };
+  savedSort: string;
+  myBackendStatus: string;
+  backendLibraryPrompts: TtalkakPromptRecord[];
+  backendLikedPrompts: TtalkakPromptRecord[];
+}
+interface TtalkakSavedLibraryContext {
+  state: TtalkakSavedState;
+  savedPrompts: TtalkakPromptRecord[];
+  popularPrompts: TtalkakPromptRecord[];
+  demoPromptIds: Set<TtalkakId>;
+  uniquePrompts(items: TtalkakPromptRecord[]): TtalkakPromptRecord[];
+  canUseDemoFallback(): boolean;
+  getLikes(prompt: TtalkakPromptRecord): number;
+  getCommentCount(prompt: TtalkakPromptRecord): number;
+}
+interface TtalkakDiscoveryState {
+  adminPromptQuery: string;
+  adminTagQuery: string;
+  [key: string]: unknown;
+}
+interface TtalkakDiscoveryContext {
+  state: TtalkakDiscoveryState;
+  document: Document;
+  searchDebounceMs: number;
+  cancelHomeSearch(): void;
+  applyTag(state: TtalkakDiscoveryState, value: string): void;
+  applyAuthor(state: TtalkakDiscoveryState, value: string): void;
+  refresh(): void;
+  render(): void;
+  restoreHomeFocus(): void;
+}
 interface TtalkakApiNormalizers {
   normalizeTags(value: unknown): string[];
   toNumber(...values: unknown[]): number;
@@ -124,6 +281,7 @@ interface TtalkakApi {
 }
 
 interface Window {
+  TtalkakModules?: TtalkakModuleRegistry;
   __API_BASE_URL__?: string;
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
@@ -149,6 +307,8 @@ interface Window {
   TtalkakHomeSearchModel: TtalkakCallableModule;
   TtalkakHomeController: TtalkakCallableModule;
   TtalkakHomeEvents: TtalkakCallableModule;
+  TtalkakSavedLibraryController: TtalkakCallableModule;
+  TtalkakDiscoveryController: TtalkakCallableModule;
   TtalkakPromptEngagementController: TtalkakCallableModule;
   TtalkakPromptEngagementEvents: TtalkakCallableModule;
   TtalkakCommentModel: TtalkakCallableModule;
@@ -189,6 +349,7 @@ interface Window {
   TtalkakAdminEffects: TtalkakCallableModule;
   TtalkakErrorEffects: TtalkakCallableModule;
   TtalkakState: TtalkakStateModule;
+  TtalkakStateDomains?: Record<string, TtalkakCallableModule>;
   TtalkakRenderers: TtalkakCallableModule;
   TtalkakRouting: TtalkakCallableModule;
   TtalkakMakeMessageParts: TtalkakCallableModule;

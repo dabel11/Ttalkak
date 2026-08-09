@@ -56,8 +56,11 @@ test("engagement event binder delegates save and like controls", () => {
 test("app delegates engagement workflows without duplicate controller functions", () => {
   const frontendRoot = path.resolve(__dirname, "..");
   const appSource = fs.readFileSync(path.join(frontendRoot, "src", "app.js"), "utf8");
-  const indexHtml = fs.readFileSync(path.join(frontendRoot, "index.html"), "utf8");
-  assert.match(indexHtml, /interactions\/prompt-engagement-controller\.js/);
+  const entry = fs.readFileSync(path.join(frontendRoot, "src", "app-entry.js"), "utf8");
+  const interactionEntry = fs.readFileSync(path.join(frontendRoot, "src", "interactions", "index.js"), "utf8");
+  assert.match(entry, /interactions\/index\.js/);
+  assert.match(interactionEntry, /prompt-engagement-controller\.js/);
+  assert.match(interactionEntry, /export const interactions/);
   assert.match(appSource, /createPromptEngagementController/);
   ["toggleSavedPrompt", "toggleLikePrompt", "toggleLikeComment", "addPromptComment", "addCommentReply", "updateOwnComment"].forEach((name) => {
     assert.doesNotMatch(appSource, new RegExp(`function ${name}\\s*\\(`));
