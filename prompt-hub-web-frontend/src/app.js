@@ -50,6 +50,8 @@ const { createShareController, getShareTagSuggestions: getShareTagSuggestionsMod
 const { bindShareEvents } = window.TtalkakShareEvents || {};
 const { createModalController } = window.TtalkakModalController || {};
 const { bindModalEvents } = window.TtalkakModalEvents || {};
+const { createAuthSession, normalizeAuthResult } = window.TtalkakAuthSession || {};
+const { getUserIdValidationMessage, isValidEmail } = window.TtalkakAuthValidation || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -95,6 +97,10 @@ if (
     bindShareEvents,
     createModalController,
     bindModalEvents,
+    createAuthSession,
+    normalizeAuthResult,
+    getUserIdValidationMessage,
+    isValidEmail,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -879,6 +885,14 @@ const shareController = createShareController({
   applyShared: applySharedPromptState, notice: showNotice,
 });
 const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
+const authSession = createAuthSession({ state, applyIdentity: applyAuthenticatedIdentityState, resetBackend: resetSessionBackendStateValue, clearState: clearAuthenticatedSessionState, normalizeLikes: normalizePersistedLikeCounts, writeToken: (token) => writeStorageItem(AUTH_TOKEN_KEY, token), removeToken: () => removeStorageItem(AUTH_TOKEN_KEY) });
+const getCurrentAccountScopeKey = authSession.key;
+const snapshotCurrentAccountScope = authSession.snapshot;
+const saveCurrentAccountScope = authSession.saveScope;
+const applyAccountScope = authSession.applyScope;
+const restoreCurrentAccountScope = authSession.restoreScope;
+const applyAuthenticatedUser = authSession.applyUser;
+const clearAuthenticatedSession = authSession.clear;
 const closeTopModal = modalController.closeTop;
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
@@ -2257,88 +2271,6 @@ function isDuplicateAuthValue(field, value) {
   return source.some((item) => normalizeSearchText(item) === normalized);
 }
 
-function getUserIdValidationMessage(value) {
-  const userId = String(value || "").trim();
-  if (!userId) return "";
-  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(userId)) return "아이디에는 한글을 사용할 수 없습니다.";
-  if (!/^[a-z0-9_-]+$/.test(userId)) return "아이디는 영문 소문자, 숫자, _, -만 사용할 수 있습니다.";
-  return "";
-}
-
-function isValidEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
-}
-
-function normalizeAuthResult(payload, fallbackUserId = "") {
-  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
-  const user = data.user || data.member || data.account || {};
-  const token = String(data.accessToken || data.token || data.authToken || data.jwt || "").trim();
-  const nickname = String(user.nickname || user.name || data.nickname || fallbackUserId || "사용자").trim() || "사용자";
-  const role = String(user.role || data.role || "user").toLowerCase().replace(/^role_/, "");
-
-  return {
-    token,
-    user: {
-      id: user.id || user.memberId || data.memberId || null,
-      userId: user.userId || user.username || data.userId || fallbackUserId || "",
-      nickname,
-      role,
-    },
-    raw: payload,
-  };
-}
-
-function getCurrentAccountScopeKey() {
-  if (!state.isLoggedIn) return "guest";
-  const id = state.currentUserId || "";
-  const role = String(state.currentUserRole || "user").toLowerCase();
-  const nickname = String(state.currentUser || "").trim();
-  return `${role}:${id || nickname || "unknown"}`;
-}
-
-function snapshotCurrentAccountScope() {
-  return {
-    userLibraryPromptIds: [...state.userLibraryPromptIds],
-    likedPromptIds: [...state.likedPromptIds],
-    likedCommentIds: [...state.likedCommentIds],
-    reportedPromptIds: [...state.reportedPromptIds],
-    reportedCommentIds: [...state.reportedCommentIds],
-    hideReportedPrompts: state.hideReportedPrompts,
-  };
-}
-
-function saveCurrentAccountScope() {
-  const key = getCurrentAccountScopeKey();
-  if (!key) return;
-  state.accountScopes = {
-    ...(state.accountScopes || {}),
-    [key]: snapshotCurrentAccountScope(),
-  };
-}
-
-function applyAccountScope(scope = {}) {
-  state.userLibraryPromptIds = new Set(Array.isArray(scope.userLibraryPromptIds) ? scope.userLibraryPromptIds : []);
-  state.likedPromptIds = new Set(Array.isArray(scope.likedPromptIds) ? scope.likedPromptIds : []);
-  state.likedCommentIds = new Set(Array.isArray(scope.likedCommentIds) ? scope.likedCommentIds : []);
-  state.reportedPromptIds = new Set(Array.isArray(scope.reportedPromptIds) ? scope.reportedPromptIds : []);
-  state.reportedCommentIds = new Set(Array.isArray(scope.reportedCommentIds) ? scope.reportedCommentIds : []);
-  state.hideReportedPrompts = Boolean(scope.hideReportedPrompts);
-  normalizePersistedLikeCounts();
-}
-
-function restoreCurrentAccountScope() {
-  const scopes = state.accountScopes && typeof state.accountScopes === "object" ? state.accountScopes : {};
-  applyAccountScope(scopes[getCurrentAccountScopeKey()] || {});
-}
-
-function applyAuthenticatedUser(authResult) {
-  saveCurrentAccountScope();
-  applyAuthenticatedIdentity(authResult);
-  resetSessionBackendState();
-  restoreCurrentAccountScope();
-  writeStorageItem(AUTH_TOKEN_KEY, authResult.token);
-}
-
 function applyAuthenticatedIdentity(authResult) {
   applyAuthenticatedIdentityState(state, authResult);
 }
@@ -2353,13 +2285,6 @@ function clearSessionBackendData() {
 
 function clearTransientSessionUiState() {
   clearTransientSessionUiStateValue(state);
-}
-
-function clearAuthenticatedSession({ keepRoute = false } = {}) {
-  saveCurrentAccountScope();
-  clearAuthenticatedSessionState(state, { keepRoute });
-  restoreCurrentAccountScope();
-  removeStorageItem(AUTH_TOKEN_KEY);
 }
 
 function clearAuthenticatedIdentity() {
