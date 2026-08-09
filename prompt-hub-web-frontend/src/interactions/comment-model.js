@@ -14,6 +14,10 @@
       canDelete: (comment) => canDeleteComment(state, comment),
       countThread: countCommentThread,
       findById: (commentId) => findCommentById(commentsByPrompt, commentId),
+      findContext: (commentId) => {
+        const promptId = findPromptIdByCommentId(commentsByPrompt, commentId);
+        return promptId ? { promptId, comment: findCommentInList(commentsByPrompt[promptId], commentId) } : null;
+      },
       findInList: findCommentInList,
       findPromptId: (commentId) => findPromptIdByCommentId(commentsByPrompt, commentId),
       getLikes: getCommentLikes,

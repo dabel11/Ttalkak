@@ -15,6 +15,7 @@
     "src/share/*.js",
     "src/modal/*.js",
     "src/auth/*.js",
+    "src/admin/*.js",
     "src/make/*.js"
   ]
 }

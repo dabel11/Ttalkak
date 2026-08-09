@@ -13,6 +13,8 @@ interface Window {
   TtalkakAuthValidation: unknown;
   TtalkakAuthController: unknown;
   TtalkakAuthEvents: unknown;
+  TtalkakAdminEvents: unknown;
+  TtalkakAdminController: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;
