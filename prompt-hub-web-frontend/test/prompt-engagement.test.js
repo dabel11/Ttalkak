@@ -77,3 +77,15 @@ test("comment model synchronizes counts across prompt collections", () => {
   assert.equal(shared.commentCount, 2);
   assert.equal(other.comments, 2);
 });
+
+test("comment repository binds thread data without app-level adapters", () => {
+  const groups = { p: [{ id: "a", likes: 2, replies: [{ id: "b" }] }] };
+  const prompt = { id: "p" };
+  const repository = commentModel.createCommentRepository({ state: { isLoggedIn: true, currentUser: "me" }, commentsByPrompt: groups, promptLists: [[prompt]] });
+  assert.equal(repository.findById("b").id, "b");
+  assert.equal(repository.getPromptCommentCount(prompt), 2);
+  repository.syncCount("p");
+  assert.equal(prompt.comments, 2);
+  const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
+  ["findCommentById", "getSortedPromptComments", "countCommentThread", "canDeleteComment"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`)));
+});

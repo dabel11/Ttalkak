@@ -8,7 +8,23 @@
   function sortComments(comments) { return [...(comments || [])].map((comment, index) => ({ comment, index })).sort((a, b) => getCommentLikes(b.comment) - getCommentLikes(a.comment) || a.index - b.index).map(({ comment }) => comment); }
   function canDeleteComment(state, comment) { if (!comment) return false; if (state.adminMode) return true; if (!state.isLoggedIn) return false; const owner = comment.owner || comment.author; return owner === "나" || owner === state.currentUser || comment.author === state.currentUser; }
   function syncPromptCommentCount(promptId, comments, promptLists) { if (!Array.isArray(comments)) return 0; const count = countCommentThread(comments); const updated = new Set(); for (const list of promptLists) { const prompt = list.find((item) => item.id === promptId); if (!prompt || updated.has(prompt)) continue; prompt.comments = count; prompt.commentCount = count; updated.add(prompt); } return count; }
-  const api = Object.freeze({ canDeleteComment, countCommentThread, findCommentById, findCommentInList, findPromptIdByCommentId, getCommentLikes, sortComments, syncPromptCommentCount });
+  function createCommentRepository({ state, commentsByPrompt, promptLists }) {
+    const getPromptComments = (promptId) => commentsByPrompt[promptId] || [];
+    return Object.freeze({
+      canDelete: (comment) => canDeleteComment(state, comment),
+      countThread: countCommentThread,
+      findById: (commentId) => findCommentById(commentsByPrompt, commentId),
+      findInList: findCommentInList,
+      findPromptId: (commentId) => findPromptIdByCommentId(commentsByPrompt, commentId),
+      getLikes: getCommentLikes,
+      getPromptComments,
+      getPromptCommentCount: (prompt) => countCommentThread(getPromptComments(prompt.id)) || Number(prompt.comments || prompt.commentCount || 0),
+      getSortedPromptComments: (promptId) => sortComments(getPromptComments(promptId)),
+      getSortedReplies: (comment) => sortComments(comment.replies || []),
+      syncCount: (promptId) => syncPromptCommentCount(promptId, commentsByPrompt[promptId], promptLists),
+    });
+  }
+  const api = Object.freeze({ canDeleteComment, countCommentThread, createCommentRepository, findCommentById, findCommentInList, findPromptIdByCommentId, getCommentLikes, sortComments, syncPromptCommentCount });
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.TtalkakCommentModel = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -38,6 +38,7 @@ const { bindPromptEngagementEvents } = window.TtalkakPromptEngagementEvents || {
 const {
   canDeleteComment: canDeleteCommentModel,
   countCommentThread: countCommentThreadModel,
+  createCommentRepository,
   findCommentById: findCommentByIdModel,
   findCommentInList,
   findPromptIdByCommentId: findPromptIdByCommentIdModel,
@@ -82,6 +83,7 @@ if (
     bindPromptEngagementEvents,
     canDeleteCommentModel,
     countCommentThreadModel,
+    createCommentRepository,
     findCommentByIdModel,
     findCommentInList,
     findPromptIdByCommentIdModel,
@@ -811,6 +813,7 @@ const homeController = createHomeController({
   render,
 });
 
+const commentRepository = createCommentRepository({ state, commentsByPrompt, promptLists: [popularPrompts, savedPrompts] });
 const promptEngagementController = createPromptEngagementController({
   state,
   savedPrompts,
@@ -818,10 +821,10 @@ const promptEngagementController = createPromptEngagementController({
   notice: showNotice,
   render,
   findPrompt: findPromptById,
-  findComment: findCommentById,
-  findPromptIdByComment: findPromptIdByCommentId,
-  getCommentLikes,
-  canDeleteComment,
+  findComment: commentRepository.findById,
+  findPromptIdByComment: commentRepository.findPromptId,
+  getCommentLikes: commentRepository.getLikes,
+  canDeleteComment: commentRepository.canDelete,
   getPromptMutationContext: getPromptMutationStateContext,
   getCommentMutationContext: getCommentMutationStateContext,
   runMutation: runPromptStateMutation,
@@ -850,12 +853,23 @@ const promptEngagementController = createPromptEngagementController({
   getToken: getAuthToken,
   warn: (...args) => console.warn(...args),
   incrementViews: incrementPromptViews,
-  syncCommentCount: syncPromptCommentCount,
-  findCommentInList,
+  syncCommentCount: commentRepository.syncCount,
+  findCommentInList: commentRepository.findInList,
   confirm: openConfirmAction,
   deleteCommentState,
   refreshAdmin: refreshAdminAfterMutation,
 });
+const hydratePromptComments = (...args) => promptEngagementController.hydratePromptComments(...args);
+const syncPromptCommentCount = commentRepository.syncCount;
+const findPromptIdByCommentId = commentRepository.findPromptId;
+const getPromptComments = commentRepository.getPromptComments;
+const getSortedPromptComments = commentRepository.getSortedPromptComments;
+const getSortedCommentReplies = commentRepository.getSortedReplies;
+const findCommentById = commentRepository.findById;
+const countCommentThread = commentRepository.countThread;
+const getCommentLikes = commentRepository.getLikes;
+const getPromptCommentCount = commentRepository.getPromptCommentCount;
+const canDeleteComment = commentRepository.canDelete;
 
 const shareController = createShareController({
   state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
@@ -3436,18 +3450,6 @@ function openPromptDetail(promptId, options = {}) {
   render();
 }
 
-async function hydratePromptComments(promptId, options = {}) {
-  return promptEngagementController.hydratePromptComments(promptId, options);
-}
-
-function syncPromptCommentCount(promptId) {
-  return syncPromptCommentCountModel(promptId, commentsByPrompt[promptId], [popularPrompts, savedPrompts]);
-}
-
-function findPromptIdByCommentId(commentId) {
-  return findPromptIdByCommentIdModel(commentsByPrompt, commentId);
-}
-
 function shouldOpenCommentsByDefault() {
   if (typeof window === "undefined") return true;
   return window.matchMedia("(min-width: 900px)").matches;
@@ -3462,35 +3464,6 @@ function incrementPromptViews(promptId) {
     prompt.views = getPromptViewCount(prompt) + 1;
     updated.add(prompt);
   }
-}
-
-function getPromptComments(promptId) {
-  return commentsByPrompt[promptId] || [];
-}
-
-function getSortedPromptComments(promptId) {
-  return sortCommentsModel(getPromptComments(promptId));
-}
-
-function getSortedCommentReplies(comment) {
-  return sortCommentsModel(comment.replies || []);
-}
-
-function findCommentById(commentId) {
-  return findCommentByIdModel(commentsByPrompt, commentId);
-}
-
-function countCommentThread(comments) {
-  return countCommentThreadModel(comments);
-}
-
-function getCommentLikes(comment) {
-  return getCommentLikesModel(comment);
-}
-
-function getPromptCommentCount(prompt) {
-  const threadCount = countCommentThread(getPromptComments(prompt.id));
-  return threadCount || Number(prompt.comments || prompt.commentCount || 0);
 }
 
 function normalizeAuthorName(value) {
@@ -3590,10 +3563,6 @@ async function updateAdminCommentHiddenState(commentId, shouldHide) {
   }
 
   render();
-}
-
-function canDeleteComment(comment) {
-  return canDeleteCommentModel(state, comment);
 }
 
 function openConfirmAction(action) {
