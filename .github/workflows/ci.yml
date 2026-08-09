@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop-integrated
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            extension/package-lock.json
+            prompt-hub-web-frontend/package-lock.json
+
+      - name: Check pull request whitespace errors
+        if: github.event_name == 'pull_request'
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+
+      - name: Check pushed commit whitespace errors
+        if: github.event_name == 'push'
+        run: git diff --check "${{ github.event.before }}" "${{ github.sha }}"
+
+      - name: Install web dependencies
+        working-directory: prompt-hub-web-frontend
+        run: npm ci
+
+      - name: Verify and build web frontend
+        working-directory: prompt-hub-web-frontend
+        run: npm run verify
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Run extension tests
+        working-directory: extension
+        run: npm test
+
+      - name: Build extension for production
+        working-directory: extension
+        env:
+          VITE_BACKEND_API_URL: ${{ vars.VITE_BACKEND_API_URL || 'https://api.example.invalid' }}
+        run: npm run build:prod
+
+  web-e2e:
+    name: Web fixture browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: prompt-hub-web-frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prompt-hub-web-frontend/package-lock.json
+
+      - name: Install web test dependencies
+        run: npm ci
+
+      - name: Install Chromium for E2E tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run fixture browser E2E tests
+        run: npm run test:e2e
+
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: prompt-hub-web-frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run backend tests
+        run: ./gradlew test --no-daemon

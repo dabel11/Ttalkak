@@ -1,0 +1,164 @@
+const { test, expect } = require("@playwright/test");
+
+const STORAGE_KEY = "prompt_hub_web_state_v2";
+const API_PATTERN = "http://localhost:8080/**";
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "content-type, authorization",
+  "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "content-type": "application/json; charset=utf-8",
+};
+
+const askMessage = {
+  id: "assistant-ask",
+  role: "assistant",
+  mode: "ask",
+  summary: "Please provide a little more information.",
+  questions: [
+    { field: "purpose", question: "What is the purpose?", importance: "required", reason: "This determines the output structure." },
+    { field: "audience", question: "Who is the audience?", importance: "recommended" },
+  ],
+};
+
+function persistedState(messages = [], extra = {}) {
+  const threadId = extra.activeThreadId || (messages.length ? "fixture-thread" : null);
+  const recentThreads = extra.recentThreads || (threadId
+    ? [{ id: threadId, title: "Fixture conversation", preview: "Fixture", folderId: "uncategorized", createdAt: 1, messages }]
+    : []);
+  return JSON.stringify({
+    state: {
+      guestImproveCount: 0,
+      messages,
+      recentThreads,
+      activeThreadId: threadId,
+      activeFolderId: "all",
+      makeFolders: [{ id: "uncategorized", name: "Uncategorized" }],
+      ...extra,
+    },
+  });
+}
+
+async function seedStorage(page, messages = [], extra = {}) {
+  const value = persistedState(messages, extra);
+  await page.addInitScript(({ key, stored }) => {
+    if (window.sessionStorage.getItem("__ttalkak_e2e_seeded__")) return;
+    window.localStorage.clear();
+    window.localStorage.setItem(key, stored);
+    window.sessionStorage.setItem("__ttalkak_e2e_seeded__", "true");
+  }, { key: STORAGE_KEY, stored: value });
+}
+
+async function mockBackend(page, improveHandler = async (route) => route.fulfill({
+  status: 200,
+  headers: CORS_HEADERS,
+  body: JSON.stringify({ mode: "improve", improvedPrompt: "A production-ready improved prompt." }),
+})) {
+  await page.route(API_PATTERN, async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: CORS_HEADERS, body: "" });
+      return;
+    }
+    if (new URL(request.url()).pathname === "/api/prompts/improve") {
+      await improveHandler(route);
+      return;
+    }
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: [] }) });
+  });
+}
+
+async function openMake(page, messages = [], extra = {}, improveHandler) {
+  await seedStorage(page, messages, extra);
+  await mockBackend(page, improveHandler);
+  await page.goto("/");
+  await page.locator('[data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+}
+
+test("ask questions render with required state and hide executable actions", async ({ page }) => {
+  await openMake(page, [askMessage]);
+
+  await expect(page.locator("[data-ask-answer-form]")).toBeVisible();
+  await expect(page.locator("[data-ask-answer-input]")).toHaveCount(2);
+  await expect(page.locator('[data-ask-answer-input][name="purpose"]')).toHaveAttribute("required", "");
+  await expect(page.locator('[data-ask-answer-input][name="purpose"]')).toHaveAttribute("aria-required", "true");
+  await expect(page.locator("[data-copy-message]")).toHaveCount(0);
+  await expect(page.locator("[data-execute-message]")).toHaveCount(0);
+});
+
+test("required answers are validated and a complete answer transitions to improve", async ({ page }) => {
+  await openMake(page, [askMessage]);
+  const form = page.locator("[data-ask-answer-form]");
+  const requiredInput = form.locator('[name="purpose"]');
+
+  await form.locator('button[type="submit"]').click();
+  await expect(requiredInput).toHaveAttribute("aria-invalid", "true");
+  await expect(requiredInput).toBeFocused();
+
+  await requiredInput.fill("Prepare a release announcement");
+  await form.locator('[name="audience"]').fill("New users");
+  const requestPromise = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/prompts/improve"));
+  await form.locator('button[type="submit"]').click();
+  const request = await requestPromise;
+  const payload = request.postDataJSON();
+
+  expect(payload.prompt).toContain("Prepare a release announcement");
+  expect(payload.prompt).toContain("New users");
+  await expect(page.locator("[data-copy-message]")).toHaveCount(1);
+  await expect(page.locator("[data-execute-message]")).toHaveCount(1);
+});
+
+test("legacy questions migrate, empty messages disappear, and restored data survives reload", async ({ page }) => {
+  const legacyMessages = [
+    { id: "legacy-question", role: "assistant", type: "question", answer: "Please clarify\n- **Audience**: Who is the audience?" },
+    { id: "legacy-empty", role: "assistant", content: "" },
+  ];
+  await openMake(page, legacyMessages);
+
+  await expect(page.locator('[data-message-id="legacy-question"]')).toBeVisible();
+  await expect(page.locator('[data-message-id="legacy-empty"]')).toHaveCount(0);
+  await expect(page.locator("[data-ask-answer-input]")).toHaveCount(1);
+
+  await page.reload();
+  await page.locator('[data-route="make"]').click();
+  await expect(page.locator('[data-message-id="legacy-question"]')).toBeVisible();
+  await expect(page.locator('[data-message-id="legacy-empty"]')).toHaveCount(0);
+});
+
+test("recent conversation menu opens and closes through delegated events", async ({ page }) => {
+  const messages = [{ id: "user-one", role: "user", content: "Fixture prompt" }];
+  await openMake(page, messages);
+
+  const menuButton = page.locator("[data-thread-menu]");
+  await menuButton.click();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".recent-thread-menu")).toBeVisible();
+
+  await page.locator(".chat-feed").click({ position: { x: 10, y: 10 } });
+  await expect(page.locator(".recent-thread-menu")).toHaveCount(0);
+});
+
+const errorCases = [
+  { name: "network", expected: "백엔드에 연결할 수 없습니다", reply: (route) => route.abort("failed") },
+  { name: "AI service", expected: "AI 서비스가 일시적으로 응답하지 않습니다", status: 503, code: "AI_SERVICE_UNAVAILABLE" },
+  { name: "contract", expected: "AI 응답 형식을 처리하지 못했습니다", status: 500, code: "AI_INVALID_RESPONSE" },
+  { name: "authentication", expected: "로그인이 만료되었습니다", status: 401, code: "AUTH_EXPIRED", retryable: false },
+];
+
+for (const scenario of errorCases) {
+  test(`${scenario.name} failure renders an actionable error state`, async ({ page }) => {
+    const improveHandler = scenario.reply || ((route) => route.fulfill({
+      status: scenario.status,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ code: scenario.code }),
+    }));
+    await openMake(page, [], {}, improveHandler);
+
+    await page.locator('[data-composer] textarea[name="prompt"]').fill("Improve this fixture prompt");
+    await page.locator('[data-composer] button[type="submit"]').click();
+
+    const failure = page.locator(".message-failure-status");
+    await expect(failure).toContainText(scenario.expected);
+    await expect(failure.locator("[data-retry-message]")).toHaveCount(scenario.retryable === false ? 0 : 1);
+  });
+}

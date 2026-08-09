@@ -2034,6 +2034,13 @@ function SharePage() {
   );
 }
 
+function openAuth(view = "login") {
+  state.authView = view;
+  state.authUserIdWarning = "";
+  state.authError = "";
+  render();
+}
+
 function AuthModal() {
   const isSignup = state.authView === "signup";
   const isFindId = state.authView === "find-id";
@@ -3262,7 +3269,7 @@ function bindAuthFormEvents() {
         state.authUserIdWarning = "";
         state.authError = "";
         showNotice(isSignup ? "회원가입이 완료되었습니다." : "로그인했습니다.");
-        await loadMakeBackendData({ shouldRender: false });
+        await hydrateBackendMakeDataIfNeeded();
         render();
       } catch (error) {
         const backendMessage = error?.payload?.message || error?.message || "";
@@ -6367,7 +6374,6 @@ function canShowReportedState() {
 
 async function toggleAdminPromptHidden(promptId) {
   if (!promptId) return;
-  let backendChanged = false;
   const canUseBackendPromptAction = hasBackendAuthToken() && isBackendNumericId(promptId);
 
   if (!canUseBackendPromptAction) {
@@ -6383,7 +6389,6 @@ async function toggleAdminPromptHidden(promptId) {
         logMessage: "[TTALKAK] /api/admin/prompts/{id}/restore failed; aborting prompt restore.",
       });
       if (!result.ok) return;
-      backendChanged = true;
     } else {
       showNotice("게시글 숨김 해제 API가 연결되어 있지 않습니다.");
       return;
@@ -6397,7 +6402,6 @@ async function toggleAdminPromptHidden(promptId) {
         logMessage: "[TTALKAK] /api/admin/prompts/{id}/hide failed; aborting prompt hide.",
       });
       if (!result.ok) return;
-      backendChanged = true;
     } else {
       showNotice("게시글 숨김 API가 연결되어 있지 않습니다.");
       return;
@@ -6405,7 +6409,7 @@ async function toggleAdminPromptHidden(promptId) {
     applyAdminPromptHiddenState(state, promptId, true);
     showNotice("관리자 숨김 처리했습니다.");
   }
-  if (backendChanged) await refreshAdminAfterMutation({ auditReason: "게시물 숨김/해제 후" });
+  await refreshAdminAfterMutation({ auditReason: "게시물 숨김/해제 후" });
 }
 
 function getPopularTotalPages(count) {

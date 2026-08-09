@@ -3,6 +3,21 @@
   "private": true,
   "scripts": {
     "build:shared": "node ../scripts/build-make-message-model.cjs",
-    "test": "node --test test/*.test.js"
+    "check:shared": "node ../scripts/check-make-message-model.cjs",
+    "build": "node ../scripts/build-web.cjs",
+    "build:prod": "node ../scripts/build-web.cjs --production",
+    "lint": "eslint src test e2e playwright.config.js preview-server.cjs",
+    "typecheck": "tsc --project tsconfig.make.json",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "verify": "npm run check:shared && npm run lint && npm run typecheck && npm test && npm run build:prod",
+    "verify:full": "npm run verify && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.61.1",
+    "eslint": "10.8.0",
+    "globals": "17.7.0",
+    "typescript": "7.0.2"
   }
 }

@@ -9,7 +9,10 @@
   function submitAskAnswers(ctx, form) {
     const { inputs, result } = collectAskAnswerPayload(form, ctx.model);
     const invalid = inputs.filter((input) => result.missingFields.includes(input.name));
-    inputs.forEach((input) => input.toggleAttribute("aria-invalid", invalid.includes(input)));
+    inputs.forEach((input) => {
+      if (invalid.includes(input)) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    });
     if (result.missingFields.length) {
       invalid[0]?.focus();
       const progress = form.querySelector("[data-ask-answer-progress]");

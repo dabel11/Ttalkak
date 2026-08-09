@@ -24,6 +24,10 @@ bin/
 extension/node_modules/
 extension/dist/
 extension/.npm-cache/
+prompt-hub-web-frontend/node_modules/
+prompt-hub-web-frontend/dist/
+prompt-hub-web-frontend/playwright-report/
+prompt-hub-web-frontend/test-results/
 
 # ── Python (rag-server) ─────────────────────────────────────
 __pycache__/
