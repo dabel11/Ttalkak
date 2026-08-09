@@ -879,6 +879,25 @@ const shareController = createShareController({
   applyShared: applySharedPromptState, notice: showNotice,
 });
 const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
+const closeTopModal = modalController.closeTop;
+const focusActiveModal = modalController.focusActive;
+const openConfirmAction = modalController.openConfirm;
+const confirmActionHandlers = {
+  "delete-prompt": (action) => performDeletePrompt(action.targetId),
+  "unshare-prompt": (action) => performUnsharePrompt(action.targetId),
+  "delete-comment": (action) => promptEngagementController.performDeleteComment(action.targetId),
+  "delete-thread": (action) => performDeleteThread(action.targetId),
+  "delete-folder": (action) => performDeleteFolder(action.targetId),
+  "admin-tag-status": (action) => updateAdminTagDecision(action.targetId, action.value),
+  logout: () => {
+    stampCurrentUserOwnedPrompts();
+    const wasAdminMode = state.adminMode;
+    clearAuthenticatedSession();
+    showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
+  },
+  withdraw: withdrawConfirmedAccount,
+  "reset-demo": () => { resetDemoState(); return false; },
+};
 
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -1031,14 +1050,6 @@ function resetHomeView() {
   homeController.cancelSearchCommit();
   resetHomeViewState(state);
   if (state.backendStatus === "connected") refreshBackendHomePrompts();
-}
-
-function closeTopModal() {
-  return modalController.closeTop();
-}
-
-function focusActiveModal() {
-  modalController.focusActive();
 }
 
 function Sidebar() {
@@ -2700,7 +2711,7 @@ function bindAuthControlEvents() {
 }
 
 function bindModalControlEvents() {
-  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction }, state);
+  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: () => modalController.runConfirmed(confirmActionHandlers) }, state);
 }
 
 function bindPromptInteractionEvents() {
@@ -3565,54 +3576,13 @@ async function updateAdminCommentHiddenState(commentId, shouldHide) {
   render();
 }
 
-function openConfirmAction(action) {
-  modalController.openConfirm(action);
-}
-
-async function runConfirmedAction() {
-  const action = state.confirmAction;
-  if (!action) return;
-
-  state.confirmAction = null;
-
-  if (action.type === "delete-prompt") {
-    performDeletePrompt(action.targetId);
-  }
-
-  if (action.type === "unshare-prompt") {
-    performUnsharePrompt(action.targetId);
-  }
-
-  if (action.type === "delete-comment") {
-    promptEngagementController.performDeleteComment(action.targetId);
-  }
-
-  if (action.type === "delete-thread") {
-    performDeleteThread(action.targetId);
-  }
-
-  if (action.type === "delete-folder") {
-    performDeleteFolder(action.targetId);
-  }
-
-  if (action.type === "admin-tag-status") {
-    updateAdminTagDecision(action.targetId, action.value);
-  }
-
-  if (action.type === "logout") {
-    stampCurrentUserOwnedPrompts();
-    const wasAdminMode = state.adminMode;
-    clearAuthenticatedSession();
-    showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
-  }
-
-  if (action.type === "withdraw") {
+async function withdrawConfirmedAccount(action) {
     const api = window.TTALKAK_API;
     if (!state.authToken && !state.token) {
       state.authView = "login";
       showNotice("로그인이 필요합니다.");
       render();
-      return;
+      return false;
     }
     try {
       if (!api?.withdrawAccount) throw new Error("회원탈퇴 API를 찾을 수 없습니다.");
@@ -3622,16 +3592,8 @@ async function runConfirmedAction() {
     } catch (error) {
       handleBackendAccessError(error, "회원탈퇴 요청에 실패했습니다.");
       render();
-      return;
+      return false;
     }
-  }
-
-  if (action.type === "reset-demo") {
-    resetDemoState();
-    return;
-  }
-
-  render();
 }
 
 function performDeleteThreadLocal(threadId) {
