@@ -25,6 +25,7 @@
       renderPreservingMakeScroll,
       scrollToMakeLatestMessage,
       state,
+      reportWarning,
     } = ctx;
 
     async function createBackendMakeThread(thread) {
@@ -198,7 +199,7 @@
           ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
           : getApiFailureMessage("Make 첨삭 API"));
         handleBackendAccessError(error, fallbackMessage);
-        console.warn("[TTALKAK] /api/prompts/improve 연동에 실패했습니다.", error);
+        reportWarning("make-sync", "improve-prompt", error);
         if (!canUseDemoFallback()) throw error;
         const fallbackText = polishPrompt(prompt);
         return { text: fallbackText, mode: "improve", improvedPrompt: fallbackText };

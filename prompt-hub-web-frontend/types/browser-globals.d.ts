@@ -125,6 +125,7 @@ interface TtalkakModuleRegistry {
   routing: TtalkakCallableModule;
   api: TtalkakApi;
   apiContract: Window["TtalkakApiContract"];
+  observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
   state: { api: TtalkakStateModule; domains: Readonly<Record<string, TtalkakCallableModule>> };
 }
 interface TtalkakSavedState {

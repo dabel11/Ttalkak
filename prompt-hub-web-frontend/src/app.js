@@ -1,6 +1,11 @@
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 if (!modules) throw new Error("TTALKAK application modules are not initialized");
+const toWarningError = (...args) => {
+  const error = args.find((value) => value instanceof Error) || new Error(args.map(String).join(" "));
+  return error;
+};
+const reportWarning = (area, action, error) => modules.observability.reportWarning(area, action, error);
 
 const {
   normalizeSearchText,
@@ -926,7 +931,7 @@ const promptEngagementController = createPromptEngagementController({
   commentsByPrompt,
   api: apiClient,
   getToken: getAuthToken,
-  warn: (...args) => console.warn(...args),
+  warn: (...args) => reportWarning("prompt-engagement", "controller-warning", toWarningError(...args)),
   incrementViews: incrementPromptViews,
   syncCommentCount: commentRepository.syncCount,
   findCommentInList: commentRepository.findInList,
@@ -985,7 +990,7 @@ const applyAccountScope = authSession.applyScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
-const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => console.warn(...args), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons });
 const { AuthModal } = authView;
 const adminController = createAdminController({
@@ -1000,6 +1005,7 @@ const adminController = createAdminController({
   hydrateBackendAdminDataIfNeeded, finishAdminRevisionRequestState, getBackendErrorCode, getSortedPromptComments,
   getAdminReportRecords, getAdminTagStatusLabel, getReportStatusLabel, getAuthorRevisionStatusLabel,
   commentsByPrompt, findCommentInList: commentRepository.findInList, findPromptById, getAdminHydrationEffectContext,
+  reportWarning,
 });
 const adminView = createAdminView({
   state, popularPrompts, savedPrompts, getUniquePrompts, getAdminReportRecords, getAdminManagedTags,
@@ -1056,6 +1062,7 @@ const makeWorkflows = createMakeWorkflows({
   toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
   openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
   handleBackendAccessError,
+  reportWarning,
 });
 const {
   performDeleteThread, guardMakeFolderMutation, normalizeMakeFolderName, hasMakeFolderName,
@@ -2988,7 +2995,7 @@ function callBackendApi(action, ...args) {
         ? "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다."
         : "백엔드 요청에 실패했습니다.",
     );
-    console.warn(`[TTALKAK] ${action} API 호출에 실패했습니다.`, error);
+    reportWarning("backend-api", action, error);
     return null;
   });
 }
@@ -3028,7 +3035,7 @@ function getMakeApiToken() {
 
 function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
   handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
-  if (logMessage) console.warn(logMessage, error);
+  if (logMessage) reportWarning("make-sync", "backend-sync-failure", error);
 }
 
 
@@ -3129,6 +3136,7 @@ function getMakeServerSyncContext() {
     renderPreservingMakeScroll,
     scrollToMakeLatestMessage,
     state,
+    reportWarning,
   };
 }
 
@@ -3258,8 +3266,12 @@ appBootstrap = createAppBootstrap({
   getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render,
   isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,
   formatShortDate, getReportRecord, mapBackendReportStatus, hydrateBackendAdminData,
+  reportWarning,
   hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, normalizeDemoCopy,
   normalizeAssistantPromptOutputs, ensureDemoComments,
 });
-appBootstrap.bootstrap();
+const hydration = appBootstrap.bootstrap();
+document.documentElement.dataset.ttalkakReady = "true";
+document.dispatchEvent(new CustomEvent("ttalkak:ready"));
+return hydration;
 }

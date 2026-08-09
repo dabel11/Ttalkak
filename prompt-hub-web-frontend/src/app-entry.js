@@ -18,8 +18,10 @@ import { state, domains } from "./state/index.js";
 import { renderers } from "./renderers/index.js";
 import { routing } from "./routing/index.js";
 import { startApp } from "./app.js";
+import { clientErrorReporter, installGlobalErrorObservers } from "./observability/index.js";
 
-const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
+installGlobalErrorObservers(window, clientErrorReporter);
+const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, observability: clientErrorReporter, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
 startApp(modules);
 
-export { admin, api, apiContract, auth, bootstrap, components, createDiscoveryController, createSavedLibraryController, domains, effects, events, home, interactions, make, modal, renderers, routing, share, startApp, state, utils };
+export { admin, api, apiContract, auth, bootstrap, clientErrorReporter, components, createDiscoveryController, createSavedLibraryController, domains, effects, events, home, interactions, make, modal, renderers, routing, share, startApp, state, utils };

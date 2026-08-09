@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { gotoApp } = require("./support/app-ready.js");
 
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const TOKEN_KEY = "ttalkak_access_token";
@@ -48,7 +49,7 @@ test("login accepts a valid auth contract and rejects a malformed response", asy
     return true;
   });
 
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-open-auth="login"]').click();
   await page.locator('[data-auth-form] input[name="userId"]').fill("fixture");
   await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
@@ -79,7 +80,7 @@ test("an expired authenticated session returns to the login state", async ({ pag
     }
     return false;
   });
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-save-prompt="88"]').click();
   await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
 });
@@ -111,7 +112,7 @@ test("administrator report and tag mutations update through fixture APIs", async
   });
 
   const reportsLoaded = page.waitForResponse((response) => response.url().endsWith("/api/admin/reports") && response.request().method() === "GET");
-  await page.goto("/");
+  await gotoApp(page);
   await reportsLoaded;
   await page.locator('[data-admin-report-status="prompt:88:reviewed"]').click();
   await expect(page.locator(".toast")).toContainText("검토 완료");
@@ -145,7 +146,7 @@ test("administrator user block failure rolls back and a retry succeeds", async (
     return false;
   });
 
-  await page.goto("/");
+  await gotoApp(page);
   const search = page.locator("[data-admin-user-search-form]");
   await search.locator('input[name="nickname"]').fill("Target User");
   await search.locator('button[type="submit"]').click();

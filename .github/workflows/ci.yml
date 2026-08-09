@@ -95,11 +95,17 @@ jobs:
       - name: Run fixture browser E2E tests
         run: npm run test:e2e
 
+      - name: Build production browser bundle
+        run: npm run build:prod
+
+      - name: Run production browser smoke test
+        run: npm run test:e2e:prod
+
       - name: Upload E2E failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-test-results
+          name: playwright-test-results-${{ github.run_attempt }}
           path: prompt-hub-web-frontend/test-results/
           if-no-files-found: ignore
           retention-days: 7

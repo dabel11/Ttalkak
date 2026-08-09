@@ -5,6 +5,9 @@
     "build:shared": "node ../scripts/build-make-message-model.cjs",
     "check:shared": "node ../scripts/check-make-message-model.cjs",
     "check:api": "node ../scripts/check-web-api-contracts.cjs",
+    "check:bundle": "node ../scripts/check-web-bundle-size.cjs",
+    "check:globals": "node ../scripts/check-web-legacy-globals.cjs",
+    "check:observability": "node ../scripts/check-web-observability.cjs",
     "build": "node ../scripts/build-web.cjs",
     "build:prod": "node ../scripts/build-web.cjs --production",
     "lint": "eslint src test e2e playwright.config.js playwright.production.config.js preview-server.cjs",
@@ -21,7 +24,7 @@
     "test:coverage": "npm run test:coverage:core && npm run test:coverage:state",
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test --config=playwright.production.config.js",
-    "verify": "npm run check:shared && npm run check:api && npm run lint && npm run typecheck && npm run typecheck:strict && npm run test:coverage && npm run build:prod",
+    "verify": "npm run check:shared && npm run check:api && npm run check:globals && npm run check:observability && npm run lint && npm run typecheck && npm run typecheck:strict && npm run test:coverage && npm run build:prod && npm run check:bundle",
     "verify:full": "npm run verify && npm run test:e2e && npm run test:e2e:prod"
   },
   "devDependencies": {

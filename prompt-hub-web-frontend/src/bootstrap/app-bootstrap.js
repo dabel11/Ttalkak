@@ -33,6 +33,7 @@
         handleBackendAccessError: ctx.handleBackendAccessError,
         homePageSize: ctx.homePageSize,
         render: ctx.render,
+        reportWarning: ctx.reportWarning,
         state: ctx.state,
       };
     }
@@ -62,6 +63,7 @@
         hasBackendAuthToken: ctx.hasBackendAuthToken,
         mapBackendReportStatus: ctx.mapBackendReportStatus,
         render: ctx.render,
+        reportWarning: ctx.reportWarning,
         state: ctx.state,
       };
     }

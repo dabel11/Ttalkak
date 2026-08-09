@@ -272,13 +272,13 @@
     if (foldersResult.status === "fulfilled") {
       shouldRender = applyMakeFoldersResult(backendDataContext, foldersResult.value) || shouldRender;
     } else if (foldersResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/make/folders 연동에 실패했습니다.", foldersResult.reason);
+      ctx.reportWarning("backend-hydration", "make-folders", foldersResult.reason);
     }
 
     if (threadsResult.status === "fulfilled") {
       shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
     } else if (threadsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/make/threads 연동에 실패했습니다.", threadsResult.reason);
+      ctx.reportWarning("backend-hydration", "make-threads", threadsResult.reason);
     }
 
     const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
@@ -340,19 +340,19 @@
     if (libraryResult.status === "fulfilled") {
       shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
+      ctx.reportWarning("backend-hydration", "my-library", libraryResult.reason);
     }
 
     if (likedLibraryResult.status === "fulfilled") {
       shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
+      ctx.reportWarning("backend-hydration", "my-liked-library", likedLibraryResult.reason);
     }
 
     if (promptsResult.status === "fulfilled") {
       shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
+      ctx.reportWarning("backend-hydration", "my-prompts", promptsResult.reason);
     }
 
     if (commentsResult.status === "fulfilled") {
@@ -394,7 +394,7 @@
       state.backendStatusMessage = canUseDemoFallback()
         ? "GET /api/prompts 호출 실패로 데모 데이터를 표시 중입니다."
         : getApiFailureMessage("Home API");
-      console.warn("[TTALKAK] /api/prompts 연동에 실패했습니다.", promptsResult.reason);
+      ctx.reportWarning("backend-hydration", "home-prompts", promptsResult.reason);
     }
 
     if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
@@ -403,7 +403,7 @@
       }
       shouldRender = true;
     } else if (tagsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/tags/popular 연동에 실패했습니다.", tagsResult.reason);
+      ctx.reportWarning("backend-hydration", "popular-tags", tagsResult.reason);
     }
 
     if (shouldRender || state.backendStatus === "fallback") render();
@@ -450,7 +450,7 @@
       state.backendStatusMessage = canUseDemoFallback()
         ? "검색 API 호출 실패로 현재 화면의 로컬 목록을 유지합니다."
         : getApiFailureMessage("Home 검색 API");
-      console.warn("[TTALKAK] /api/prompts 검색 호출에 실패했습니다.", error);
+      ctx.reportWarning("backend-hydration", "refresh-home-prompts", error);
       render();
     }
   }

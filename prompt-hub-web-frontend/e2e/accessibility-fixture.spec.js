@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { gotoApp } = require("./support/app-ready.js");
 const AxeBuilder = require("@axe-core/playwright").default;
 
 async function expectAccessible(page, label) {
@@ -8,7 +9,7 @@ async function expectAccessible(page, label) {
 }
 
 test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA automated rules", async ({ page }) => {
-  await page.goto("/");
+  await gotoApp(page);
   await expectAccessible(page, "Home");
 
   await page.locator('[data-open-auth="login"]').click();
@@ -51,7 +52,7 @@ test("confirmation modal opens through a real folder workflow and restores focus
       state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 8, currentUserRole: "user", authToken: "modal-fixture-token", token: "modal-fixture-token" },
     }));
   });
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("접근성 폴더");
@@ -80,7 +81,7 @@ test("Saved fixture satisfies WCAG A/AA automated rules", async ({ page }) => {
       state: { route: "saved", isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "saved-fixture-token", token: "saved-fixture-token", myPageTab: "library" },
     }));
   });
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
   await expectAccessible(page, "Saved");
@@ -98,7 +99,7 @@ test("administrator fixture satisfies WCAG A/AA automated rules", async ({ page 
       state: { route: "admin", isLoggedIn: true, currentUser: "Admin", currentUserId: 1, currentUserRole: "admin", authToken: "admin-fixture-token", token: "admin-fixture-token", adminMode: true, adminTab: "reports" },
     }));
   });
-  await page.goto("/");
+  await gotoApp(page);
   await expect(page.locator(".admin-page")).toBeVisible();
   await expectAccessible(page, "Admin");
 });

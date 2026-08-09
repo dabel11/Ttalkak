@@ -1,7 +1,7 @@
 (function attach(global) {
   "use strict";
   function createMakeFolderWorkflows(ctx) {
-    const { state, render, showNotice, guardAdminUserAction, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext, getMakeApi, getMakeApiToken, isBackendNumericId, handleMakeBackendSyncError, ensureBackendMakeThreadId } = ctx;
+    const { state, render, showNotice, guardAdminUserAction, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext, getMakeApi, getMakeApiToken, isBackendNumericId, handleMakeBackendSyncError, ensureBackendMakeThreadId, reportWarning } = ctx;
 
     function guardMakeFolderMutation(clearSelection) {
       if (guardAdminUserAction()) {
@@ -113,7 +113,7 @@
         folder.serverId = backendFolderId;
         await moveThreadToFolderOnBackend(thread, backendFolderId);
       } else {
-        console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다.");
+        reportWarning("make-folders", "missing-created-folder-id", "Created folder has no server id");
         if (!canUseDemoFallback()) {
           removeLocalMakeFolder(folder.id);
           restoreThreadFolder(thread, previousFolderId);
@@ -198,7 +198,7 @@
 
       const backendThreadId = await ensureBackendMakeThreadId(thread);
       if (!backendThreadId) {
-        console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다.");
+        reportWarning("make-folders", "missing-thread-id", "Thread has no server id");
         return canUseDemoFallback();
       }
 

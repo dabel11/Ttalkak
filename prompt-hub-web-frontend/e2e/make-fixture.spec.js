@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { gotoApp } = require("./support/app-ready.js");
 
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const API_PATTERN = "http://localhost:8080/**";
@@ -70,7 +71,7 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
 async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
   await mockBackend(page, improveHandler);
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
 }

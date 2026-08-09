@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { gotoApp } = require("./support/app-ready.js");
 
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const TOKEN_KEY = "ttalkak_access_token";
@@ -81,7 +82,7 @@ test("folder lifecycle persists through reload and deletes through confirmation"
     return false;
   });
 
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("업무");
@@ -145,7 +146,7 @@ test("thread folder move rolls back on failure and recent conversation restores 
     return false;
   });
 
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   const row = page.locator('[data-open-thread="7"]').locator("..");
   await row.locator('[data-thread-menu="7"]').click();
@@ -167,7 +168,7 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   const prompt = { id: "fixture-prompt", title: "기존 제목", text: "기존 내용", tags: ["fixture"], source: "mine", owner: "Fixture User", author: "Fixture User", isShared: true, savedByMe: true };
   await seed(page, { savedPrompts: [prompt], popularPrompts: [prompt] });
   await mockBackend(page);
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-route="saved"]').click();
 
   let card = page.locator('[data-open-prompt="fixture-prompt"]');
@@ -214,7 +215,7 @@ test("report failure preserves the dialog and success prevents duplicate reporti
     return false;
   });
 
-  await page.goto("/");
+  await gotoApp(page);
   await page.locator('[data-open-prompt="88"]').click();
   await page.locator('[data-report-prompt="88"]').click();
   const reportForm = page.locator('[data-report-form="88"]');

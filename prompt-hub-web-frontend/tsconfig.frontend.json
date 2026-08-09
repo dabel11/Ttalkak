@@ -26,6 +26,7 @@
     "src/renderers/pages/*.js",
     "src/events/*.js",
     "src/routing/*.js",
+    "src/observability/*.mjs",
     "src/components.js",
     "src/app.js"
   ]

@@ -15,6 +15,7 @@
       getBackendErrorCode, getSortedPromptComments, getAdminReportRecords, getAdminTagStatusLabel,
       getReportStatusLabel, getAuthorRevisionStatusLabel, commentsByPrompt, findCommentInList, findPromptById,
       getAdminHydrationEffectContext,
+      reportWarning,
     } = ctx;
     const window = global;
 async function searchAdminUserCandidates(nickname) {
@@ -45,7 +46,7 @@ async function searchAdminUserCandidates(nickname) {
         error,
         canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
       );
-      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      reportWarning("admin", "search-users", error);
       if (!canUseDemoFallback()) {
         state.adminUserSearchResults = [];
         state.adminUserSearchMessage = "사용자 검색 API 호출에 실패했습니다.";
@@ -117,7 +118,7 @@ async function openAdminUserActivity(nickname, options = {}) {
         error,
         canUseDemoFallback() ? "사용자 검색 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 검색 API 조회에 실패했습니다.",
       );
-      console.warn("[TTALKAK] /api/admin/users?nickname 호출에 실패했습니다.", error);
+      reportWarning("admin", "load-user", error);
       if (!canUseDemoFallback()) return;
     }
   }
@@ -139,7 +140,7 @@ async function openAdminUserActivity(nickname, options = {}) {
         error,
         canUseDemoFallback() ? "사용자 활동 API 조회에 실패했습니다. 로컬 후보로 표시합니다." : "사용자 활동 API 조회에 실패했습니다.",
       );
-      console.warn("[TTALKAK] /api/admin/users/{memberId}/activity 계열 호출에 실패했습니다.", error);
+      reportWarning("admin", "load-user-activity", error);
     }
   }
 }
@@ -192,7 +193,7 @@ function refreshAdminUserActivityAfterBlock(memberId, normalizedNickname, displa
       }
     })
     .catch((refreshError) => {
-      console.warn("[TTALKAK] Failed to refresh admin user activity after block state change.", refreshError);
+      reportWarning("admin", "refresh-user-after-block", refreshError);
     });
 }
 
@@ -240,11 +241,11 @@ async function runAdminApiMutation(action, args = [], options = {}) {
     return { ok: true, missing: false, value };
   } catch (error) {
     if (typeof options.onError === "function" && options.onError(error)) {
-      if (options.logMessage) console.warn(options.logMessage, error);
+      if (options.logMessage) reportWarning("admin", action, error);
       return { ok: false, missing: false, error, value: null };
     }
     handleBackendAccessError(error, options.fallbackMessage || "관리자 요청 처리에 실패했습니다.");
-    if (options.logMessage) console.warn(options.logMessage, error);
+    if (options.logMessage) reportWarning("admin", action, error);
     if (options.refreshOnFailure) await hydrateBackendAdminDataIfNeeded({ force: true });
     return { ok: false, missing: false, error, value: null };
   }
