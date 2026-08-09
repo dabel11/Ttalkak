@@ -8,7 +8,7 @@
     } = normalizers;
 
     async function getCommunityPosts({ page = 1, size = 16, sort = "popular" } = {}) {
-      const query = new URLSearchParams({ page, size, sort });
+      const query = new URLSearchParams({ page: String(page), size: String(size), sort });
       const payload = await request(`/api/prompts?${query.toString()}`);
       return {
         ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
@@ -20,7 +20,7 @@
     return {
       getCommunityPosts,
       searchCommunityPosts({ tags = [], scope = "", query: searchQuery = "", keyword = "", author = "", page = 1, size = 16, sort = "popular" } = {}) {
-        const query = new URLSearchParams({ page, size, sort });
+        const query = new URLSearchParams({ page: String(page), size: String(size), sort });
         if (tags.length) query.set("tags", tags.join(","));
         if (scope) query.set("scope", scope);
         if (searchQuery) query.set("query", searchQuery);
@@ -36,7 +36,7 @@
         return request(`/api/tags/popular?limit=${limit}`).then((payload) => unwrapItems(payload).map(normalizePopularTag).filter(Boolean));
       },
       searchTags({ query = "", limit = 8 } = {}) {
-        const params = new URLSearchParams({ query, limit });
+        const params = new URLSearchParams({ query, limit: String(limit) });
         return request(`/api/tags?${params.toString()}`).then((payload) => unwrapItems(payload).map(normalizeAdminTag));
       },
       proposeTag(payload, token) {

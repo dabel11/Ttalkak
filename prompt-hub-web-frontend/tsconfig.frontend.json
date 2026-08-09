@@ -10,6 +10,8 @@
   },
   "include": [
     "types/browser-globals.d.ts",
+    "src/api.js",
+    "src/api/*.js",
     "src/home/*.js",
     "src/interactions/*.js",
     "src/share/*.js",

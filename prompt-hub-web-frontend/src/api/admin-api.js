@@ -18,43 +18,43 @@
 
     const api = {
       getAdminPrompts({ status = "", page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         if (status) query.set("status", status);
         return request(`/api/admin/prompts?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizePrompt));
       },
       searchAdminUsers({ nickname = "", page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ nickname, page, pageSize });
+        const query = new URLSearchParams({ nickname, page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users?${query.toString()}`, { token }).then((payload) => getPageItems(payload).map(normalizeAdminUser));
       },
       getAdminUserActivitySummary(memberId, token) {
         return request(`/api/admin/users/${memberId}/activity`, { token }).then(normalizeAdminUserActivitySummary);
       },
       getAdminUserPrompts(memberId, { page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users/${memberId}/prompts?${query.toString()}`, { token }).then((payload) =>
           getPageItems(payload).map(normalizeAdminUserPromptActivity),
         );
       },
       getAdminUserComments(memberId, { page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users/${memberId}/comments?${query.toString()}`, { token }).then((payload) =>
           getPageItems(payload).map(normalizeAdminUserCommentActivity),
         );
       },
       getAdminUserReplies(memberId, { page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users/${memberId}/replies?${query.toString()}`, { token }).then((payload) =>
           getPageItems(payload).map(normalizeAdminUserCommentActivity),
         );
       },
       getAdminUserSubmittedReports(memberId, { page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users/${memberId}/reports/submitted?${query.toString()}`, { token }).then((payload) =>
           getPageItems(payload).map(normalizeAdminUserReportActivity),
         );
       },
       getAdminUserReceivedReports(memberId, { page = 1, pageSize = 20 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/users/${memberId}/reports/received?${query.toString()}`, { token }).then((payload) =>
           getPageItems(payload).map(normalizeAdminUserReportActivity),
         );
@@ -79,7 +79,7 @@
           };
         } catch (error) {
           if (![404, 501].includes(Number(error?.status))) throw error;
-          const query = new URLSearchParams({ limit });
+          const query = new URLSearchParams({ limit: String(limit) });
           return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
         }
       },
@@ -90,11 +90,11 @@
         return request(`/api/admin/users/${memberId}/unblock`, { method: "PATCH", token }).then(normalizeAdminUserActivity);
       },
       getAdminAuditLogs({ page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/admin/audit-logs?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeAdminAuditLog));
       },
       getAdminRevisionRequests({ status = "all", page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         if (status) query.set("status", status);
         return request(`/api/admin/revision-requests?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeRevisionRequest));
       },

@@ -184,6 +184,12 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   await page.locator("[data-confirm-action]").click();
   await expect(card).toContainText("비공개");
 
+  await page.reload();
+  await page.locator('[data-route="saved"]').click();
+  card = page.locator('[data-open-prompt="fixture-prompt"]');
+  await expect(card).toContainText("수정된 제목");
+  await expect(card).toContainText("비공개");
+
   await card.locator("[data-prompt-card-menu]").click();
   await card.locator("[data-delete-prompt]").click();
   await page.locator("[data-confirm-action]").click();

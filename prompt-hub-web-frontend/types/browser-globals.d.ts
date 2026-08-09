@@ -11,6 +11,17 @@ interface TtalkakApi {
   withdrawAccount(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   checkUserId(userId: string): Promise<unknown>;
   checkNickname(nickname: string): Promise<unknown>;
+  getCommunityPosts(options?: TtalkakPayload): Promise<unknown>;
+  searchCommunityPosts(options?: TtalkakPayload): Promise<unknown>;
+  getPopularTags(options?: TtalkakPayload): Promise<unknown>;
+  searchTags(options?: TtalkakPayload): Promise<unknown>;
+  proposeTag(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  viewPrompt(promptId: TtalkakId): Promise<unknown>;
+  improvePrompt(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  savePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  unsavePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  likePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  unlikePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   getMakeThreads(token: TtalkakToken): Promise<unknown>;
   getMakeThread(threadId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   getMakeFolders(token: TtalkakToken): Promise<unknown>;
@@ -27,12 +38,32 @@ interface TtalkakApi {
   unsharePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   reportPrompt(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   reportComment(commentId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getPromptComments(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  addComment(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  addReply(commentId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateComment(commentId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  deleteComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  likeComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  unlikeComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  getSavedPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getMyLibrary(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getMyPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getMyComments(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getMyReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getMyRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   updateAdminReportStatus(reportId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
   getAdminPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminTags(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   updateAdminTagStatus(tagId: TtalkakId, status: string, token: TtalkakToken): Promise<unknown>;
   searchAdminUsers(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserActivitySummary(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  getAdminUserPrompts(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserComments(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserReplies(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserSubmittedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserReceivedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminUserActivity(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   blockAdminUser(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   unblockAdminUser(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
@@ -50,11 +81,25 @@ interface TtalkakApi {
 }
 
 interface Window {
+  __API_BASE_URL__?: string;
+  TTALKAK_API_BASE_URL?: string;
+  TTALKAK_API_TIMEOUT_MS?: number | string;
+  TTALKAK_API_CORE: any;
+  TTALKAK_API_NORMALIZERS: any;
+  TTALKAK_AUTH_API: (context: any) => any;
+  TTALKAK_PROMPT_API: (context: any) => any;
+  TTALKAK_COMMENT_API: (context: any) => any;
+  TTALKAK_MYPAGE_API: (context: any) => any;
+  TTALKAK_MAKE_API: (context: any) => any;
+  TTALKAK_ADMIN_API: (context: any) => any;
+  TtalkakMakeMessageModel: any;
   TTALKAK_API: TtalkakApi;
   TtalkakApiContract: {
     assertApiContract(api: unknown): TtalkakApi;
     assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
     assertCollectionResponse(value: unknown, operation?: string): unknown[];
+    validateApiResponse(method: string, value: unknown): unknown;
+    wrapApiResponses(api: TtalkakApi): TtalkakApi;
   };
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TtalkakHomeSearchModel: unknown;

@@ -7,6 +7,7 @@
     return `${API_BASE_URL}${path}`;
   }
 
+  /** @param {string} path @param {RequestInit & { token?: string }} [options] */
   async function request(path, options = {}) {
     const { token, headers, ...fetchOptions } = options;
     const storedToken = (() => {
@@ -33,8 +34,7 @@
       });
 
       if (!response.ok) {
-        const error = new Error(`API request failed: ${response.status} ${response.statusText}`);
-        error.status = response.status;
+        const error = Object.assign(new Error(`API request failed: ${response.status} ${response.statusText}`), { status: response.status, payload: null });
         try {
           error.payload = await response.json();
         } catch (_error) {
@@ -48,10 +48,7 @@
       return text ? JSON.parse(text) : null;
     } catch (error) {
       if (error?.name === "AbortError") {
-        const timeoutError = new Error("백엔드 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
-        timeoutError.status = 0;
-        timeoutError.code = "REQUEST_TIMEOUT";
-        timeoutError.cause = error;
+        const timeoutError = Object.assign(new Error("백엔드 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."), { status: 0, code: "REQUEST_TIMEOUT", cause: error });
         throw timeoutError;
       }
       throw error;
