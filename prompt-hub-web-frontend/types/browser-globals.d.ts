@@ -1,5 +1,61 @@
+type TtalkakId = string | number;
+type TtalkakToken = string | undefined;
+type TtalkakPayload = Record<string, unknown>;
+
+interface TtalkakApi {
+  login(payload: TtalkakPayload): Promise<unknown>;
+  signup(payload: TtalkakPayload): Promise<unknown>;
+  googleLogin(credential: string): Promise<unknown>;
+  findId(payload: TtalkakPayload): Promise<unknown>;
+  requestPasswordReset(payload: TtalkakPayload): Promise<unknown>;
+  withdrawAccount(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  checkUserId(userId: string): Promise<unknown>;
+  checkNickname(nickname: string): Promise<unknown>;
+  getMakeThreads(token: TtalkakToken): Promise<unknown>;
+  getMakeThread(threadId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  getMakeFolders(token: TtalkakToken): Promise<unknown>;
+  createMakeThread(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  deleteMakeThread(threadId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  createMakeFolder(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateMakeFolder(folderId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  deleteMakeFolder(folderId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  moveMakeThread(threadId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  sharePrompt(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  shareExistingPrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  updatePrompt(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  deletePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  unsharePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  reportPrompt(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  reportComment(commentId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateAdminReportStatus(reportId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
+  getAdminPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminTags(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateAdminTagStatus(tagId: TtalkakId, status: string, token: TtalkakToken): Promise<unknown>;
+  searchAdminUsers(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserActivity(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  blockAdminUser(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  unblockAdminUser(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  getAdminAuditLogs(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  requestAuthorRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateAuthorRevisionRequest(requestId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  updateAdminRevisionRequestStatus(requestId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
+  hideAdminComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  unhideAdminComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  deleteAdminComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  hideAdminPrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  restoreAdminPrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  [method: string]: unknown;
+}
+
 interface Window {
-  TTALKAK_API: any;
+  TTALKAK_API: TtalkakApi;
+  TtalkakApiContract: {
+    assertApiContract(api: unknown): TtalkakApi;
+    assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
+    assertCollectionResponse(value: unknown, operation?: string): unknown[];
+  };
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TtalkakHomeSearchModel: unknown;
   TtalkakHomeController: unknown;
