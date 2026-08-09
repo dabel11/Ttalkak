@@ -1,4 +1,5 @@
 interface Window {
+  TTALKAK_API: any;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TtalkakHomeSearchModel: unknown;
   TtalkakHomeController: unknown;
@@ -7,6 +8,7 @@ interface Window {
   TtalkakPromptEngagementEvents: unknown;
   TtalkakCommentModel: unknown;
   TtalkakCommentView: unknown;
+  TtalkakPromptWorkflows: unknown;
   TtalkakShareController: unknown;
   TtalkakShareEvents: unknown;
   TtalkakModalController: unknown;
@@ -26,4 +28,5 @@ interface Window {
   TtalkakMakeFocus: unknown;
   TtalkakMakePersistence: unknown;
   TtalkakMakeState: unknown;
+  TtalkakMakeWorkflows: unknown;
 }

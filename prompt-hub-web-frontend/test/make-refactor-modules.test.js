@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { createMakeWorkflows } = require("../src/make/make-workflows.js");
 
 global.window = { setTimeout: (callback) => callback() };
 require("../src/make/make-state.js");
@@ -20,6 +21,8 @@ test("Make request state transitions are centralized", () => {
   api.completeMakeRequest(request);
   assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null });
 });
+test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
+test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
 
 test("Make state mutations use named helpers", () => {
   const state = {};

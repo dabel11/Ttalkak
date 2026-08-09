@@ -47,6 +47,7 @@ const {
   syncPromptCommentCount: syncPromptCommentCountModel,
 } = window.TtalkakCommentModel || {};
 const { createCommentView } = window.TtalkakCommentView || {};
+const { createPromptWorkflows } = window.TtalkakPromptWorkflows || {};
 const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = window.TtalkakShareController || {};
 const { bindShareEvents } = window.TtalkakShareEvents || {};
 const { createModalController } = window.TtalkakModalController || {};
@@ -71,6 +72,7 @@ const {
 const {
   createMakeServerSyncEffects,
 } = window.TtalkakMakeServerSyncEffects || {};
+const { createMakeWorkflows } = window.TtalkakMakeWorkflows || {};
 
 if (
   [
@@ -102,6 +104,7 @@ if (
     sortCommentsModel,
     syncPromptCommentCountModel,
     createCommentView,
+    createPromptWorkflows,
     createShareController,
     getShareTagSuggestionsModel,
     bindShareEvents,
@@ -124,6 +127,7 @@ if (
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
     createMakeServerSyncEffects,
+    createMakeWorkflows,
   ].some((fn) => typeof fn !== "function")
 ) {
   throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
@@ -814,7 +818,6 @@ const demoCommentBackfill = {
 
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 
-let templateToggleTimer = null;
 
 let adminPromptSearchCommitTimer = null;
 let adminTagSearchCommitTimer = null;
@@ -922,7 +925,7 @@ const {
 const shareController = createShareController({
   state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
   escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: window.TTALKAK_API,
-  hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: removePromptById,
+  hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: (...args) => promptWorkflows.removePromptById(...args),
   handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
   applyShared: applySharedPromptState, notice: showNotice,
 });
@@ -994,6 +997,47 @@ const openAuth = authController.open;
 const closeTopModal = modalController.closeTop;
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
+const makeWorkflows = createMakeWorkflows({
+  state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
+  showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
+  copyTextToClipboard, makePromptTitle, normalizeSearchText, persistState, getMakeApi, getMakeApiToken,
+  handleMakeBackendSyncError, getMakeThreadById, getMakeBackendThreadId, isBackendNumericId,
+  normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
+  getMakeServerSyncContext, getMakeControllerContext, submitMakePrompt, openAuth, deleteMakeThreadState,
+  createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState,
+  MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext,
+  toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
+  openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
+  handleBackendAccessError,
+});
+const {
+  performDeleteThread, guardMakeFolderMutation, normalizeMakeFolderName, hasMakeFolderName,
+  createLocalMakeFolder, removeLocalMakeFolder, restoreThreadFolder, createMakeFolder,
+  createMakeFolderAndMoveThread, getCustomMakeFolderCount, renameMakeFolder, performDeleteFolder,
+  moveThreadToFolder, moveThreadToFolderOnBackend, countThreadsInFolder, getThreadFolderId,
+  getActiveFolderName, copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage,
+  openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders,
+  executeMakeMessage, getExecuteTarget, updateRecentThread, openRecentThread, openSavedMakePrompt,
+  startNewChat, getRecentThreadKeyFromThread, getRecentThreadKey, applyTemplate, toggleTemplateBar,
+  createBackendMakeFolder, updateBackendMakeFolderName, deleteBackendMakeFolder, createBackendMakeThread,
+  ensureBackendMakeThreadId, getBackendFolderId, syncMakeThreadWithBackend, refreshMakeThreadsFromBackend,
+  refreshActiveMakeThreadFromBackend,
+} = makeWorkflows;
+const promptWorkflows = createPromptWorkflows({
+  state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction,
+  findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId,
+  hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext,
+  getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState,
+  makeRevisionRequestKey: (...args) => makeRevisionRequestKey(...args), removePromptByIdState,
+  refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag,
+  parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState,
+  applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE,
+});
+const {
+  openReportPrompt, openReportComment, submitReport, reportPrompt, reportComment, deleteOwnPrompt,
+  unshareOwnPrompt, publishSavedPrompt, updateOwnPrompt, performDeletePrompt, performUnsharePrompt,
+  removePromptById,
+} = promptWorkflows;
 const confirmActionHandlers = {
   "delete-prompt": (action) => performDeletePrompt(action.targetId),
   "unshare-prompt": (action) => performUnsharePrompt(action.targetId),
@@ -2150,107 +2194,9 @@ function bindReportAndCommentFormEvents() {
   });
 }
 
-function openReportPrompt(promptId) {
-  if (!findPromptById(promptId)) return;
-  if (guardAdminUserAction()) return;
 
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 신고할 수 있습니다.");
-    render();
-    return;
-  }
-  if (state.reportedPromptIds.has(promptId)) {
-    showNotice("이미 신고한 프롬프트입니다.");
-    return;
-  }
-  state.reportPromptId = promptId;
-  state.reportCommentId = null;
-  render();
-}
 
-function openReportComment(commentId) {
-  if (!findCommentById(commentId)) return;
-  if (guardAdminUserAction()) return;
 
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 신고할 수 있습니다.");
-    render();
-    return;
-  }
-  if (state.reportedCommentIds.has(commentId)) {
-    showNotice("이미 신고한 댓글입니다.");
-    return;
-  }
-  state.reportCommentId = commentId;
-  state.reportPromptId = null;
-  render();
-}
-
-function submitReport(type, targetId, reason) {
-  if (type === "comment") {
-    reportComment(targetId, reason);
-    return;
-  }
-  reportPrompt(targetId, reason);
-}
-
-async function reportPrompt(promptId, reason) {
-  const content = String(reason || "").trim();
-  if (!content) {
-    showNotice("신고 사유를 입력해주세요.");
-    return;
-  }
-
-  if (isBackendNumericId(promptId) && state.backendStatus === "connected") {
-    const token = getAuthToken();
-    if (!token || isDemoAuthToken(token)) {
-      showNotice("실제 로그인 후 프롬프트를 신고할 수 있습니다.");
-      openAuth("login");
-      return;
-    }
-    try {
-      await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
-    } catch (error) {
-      handleBackendAccessError(error, "신고 요청에 실패했습니다.");
-      return;
-    }
-  }
-
-  applyPromptReportedState(getPromptMutationStateContext(), promptId, content);
-  showNotice("신고가 접수되었습니다.");
-  refreshMyPageDataAfterMutation();
-  render();
-}
-async function reportComment(commentId, reason) {
-  const content = String(reason || "").trim();
-  if (!content) {
-    showNotice("댓글 신고 사유를 입력해주세요.");
-    return;
-  }
-
-  const context = findCommentContextById(commentId);
-  if (isBackendNumericId(commentId) && state.backendStatus === "connected") {
-    const token = getAuthToken();
-    if (!token || isDemoAuthToken(token)) {
-      showNotice("실제 로그인 후 댓글을 신고할 수 있습니다.");
-      openAuth("login");
-      return;
-    }
-    try {
-      await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
-    } catch (error) {
-      handleBackendAccessError(error, "댓글 신고 요청에 실패했습니다.");
-      return;
-    }
-  }
-
-  applyCommentReportedState(getPromptMutationStateContext(), commentId, content, context);
-  showNotice("댓글 신고가 접수되었습니다.");
-  refreshMyPageDataAfterMutation();
-  render();
-}
 function getShareTagSuggestions(query, selectedTags = []) {
   return getShareTagSuggestionsModel(query, selectedTags, getKnownTags(), normalizeTag);
 }
@@ -2366,272 +2312,23 @@ function stampCurrentUserOwnedPrompts() {
 
 
 
-function performDeleteThreadLocal(threadId) {
-  deleteMakeThreadState(state, threadId);
-  showNotice("대화를 삭제했습니다.");
-}
 
-async function performDeleteThread(threadId) {
-  const thread = state.recentThreads.find((item) => item.id === threadId || item.serverId === threadId);
-  const backendThreadId = thread?.serverId || (isBackendNumericId(threadId) ? threadId : "");
-  const api = getMakeApi();
 
-  if (!state.isLoggedIn || !backendThreadId || !api?.deleteMakeThread || !hasBackendAuthToken()) {
-    performDeleteThreadLocal(threadId);
-    render();
-    return;
-  }
 
-  try {
-    await api.deleteMakeThread(backendThreadId, getMakeApiToken());
-    deleteMakeThreadState(state, threadId);
-    showNotice("대화를 삭제했습니다.");
-    render();
-    refreshMakeThreadsFromBackend();
-  } catch (error) {
-    const status = Number(error?.status || error?.payload?.status || 0);
-    if (status === 404) {
-      showNotice("이미 삭제되었거나 접근할 수 없는 대화입니다.");
-      deleteMakeThreadState(state, threadId);
-      render();
-      refreshMakeThreadsFromBackend();
-      return;
-    }
 
-    handleBackendAccessError(error, "대화 삭제 요청에 실패했습니다.");
-    render();
-  }
-}
 
-function guardMakeFolderMutation(clearSelection) {
-  if (guardAdminUserAction()) {
-    clearSelection?.();
-    render();
-    return true;
-  }
 
-  if (!state.isLoggedIn) {
-    clearSelection?.();
-    showNotice("로그인하면 대화를 폴더로 정리할 수 있습니다.");
-    render();
-    return true;
-  }
 
-  return false;
-}
 
-function normalizeMakeFolderName(name) {
-  return String(name || "").trim();
-}
 
-function hasMakeFolderName(name) {
-  return state.makeFolders.some((folder) => folder.name === name);
-}
 
-function createLocalMakeFolder(name) {
-  return createLocalMakeFolderState(state, name);
-}
 
-function removeLocalMakeFolder(folderId) {
-  removeLocalMakeFolderState(state, folderId);
-}
 
-function restoreThreadFolder(thread, folderId) {
-  restoreMakeThreadFolderState(thread, folderId);
-}
 
-async function createMakeFolder(folderName) {
-  if (guardMakeFolderMutation(() => { state.creatingFolder = false; })) return;
 
-  if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
-    state.creatingFolder = false;
-    render();
-    return;
-  }
 
-  const cleanName = normalizeMakeFolderName(folderName);
-  if (!cleanName) {
-    showNotice("폴더 이름을 입력해주세요.");
-    return;
-  }
 
-  if (hasMakeFolderName(cleanName)) {
-    showNotice("이미 같은 이름의 폴더가 있습니다.");
-    return;
-  }
 
-  const folder = createLocalMakeFolder(cleanName);
-  state.activeFolderId = folder.id;
-  state.creatingFolder = false;
-  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
-  if (backendFolderId) {
-    folder.serverId = backendFolderId;
-  } else if (!canUseDemoFallback()) {
-    removeLocalMakeFolder(folder.id);
-    state.activeFolderId = "all";
-    showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
-    render();
-    return;
-  }
-  showNotice("폴더를 추가했습니다.");
-  render();
-}
-
-async function createMakeFolderAndMoveThread(threadId, folderName) {
-  if (guardMakeFolderMutation(() => { state.creatingThreadFolderId = null; })) return;
-
-  const thread = state.recentThreads.find((item) => item.id === threadId);
-  if (!thread) return;
-
-  if (getCustomMakeFolderCount() >= MAX_CUSTOM_MAKE_FOLDERS) {
-    showNotice(`폴더는 최대 ${MAX_CUSTOM_MAKE_FOLDERS}개까지 만들 수 있습니다.`);
-    state.creatingThreadFolderId = null;
-    render();
-    return;
-  }
-
-  const cleanName = normalizeMakeFolderName(folderName);
-  if (!cleanName) {
-    showNotice("폴더 이름을 입력해주세요.");
-    return;
-  }
-
-  if (hasMakeFolderName(cleanName)) {
-    showNotice("이미 같은 이름의 폴더가 있습니다.");
-    return;
-  }
-
-  const previousFolderId = thread.folderId;
-  const folder = createLocalMakeFolder(cleanName);
-  thread.folderId = folder.id;
-  state.activeFolderId = folder.id;
-  state.openThreadMenuId = null;
-  state.creatingThreadFolderId = null;
-  const backendFolderId = await createBackendMakeFolder({ name: cleanName });
-  if (backendFolderId) {
-    folder.serverId = backendFolderId;
-    await moveThreadToFolderOnBackend(thread, backendFolderId);
-  } else {
-    console.warn("[TTALKAK] 새 폴더 서버 id가 없어 대화 이동 API는 건너뜁니다.");
-    if (!canUseDemoFallback()) {
-      removeLocalMakeFolder(folder.id);
-      restoreThreadFolder(thread, previousFolderId);
-      state.activeFolderId = thread.folderId;
-      showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
-      render();
-      return;
-    }
-  }
-  showNotice("새 폴더를 만들고 대화를 이동했습니다.");
-  render();
-}
-
-function getCustomMakeFolderCount() {
-  return state.makeFolders.filter((folder) => folder.id !== "all" && folder.id !== "uncategorized").length;
-}
-
-async function renameMakeFolder(folderId, name) {
-  if (guardMakeFolderMutation(() => { state.editingFolderId = null; })) return;
-
-  const folder = state.makeFolders.find((item) => item.id === folderId);
-  const cleanName = normalizeMakeFolderName(name);
-  if (!folder || !cleanName) return;
-
-  state.editingFolderId = null;
-  const backendUpdated = await updateBackendMakeFolderName(folderId, cleanName);
-  if (!backendUpdated && !canUseDemoFallback()) {
-    showNotice("폴더 이름 수정 요청에 실패했습니다.");
-    render();
-    return;
-  }
-  folder.name = cleanName;
-  showNotice("폴더 이름을 수정했습니다.");
-  render();
-}
-
-async function performDeleteFolder(folderId) {
-  if (guardMakeFolderMutation()) return;
-
-  if (!folderId || folderId === "uncategorized") return;
-  const previousFolders = state.makeFolders.map((folder) => ({ ...folder }));
-  const previousThreadFolders = state.recentThreads.map((thread) => ({ id: thread.id, folderId: thread.folderId }));
-  const previousActiveFolderId = state.activeFolderId;
-  const backendDeleted = await deleteBackendMakeFolder(folderId);
-  if (!backendDeleted && !canUseDemoFallback()) {
-    state.makeFolders = previousFolders;
-    previousThreadFolders.forEach((previous) => {
-      const thread = state.recentThreads.find((item) => item.id === previous.id);
-      restoreThreadFolder(thread, previous.folderId);
-    });
-    state.activeFolderId = previousActiveFolderId;
-    showNotice("폴더 삭제 요청에 실패했습니다.");
-    render();
-    return;
-  }
-  deleteMakeFolderState(getMakeMutationStateContext(), folderId);
-  showNotice("폴더를 삭제했습니다.");
-  render();
-}
-
-async function moveThreadToFolder(threadId, folderId) {
-  if (guardMakeFolderMutation()) return;
-
-  const thread = state.recentThreads.find((item) => item.id === threadId);
-  if (!thread) return;
-  const previousFolderId = thread.folderId;
-  thread.folderId = folderId || "uncategorized";
-  const backendMoved = await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
-  if (!backendMoved && !canUseDemoFallback()) {
-    restoreThreadFolder(thread, previousFolderId);
-    showNotice("대화 폴더 이동 요청에 실패해 변경을 취소했습니다.");
-    render();
-    return;
-  }
-  showNotice("대화 폴더를 변경했습니다.");
-  render();
-}
-
-async function moveThreadToFolderOnBackend(thread, backendFolderId) {
-  const api = getMakeApi();
-  if (!api?.moveMakeThread) return canUseDemoFallback();
-
-  const backendThreadId = await ensureBackendMakeThreadId(thread);
-  if (!backendThreadId) {
-    console.warn("[TTALKAK] 서버 대화 id가 없어 폴더 이동 API는 건너뜁니다.");
-    return canUseDemoFallback();
-  }
-
-  try {
-    await api.moveMakeThread(
-      backendThreadId,
-      { folderId: isBackendNumericId(backendFolderId) ? Number(backendFolderId) : null },
-      getMakeApiToken(),
-    );
-    return true;
-  } catch (error) {
-    handleMakeBackendSyncError(
-      error,
-      "대화 폴더 이동 요청에 실패해 로컬 데모 상태만 유지합니다.",
-      "대화 폴더 이동 요청에 실패했습니다.",
-      "[TTALKAK] /api/make/threads/{id}/folder 호출에 실패했습니다.",
-    );
-    return false;
-  }
-}
-
-function countThreadsInFolder(folderId) {
-  return state.recentThreads.filter((thread) => getThreadFolderId(thread) === folderId).length;
-}
-
-function getThreadFolderId(thread) {
-  return thread.folderId || "uncategorized";
-}
-
-function getActiveFolderName() {
-  if (state.activeFolderId === "all") return "최근 대화";
-  return state.makeFolders.find((folder) => folder.id === state.activeFolderId)?.name || "최근 대화";
-}
 
 function resetDemoState() {
   try {
@@ -2746,193 +2443,18 @@ function getMakeControllerContext() {
   };
 }
 
-async function copyMakeMessage(messageId) {
-  const message = state.messages.find((item) => item.id === messageId);
-  if (!message) return;
-  const finalPrompt = getFinalPromptText(message);
 
-  await copyTextToClipboard(finalPrompt);
 
-  state.copiedMessageId = messageId;
-  showNotice("프롬프트를 복사했습니다.");
-  window.setTimeout(() => {
-    if (state.copiedMessageId !== messageId) return;
-    state.copiedMessageId = "";
-    render();
-  }, 1100);
-}
 
-function saveMakeMessage(messageId) {
-  if (guardAdminUserAction()) return;
 
-  const message = state.messages.find((item) => item.id === messageId);
-  if (!message) return;
-  const finalPrompt = getFinalPromptText(message);
-  const result = toggleSavedMakeMessageState(getMakeMutationStateContext(), message, finalPrompt);
-  showNotice(result === "removed" ? "메시지 저장을 해제했습니다." : "메시지를 저장했습니다.");
-  render();
-}
-async function resendEditedMessage(messageId, value) {
-  return window.TtalkakMakeController.resendEdited(getMakeControllerContext(), messageId, value);
-}
-function openShareFromMakeMessage(messageId) {
-  const message = state.messages.find((item) => item.id === messageId);
-  if (!message) return;
-  if (guardAdminUserAction()) return;
 
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("공유하려면 로그인이 필요합니다.");
-    return;
-  }
 
-  const finalPrompt = getFinalPromptText(message);
-  state.shareDraft = {
-    promptId: `make-share-${message.id}`,
-    title: makePromptTitle(message.sourcePrompt || finalPrompt),
-    text: finalPrompt,
-    tags: [],
-  };
-  state.shareError = "";
-  state.route = "share";
-  render();
-}
 
-function openExecuteModal(messageId) {
-  const message = state.messages.find((item) => item.id === messageId);
-  if (!message) return;
-  if (!confirmPlaceholderExecution(getFinalPromptText(message))) return;
-  state.executeMessageId = messageId;
-  state.executePromptId = null;
-  renderPreservingMakeScroll();
-}
 
-function openPromptExecuteModal(promptId) {
-  const prompt = findPromptById(promptId);
-  if (!prompt) return;
-  if (!confirmPlaceholderExecution(String(prompt.text || ""))) return;
-  state.executePromptId = promptId;
-  state.executeMessageId = null;
-  renderPreservingMakeScroll();
-}
 
-function confirmPlaceholderExecution(text) {
-  if (!hasPromptPlaceholders(text)) return true;
-  return window.confirm(
-    "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
-  );
-}
 
-function hasPromptPlaceholders(text) {
-  return /\[[^\]\n]{1,80}\]/.test(String(text || ""));
-}
 
-async function executeMakeMessage(messageId, targetId) {
-  const message = state.messages.find((item) => item.id === messageId);
-  const prompt = findPromptById(state.executePromptId);
-  const finalPrompt = message ? getFinalPromptText(message) : String(prompt?.text || "").trim();
-  if (!finalPrompt) return;
-  const target = getExecuteTarget(targetId);
-  if (!target) return;
-  const copied = await copyTextToClipboard(finalPrompt);
-  const opened = window.open(target.url, "_blank", "noopener,noreferrer");
 
-  state.executeMessageId = null;
-  state.executePromptId = null;
-  if (!opened) {
-    showNotice(`${target.name} 팝업이 차단되었습니다. 프롬프트는 복사했으니 새 탭에서 직접 열어 붙여넣어 주세요.`);
-  } else if (copied) {
-    showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
-  } else {
-    showNotice(`${target.name}로 이동합니다. 복사가 제한되면 Make의 Copy 버튼으로 다시 복사해주세요.`);
-  }
-  renderPreservingMakeScroll();
-}
-
-function getExecuteTarget(targetId) {
-  const targets = {
-    chatgpt: { name: "ChatGPT", url: "https://chatgpt.com/" },
-    gemini: { name: "Google Gemini", url: "https://gemini.google.com/" },
-    claude: { name: "Claude", url: "https://claude.ai/" },
-  };
-
-  return targets[targetId] || null;
-}
-
-function updateRecentThread(threadId) {
-  updateRecentMakeThreadState(getMakeMutationStateContext(), threadId);
-}
-
-function openRecentThread(threadId) {
-  const thread = state.recentThreads.find((item) => item.id === threadId);
-  if (!thread) return;
-
-  openRecentMakeThreadState(state, thread);
-  render();
-}
-function openSavedMakePrompt(promptId) {
-  const prompt = savedPrompts.find((item) => item.id === promptId);
-  if (!prompt?.messages?.length) return;
-
-  openSavedMakePromptState(getMakeMutationStateContext(), promptId, prompt);
-  render();
-}
-function startNewChat() {
-  startNewMakeChatState(state);
-  render();
-}
-function getRecentThreadKeyFromThread(thread) {
-  return thread.id || thread.dedupeKey || "";
-}
-
-function getRecentThreadKey(text) {
-  return String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function applyTemplate(templateId) {
-  const template = promptTemplates.find((item) => item.id === templateId);
-  if (!template) return;
-
-  window.TtalkakMakeState.setMakeComposerDraft(state, template.prompt);
-  render();
-  window.setTimeout(() => {
-    const textarea = document.querySelector("[data-autosize-textarea]");
-    if (!textarea) return;
-    textarea.focus();
-    const firstBlankLine = textarea.value.split("\n").findIndex((line) => /:\s*$/.test(line));
-    const lines = textarea.value.split("\n");
-    const targetLineIndex = firstBlankLine >= 0 ? firstBlankLine : lines.length - 1;
-    const cursorPosition = lines.slice(0, targetLineIndex + 1).join("\n").length;
-    textarea.setSelectionRange(cursorPosition, cursorPosition);
-    autosizeTextarea(textarea);
-  }, 0);
-}
-
-function toggleTemplateBar(button) {
-  window.clearTimeout(templateToggleTimer);
-
-  if (state.templateCollapsed) {
-    state.templateCollapsed = false;
-    render();
-    return;
-  }
-
-  const templateBar = button.closest(".make-template-bar");
-  if (!templateBar) {
-    state.templateCollapsed = true;
-    render();
-    return;
-  }
-
-  templateBar.classList.add("collapsing");
-  button.setAttribute("aria-label", "분야 버튼 펼치기");
-  button.setAttribute("aria-expanded", "false");
-  button.innerHTML = "&gt;";
-  templateToggleTimer = window.setTimeout(() => {
-    state.templateCollapsed = true;
-    render();
-  }, 190);
-}
 
 async function copyTextToClipboard(text) {
   try {
@@ -2973,138 +2495,12 @@ function autosizeTextarea(textarea) {
   textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
 }
 
-function deleteOwnPrompt(promptId) {
-  const prompt = findPromptById(promptId);
-  if (guardAdminUserAction()) return;
 
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 본인 프롬프트만 삭제할 수 있습니다.");
-    return;
-  }
-  if (!prompt || prompt.source !== "mine") return;
 
-  openConfirmAction({
-    type: "delete-prompt",
-    targetId: promptId,
-    title: "프롬프트 삭제",
-    message: "이 프롬프트를 정말 삭제할까요? 삭제하면 Saved와 Home에서 모두 사라집니다.",
-    confirmLabel: "삭제",
-    danger: true,
-  });
-}
 
-function unshareOwnPrompt(promptId) {
-  const prompt = findPromptById(promptId);
-  if (guardAdminUserAction()) return;
 
-  if (!state.adminMode && !state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 본인 프롬프트만 공유 취소할 수 있습니다.");
-    return;
-  }
-  if (!prompt || (prompt.source !== "mine" && !state.adminMode)) return;
 
-  openConfirmAction({
-    type: "unshare-prompt",
-    targetId: promptId,
-    title: "공유 취소",
-    message: "공유를 취소하면 Home과 검색 결과에서 이 프롬프트가 사라집니다. 계속할까요?",
-    confirmLabel: "공유 취소",
-    danger: false,
-  });
-}
 
-async function publishSavedPrompt(promptId) {
-  const prompt = savedPrompts.find((item) => item.id === promptId);
-  if (!prompt || prompt.source !== "mine") return;
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    render();
-    return;
-  }
-
-  let backendPrompt = null;
-  if (isBackendNumericId(promptId) && hasBackendAuthToken() && window.TTALKAK_API?.shareExistingPrompt) {
-    try {
-      backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, getAuthToken() || undefined);
-    } catch (error) {
-      handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
-      return;
-    }
-  }
-
-  applyPublishedSavedPromptState(getCommentMutationStateContext(), prompt, backendPrompt);
-  showNotice("프롬프트를 공유됨 상태로 전환했습니다.");
-  render();
-}
-
-async function updateOwnPrompt(promptId, formData) {
-  const prompt = findPromptById(promptId);
-  if (!prompt || prompt.source !== "mine") return;
-  if (guardAdminUserAction()) return;
-
-  const title = String(formData.get("title") || "").trim();
-  const text = String(formData.get("text") || "").trim();
-  const tags = parseSharedTags(String(formData.get("tags") || ""));
-
-  if (!title || !text) {
-    showNotice("제목과 프롬프트를 입력해주세요. 해시태그는 선택 사항입니다.");
-    return;
-  }
-
-  let backendPrompt = null;
-  if (isBackendNumericId(promptId) && window.TTALKAK_API?.updatePrompt) {
-    try {
-      backendPrompt = await window.TTALKAK_API.updatePrompt(
-        promptId,
-        { title, text, tags },
-        getAuthToken() || undefined,
-      );
-    } catch (error) {
-      handleBackendAccessError(error, "프롬프트 수정 요청에 실패했습니다.");
-      return;
-    }
-  }
-
-  const nextValues = backendPrompt
-    ? { ...backendPrompt, source: "mine", savedByMe: prompt.savedByMe, isShared: prompt.isShared }
-    : { title, text, tags, updatedAt: Date.now() };
-
-  applyEditedPromptState(getCommentMutationStateContext(), promptId, nextValues, makeRevisionRequestKey("prompt", promptId));
-  showNotice("프롬프트를 수정했습니다.");
-  await refreshMyPageDataAfterMutation();
-  render();
-}
-
-function performDeletePrompt(promptId) {
-  if (isBackendNumericId(promptId)) {
-    callBackendApi("deletePrompt", promptId);
-  }
-  applyDeletedPromptState(
-    getPromptMutationStateContext(),
-    promptId,
-    SAVED_PAGE_SIZE,
-  );
-  showNotice("\uD504\uB86C\uD504\uD2B8\uB97C \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
-}
-
-function performUnsharePrompt(promptId) {
-  const prompt = findPromptById(promptId);
-  if (!prompt || prompt.source !== "mine") return;
-
-  applyUnsharedPromptState(getCommentMutationStateContext(), promptId, prompt);
-  if (isBackendNumericId(promptId)) {
-    callBackendApi("unsharePrompt", promptId);
-  }
-  showNotice("프롬프트 공유를 취소했습니다.");
-}
-
-function removePromptById(list, promptId) {
-  removePromptByIdState(list, promptId);
-}
 
 function normalizeSavedPage() {
   normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
@@ -3672,80 +3068,11 @@ function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessag
   if (logMessage) console.warn(logMessage, error);
 }
 
-async function createBackendMakeFolder(payload) {
-  const api = getMakeApi();
-  if (!api?.createMakeFolder) return "";
 
-  try {
-    const result = await api.createMakeFolder(payload, getMakeApiToken());
-    return String(result?.id || result?.folderId || result?.data?.id || result?.data?.folderId || "");
-  } catch (error) {
-    handleMakeBackendSyncError(
-      error,
-      "폴더 생성 요청에 실패해 로컬 데모 폴더만 유지합니다.",
-      "폴더 생성 요청에 실패했습니다.",
-      "[TTALKAK] /api/make/folders 생성 호출에 실패했습니다.",
-    );
-    return "";
-  }
-}
 
-async function updateBackendMakeFolderName(folderId, name) {
-  const backendFolderId = getBackendFolderId(folderId);
-  if (!backendFolderId) return true;
 
-  const api = getMakeApi();
-  if (!api?.updateMakeFolder) return canUseDemoFallback();
 
-  try {
-    await api.updateMakeFolder(backendFolderId, { name }, getMakeApiToken());
-    return true;
-  } catch (error) {
-    handleMakeBackendSyncError(
-      error,
-      "폴더 이름 수정 요청에 실패해 로컬 데모 상태만 유지합니다.",
-      "폴더 이름 수정 요청에 실패했습니다.",
-      "[TTALKAK] /api/make/folders/{id} 수정 호출에 실패했습니다.",
-    );
-    return false;
-  }
-}
 
-async function deleteBackendMakeFolder(folderId) {
-  const backendFolderId = getBackendFolderId(folderId);
-  if (!backendFolderId) return true;
-
-  const api = getMakeApi();
-  if (!api?.deleteMakeFolder) return canUseDemoFallback();
-
-  try {
-    await api.deleteMakeFolder(backendFolderId, getMakeApiToken());
-    return true;
-  } catch (error) {
-    handleMakeBackendSyncError(
-      error,
-      "폴더 삭제 요청에 실패해 로컬 데모 상태만 유지합니다.",
-      "폴더 삭제 요청에 실패했습니다.",
-      "[TTALKAK] /api/make/folders/{id} 삭제 호출에 실패했습니다.",
-    );
-    return false;
-  }
-}
-
-async function createBackendMakeThread(thread) {
-  return getMakeServerSyncEffects().createBackendMakeThread(thread);
-}
-
-async function ensureBackendMakeThreadId(thread) {
-  return getMakeServerSyncEffects().ensureBackendMakeThreadId(thread);
-}
-
-function getBackendFolderId(folderId) {
-  if (!folderId || folderId === "all" || folderId === "uncategorized") return null;
-  const folder = state.makeFolders.find((item) => item.id === folderId || item.serverId === folderId);
-  const candidate = folder?.serverId || folderId;
-  return isBackendNumericId(candidate) ? Number(candidate) : null;
-}
 
 function isBackendNumericId(value) {
   return value !== null && value !== undefined && /^\d+$/.test(String(value));
@@ -3788,17 +3115,8 @@ async function improvePromptWithBackend(prompt, {
   return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category });
 }
 
-async function syncMakeThreadWithBackend(threadId) {
-  return getMakeServerSyncEffects().syncMakeThreadWithBackend(threadId);
-}
 
-async function refreshMakeThreadsFromBackend({ shouldRender = true, quiet = false } = {}) {
-  return getMakeServerSyncEffects().refreshMakeThreadsFromBackend({ shouldRender, quiet });
-}
 
-async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false, scrollToLatest = false } = {}) {
-  return getMakeServerSyncEffects().refreshActiveMakeThreadFromBackend(threadId, { quiet, preserveScroll, scrollToLatest });
-}
 
 function queueLatestMakeThreadScroll(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;
