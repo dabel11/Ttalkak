@@ -33,6 +33,8 @@ const {
 const getUniquePrompts = uniquePrompts;
 const { createHomeController } = window.TtalkakHomeController || {};
 const { bindHomeEvents } = window.TtalkakHomeEvents || {};
+const { createPromptEngagementController } = window.TtalkakPromptEngagementController || {};
+const { bindPromptEngagementEvents } = window.TtalkakPromptEngagementEvents || {};
 const {
   makePreview,
   sanitizeMakeBackendMessage,
@@ -62,6 +64,8 @@ if (
     uniquePrompts,
     createHomeController,
     bindHomeEvents,
+    createPromptEngagementController,
+    bindPromptEngagementEvents,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -778,6 +782,42 @@ const homeController = createHomeController({
   applyPage: (value) => applyHomePageState(state, value),
   refresh: refreshBackendHomePrompts,
   render,
+});
+
+const promptEngagementController = createPromptEngagementController({
+  state,
+  savedPrompts,
+  guard: guardAdminUserAction,
+  notice: showNotice,
+  render,
+  findPrompt: findPromptById,
+  findComment: findCommentById,
+  findPromptIdByComment: findPromptIdByCommentId,
+  getCommentLikes,
+  canDeleteComment,
+  getPromptMutationContext: getPromptMutationStateContext,
+  getCommentMutationContext: getCommentMutationStateContext,
+  runMutation: runPromptStateMutation,
+  isHiddenDemoPrompt: isHiddenDemoLibraryPrompt,
+  isBackendId: isBackendNumericId,
+  refreshMyPage: refreshMyPageDataAfterMutation,
+  callApi: callBackendApi,
+  hasBackendToken: hasBackendAuthToken,
+  hydrateComments: hydratePromptComments,
+  revisionKey: makeRevisionRequestKey,
+  applyExistingSaved: applyExistingPromptSavedState,
+  applyBackendUnsaved: applyBackendPromptUnsavedState,
+  togglePendingUnsave: togglePendingUnsaveState,
+  applyUnsaved: applyPromptUnsavedState,
+  applyNewSaved: applyNewPromptSavedState,
+  applyPromptLiked: applyPromptLikedState,
+  applyPromptUnliked: applyPromptUnlikedState,
+  toggleCommentLiked: toggleCommentLikedState,
+  addPromptCommentState,
+  addReplyState: addCommentReplyState,
+  toggleReplyState: toggleReplyCommentState,
+  toggleEditState: toggleEditCommentState,
+  updateCommentState: updateOwnCommentState,
 });
 
 const icons = {
@@ -2342,6 +2382,10 @@ function bindCoreEvents() {
   bindAuthControlEvents();
   bindModalControlEvents();
   bindPromptInteractionEvents();
+  bindPromptEngagementEvents(document, {
+    ...promptEngagementController,
+    openPromptComments,
+  });
   bindHomeSearchEvents();
   bindAdminControlEvents();
   bindFormSubmitEvents();
@@ -2734,30 +2778,6 @@ function bindPromptInteractionEvents() {
       state.savedSort = select.value;
       state.savedPage = 1;
       render();
-    });
-  });
-
-  document.querySelectorAll("[data-save-prompt]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleSavedPrompt(button.dataset.savePrompt);
-    });
-  });
-
-  document.querySelectorAll("[data-like-prompt]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleLikePrompt(button.dataset.likePrompt);
-    });
-  });
-
-  document.querySelectorAll("[data-open-comments]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openPromptComments(button.dataset.openComments);
     });
   });
 
@@ -3337,27 +3357,6 @@ function bindReportAndCommentFormEvents() {
     });
   }
 
-  document.querySelectorAll("[data-comment-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      addPromptComment(form.dataset.commentForm, new FormData(form).get("comment"));
-    });
-  });
-
-  document.querySelectorAll("[data-reply-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      addCommentReply(form.dataset.replyForm, new FormData(form).get("reply"));
-    });
-  });
-
-  document.querySelectorAll("[data-edit-comment-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      updateOwnComment(form.dataset.editCommentForm, new FormData(form).get("comment"));
-    });
-  });
-
   document.querySelectorAll("[data-toggle-comments]").forEach((button) => {
     button.addEventListener("click", () => {
       const promptId = button.dataset.toggleComments;
@@ -3396,26 +3395,6 @@ function bindReportAndCommentFormEvents() {
     });
   });
 
-  document.querySelectorAll("[data-edit-comment]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleEditComment(button.dataset.editComment);
-    });
-  });
-
-  document.querySelectorAll("[data-like-comment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      toggleLikeComment(button.dataset.likeComment);
-    });
-  });
-
-  document.querySelectorAll("[data-reply-comment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      toggleReplyForm(button.dataset.replyComment);
-    });
-  });
-
   document.querySelectorAll("[data-report-comment]").forEach((button) => {
     button.addEventListener("click", () => {
       openReportComment(button.dataset.reportComment);
@@ -3423,92 +3402,6 @@ function bindReportAndCommentFormEvents() {
   });
 }
 
-async function toggleSavedPrompt(promptId) {
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 저장할 수 있습니다.");
-    return;
-  }
-
-  const savedIndex = savedPrompts.findIndex((item) => item.id === promptId);
-  const mutationContext = getPromptMutationStateContext();
-
-  if (savedIndex >= 0) {
-    const savedPrompt = savedPrompts[savedIndex];
-    const isSavedByMe = Boolean(savedPrompt.savedByMe);
-    const wasHiddenDemoPrompt = isHiddenDemoLibraryPrompt(savedPrompt);
-
-    if (!isSavedByMe || wasHiddenDemoPrompt) {
-      if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
-      applyExistingPromptSavedState(mutationContext, promptId, savedPrompt);
-      refreshMyPageDataAfterMutation();
-      showNotice("저장했습니다.");
-      return;
-    }
-
-    if (state.route === "saved" && state.myBackendStatus === "connected" && isBackendNumericId(promptId)) {
-      if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
-      applyBackendPromptUnsavedState(mutationContext, promptId, savedPrompt);
-      refreshMyPageDataAfterMutation();
-      showNotice("저장을 해제했습니다.");
-      return;
-    }
-
-    if (state.route === "saved") {
-      const pendingState = togglePendingUnsaveState(mutationContext, promptId);
-      showNotice(
-        pendingState === "restored"
-          ? "저장 해제를 취소했습니다."
-          : "페이지를 벗어나면 보관함에서 제거됩니다."
-      );
-      return;
-    }
-
-    if (!(await runPromptStateMutation("unsavePrompt", promptId, "저장 해제 요청에 실패했습니다."))) return;
-    applyPromptUnsavedState(mutationContext, promptId, savedPrompt, savedIndex);
-    refreshMyPageDataAfterMutation();
-    showNotice("저장을 해제했습니다.");
-    return;
-  }
-
-  const prompt = findPromptById(promptId);
-  if (!prompt) return;
-
-  if (state.pendingUnsaveIds.has(promptId)) {
-    togglePendingUnsaveState(mutationContext, promptId);
-    showNotice("저장 해제를 취소했습니다.");
-    return;
-  }
-
-  if (!(await runPromptStateMutation("savePrompt", promptId, "저장 요청에 실패했습니다."))) return;
-  applyNewPromptSavedState(mutationContext, promptId, prompt);
-  refreshMyPageDataAfterMutation();
-  showNotice("저장했습니다.");
-}
-async function toggleLikePrompt(promptId) {
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 좋아요를 누를 수 있습니다.");
-    return;
-  }
-
-  const isLiked = state.likedPromptIds.has(promptId);
-  const mutationContext = getPromptMutationStateContext();
-  if (isLiked) {
-    if (!(await runPromptStateMutation("unlikePrompt", promptId, "좋아요 취소 요청에 실패했습니다."))) return;
-    applyPromptUnlikedState(mutationContext, promptId);
-    refreshMyPageDataAfterMutation();
-  } else {
-    if (!(await runPromptStateMutation("likePrompt", promptId, "좋아요 요청에 실패했습니다."))) return;
-    applyPromptLikedState(mutationContext, promptId, findPromptById(promptId));
-    refreshMyPageDataAfterMutation();
-  }
-  showNotice(isLiked ? "좋아요를 취소했습니다." : "좋아요를 눌렀습니다.");
-}
 function openReportPrompt(promptId) {
   if (!findPromptById(promptId)) return;
   if (guardAdminUserAction()) return;
@@ -3858,34 +3751,6 @@ function getCommentLikes(comment) {
   return Math.max(0, Number(comment?.likes || 0));
 }
 
-function toggleLikeComment(commentId) {
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("로그인 후 댓글에 좋아요를 누를 수 있습니다.");
-    render();
-    return;
-  }
-
-  const comment = findCommentById(commentId);
-  if (!comment) return;
-  if (canDeleteComment(comment)) {
-    showNotice("내가 작성한 댓글에는 좋아요를 누를 수 없습니다.");
-    return;
-  }
-
-  const isLiked = state.likedCommentIds.has(commentId);
-  toggleCommentLikedState(state, commentId, comment, getCommentLikes);
-  if (isLiked) {
-    callBackendApi("unlikeComment", commentId);
-  } else {
-    callBackendApi("likeComment", commentId);
-  }
-
-  showNotice(isLiked ? "댓글 좋아요를 취소했습니다." : "댓글에 좋아요를 눌렀습니다.");
-}
-
 function getPromptCommentCount(prompt) {
   const threadCount = countCommentThread(getPromptComments(prompt.id));
   return threadCount || Number(prompt.comments || prompt.commentCount || 0);
@@ -3959,91 +3824,6 @@ function stampCurrentUserOwnedPrompts() {
       if (!prompt.author || prompt.author === "나") prompt.author = currentUser;
     });
   });
-}
-
-function addPromptComment(promptId, text) {
-  const content = String(text || "").trim();
-  if (!content) return;
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("\uB313\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
-    render();
-    return;
-  }
-
-  addPromptCommentState(getCommentMutationStateContext(), promptId, content);
-  callBackendApi("addComment", promptId, { text: content }).then(() => {
-    if (hasBackendAuthToken()) hydratePromptComments(promptId);
-  });
-  render();
-}
-
-function toggleReplyForm(commentId) {
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    return render();
-  }
-
-  toggleReplyCommentState(state, commentId);
-  render();
-}
-
-function addCommentReply(commentId, text) {
-  const content = String(text || "").trim();
-  if (!content) return;
-  if (guardAdminUserAction()) return;
-
-  if (!state.isLoggedIn) {
-    state.authView = "login";
-    showNotice("\uB2F5\uAE00\uC744 \uC791\uC131\uD558\uB824\uBA74 \uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.");
-    render();
-    return;
-  }
-
-  const parentComment = findCommentById(commentId);
-  if (!parentComment) return;
-  const promptId = findPromptIdByCommentId(commentId);
-
-  addCommentReplyState(getCommentMutationStateContext(), parentComment, promptId, content);
-  callBackendApi("addReply", commentId, { text: content }).then(() => {
-    if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
-  });
-  showNotice("\uB2F5\uAE00\uC744 \uB4F1\uB85D\uD588\uC2B5\uB2C8\uB2E4.");
-  render();
-}
-
-function toggleEditComment(commentId) {
-  if (guardAdminUserAction()) return;
-
-  const comment = findCommentById(commentId);
-  if (!comment || !canDeleteComment(comment)) return;
-
-  toggleEditCommentState(state, commentId);
-  render();
-}
-
-function updateOwnComment(commentId, text) {
-  const content = String(text || "").trim();
-  if (!content) return;
-  if (guardAdminUserAction()) return;
-
-  const comment = findCommentById(commentId);
-  if (!comment || !canDeleteComment(comment)) return;
-  const promptId = findPromptIdByCommentId(commentId);
-  const revisionKey = makeRevisionRequestKey("comment", commentId);
-  const changed = updateOwnCommentState(state, comment, commentId, content, revisionKey);
-
-  if (changed && isBackendNumericId(commentId)) {
-    callBackendApi("updateComment", commentId, { text: content }).then(() => {
-      if (promptId && hasBackendAuthToken()) hydratePromptComments(promptId);
-    });
-  }
-
-  showNotice("\uB313\uAE00\uC744 \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4.");
 }
 
 function deleteOwnComment(commentId) {

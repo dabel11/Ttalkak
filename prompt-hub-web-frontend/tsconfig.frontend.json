@@ -11,6 +11,7 @@
   "include": [
     "types/browser-globals.d.ts",
     "src/home/*.js",
+    "src/interactions/*.js",
     "src/make/*.js"
   ]
 }
