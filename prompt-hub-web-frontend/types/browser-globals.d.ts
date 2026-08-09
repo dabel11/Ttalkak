@@ -4,6 +4,7 @@ interface Window {
   TtalkakHomeEvents: unknown;
   TtalkakPromptEngagementController: unknown;
   TtalkakPromptEngagementEvents: unknown;
+  TtalkakCommentModel: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;

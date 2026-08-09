@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createPromptEngagementController } = require("../src/interactions/prompt-engagement-controller.js");
 const { bindPromptEngagementEvents } = require("../src/interactions/prompt-engagement-events.js");
+const commentModel = require("../src/interactions/comment-model.js");
 
 function createContext(overrides = {}) {
   const calls = [];
@@ -59,4 +60,20 @@ test("app delegates engagement workflows without duplicate controller functions"
   ["toggleSavedPrompt", "toggleLikePrompt", "toggleLikeComment", "addPromptComment", "addCommentReply", "updateOwnComment"].forEach((name) => {
     assert.doesNotMatch(appSource, new RegExp(`function ${name}\\s*\\(`));
   });
+});
+
+test("comment model recursively finds, counts and stably sorts threads", () => {
+  const comments = [{ id: "a", likes: 1, replies: [{ id: "b", likes: 3 }] }, { id: "c", likes: 3 }, { id: "d", deleted: true }];
+  assert.equal(commentModel.findCommentInList(comments, "b").id, "b");
+  assert.equal(commentModel.countCommentThread(comments), 3);
+  assert.deepEqual(commentModel.sortComments(comments).map((item) => item.id), ["c", "a", "d"]);
+});
+
+test("comment model synchronizes counts across prompt collections", () => {
+  const shared = { id: "p" };
+  const other = { id: "p" };
+  const count = commentModel.syncPromptCommentCount("p", [{ id: "a", replies: [{ id: "b" }] }], [[shared], [other]]);
+  assert.equal(count, 2);
+  assert.equal(shared.commentCount, 2);
+  assert.equal(other.comments, 2);
 });

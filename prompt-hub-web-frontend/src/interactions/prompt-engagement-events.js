@@ -11,6 +11,7 @@
     root.querySelectorAll("[data-like-comment]").forEach((button) => button.addEventListener("click", () => actions.toggleLikeComment(button.dataset.likeComment)));
     root.querySelectorAll("[data-reply-comment]").forEach((button) => button.addEventListener("click", () => actions.toggleReplyForm(button.dataset.replyComment)));
     root.querySelectorAll("[data-edit-comment]").forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); actions.toggleEditComment(button.dataset.editComment); }));
+    root.querySelectorAll("[data-delete-comment]").forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); actions.deleteOwnComment(button.dataset.deleteComment); }));
   }
 
   const api = Object.freeze({ bindPromptEngagementEvents });

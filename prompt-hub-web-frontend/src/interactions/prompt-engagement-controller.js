@@ -100,7 +100,58 @@
       ctx.notice("댓글을 수정했습니다.");
     }
 
-    return Object.freeze({ addCommentReply, addPromptComment, toggleEditComment, toggleLikeComment, toggleLikePrompt, toggleReplyForm, toggleSavedPrompt, updateOwnComment });
+    function openPromptComments(promptId) {
+      ctx.incrementViews(promptId);
+      ctx.state.detailPromptId = promptId;
+      ctx.state.detailHighlightCommentId = null;
+      ctx.state.expandedComments[promptId] = true;
+      hydratePromptComments(promptId);
+      ctx.render();
+    }
+
+    async function hydratePromptComments(promptId, options = {}) {
+      if (!ctx.api?.getPromptComments || !promptId || !ctx.isBackendId(promptId)) return false;
+      try {
+        const comments = await ctx.api.getPromptComments(promptId, ctx.getToken() || undefined);
+        if (!Array.isArray(comments)) return false;
+        ctx.commentsByPrompt[promptId] = comments;
+        ctx.syncCommentCount(promptId);
+        if (options.render !== false && ctx.state.detailPromptId === promptId) ctx.render();
+        return true;
+      } catch (error) {
+        ctx.warn("[TTALKAK] 댓글 조회에 실패해 기존 댓글을 유지합니다.", error);
+        return false;
+      }
+    }
+
+    function deleteOwnComment(commentId) {
+      if (ctx.guard()) return;
+      for (const comments of Object.values(ctx.commentsByPrompt)) {
+        const comment = ctx.findCommentInList(comments, commentId);
+        if (!comment || !ctx.canDeleteComment(comment)) continue;
+        ctx.confirm({ type: "delete-comment", targetId: commentId, title: ctx.state.adminMode ? "신고 댓글 삭제" : "댓글 삭제", message: ctx.state.adminMode ? "신고된 댓글을 삭제할까요? 이 작업은 운영 조치로 기록되어야 합니다." : "이 댓글을 삭제할까요?", confirmLabel: "삭제", danger: true });
+        return;
+      }
+    }
+
+    function performDeleteComment(commentId) {
+      for (const [promptId, comments] of Object.entries(ctx.commentsByPrompt)) {
+        const removed = ctx.deleteCommentState(ctx.getCommentMutationContext(), promptId, comments, commentId, ctx.canDeleteComment);
+        if (!removed) continue;
+        if (ctx.isBackendId(commentId)) {
+          const action = ctx.state.adminMode && ctx.api?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
+          ctx.callApi(action, commentId).then(() => {
+            if (ctx.hasBackendToken()) hydratePromptComments(promptId);
+            if (ctx.state.adminMode) ctx.refreshAdmin({ auditReason: "댓글 삭제 후" });
+          });
+        }
+        ctx.notice("댓글을 삭제했습니다.");
+        return true;
+      }
+      return false;
+    }
+
+    return Object.freeze({ addCommentReply, addPromptComment, deleteOwnComment, hydratePromptComments, openPromptComments, performDeleteComment, toggleEditComment, toggleLikeComment, toggleLikePrompt, toggleReplyForm, toggleSavedPrompt, updateOwnComment });
   }
 
   const api = Object.freeze({ createPromptEngagementController });

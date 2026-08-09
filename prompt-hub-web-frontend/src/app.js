@@ -36,6 +36,16 @@ const { bindHomeEvents } = window.TtalkakHomeEvents || {};
 const { createPromptEngagementController } = window.TtalkakPromptEngagementController || {};
 const { bindPromptEngagementEvents } = window.TtalkakPromptEngagementEvents || {};
 const {
+  canDeleteComment: canDeleteCommentModel,
+  countCommentThread: countCommentThreadModel,
+  findCommentById: findCommentByIdModel,
+  findCommentInList,
+  findPromptIdByCommentId: findPromptIdByCommentIdModel,
+  getCommentLikes: getCommentLikesModel,
+  sortComments: sortCommentsModel,
+  syncPromptCommentCount: syncPromptCommentCountModel,
+} = window.TtalkakCommentModel || {};
+const {
   makePreview,
   sanitizeMakeBackendMessage,
 } = window.TtalkakMakePreview || {};
@@ -66,6 +76,14 @@ if (
     bindHomeEvents,
     createPromptEngagementController,
     bindPromptEngagementEvents,
+    canDeleteCommentModel,
+    countCommentThreadModel,
+    findCommentByIdModel,
+    findCommentInList,
+    findPromptIdByCommentIdModel,
+    getCommentLikesModel,
+    sortCommentsModel,
+    syncPromptCommentCountModel,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
@@ -818,6 +836,16 @@ const promptEngagementController = createPromptEngagementController({
   toggleReplyState: toggleReplyCommentState,
   toggleEditState: toggleEditCommentState,
   updateCommentState: updateOwnCommentState,
+  commentsByPrompt,
+  api: window.TTALKAK_API,
+  getToken: getAuthToken,
+  warn: (...args) => console.warn(...args),
+  incrementViews: incrementPromptViews,
+  syncCommentCount: syncPromptCommentCount,
+  findCommentInList,
+  confirm: openConfirmAction,
+  deleteCommentState,
+  refreshAdmin: refreshAdminAfterMutation,
 });
 
 const icons = {
@@ -2382,10 +2410,7 @@ function bindCoreEvents() {
   bindAuthControlEvents();
   bindModalControlEvents();
   bindPromptInteractionEvents();
-  bindPromptEngagementEvents(document, {
-    ...promptEngagementController,
-    openPromptComments,
-  });
+  bindPromptEngagementEvents(document, promptEngagementController);
   bindHomeSearchEvents();
   bindAdminControlEvents();
   bindFormSubmitEvents();
@@ -3375,14 +3400,6 @@ function bindReportAndCommentFormEvents() {
     });
   });
 
-  document.querySelectorAll("[data-delete-comment]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      deleteOwnComment(button.dataset.deleteComment);
-    });
-  });
-
   document.querySelectorAll("[data-admin-toggle-comment-hidden]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3636,56 +3653,16 @@ function openPromptDetail(promptId, options = {}) {
   render();
 }
 
-function openPromptComments(promptId) {
-  incrementPromptViews(promptId);
-  state.detailPromptId = promptId;
-  state.detailHighlightCommentId = null;
-  state.expandedComments[promptId] = true;
-  hydratePromptComments(promptId);
-  render();
-}
-
 async function hydratePromptComments(promptId, options = {}) {
-  const api = window.TTALKAK_API;
-  if (!api?.getPromptComments || !promptId || !isBackendNumericId(promptId)) return false;
-
-  try {
-    const comments = await api.getPromptComments(promptId, getAuthToken() || undefined);
-    if (Array.isArray(comments)) {
-      commentsByPrompt[promptId] = comments;
-      syncPromptCommentCount(promptId);
-      if (options.render !== false && state.detailPromptId === promptId) render();
-      return true;
-    }
-  } catch (error) {
-    console.warn("[TTALKAK] /api/prompts/{id}/comments 호출에 실패해 데모 댓글을 유지합니다.", error);
-  }
-
-  return false;
+  return promptEngagementController.hydratePromptComments(promptId, options);
 }
 
 function syncPromptCommentCount(promptId) {
-  const comments = commentsByPrompt[promptId];
-  if (!Array.isArray(comments)) return;
-
-  const commentCount = countCommentThread(comments);
-  const updated = new Set();
-
-  for (const list of [popularPrompts, savedPrompts]) {
-    const prompt = list.find((item) => item.id === promptId);
-    if (!prompt || updated.has(prompt)) continue;
-    prompt.comments = commentCount;
-    prompt.commentCount = commentCount;
-    updated.add(prompt);
-  }
+  return syncPromptCommentCountModel(promptId, commentsByPrompt[promptId], [popularPrompts, savedPrompts]);
 }
 
 function findPromptIdByCommentId(commentId) {
-  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    if (findCommentInList(comments, commentId)) return promptId;
-  }
-
-  return "";
+  return findPromptIdByCommentIdModel(commentsByPrompt, commentId);
 }
 
 function shouldOpenCommentsByDefault() {
@@ -3709,46 +3686,23 @@ function getPromptComments(promptId) {
 }
 
 function getSortedPromptComments(promptId) {
-  return getPromptComments(promptId)
-    .map((comment, index) => ({ comment, index }))
-    .sort((a, b) => getCommentLikes(b.comment) - getCommentLikes(a.comment) || a.index - b.index)
-    .map(({ comment }) => comment);
+  return sortCommentsModel(getPromptComments(promptId));
 }
 
 function getSortedCommentReplies(comment) {
-  return [...(comment.replies || [])]
-    .map((reply, index) => ({ reply, index }))
-    .sort((a, b) => getCommentLikes(b.reply) - getCommentLikes(a.reply) || a.index - b.index)
-    .map(({ reply }) => reply);
+  return sortCommentsModel(comment.replies || []);
 }
 
 function findCommentById(commentId) {
-  if (!commentId) return null;
-
-  for (const comments of Object.values(commentsByPrompt)) {
-    const comment = findCommentInList(comments, commentId);
-    if (comment) return comment;
-  }
-
-  return null;
-}
-
-function findCommentInList(comments, commentId) {
-  for (const comment of comments || []) {
-    if (comment.id === commentId) return comment;
-    const reply = findCommentInList(comment.replies || [], commentId);
-    if (reply) return reply;
-  }
-
-  return null;
+  return findCommentByIdModel(commentsByPrompt, commentId);
 }
 
 function countCommentThread(comments) {
-  return (comments || []).reduce((total, comment) => total + (comment.deleted ? 0 : 1) + countCommentThread(comment.replies || []), 0);
+  return countCommentThreadModel(comments);
 }
 
 function getCommentLikes(comment) {
-  return Math.max(0, Number(comment?.likes || 0));
+  return getCommentLikesModel(comment);
 }
 
 function getPromptCommentCount(prompt) {
@@ -3826,25 +3780,6 @@ function stampCurrentUserOwnedPrompts() {
   });
 }
 
-function deleteOwnComment(commentId) {
-  if (guardAdminUserAction()) return;
-
-  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    const comment = findCommentInList(comments, commentId);
-    if (!comment || !canDeleteComment(comment)) continue;
-
-    openConfirmAction({
-      type: "delete-comment",
-      targetId: commentId,
-      title: state.adminMode ? "신고 댓글 삭제" : "댓글 삭제",
-      message: state.adminMode ? "신고된 댓글을 삭제할까요? 이 작업은 운영 조치로 기록되어야 합니다." : "이 댓글을 삭제할까요?",
-      confirmLabel: "삭제",
-      danger: true,
-    });
-    return;
-  }
-}
-
 async function updateAdminCommentHiddenState(commentId, shouldHide) {
   if (!state.adminMode || !commentId) return;
   const context = findCommentContextById(commentId);
@@ -3875,11 +3810,7 @@ async function updateAdminCommentHiddenState(commentId, shouldHide) {
 }
 
 function canDeleteComment(comment) {
-  if (!comment) return false;
-  if (state.adminMode) return true;
-  if (!state.isLoggedIn) return false;
-  const owner = comment.owner || comment.author;
-  return owner === "나" || owner === state.currentUser || comment.author === state.currentUser;
+  return canDeleteCommentModel(state, comment);
 }
 
 function openConfirmAction(action) {
@@ -3902,7 +3833,7 @@ async function runConfirmedAction() {
   }
 
   if (action.type === "delete-comment") {
-    performDeleteComment(action.targetId);
+    promptEngagementController.performDeleteComment(action.targetId);
   }
 
   if (action.type === "delete-thread") {
@@ -3950,23 +3881,6 @@ async function runConfirmedAction() {
   }
 
   render();
-}
-
-function performDeleteComment(commentId) {
-  for (const [promptId, comments] of Object.entries(commentsByPrompt)) {
-    const removed = deleteCommentState(getCommentMutationStateContext(), promptId, comments, commentId, canDeleteComment);
-    if (!removed) continue;
-
-    if (isBackendNumericId(commentId)) {
-      const apiName = state.adminMode && window.TTALKAK_API?.deleteAdminComment ? "deleteAdminComment" : "deleteComment";
-      callBackendApi(apiName, commentId).then(() => {
-        if (hasBackendAuthToken()) hydratePromptComments(promptId);
-        if (state.adminMode) refreshAdminAfterMutation({ auditReason: "\uB313\uAE00 \uC0AD\uC81C \uD6C4" });
-      });
-    }
-    showNotice("\uB313\uAE00\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4.");
-    return;
-  }
 }
 
 function performDeleteThreadLocal(threadId) {
