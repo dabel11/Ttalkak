@@ -28,6 +28,7 @@ test("prompt like controller performs backend mutation and state transition", as
   await createPromptEngagementController(ctx).toggleLikePrompt("42");
   assert.deepEqual(calls.slice(0, 3), ["likePrompt", "liked", "refresh"]);
 });
+test("app delegates comment and reply rendering", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createCommentView/); ["CommentItem", "ReplyItem"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`))); });
 
 test("engagement controller redirects guests before mutations", async () => {
   const { ctx, calls } = createContext();

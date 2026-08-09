@@ -1,20 +1,26 @@
 interface Window {
+  TTALKAK_GOOGLE_CREDENTIAL?: string;
   TtalkakHomeSearchModel: unknown;
   TtalkakHomeController: unknown;
   TtalkakHomeEvents: unknown;
   TtalkakPromptEngagementController: unknown;
   TtalkakPromptEngagementEvents: unknown;
   TtalkakCommentModel: unknown;
+  TtalkakCommentView: unknown;
   TtalkakShareController: unknown;
   TtalkakShareEvents: unknown;
   TtalkakModalController: unknown;
   TtalkakModalEvents: unknown;
+  TtalkakModalView: unknown;
   TtalkakAuthSession: unknown;
   TtalkakAuthValidation: unknown;
   TtalkakAuthController: unknown;
   TtalkakAuthEvents: unknown;
+  TtalkakAuthView: unknown;
   TtalkakAdminEvents: unknown;
+  TtalkakAdminSelectors: unknown;
   TtalkakAdminController: unknown;
+  TtalkakAdminView: unknown;
   TtalkakMakeController: unknown;
   TtalkakMakeEvents: unknown;
   TtalkakMakeFocus: unknown;

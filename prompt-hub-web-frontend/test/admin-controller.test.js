@@ -37,6 +37,7 @@ test("admin events delegate prompt and report mutations", () => {
   report.dispatch("click");
   assert.deepEqual(calls, [["hide", "prompt-1"], ["report", "report-7", "resolved"]]);
 });
+test("app delegates administrator views and selectors", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createAdminView/); assert.match(app, /createAdminSelectors/); ["AdminPage", "AdminUserActivitySummary", "getAdminManagedTags", "getAdminReportRecords", "matchesAdminPromptQuery"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function\\s+${name}\\s*\\(`))); });
 
 test("app delegates all administrator events and workflows", () => {
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
