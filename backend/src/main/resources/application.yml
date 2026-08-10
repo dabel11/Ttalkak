@@ -18,6 +18,7 @@ spring:
 
 rag:
   server-url: ${RAG_SERVER_URL:http://localhost:8000}
+  response-timeout: ${RAG_RESPONSE_TIMEOUT:75s}
 ttalkak:
   cors:
     allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}"

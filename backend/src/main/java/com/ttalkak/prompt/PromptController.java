@@ -18,6 +18,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.util.*;
 import java.time.LocalDateTime;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/prompts")
@@ -30,6 +31,7 @@ public class PromptController {
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
+    private final Duration ragResponseTimeout;
 
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
@@ -41,7 +43,8 @@ public class PromptController {
                             AuthService authService,
                             MakeThreadRepository makeThreadRepository,
                             ObjectMapper objectMapper,
-                            WebClient.Builder webClientBuilder) {
+                            WebClient.Builder webClientBuilder,
+                            Duration ragResponseTimeout) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
@@ -50,6 +53,7 @@ public class PromptController {
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
+		this.ragResponseTimeout = ragResponseTimeout;
     }
 
     @GetMapping
@@ -689,7 +693,7 @@ public class PromptController {
                     .bodyValue(ragRequest)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .block();
+                    .block(ragResponseTimeout);
 
             if (response == null) {
                 throw new ApiException(

@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -67,7 +69,9 @@ class PromptImproveConversationTest {
 				authService,
 				makeThreadRepository,
 				objectMapper,
-				successfulRagWebClientBuilder());
+				successfulRagWebClientBuilder(),
+				Duration.ofSeconds(75)
+		);
 
 		ReflectionTestUtils.setField(
 				controller,
@@ -349,7 +353,9 @@ class PromptImproveConversationTest {
 				authService,
 				makeThreadRepository,
 				objectMapper,
-				webClientBuilder);
+				webClientBuilder,
+				Duration.ofSeconds(75)
+		);
 
 		ReflectionTestUtils.setField(
 				controller,
