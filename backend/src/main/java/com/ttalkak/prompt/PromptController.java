@@ -44,6 +44,7 @@ public class PromptController {
                             MakeThreadRepository makeThreadRepository,
                             ObjectMapper objectMapper,
                             WebClient.Builder webClientBuilder,
+                            @Value("${rag.response-timeout:75s}")
                             Duration ragResponseTimeout) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
