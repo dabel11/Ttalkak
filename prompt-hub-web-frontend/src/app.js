@@ -1163,6 +1163,11 @@ function render() {
   });
 }
 
+document.addEventListener("ttalkak:route-renderers-changed", (event) => {
+  if (!(event instanceof CustomEvent)) return;
+  if (event.detail?.route === state.route || (event.detail?.route === "admin" && state.adminMode)) render();
+});
+
 function renderPreservingMakeScroll() {
   renderWithPreservedMakeScroll(render);
 }

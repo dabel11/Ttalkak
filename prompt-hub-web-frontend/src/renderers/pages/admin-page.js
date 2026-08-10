@@ -43,4 +43,5 @@
     ...(global.TtalkakRenderers || {}),
     AdminPageView,
   });
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-registered", { detail: { renderers: { AdminPageView } } }));
 })(window);

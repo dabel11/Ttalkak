@@ -21,7 +21,7 @@ module.exports = [
     },
   },
   {
-    files: ["src/app-entry.js", "src/app.js", "src/**/*.mjs", "src/**/index.js"],
+    files: ["src/app-entry.js", "src/app.js", "src/**/*.mjs", "src/**/index.js", "src/renderers/lazy-route-renderers.js", "src/renderers/routes/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

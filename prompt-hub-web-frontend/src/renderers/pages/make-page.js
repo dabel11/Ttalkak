@@ -345,4 +345,8 @@
     MessageBubbleView,
     UserMessageView,
   });
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-registered", { detail: { renderers: {
+    MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView,
+    MessageActionsView, MessageBubbleView, UserMessageView,
+  } } }));
 })(window);

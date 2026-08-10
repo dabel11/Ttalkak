@@ -370,4 +370,7 @@
     AdminTagsPanelView,
     AdminUsersPanelView,
   });
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-registered", { detail: { renderers: {
+    AdminAuditPanelView, AdminPromptsPanelView, AdminReportsPanelView, AdminTagsPanelView, AdminUsersPanelView,
+  } } }));
 })(window);

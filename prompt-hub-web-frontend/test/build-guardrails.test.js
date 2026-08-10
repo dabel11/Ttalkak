@@ -22,6 +22,17 @@ test("production build splits optional demo data out of the initial bundle", () 
   assert.match(build, /chunkNames:\s*["']chunks\//);
 });
 
+test("production renderers keep Admin, Make, and Share behind route chunks", () => {
+  const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
+  const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
+  ["admin-panels.js", "pages/admin-page.js", "pages/make-message-parts.js", "pages/make-page.js", "pages/share-page.js"].forEach((file) => {
+    assert.doesNotMatch(rendererEntry, new RegExp(`import ["']\\./${file.replaceAll(".", "\\.")}["']`));
+  });
+  ["admin", "make", "share"].forEach((route) => {
+    assert.match(loader, new RegExp(`${route}: \\(\\) => import\\(["']\\./routes/${route}\\.js["']\\)`));
+  });
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));
