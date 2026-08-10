@@ -15,16 +15,17 @@ POST /query
   │                 model="gemini-2.0-flash", history, use_reranker=T, use_hybrid=F,
   │                 use_examples=T, n_examples=2, example_min_score=0.40, ... }
   ▼
-[A] 검색 쿼리 결정      main.py:142-147   (기본: HyDE 카드형 재작성 / 옵션: 원본·키워드 변환)
+[A] 검색 쿼리 결정      main.py:142-147   (기본: 원본 그대로 / 옵션: HyDE·키워드 변환 — 둘 다 off)
   ▼
 [B] 기법 검색 (2단계+컷) retriever.py:84   (컬렉션 prompt_techniques)
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
-   ├ B2 1단계 후보 20개  (bge-m3 dense 코사인)     retriever.py:126
+   ├ B2 1단계 후보 20개  (bge-m3 dense 코사인 —    retriever.py:126
+   │                     본문 벡터 ∪ 검색뷰 벡터의 max)
    ├ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:175
    └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
   ▼
    검색결과 0 & history 없음 → 404                  main.py:160
-  │                                                (HyDE 상시 적용 시 사실상 미발동 — §1-[B4])
+  │                                                (⚠️ 실사용 6%에서 발동 — §4 참조)
   ▼
 [B+] 예시 검색 (타입별)  main.py query()   (컬렉션 prompt_examples: 원본요청 매칭 dense top-N,
   │                                         리랭커 생략, example_min_score 컷 → 관련無면 0건)
@@ -56,20 +57,22 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 ## 1. 단계별 상세
 
 ### [A] 검색 쿼리 결정 — `main.py:142-147`
-- **기본값: `use_hyde=True` → `query_transform.hyde()`** (거친 요청 → 기법 카드형 가상문서 생성 후 `원본+가상문서`를 검색 쿼리로). 실패 시 원본으로 안전 폴백.
-- `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성 — 카드 장르 미스매치로 hyde보다 열등, 기본 off)
-- 둘 다 off → `search_query = req.query` (원본 그대로)
-- **왜 HyDE가 기본인가** (2026-07-29 측정): 코퍼스는 '기법 설명 카드'인데 사용자 입력은 '거친 작업지시'라 **문체 장르가 달라** 주제가 맞아도 dense 코사인이 **0.34~0.48 좁은 띠**에 눌린다. `min_score=0.40` 컷이 이 띠 한복판을 잘라, 예컨대 "제주도 여행 블로그 글 써줘"(0.42)에 "아이랑 3박4일"을 덧붙이면 0.36으로 떨어져 **첫 턴 404**가 났다. HyDE는 쿼리를 카드 장르로 재작성해 **0.69~0.84**로 끌어올리고(폴백 0건), 회수 기법도 더 정확(자소서 → `Analyst-Then-Writer` #1). 모델은 8b(`llama-3.1-8b-instant`) — 형식 모방만 하면 되어 70b보다 오히려 높고 TPD 한도도 여유. (`query_transform.py:17-20`)
+- **기본값: 둘 다 off → `search_query = req.query`** (원본 그대로).
+- `use_hyde` ON → `query_transform.hyde()` (거친 요청 → 기법 카드형 가상문서, `원본+가상문서`로 검색). 실패 시 원본 폴백.
+- `use_query_transform` ON → `query_transform.transform()` (키워드 줄 생성 — 카드 장르 미스매치로 hyde보다 열등)
+- **HyDE 이력 — 켰다가 되돌렸다**: 2026-07-29에 기본 ON으로 켰다(코퍼스 '기법 설명 카드' vs 입력 '거친 작업지시'의 **문체 장르 미스매치**로 dense가 0.34~0.48 좁은 띠에 눌려 `min_score=0.40`이 그 한복판을 자르던 문제 — "제주도 여행 블로그 글 써줘"에 "아이랑 3박4일"을 붙이면 0.36으로 떨어져 **404**). HyDE는 점수를 0.69~0.84로 끌어올렸으나, **2026-07-30 재평가에서 정확도를 크게 해치는 것이 확인돼 되돌렸다** — 170코퍼스 실측 raw R@5 **0.763** vs +HyDE **0.441**, Hit@1 0.627 vs 0.271. 카드 장르로 재작성하는 성질이 **제네릭 카드 오회수**를 유발한다.
+- ⚠️ 되돌림과 함께 **404 문제도 되살아났다**(2026-08-09 실측 17% → 멀티표현 적용 후 6%). 근본 원인과 후속 설계는 §4 참조.
 - **검색용 쿼리와 생성용 쿼리를 분리** → 자세히는 §2-(1)
 
 ### [B] 검색 — `retriever.py:84 search()`
 - **B1. 컬렉션 로드** (`retriever.py:193`)
-  - MySQL `rag_chunk`에서 `collection_name` 일치 행을 `id` 순으로 `SELECT document, metadata, embedding`
+  - MySQL `rag_chunk`에서 `collection_name` 일치 행을 `id` 순으로 `SELECT document, metadata, embedding, embedding_views`
   - 임베딩(JSON) → numpy 배열. **매 쿼리마다 전체 로드** → 자세히는 §2-(3)
 - **B2. 1단계 후보 추리기** (`_candidates`, `retriever.py:126`)
   - 리랭크 ON이므로 후보 폭 `stage1_k = max(fetch_k=20, top_k=5) = 20` (`retriever.py:107`)
   - **fetch_k=20은 측정 파레토 최적** — 50은 전 지표 열세+2.5배 느림(21~50위 쓰레기가 리랭커를 오판시킴), 10은 지연 절반이나 Recall@5 −4.5%p (WORKLOG 2026-07-05 스윕)
   - `_dense_scores`: bge-m3로 쿼리 인코딩 → 전체 행렬과 **numpy 코사인** (`retriever.py:148`)
+  - **멀티표현 max 풀링(2026-08-09)**: 행이 `embedding_views`(검색용 축약뷰 벡터)를 가지면 **본문 벡터와 뷰 벡터 중 최고 점수**를 그 행 점수로 쓴다. 뷰가 없는 행(`NULL`)은 종전과 완전히 동일 → 자세히는 §2-(5)
   - `use_hybrid=False` → BM25 건너뜀, `argsort(-dense)[:20]`
   - (하이브리드 ON 시: BM25(kiwipiepy 형태소) 점수와 **RRF 융합**, `_rrf_order` 165 — 기본 off)
 - **B3. 2단계 리랭크** (`_rerank`, `retriever.py:175`)
@@ -79,7 +82,9 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - **B4. 유효 유사도 컷** (`retriever.py:121`, 기본 `min_score=0.40`)
   - `score`(dense 코사인) < min_score 인 결과를 top_k에서 **제외**
   - 신호·임계치는 측정으로 결정: 리랭커 확률은 정답/오답 분리 전무(p50 0.503 vs 0.500)라 **dense 채택**, τ=0.40은 recall 무손실(0.839)·빈결과 0% 지점 (`eval/score_analysis.py`, 코퍼스 변경 시 재측정)
-  - **HyDE 상시 적용(기본)의 부수효과**: hyde가 쿼리를 카드 장르로 맞춰 거의 모든 입력이 0.6~0.8로 통과하므로 이 컷은 **관련성 게이트로는 사실상 무력화**된다(쓰레기 입력 "asdf"도 0.77). 결과적으로 **첫 턴 404는 hyde 폴백(한도 초과 등)+원본마저 0.40 미만인 드문 경우에만 발동**. 무의미 입력의 최종 게이트는 404가 아니라 **생성 단계의 `mode=ask`**(무엇을 개선할지 되물음)가 담당한다.
+  - 🔴 **그 τ는 지금 운영 분포에서 유효하지 않다 (2026-08-09 실측)**: 근거가 된 측정은 `qa_set`(기법을 찾는 **질문형**) 분포였는데, 운영에 들어오는 것은 **거친 작업지시**다. 실사용 입력 18개 중 **404 3건(17%)**, 동시에 무관 입력 8개 중 **5건이 통과**(`https://example.com` 0.538 · `1+1은?` 0.462 · `안녕하세요` 0.419). **정상 min 0.336 < 무관 max 0.538 — 분포가 겹쳐 어떤 임계치로도 분리 불가.**
+  - 근본 원인은 임계치가 아니라 **코퍼스 구성**이다: 기법 카드에 대한 관련성 판별력은 **AUC 0.575(≒무작위)**, 같은 쿼리로 `prompt_examples`는 **AUC 1.000(완전분리)**. → §4 및 WORKLOG 2026-08-09.
+  - 현재 무의미 입력의 실질적 최종 게이트는 404가 아니라 **생성 단계의 `mode=ask`**(무엇을 개선할지 되물음)다.
 - **결과**: 관련 기법 청크 ≤5개 `{text, metadata{technique, category, source, chunk_id}, score, rerank_score}`
 
 ### [C0] 요청 분석 (1단계) — `analyzer.py` (규약 v3, 2026-07-31)
@@ -138,7 +143,8 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   - `hyde()` (101): Groq `llama-3.1-8b-instant`, 출력=**기법 카드형 가상문서**, 반환은 `원본+가상문서`
   - 모든 실패 경로에서 **원본 쿼리 반환** → 변환이 검색을 절대 끊지 않음
 - **변환문은 생성기에 도달하지 않음** → 켜져도 원문은 100% 보존, 순수 "검색 렌즈"
-- **기본값: `hyde()` on, `transform()` off**: 초기엔 둘 다 off였으나(동질 코퍼스에서 키워드 변환이 악화, WORKLOG 2026-06-21), 2026-07-29 재측정에서 **거친 작업지시 ↔ 카드 코퍼스의 장르 미스매치**가 드러나 HyDE(카드형 재작성)를 기본 on으로 전환. 키워드 `transform`은 장르가 여전히 안 맞아(임영웅 케이스 0.42→0.37 악화) opt-in 유지.
+- **기본값: 둘 다 off (원본 그대로 검색)**: 초기에도 off였고(동질 코퍼스에서 키워드 변환 악화, WORKLOG 2026-06-21), 2026-07-29에 장르 미스매치 대응으로 HyDE를 기본 on 했다가 **2026-07-30 재평가에서 되돌렸다**(R@5 0.763→0.441). 키워드 `transform`도 장르가 안 맞아(임영웅 0.42→0.37 악화) opt-in 유지.
+- ⭐ **교훈**: 장르 미스매치를 **쿼리 쪽에서** 메우려는 시도(HyDE)는 쿼리마다 LLM 재작성이라 노이즈가 크고 제네릭 카드로 끌린다. 간극을 메운다면 **문서 쪽**이 맞다 — 오프라인·캐시 가능·검수 가능·쿼리당 비용 0. → §4 백로그(문서측 요청 예문 생성)
 
 ### (2) 임베딩 모델 1개 공유 + 별도 리랭커 — `embeddings.py`
 - **bge-m3 임베딩 모델은 프로세스당 1회 로드** 후 Indexer·Retriever **공유** (`get_model`, 캐시 `_model_cache`)
@@ -163,6 +169,21 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - `/query`·gen_eval·uplift_eval 모두 `run_generation()` **공용 경로** 사용 (측정 = 운영)
 - 검증: gen_eval 12문항 mode_accuracy **1.00**, 폴백 발동 0회 (2026-07-05)
 
+### (5) 멀티표현 인덱싱 — 청크당 벡터 여러 개 — `views.py` (2026-08-09)
+- 기법 카드를 **전문 그대로** 임베딩하면 영문 필드명(`Technique:`/`Use When:` …)과 프롬프트 템플릿·예시가 신호를 희석한다. 정작 사용자 요청과 맞아야 할 `Definition`/`Use When`은 카드 327자 중 100자가 안 된다.
+- **해법**: 카드도 `document`도 고치지 않고, **같은 청크를 '이름+정의+언제쓰나'로 줄인 뷰로 한 번 더 임베딩**해 `rag_chunk.embedding_views`(JSON 배열)에 저장. 검색은 본문 벡터와 뷰 벡터 중 **최고 점수**(max 풀링)를 쓴다.
+- `NULL`이면 종전과 완전히 동일 → 기존 행·타 컬렉션 **무회귀**. 뷰가 리스트라 **청크당 N개**로 확장 가능.
+- 어떤 뷰를 만들지는 `views.build_search_views(document, collection)`가 컬렉션별로 결정. 미등록 컬렉션은 `[]`.
+- 적재: `python -m ingestion.backfill_views [--dry-run|--clear]` — `document`·본문 `embedding`은 읽기만 한다(재인덱싱 아님).
+
+| 인덱싱 뷰 (dense 단독, 59문항, 170코퍼스) | Hit@1 | R@5 | NDCG@5 |
+|---|---|---|---|
+| 전체 카드(종전) | 0.576 | 0.709 | 0.634 |
+| **전체 ∪ 축약뷰 (채택)** | **0.644** | **0.723** | **0.666** |
+
+- ⚠️ **리랭커 경로에서는 이득이 상쇄된다**(Hit@1 0.627→0.610, R@5 0.763 동일) — 리랭커가 top-20을 어차피 재정렬하므로 후보 *순서* 개선이 흡수된다. **채택 이유는 (a) 404율 17%→6% (b) 리랭커를 뺄 선택지 확보** — H+dense 단독이 종전 리랭커 경로와 동급이면서 **24배 빠르다**(355ms vs 8,535ms).
+- ⚠️ max 풀링이라 표시 `score`가 전반적으로 소폭 상승 → `min_score` 재교정 대상.
+
 ---
 
 ## 3. 기본 설정값 / 튜닝 포인트
@@ -170,23 +191,33 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 | 항목 | 기본값 | 위치 | 비고 |
 |---|---|---|---|
 | `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수(상한 — min_score 컷으로 줄 수 있음) |
-| `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. recall 무손실 지점(score_analysis로 측정) |
+| `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. 🔴 **운영 분포에서 무효** — 실사용 404 6%·무관입력 5/8 통과. 재교정 필요(§1-[B4]) |
 | `fetch_k` | 20 | `main.py:48` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
 | `use_reranker` | True | `main.py:48` | 측정상 단독이 최고 |
 | `use_hybrid` | False | `main.py:48` | 한국어 코퍼스에서 악화 → off |
 | 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py` GROQ_MODEL_MAP | 8b 생성은 mode_accuracy 0.75로 열세 → 70b 유지 |
 | 생성 temp/tokens | 0.7(`GEN_TEMPERATURE`) / TPM 예산 내 동적(≤4096) | `generator.py` `_fit_max_tokens` | 입력은 `_est_tokens`(한글 /1.0·영숫자 /4·기호 /1.5, 실측 보정)로 추정 후 예약 축소 — 긴 원문 413 방지 |
-| collection | prompt_techniques (134청크) | QueryRequest | 기법 카드 컬렉션 (100 원본 + 가이드 8 + DAIR·Cookbook 30 − 중복 정리 4) |
+| collection | prompt_techniques (**170청크**) | QueryRequest | 기법 카드 컬렉션 (134 + 공신력 웹소스 56 − near-dup 정리 20). ⚠️ 134시절보다 R@5 −5.9pp |
+| `embedding_views` | 뷰 1개/청크 | `views.py` `_BUILDERS` | 멀티표현 인덱싱(§2-(5)). `prompt_techniques`만 등록, 나머지는 NULL(종전 동작) |
 | `use_examples` | True | `main.py` QueryRequest | 타입별 개선 예시 주입 on/off (C안, 2026-07-23). off면 기법만 — 종전과 동일 |
 | `n_examples` | 2 | `main.py` QueryRequest | 주입 예시 수(상한 — example_min_score 컷으로 줄 수 있음) |
 | `example_min_score` | 0.40 | `main.py` QueryRequest | 예시 유효 유사도 컷(dense). ⚠️ 임시값 — score_analysis로 예시 코퍼스 기준 재측정 필요 |
-| example collection | prompt_examples (20 예시) | QueryRequest | 합성 개선 사례(`ingestion/gen_examples.py`, 10태스크×2) |
+| example collection | prompt_examples (**131 예시**) | QueryRequest | 합성 개선 사례(`ingestion/gen_examples.py`, 20태스크 유형·순수 한국어). ⭐ 관련성 판별력 **AUC 1.000** |
 
 ---
 
 ## 4. 알려진 한계 · 백로그
 
-- ✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05) — 무관 입력은 0건→404, 실제 개선 요청은 평가셋 기준 빈결과 0%.
+> 아래 🔴 두 항목의 **방법론·실행 순서는 `CORPUS_STRATEGY.md`** 에 별도 정리돼 있다
+> (무의미 쿼리 게이팅 3층 방어 · 코퍼스 품질 5축 · 진단 지표 · 우선순위 표).
+
+- 🔴 **[최우선] 코퍼스 구성이 관련성을 분리하지 못한다** (2026-08-09 실측): 같은 쿼리·같은 임베딩 모델인데 `prompt_techniques`는 **AUC 0.575(≒무작위)**, `prompt_examples`는 **AUC 1.000(완전분리)**. 차이는 오직 **코퍼스가 쓰인 문체** — 기법 카드는 영문 스캐폴딩+정의체, 예시는 한국어 사용자 말투. 증거: `https://example.com`(0.543)이 `제주도 여행 블로그 글 써줘. 아이랑 3박4일`(0.361)보다 기법 카드와 더 유사하다(의미가 아니라 표면이 맞은 것).
+  · 이 하나로 **404·게이트 무력화·HyDE 실패가 모두 설명된다** — 쿼리와 코퍼스가 다른 언어 공간에 있다.
+  · ⏳ **문서측 요청 예문 생성(doc2query/HyPE)**: 기법 카드마다 "이 기법이 필요한 **사용자 말투 한국어 요청**" N개를 오프라인 생성해 `embedding_views`에 추가. §2-(5) 인프라가 **이미 청크당 N벡터를 지원**하므로 뷰 빌더 + 백필로 끝난다. `prompt_examples`(AUC 1.000)가 사내 증거.
+  · ⏳ **관련성 게이트를 `prompt_examples`로 이관 검토** — 지금은 AUC 0.575인 컬렉션이 404를 판정하고, AUC 1.000인 컬렉션은 보조 재료로만 쓰인다. **판정 주체가 뒤바뀌어 있다.**
+  · ⏳ **하드 404 폐지** — 게이트가 제 기능을 못 하는 동안 정상 요청만 막는다. `mode=ask`가 이미 최종 게이트로 작동함은 측정됨.
+- 🔴 **리랭커가 검색 지연의 95%** (2026-08-09 실측): 7,714ms / 8,094ms. 사는 것은 R@5 +5.4pp·Hit@1 +5.1pp. 라이브 `/query` end-to-end **19.2초**. §2-(5) 이후 H+dense 단독이 동급이라 **제거 선택지가 열렸다** → ONNX/배치(품질손실 0) → 조건부 리랭크 → 제거 순으로 검토.
+- ~~✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05)~~ → **철회**: 위 AUC 측정으로 반증됨. 당시 결론은 `qa_set`(질문형) 분포에서 나온 것이고, 운영 분포(거친 작업지시)에서는 성립하지 않는다.
 - ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕 측정으로 20 확정(2026-07-05). `--fetch-k`로 재측정 가능.
 - ✅ **생성기 원문 페이로드 누락** (uplift_eval 발견): SYSTEM_PROMPT에 "원문 verbatim 포함" 규칙 추가로 해결(2026-06-26). 후속 버그(추출 `---` 잘림·노이즈 과삭제)도 수정(2026-06-27).
 - 🟡 **긴 원문 truncation**: `_fit_max_tokens`로 413 즉사는 방지(2026-07-07). 장문은 Gemini 라우팅으로 해소(2026-07-23) — 단 **GEMINI_API_KEY 설정 시에만** 작동, Groq 단독 구성에선 여전히 출력이 잘릴 수 있음
