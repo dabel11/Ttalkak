@@ -5,7 +5,7 @@ MySQL(rag_chunk)에서 컬렉션 행을 읽어 검색한다. (ChromaDB 대체)
 
 검색 단계:
   1) 후보 추리기
-     - dense — bge-m3 임베딩 + numpy 코사인
+     - dense — bge-m3 임베딩 + numpy 코사인 (본문 벡터 ∪ 검색뷰 벡터의 max)
      - (옵션) hybrid — dense + BM25(sparse) 를 RRF로 융합해 후보 순위 결정
   2) (옵션) rerank — bge-reranker-v2-m3(cross-encoder)로 (query, doc) 재채점
 
@@ -146,9 +146,28 @@ class Retriever:
         ]
 
     def _dense_scores(self, query: str, rows: list[dict]) -> np.ndarray:
+        """행별 dense 코사인. 행이 검색뷰 벡터(`embedding_views`)를 갖고 있으면
+        본문 벡터와 뷰 벡터 중 **최고 점수**를 그 행의 점수로 쓴다(멀티표현 max 풀링).
+        뷰가 없는 행은 종전과 완전히 동일하다 — 본문 벡터 하나뿐이므로 max 가 곧 그 값."""
         query_vec = np.asarray(self.model.encode([query])[0], dtype=np.float32)
-        matrix    = np.asarray([r["embedding"] for r in rows], dtype=np.float32)
-        return self._cosine(query_vec, matrix)
+
+        # 모든 벡터를 한 행렬로 펼치고, 각 벡터가 어느 행 소속인지 기록
+        vectors: list = []
+        owner:   list[int] = []
+        for i, r in enumerate(rows):
+            vectors.append(r["embedding"])
+            owner.append(i)
+            for v in (r.get("embedding_views") or []):
+                vectors.append(v)
+                owner.append(i)
+
+        sims = self._cosine(query_vec, np.asarray(vectors, dtype=np.float32))
+        if len(vectors) == len(rows):        # 뷰 없음 — 추가 연산 생략
+            return sims
+
+        scores = np.full(len(rows), -1.0, dtype=np.float32)
+        np.maximum.at(scores, np.asarray(owner), sims)
+        return scores
 
     def _bm25_scores(self, query: str, rows: list[dict], collection_name: str) -> np.ndarray:
         """BM25 점수. 코퍼스 토큰화는 컬렉션별로 캐시(행수 변하면 재구축).
@@ -197,13 +216,14 @@ class Retriever:
                     RagChunk.document,
                     RagChunk.chunk_metadata,
                     RagChunk.embedding,
+                    RagChunk.embedding_views,
                 ).where(RagChunk.collection_name == collection_name)
                 .order_by(RagChunk.id)   # 안정적 정렬 → BM25 캐시와 rows 정렬 일치
             ).all()
 
         return [
-            {"document": doc, "metadata": meta, "embedding": emb}
-            for doc, meta, emb in results
+            {"document": doc, "metadata": meta, "embedding": emb, "embedding_views": views}
+            for doc, meta, emb, views in results
         ]
 
     @staticmethod

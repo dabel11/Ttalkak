@@ -39,6 +39,10 @@ class RagChunk(Base):
     document:        Mapped[str]      = mapped_column(MEDIUMTEXT, nullable=False)
     chunk_metadata:  Mapped[dict]     = mapped_column("metadata", JSON, nullable=True)
     embedding:       Mapped[list]     = mapped_column(JSON, nullable=False)
+    # 멀티표현 인덱싱(2026-08-09): 같은 청크의 '검색용 축약뷰' 벡터들. 검색은 본문
+    # 벡터와 이 벡터들 중 **최고 점수**를 쓴다(app/rag/views.py 참조).
+    # NULL 이면 종전과 동일하게 본문 벡터 하나만 쓴다 — 기존 행과 하위호환.
+    embedding_views: Mapped[list]     = mapped_column(JSON, nullable=True)
     created_at:      Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
@@ -72,8 +76,30 @@ SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False, future=True)
 
 
 def init_db() -> None:
-    """rag_chunk 테이블이 없으면 생성."""
+    """rag_chunk 테이블이 없으면 생성하고, 뒤늦게 추가된 컬럼을 보강한다."""
     Base.metadata.create_all(_engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """`create_all` 은 **기존 테이블을 ALTER 하지 않는다**. 나중에 추가된 nullable
+    컬럼만 멱등하게 채워 넣는다(경량 마이그레이션 — alembic 미사용 프로젝트).
+    실패해도 기동을 막지 않는다: 해당 기능만 비활성이고 검색은 종전대로 동작한다."""
+    from sqlalchemy import inspect, text
+
+    try:
+        existing = {c["name"] for c in inspect(_engine).get_columns(RagChunk.__tablename__)}
+    except Exception as e:
+        print(f"[DB] 컬럼 점검 생략(테이블 조회 실패): {e}")
+        return
+
+    if "embedding_views" not in existing:
+        try:
+            with _engine.begin() as conn:
+                conn.execute(text("ALTER TABLE rag_chunk ADD COLUMN embedding_views JSON NULL"))
+            print("[DB] rag_chunk.embedding_views 컬럼 추가 (멀티표현 인덱싱)")
+        except Exception as e:
+            print(f"[DB] ⚠️ embedding_views 컬럼 추가 실패 — 본문 벡터만 사용: {e}")
 
 
 def get_engine():
