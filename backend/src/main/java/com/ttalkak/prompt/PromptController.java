@@ -44,6 +44,10 @@ public class PromptController {
                             MakeThreadRepository makeThreadRepository,
                             ObjectMapper objectMapper,
                             WebClient.Builder webClientBuilder,
+                            // application.yml 의 rag.response-timeout 을 주입한다("75s" → Duration).
+                            // @Value 가 없으면 Spring 이 Duration 타입 빈을 찾다 실패해 기동이 막힌다
+                            // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
+                            @Value("${rag.response-timeout:75s}")
                             Duration ragResponseTimeout) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
