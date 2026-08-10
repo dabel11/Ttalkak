@@ -10,7 +10,7 @@
     "check:observability": "node ../scripts/check-web-observability.cjs",
     "build": "node ../scripts/build-web.cjs",
     "build:prod": "node ../scripts/build-web.cjs --production",
-    "lint": "eslint src test e2e playwright.config.js playwright.production.config.js preview-server.cjs",
+    "lint": "eslint src test e2e playwright.config.js playwright.production.config.js playwright.firefox.config.js preview-server.cjs",
     "typecheck": "tsc --project tsconfig.frontend.json",
     "typecheck:strict": "tsc --project tsconfig.strict.json",
     "test": "node --test test/*.test.js",
@@ -23,9 +23,10 @@
     "test:coverage:state": "npm run test:coverage:state:all && npm run test:coverage:state:critical",
     "test:coverage": "npm run test:coverage:core && npm run test:coverage:state",
     "test:e2e": "playwright test",
+    "test:e2e:firefox": "playwright test --config=playwright.firefox.config.js",
     "test:e2e:prod": "playwright test --config=playwright.production.config.js",
     "verify": "npm run check:shared && npm run check:api && npm run check:globals && npm run check:observability && npm run lint && npm run typecheck && npm run typecheck:strict && npm run test:coverage && npm run build:prod && npm run check:bundle",
-    "verify:full": "npm run verify && npm run test:e2e && npm run test:e2e:prod"
+    "verify:full": "npm run verify && npm run test:e2e && npm run test:e2e:firefox && npm run test:e2e:prod"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
