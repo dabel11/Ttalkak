@@ -1,4 +1,5 @@
 {
+  "initialJavascript": { "rawBytes": 420000, "gzipBytes": 108000 },
   "javascript": { "rawBytes": 460000, "gzipBytes": 120000 },
   "styles": { "rawBytes": 150000, "gzipBytes": 25000 }
 }

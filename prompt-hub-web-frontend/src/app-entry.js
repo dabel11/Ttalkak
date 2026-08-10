@@ -9,7 +9,6 @@ import { auth } from "./auth/index.js";
 import { admin } from "./admin/index.js";
 import { bootstrap } from "./bootstrap/index.js";
 import { make } from "./make/index.js";
-import "./demo-data.js";
 import { api, apiContract } from "./api/index.js";
 import { components } from "./ui/index.js";
 import { events } from "./events/index.js";
@@ -19,6 +18,10 @@ import { renderers } from "./renderers/index.js";
 import { routing } from "./routing/index.js";
 import { startApp } from "./app.js";
 import { clientErrorReporter, installGlobalErrorObservers } from "./observability/index.js";
+
+if (window.TTALKAK_DEMO_FALLBACK_ENABLED === true) {
+  await import("./demo-data.js");
+}
 
 installGlobalErrorObservers(window, clientErrorReporter);
 const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, observability: clientErrorReporter, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });

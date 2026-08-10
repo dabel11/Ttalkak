@@ -21,6 +21,11 @@ function collectAssetSizes(assetRoot) {
   return totals;
 }
 
+function collectFileSize(file) {
+  const content = fs.readFileSync(file);
+  return { files: 1, rawBytes: content.length, gzipBytes: zlib.gzipSync(content).length };
+}
+
 function assertBundleBudgets(actual, budgets) {
   const failures = [];
   for (const [category, limits] of Object.entries(budgets)) {
@@ -38,9 +43,11 @@ function assertBundleBudgets(actual, budgets) {
 function main() {
   const budgets = JSON.parse(fs.readFileSync(path.join(webRoot, "bundle-budgets.json"), "utf8"));
   const actual = collectAssetSizes(path.join(webRoot, "dist", "assets"));
+  const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, "dist", "build-manifest.json"), "utf8"));
+  actual.initialJavascript = collectFileSize(path.join(webRoot, "dist", manifest.bundle));
   assertBundleBudgets(actual, budgets);
   console.log(`Web bundle budgets passed: ${JSON.stringify(actual)}`);
 }
 
 if (require.main === module) main();
-module.exports = { assertBundleBudgets, collectAssetSizes };
+module.exports = { assertBundleBudgets, collectAssetSizes, collectFileSize };

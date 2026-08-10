@@ -12,6 +12,16 @@ test("preview server serves ESM module files with a JavaScript MIME type", () =>
   assert.match(previewServer, /["']\.mjs["']\s*:\s*["']text\/javascript; charset=utf-8["']/);
 });
 
+test("production build splits optional demo data out of the initial bundle", () => {
+  const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
+  const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
+  assert.match(entry, /TTALKAK_DEMO_FALLBACK_ENABLED\s*===\s*true/);
+  assert.match(entry, /await import\(["']\.\/demo-data\.js["']\)/);
+  assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.js["'];?$/m);
+  assert.match(build, /splitting:\s*true/);
+  assert.match(build, /chunkNames:\s*["']chunks\//);
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));

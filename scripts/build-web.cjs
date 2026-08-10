@@ -46,14 +46,16 @@ async function build() {
       entryPoints: [path.join(webRoot, "src", "app-entry.js")],
       bundle: true,
       format: "esm",
+      splitting: true,
       minify: true,
       sourcemap: false,
       target: ["es2023"],
       outdir: path.join(outputRoot, "assets"),
       entryNames: "app-[hash]",
+      chunkNames: "chunks/[name]-[hash]",
       metafile: true,
     });
-    const output = Object.keys(result.metafile.outputs).find((file) => file.endsWith(".js"));
+    const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
     html = html.replace('./src/app-entry.js', `./${bundle}`);
@@ -67,7 +69,17 @@ async function build() {
   fs.writeFileSync(path.join(outputRoot, "index.html"), html, "utf8");
   fs.writeFileSync(
     path.join(outputRoot, "build-manifest.json"),
-    `${JSON.stringify({ mode: production ? "production" : "development", entries: requiredEntries, bundle }, null, 2)}\n`,
+    `${JSON.stringify({
+      mode: production ? "production" : "development",
+      entries: requiredEntries,
+      bundle,
+      javascript: production
+        ? fs.readdirSync(path.join(outputRoot, "assets"), { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
+          .map((entry) => path.relative(outputRoot, path.join(entry.parentPath, entry.name)).replaceAll("\\", "/"))
+          .sort()
+        : [],
+    }, null, 2)}\n`,
     "utf8",
   );
   console.log(`Web ${production ? "production" : "development"} build created at ${outputRoot}`);
