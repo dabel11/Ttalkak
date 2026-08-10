@@ -100,7 +100,7 @@
       shouldRender = true;
     } else if (reportsResult.status === "rejected") {
       state.backendAdminReportsLoaded = false;
-      console.warn("[TTALKAK] /api/admin/reports 연동에 실패했습니다.", reportsResult.reason);
+      ctx.reportWarning("admin-hydration", "reports", reportsResult.reason);
     }
 
     if (tagsResult.status === "fulfilled" && Array.isArray(tagsResult.value)) {
@@ -111,14 +111,14 @@
       });
       shouldRender = true;
     } else if (tagsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/admin/tags 연동에 실패했습니다.", tagsResult.reason);
+      ctx.reportWarning("admin-hydration", "tags", tagsResult.reason);
     }
 
     if (promptsResult.status === "fulfilled" && Array.isArray(promptsResult.value)) {
       state.backendAdminPrompts = promptsResult.value;
       shouldRender = true;
     } else if (promptsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/admin/prompts 연동에 실패했습니다.", promptsResult.reason);
+      ctx.reportWarning("admin-hydration", "prompts", promptsResult.reason);
     }
 
     if (revisionRequestsResult.status === "fulfilled" && Array.isArray(revisionRequestsResult.value)) {
@@ -139,14 +139,14 @@
       });
       shouldRender = true;
     } else if (revisionRequestsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/admin/revision-requests 연동에 실패했습니다.", revisionRequestsResult.reason);
+      ctx.reportWarning("admin-hydration", "revision-requests", revisionRequestsResult.reason);
     }
 
     if (auditLogsResult.status === "fulfilled" && Array.isArray(auditLogsResult.value)) {
       state.backendAdminAuditLogs = auditLogsResult.value;
       shouldRender = true;
     } else if (auditLogsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/admin/audit-logs 연동에 실패해 감사 로그를 표시하지 못했습니다.", auditLogsResult.reason);
+      ctx.reportWarning("admin-hydration", "audit-logs", auditLogsResult.reason);
     }
 
     state.adminBackendStatus = allRequestsFailed ? "fallback" : "connected";
@@ -182,7 +182,7 @@
       return true;
     } catch (error) {
       state.adminAuditSyncMessage = "감사 로그 재조회에 실패했습니다. Network 탭의 /api/admin/audit-logs 응답을 확인해주세요.";
-      console.warn("[TTALKAK] /api/admin/audit-logs 재조회에 실패했습니다.", error);
+      ctx.reportWarning("admin-hydration", "refresh-audit-logs", error);
       if (shouldRender) render();
       return false;
     }

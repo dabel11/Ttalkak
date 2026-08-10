@@ -23,6 +23,11 @@ bin/
 # ── Node (extension) ────────────────────────────────────────
 extension/node_modules/
 extension/dist/
+extension/.npm-cache/
+prompt-hub-web-frontend/node_modules/
+prompt-hub-web-frontend/dist/
+prompt-hub-web-frontend/playwright-report/
+prompt-hub-web-frontend/test-results/
 
 # ── Python (rag-server) ─────────────────────────────────────
 __pycache__/
@@ -50,3 +55,6 @@ extension/.env.production.local
 
 # Local preview server logs
 prompt-hub-web-frontend/preview-server.*.log
+
+# Local backend run logs
+backend/codex-bootrun*.log

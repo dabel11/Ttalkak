@@ -2,12 +2,15 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const root = __dirname;
-const port = 4173;
+const requestedRoot = process.env.TTALKAK_PREVIEW_ROOT || ".";
+const root = path.resolve(__dirname, requestedRoot);
+if (root !== __dirname && !root.startsWith(`${__dirname}${path.sep}`)) throw new Error("Preview root must stay inside the web workspace.");
+const port = Number(process.env.TTALKAK_PREVIEW_PORT || 4173);
 const host = "127.0.0.1";
 const types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",

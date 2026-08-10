@@ -42,14 +42,7 @@
       case "INVALID_STATE":
         return "현재 상태에서는 처리할 수 없습니다.";
       case "REQUEST_TIMEOUT":
-      case "AI_TIMEOUT":
         return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_SERVICE_UNAVAILABLE":
-        return "현재 AI 첨삭 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_RATE_LIMIT_EXCEEDED":
-        return "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요.";
-      case "AI_INVALID_RESPONSE":
-        return "AI 응답을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
       case "RATE_LIMIT_EXCEEDED":
@@ -67,8 +60,13 @@
   function getBackendErrorMessage(error) {
     const payload = error?.payload;
     const codeMessage = getBackendErrorCodeMessage(getBackendErrorCode(error));
+    const code = getBackendErrorCode(error);
+    const sharedError = (!Number(error?.status || 0) || /^(AI_|RATE_LIMIT)/.test(code))
+      ? global.TtalkakMakeMessageModel?.classifyMakeError(error)
+      : null;
     return String(
       payload?.message ||
+        sharedError?.message ||
         codeMessage ||
         payload?.error ||
         payload?.code ||
@@ -120,11 +118,11 @@
 
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
-      state.recentThreads = [];
+      global.TtalkakMakeState.setMakeRecentThreads(state, []);
       return true;
     }
 
-    state.recentThreads = validThreads.map((thread) => ({
+    global.TtalkakMakeState.setMakeRecentThreads(state, validThreads.map((thread) => ({
       id: thread.id,
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
@@ -133,7 +131,7 @@
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
-    }));
+    })));
     normalizeRecentThreads();
     return true;
   }
@@ -241,28 +239,25 @@
         clearAuthenticatedSession({ keepRoute: true });
         state.authView = "login";
       }
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = wasLoggedIn && hasAnyToken
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
         ? "데모 계정은 서버 대화 조회 없이 로컬 Make 대화를 사용합니다."
         : wasLoggedIn
           ? "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다."
-          : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.";
+          : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.");
       render();
       return;
     }
 
     const api = getMakeApi();
     if (!api?.getMakeThreads && !api?.getMakeFolders) {
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = canUseDemoFallback()
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
         ? "Make demo data 표시 중: Make API wrapper가 없어 데모 데이터를 표시합니다."
-        : getApiFailureMessage("Make API");
+        : getApiFailureMessage("Make API"));
       render();
       return;
     }
 
-    state.makeBackendStatus = "checking";
-    state.makeBackendMessage = "Make API 연결 확인 중";
+    global.TtalkakMakeState.setMakeBackendState(state, "checking", "Make API 연결 확인 중");
 
     const [threadsResult, foldersResult] = await Promise.allSettled([
       api.getMakeThreads?.(getMakeApiToken()),
@@ -277,13 +272,13 @@
     if (foldersResult.status === "fulfilled") {
       shouldRender = applyMakeFoldersResult(backendDataContext, foldersResult.value) || shouldRender;
     } else if (foldersResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/make/folders 연동에 실패했습니다.", foldersResult.reason);
+      ctx.reportWarning("backend-hydration", "make-folders", foldersResult.reason);
     }
 
     if (threadsResult.status === "fulfilled") {
       shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
     } else if (threadsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/make/threads 연동에 실패했습니다.", threadsResult.reason);
+      ctx.reportWarning("backend-hydration", "make-threads", threadsResult.reason);
     }
 
     const anyConnected = threadsResult.status === "fulfilled" || foldersResult.status === "fulfilled";
@@ -301,19 +296,17 @@
         clearAuthenticatedSession({ keepRoute: true });
         state.authView = "login";
       }
-      state.makeBackendStatus = "fallback";
-      state.makeBackendMessage = "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.";
+      global.TtalkakMakeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
       render();
       return;
     }
 
-    state.makeBackendStatus = anyConnected ? "connected" : "fallback";
-    state.makeBackendMessage = anyConnected
+    global.TtalkakMakeState.setMakeBackendState(state, anyConnected ? "connected" : "fallback", anyConnected
       ? "Make API 연결됨. GET /api/make/threads, /api/make/folders 요청을 확인했습니다."
       : canUseDemoFallback()
         ? "Make demo data 표시 중: Make 백엔드 호출 실패로 데모 데이터를 표시합니다."
-        : getApiFailureMessage("Make API");
+        : getApiFailureMessage("Make API"));
 
     if (shouldRender || state.route === "make") render();
   }
@@ -347,19 +340,19 @@
     if (libraryResult.status === "fulfilled") {
       shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/library 연동에 실패했습니다.", libraryResult.reason);
+      ctx.reportWarning("backend-hydration", "my-library", libraryResult.reason);
     }
 
     if (likedLibraryResult.status === "fulfilled") {
       shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/library?filter=liked 연동에 실패했습니다.", likedLibraryResult.reason);
+      ctx.reportWarning("backend-hydration", "my-liked-library", likedLibraryResult.reason);
     }
 
     if (promptsResult.status === "fulfilled") {
       shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
     } else {
-      console.warn("[TTALKAK] /api/me/prompts 연동에 실패했습니다.", promptsResult.reason);
+      ctx.reportWarning("backend-hydration", "my-prompts", promptsResult.reason);
     }
 
     if (commentsResult.status === "fulfilled") {
@@ -401,7 +394,7 @@
       state.backendStatusMessage = canUseDemoFallback()
         ? "GET /api/prompts 호출 실패로 데모 데이터를 표시 중입니다."
         : getApiFailureMessage("Home API");
-      console.warn("[TTALKAK] /api/prompts 연동에 실패했습니다.", promptsResult.reason);
+      ctx.reportWarning("backend-hydration", "home-prompts", promptsResult.reason);
     }
 
     if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
@@ -410,7 +403,7 @@
       }
       shouldRender = true;
     } else if (tagsResult.status === "rejected") {
-      console.warn("[TTALKAK] /api/tags/popular 연동에 실패했습니다.", tagsResult.reason);
+      ctx.reportWarning("backend-hydration", "popular-tags", tagsResult.reason);
     }
 
     if (shouldRender || state.backendStatus === "fallback") render();
@@ -457,7 +450,7 @@
       state.backendStatusMessage = canUseDemoFallback()
         ? "검색 API 호출 실패로 현재 화면의 로컬 목록을 유지합니다."
         : getApiFailureMessage("Home 검색 API");
-      console.warn("[TTALKAK] /api/prompts 검색 호출에 실패했습니다.", error);
+      ctx.reportWarning("backend-hydration", "refresh-home-prompts", error);
       render();
     }
   }

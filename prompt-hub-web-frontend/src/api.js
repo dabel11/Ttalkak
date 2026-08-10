@@ -13,7 +13,7 @@
     normalizers,
   };
 
-  const api = {
+  const api = /** @type {TtalkakApi} */ (/** @type {unknown} */ ({
     request: core.request,
     normalizePrompt: normalizers.normalizePrompt,
     ...window.TTALKAK_AUTH_API(context),
@@ -22,7 +22,7 @@
     ...window.TTALKAK_MYPAGE_API(context),
     ...window.TTALKAK_MAKE_API(context),
     ...window.TTALKAK_ADMIN_API(context),
-  };
+  }));
 
   window.TTALKAK_API = api;
 })();

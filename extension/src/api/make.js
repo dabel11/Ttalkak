@@ -1,17 +1,6 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
-import { normalizeImproveFields, normalizeImproveQuestions, normalizeImproveTechniques } from "../utils/normalizeImproveResult";
-
-function normalizeChanges(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === "string") return item.trim();
-      if (!item || typeof item !== "object") return "";
-      return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
-    })
-    .filter(Boolean);
-}
+import { migrateMakeMessage } from "../../../shared/make-message-model.js";
 
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload;
@@ -24,29 +13,7 @@ function unwrapItems(payload) {
 }
 
 function normalizeMakeMessage(item, index = 0) {
-  const mode = ["ask", "improve"].includes(String(item?.mode || item?.type || "").toLowerCase())
-    ? String(item.mode || item.type).toLowerCase()
-    : "improve";
-  const improvedPrompt = mode === "ask"
-    ? ""
-    : item?.executablePrompt || item?.finalPrompt || item?.improvedPrompt || item?.improved_prompt || "";
-  return {
-    id: String(item?.id || item?.messageId || `server-message-${index}`),
-    role: item?.role || item?.sender || "assistant",
-    content: String(item?.content || item?.text || item?.message || ""),
-    answer: item?.answer || "",
-    sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "",
-    executablePrompt: improvedPrompt,
-    mode,
-    questions: normalizeImproveQuestions(item?.questions),
-    changes: normalizeChanges(item?.changes),
-    fields: normalizeImproveFields(item?.fields || item?.fieldState || item?.missingFields),
-    techniques: normalizeImproveTechniques(item?.techniques || item?.techniquesApplied || item?.techniques_applied),
-    summary: item?.summary || "",
-    sources: item?.sources || [],
-    saved: Boolean(item?.saved || item?.isSaved),
-    raw: item,
-  };
+  return migrateMakeMessage({ ...item, id: item?.id || item?.messageId || `server-message-${index}`, sourcePrompt: item?.sourcePrompt || item?.originalPrompt || item?.prompt || "", saved: Boolean(item?.saved || item?.isSaved), raw: item }, index);
 }
 
 export function normalizeMakeThread(item, index = 0) {

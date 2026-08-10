@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.js",
     "dev": "vite --host 127.0.0.1",
     "build:dev": "vite build --mode development",
     "build": "vite build",

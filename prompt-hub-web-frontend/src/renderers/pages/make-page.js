@@ -102,12 +102,12 @@
 
   function MakeComposerView(ctx, data) {
     const { icons, escapeHtml } = ctx;
-    const { composerDraft, hasMessages } = data;
+    const { composerDraft, hasMessages, isThinking } = data;
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
-        <textarea name="prompt" rows="1" data-autosize-textarea placeholder="개선하고 싶은 프롬프트를 입력하세요...">${escapeHtml(composerDraft)}</textarea>
-        <button class="send-button" type="submit" aria-label="보내기">${icons.send}</button>
+        <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
+        <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
     `;
   }
@@ -261,24 +261,23 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, failureMessage, fields, hasExecutablePrompt, id, isCopied, isEditing, isSaved, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
     const normalizedFields = normalizeMessageFields(fields);
     const legacyAsk = !hasExecutablePrompt ? normalizeLegacyAskAnswer(answer || content) : { leadText: "", questions: [] };
     const effectiveIsAsk = isAsk || (!hasExecutablePrompt && legacyAsk.questions.length > 0);
-    const normalizedQuestions = normalizeMessageQuestions(questions).concat(
-      normalizeMessageQuestions(legacyAsk.questions),
-    );
+    const normalizedQuestions = normalizeMessageQuestions([...(Array.isArray(questions) ? questions : questions ? [questions] : []), ...legacyAsk.questions]);
     const normalizedTechniques = normalizeMessageTechniques(techniques);
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
+    const recoveredContent = String(content || answer || summary || improvedPrompt || "").trim();
     const leadText = normalizedQuestions.length
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
-      : content;
+      : recoveredContent;
     const questionSection = normalizedQuestions.length
-      ? MessageQuestionsView({ escapeHtml }, { isAsk: effectiveIsAsk, questions: normalizedQuestions })
+      ? MessageQuestionsView({ escapeAttr, escapeHtml }, { isAsk: effectiveIsAsk, isThinking, messageId: id, questions: normalizedQuestions })
       : "";
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
@@ -289,7 +288,7 @@
     const techniqueSection = normalizedTechniques.length
       ? MessageTechniquesView({ escapeHtml }, { techniques: normalizedTechniques })
       : "";
-    const evidenceSection = isAssistant && String(ragStatus || "").toLowerCase() === "no_evidence"
+    const evidenceSection = isAssistant && !isAsk && String(ragStatus || "").toLowerCase() === "no_evidence"
       ? MessageEvidenceNoticeView()
       : "";
 
@@ -298,43 +297,40 @@
         <div class="message-group assistant-group make-message-enter" data-message-id="${safeMessageId}">
           <article class="message assistant">
             ${evidenceSection}
-            <p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>
+            ${leadText ? `<p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>` : ""}
             ${fieldSection}
             ${changeSection}
             ${questionSection}
             ${techniqueSection}
           </article>
-          ${hasExecutablePrompt ? `<footer class="message-actions">
-              <button type="button" data-copy-message="${safeMessageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
-              <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${safeMessageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-              <button type="button" data-share-message="${safeMessageId}">${icons.share}<span>Share</span></button>
-              <button type="button" data-execute-message="${safeMessageId}">${icons.play}<span>Execute</span></button>
-            </footer>` : ""}
+          ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
         </div>
       `;
     }
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${
-          isEditing
-            ? `<form class="message-edit-form" data-edit-message-form="${safeMessageId}">
-                <textarea name="message" rows="3">${safeContent}</textarea>
-                <div class="message-edit-actions">
-                  <button type="button" data-cancel-message-edit>취소</button>
-                  <button type="submit">다시 전송</button>
-                </div>
-              </form>`
-            : `<article class="message ${escapeAttr(role)}">
-                <p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>
-                ${failureMessage ? `<div class="message-failure-status" role="status">${escapeHtml(failureMessage)}</div>` : ""}
-                <div class="user-message-actions">
-                  <button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button>
-                </div>
-              </article>`
-        }
+        ${UserMessageView(ctx, { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
       </div>
     `;
+  }
+
+  function MessageActionsView(ctx, data) {
+    const { icons } = ctx;
+    const { isCopied, isSaved, messageId } = data;
+    return `<footer class="message-actions">
+      <button type="button" data-copy-message="${messageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
+      <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${messageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
+      <button type="button" data-share-message="${messageId}">${icons.share}<span>Share</span></button>
+      <button type="button" data-execute-message="${messageId}">${icons.play}<span>Execute</span></button>
+    </footer>`;
+  }
+
+  function UserMessageView(ctx, data) {
+    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}<div class="user-message-actions"><button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   global.TtalkakRenderers = Object.freeze({
@@ -345,6 +341,12 @@
     MakePageView,
     MakeSidePanelView,
     MakeTemplateBarView,
+    MessageActionsView,
     MessageBubbleView,
+    UserMessageView,
   });
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-registered", { detail: { renderers: {
+    MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView,
+    MessageActionsView, MessageBubbleView, UserMessageView,
+  } } }));
 })(window);

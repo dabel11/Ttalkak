@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ttalkak.local/schemas/prompt-improve-contract.schema.json",
+  "title": "Prompt improve response",
+  "type": "object",
+  "required": ["mode", "answer", "improvedPrompt", "questions", "fields", "ragStatus"],
+  "properties": {
+    "mode": { "enum": ["ask", "improve"] },
+    "answer": { "type": "string" },
+    "summary": { "type": ["string", "null"] },
+    "improvedPrompt": { "type": "string" },
+    "questions": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "required": ["question"],
+            "properties": {
+              "field": { "type": "string" },
+              "question": { "type": "string", "minLength": 1 },
+              "reason": { "type": "string" },
+              "importance": { "enum": ["required", "recommended"] }
+            },
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+    "fields": { "type": "array" },
+    "sources": { "type": "array" },
+    "ragStatus": { "type": "string", "minLength": 1 },
+    "threadId": { "type": ["integer", "string", "null"] },
+    "conversationId": { "type": ["integer", "string", "null"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "ask" } } },
+      "then": {
+        "properties": {
+          "improvedPrompt": { "const": "" },
+          "questions": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "improve" } } },
+      "then": { "properties": { "improvedPrompt": { "minLength": 1 } } }
+    }
+  ],
+  "additionalProperties": true
+}

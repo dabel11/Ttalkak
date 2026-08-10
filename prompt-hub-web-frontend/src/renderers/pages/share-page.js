@@ -109,4 +109,5 @@
     SharePageView,
     SharePreviewView,
   });
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-registered", { detail: { renderers: { SharePageView, SharePreviewView } } }));
 })(window);

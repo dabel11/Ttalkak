@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { deleteMakeThread, requestMakeThread, requestMakeThreads } from "../api/make";
+import { deleteMakeThread } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
 import { buildAskMessage, buildNoEvidenceMessage, getExecutablePrompt, getServerEditErrorMessage, hasPromptPlaceholders } from "../utils/conversationMessages";
+import { buildImproveHistory } from "../utils/conversationHistory";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
+import { createServerThreadSync } from "./useServerThreads";
 
 export function useConversation({
   authSession,
@@ -28,53 +30,20 @@ export function useConversation({
   const [localRecentThreads, setLocalRecentThreads] = useState(() => loadStorage(STORAGE.RECENTS, []));
   const [serverRecentThreads, setServerRecentThreads] = useState([]);
   const activeThreadId = useRef(null);
+  const improveRequestInFlight = useRef(false);
   const isLoggedIn = Boolean(authSession?.accessToken);
   const recentThreads = isLoggedIn ? serverRecentThreads : localRecentThreads;
-
-  async function refreshServerThreads() {
-    if (!authSession?.accessToken) return [];
-    const items = await requestMakeThreads(ragConfig, authSession.accessToken);
-    setServerRecentThreads(items);
-    return items;
-  }
-
-  async function refreshActiveServerThread(threadId = activeThreadId.current) {
-    const targetId = String(threadId || "");
-    if (targetId) {
-      try {
-        const activeThread = await requestMakeThread(ragConfig, targetId, authSession.accessToken);
-        if (activeThread) {
-          activeThreadId.current = String(activeThread.serverId || activeThread.id);
-          setServerRecentThreads((prev) => [
-            activeThread,
-            ...prev.filter((thread) => {
-              const serverId = String(thread.serverId || "");
-              const id = String(thread.id || "");
-              return serverId !== String(activeThread.serverId || activeThread.id) && id !== String(activeThread.id);
-            }),
-          ]);
-          setMessages(activeThread.messages || []);
-          return activeThread;
-        }
-      } catch (error) {
-        if (Number(error?.status || 0) !== 404) {
-          throw error;
-        }
-      }
-    }
-
-    const items = await refreshServerThreads();
-    const activeThread = items.find((thread) => {
-      const serverId = String(thread.serverId || "");
-      const id = String(thread.id || "");
-      return Boolean(targetId) && (serverId === targetId || id === targetId);
-    });
-    if (activeThread) {
-      activeThreadId.current = String(activeThread.serverId || activeThread.id);
-      setMessages(activeThread.messages || []);
-    }
-    return activeThread;
-  }
+  const {
+    recoverActiveServerThreadAfterFailure,
+    refreshActiveServerThread,
+    refreshServerThreads,
+  } = createServerThreadSync({
+    activeThreadId,
+    authSession,
+    ragConfig,
+    setMessages,
+    setServerRecentThreads,
+  });
 
   useEffect(() => {
     if (!isLoggedIn) saveStorage(STORAGE.RECENTS, localRecentThreads);
@@ -239,14 +208,16 @@ export function useConversation({
 
   async function submitPrompt() {
     const prompt = composerValue.trim();
-    if (!prompt || isLoading) return;
+    if (!prompt || isLoading || improveRequestInFlight.current) {
+      if (prompt && improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+      return;
+    }
+    improveRequestInFlight.current = true;
     const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
-    const history = messages
-      .filter((m) => !m.isError && !m.excludeFromHistory)
-      .map((m) => ({ role: m.role, content: m.role === "assistant" ? m.answer || m.content : m.content }));
+    const history = buildImproveHistory(messages);
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
     const improvePayload = {
       prompt,
@@ -372,8 +343,16 @@ export function useConversation({
     } catch (err) {
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
-      if (isAuthExpiredError(err)) await onAuthExpired();
+      if (isAuthExpiredError(err)) {
+        await onAuthExpired();
+        return;
+      }
       if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+      const recovered = await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
+      if (recovered) {
+        showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -390,6 +369,7 @@ export function useConversation({
         },
       ]);
     } finally {
+      improveRequestInFlight.current = false;
       setIsLoading(false);
     }
   }
@@ -408,7 +388,10 @@ export function useConversation({
   async function submitEditedMessage(event, messageId) {
     event?.preventDefault?.();
     if (isLoggedIn) {
-      if (isLoading) return;
+      if (isLoading || improveRequestInFlight.current) {
+        if (improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+        return;
+      }
       const prompt = editingDraft.trim();
       const threadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
       if (!prompt) return;
@@ -417,6 +400,7 @@ export function useConversation({
         return;
       }
 
+      improveRequestInFlight.current = true;
       setEditingMessageId("");
       setEditingDraft("");
       setIsLoading(true);
@@ -441,18 +425,25 @@ export function useConversation({
         }
         if (Number(error?.status || 0) === 404) {
           await refreshServerThreads().catch(() => {});
+        } else {
+          await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
         }
         showNotice(getServerEditErrorMessage(error));
       } finally {
+        improveRequestInFlight.current = false;
         setIsLoading(false);
       }
       return;
     }
-    if (isLoading) return;
+    if (isLoading || improveRequestInFlight.current) {
+      if (improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
+      return;
+    }
 
     const prompt = editingDraft.trim();
     const index = messages.findIndex((message) => message.id === messageId && message.role === "user");
     if (index < 0 || !prompt) return;
+    improveRequestInFlight.current = true;
 
     const baseMessages = messages.slice(0, index);
     const editedUserMsg = {
@@ -460,12 +451,7 @@ export function useConversation({
       content: prompt,
       editedAt: new Date().toISOString(),
     };
-    const history = baseMessages
-      .filter((message) => !message.isError && !message.excludeFromHistory)
-      .map((message) => ({
-        role: message.role,
-        content: message.role === "assistant" ? message.answer || message.content : message.content,
-      }));
+    const history = buildImproveHistory(baseMessages);
     const guestSessionUuid = sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
 
@@ -541,6 +527,7 @@ export function useConversation({
         },
       ]);
     } finally {
+      improveRequestInFlight.current = false;
       setIsLoading(false);
     }
   }

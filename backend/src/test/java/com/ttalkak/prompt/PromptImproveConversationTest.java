@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -67,7 +69,9 @@ class PromptImproveConversationTest {
 				authService,
 				makeThreadRepository,
 				objectMapper,
-				successfulRagWebClientBuilder());
+				successfulRagWebClientBuilder(),
+				Duration.ofSeconds(75)
+		);
 
 		ReflectionTestUtils.setField(
 				controller,
@@ -349,7 +353,9 @@ class PromptImproveConversationTest {
 				authService,
 				makeThreadRepository,
 				objectMapper,
-				webClientBuilder);
+				webClientBuilder,
+				Duration.ofSeconds(75)
+		);
 
 		ReflectionTestUtils.setField(
 				controller,
@@ -510,6 +516,140 @@ class PromptImproveConversationTest {
 		verify(
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
+	}
+
+
+	@Test
+	void askResponseWithoutAnswerStillReturnsQuestions() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "주제 정보가 필요합니다.",
+						  "questions": [
+						    {
+						      "field": "topic",
+						      "question": "어떤 주제로 작성할까요?",
+						      "reason": "방향을 정하기 위해 필요합니다.",
+						      "importance": "required"
+						    }
+						  ],
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request(
+						"글 써줘",
+						null,
+						null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		assertEquals("주제 정보가 필요합니다.", response.get("answer"));
+		assertEquals("주제 정보가 필요합니다.", response.get("summary"));
+		assertEquals(
+				1,
+				((List<?>) response.get("questions")).size());
+
+		verify(
+				makeThreadRepository,
+				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void questionAliasResponseIsTreatedAsAsk() {
+		when(
+				authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "type": "question",
+						  "answer": "추가 확인이 필요합니다.",
+						  "questions": ["대상 독자는 누구인가요?"],
+						  "improved_prompt": "실행되면 안 되는 프롬프트",
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request(
+						"좋은 글 써줘",
+						null,
+						null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		assertEquals(
+				1,
+				((List<?>) response.get("questions")).size());
+	}
+
+	@Test
+	void askResponseWithoutQuestionsGetsSafeFallbackQuestion() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "추가 정보가 필요합니다.",
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request("글을 써줘", null, null),
+				null);
+
+		assertEquals("ask", response.get("mode"));
+		assertEquals("", response.get("improvedPrompt"));
+		List<?> questions = (List<?>) response.get("questions");
+		assertEquals(1, questions.size());
+		assertEquals(
+				"details",
+				((Map<?, ?>) questions.get(0)).get("field"));
+	}
+
+	@Test
+	void loggedInAskTurnIsPersistedForFollowUpAndReload() throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+		useRagResponse(
+				HttpStatus.OK,
+				"""
+						{
+						  "mode": "ask",
+						  "summary": "대상 독자를 알려주세요.",
+						  "questions": ["대상 독자는 누구인가요?"],
+						  "ragStatus": "ok"
+						}
+						""");
+
+		Map<String, Object> response = controller.improve(
+				request("온보딩 글을 써줘", null, null),
+				AUTHORIZATION);
+
+		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(MakeThread.class);
+		verify(makeThreadRepository).save(captor.capture());
+		MakeThread savedThread = captor.getValue();
+		List<Map<String, Object>> messages = readMessages(savedThread);
+
+		assertEquals(101L, response.get("threadId"));
+		assertEquals(2, messages.size());
+		assertEquals("user", messages.get(0).get("role"));
+		assertEquals("assistant", messages.get(1).get("role"));
+		assertEquals("대상 독자를 알려주세요.", messages.get(1).get("content"));
+		assertEquals("ask", messages.get(1).get("mode"));
+		assertEquals(1, ((List<?>) messages.get(1).get("questions")).size());
 	}
 
 	@Test

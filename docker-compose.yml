@@ -14,7 +14,6 @@ services:
   mysql:
     # mysql:8 (=8.4.x). 기존 볼륨 데이터가 8.4로 만들어져 있어 8.0으로 내리면 기동 불가.
     image: mysql:8
-    container_name: ttalkak-mysql
     restart: unless-stopped
 
     environment:
@@ -45,7 +44,6 @@ services:
 
   backend:
     build: ./backend
-    container_name: ttalkak-backend
     restart: unless-stopped
     depends_on:
       mysql:
@@ -63,7 +61,6 @@ services:
 
   rag-server:
     build: ./rag-server
-    container_name: ttalkak-rag
     restart: unless-stopped
     depends_on:
       mysql:
@@ -92,7 +89,6 @@ services:
   web:
     # 웹 프론트는 순수 정적 파일 → nginx 로 서빙(빌드 불필요). 브라우저에서 8080 백엔드 호출.
     image: nginx:alpine
-    container_name: ttalkak-web
     restart: unless-stopped
     depends_on:
       - backend

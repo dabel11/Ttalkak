@@ -4,18 +4,18 @@
 
     return {
       getSavedPrompts({ filter = "all", page = 1, size = 16 } = {}, token) {
-        const query = new URLSearchParams({ filter, page, size });
+        const query = new URLSearchParams({ filter, page: String(page), size: String(size) });
         return request(`/api/prompts/my?${query.toString()}`, { token });
       },
       getMyLibrary({ filter = "all", page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ filter, page, pageSize });
+        const query = new URLSearchParams({ filter, page: String(page), pageSize: String(pageSize) });
         return request(`/api/me/library?${query.toString()}`, { token }).then((payload) => ({
           ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
           items: unwrapItems(payload).map(normalizePrompt),
         }));
       },
       getMyPrompts({ page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/me/prompts?${query.toString()}`, { token }).then((payload) => ({
           ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
           items: unwrapItems(payload).map((prompt) => ({
@@ -26,11 +26,11 @@
         }));
       },
       getMyComments({ page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/me/comments?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
       },
       getMyReports({ page = 1, pageSize = 64 } = {}, token) {
-        const query = new URLSearchParams({ page, pageSize });
+        const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         return request(`/api/me/reports?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
       },
       getMyRevisionRequests({ status = "all" } = {}, token) {

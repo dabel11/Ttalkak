@@ -42,7 +42,7 @@
             <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
           </button>
         </label>
-        <div class="popular-tags" aria-label="인기 태그">
+        <div class="popular-tags" role="group" aria-label="인기 태그">
           ${displayTags.map((tag) => `<button class="${searchCriteria.tagTokens.includes(normalizeTag(tag)) ? "active" : ""}" type="button" data-popular-tag="${escapeAttr(tag)}">#${escapeHtml(tag)}</button>`).join("")}
         </div>
         <div class="section-title">

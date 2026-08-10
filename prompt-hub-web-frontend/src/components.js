@@ -32,6 +32,7 @@
     `;
   }
 
+  /** @param {{ title?: unknown, message?: unknown, confirmLabel?: string, danger?: boolean }} [options] */
   function ConfirmDialog({ title, message, confirmLabel = "확인", danger = false } = {}) {
     return `
       <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
@@ -49,6 +50,7 @@
     `;
   }
 
+  /** @param {{ memberId?: string | number, nickname?: string, closeIcon?: string }} [options] */
   function AdminUserBlockDialog({ memberId, nickname = "사용자", closeIcon = "" } = {}) {
     if (!memberId) return "";
 

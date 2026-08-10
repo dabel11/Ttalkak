@@ -2,121 +2,23 @@
   "use strict";
 
   function normalizeMessageQuestions(questions) {
-    return Array.isArray(questions)
-      ? questions
-          .map((item, index) => {
-            if (typeof item === "string") {
-              const question = item.trim();
-              return question ? { field: "", question, reason: "", importance: "recommended" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const question = String(item.question || item.text || item.content || item.label || "").trim();
-            if (!question) return null;
-            const importance = String(item.importance || item.priority || "recommended").toLowerCase();
-            return {
-              field: String(item.field || item.key || item.name || `question_${index + 1}`).trim(),
-              question,
-              reason: String(item.reason || item.description || item.effect || item.helpText || "").trim(),
-              importance: importance === "required" ? "required" : "recommended",
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeQuestions(questions);
   }
 
   function normalizeMessageFields(fields) {
-    return Array.isArray(fields)
-      ? fields
-          .map((item, index) => {
-            if (typeof item === "string") {
-              const name = item.trim();
-              return name ? { name, role: "fact", status: "empty", value: "" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const name = String(item.name || item.field || item.key || item.label || `field_${index + 1}`).trim();
-            if (!name) return null;
-            const role = String(item.role || item.type || item.importance || "fact").toLowerCase();
-            const status = String(item.status || (item.value ? "filled" : "empty")).toLowerCase();
-            return {
-              name,
-              role: ["required", "fact", "framing"].includes(role) ? role : "fact",
-              status: ["filled", "empty", "missing"].includes(status) ? status : "empty",
-              value: String(item.value || item.answer || "").trim(),
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeFields(fields);
   }
 
   function normalizeMessageTechniques(techniques) {
-    return Array.isArray(techniques)
-      ? techniques
-          .map((item) => {
-            if (typeof item === "string") {
-              const name = item.trim();
-              return name ? { name, reason: "" } : null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const name = String(item.name || item.technique || item.title || item.label || "").trim();
-            if (!name) return null;
-            return {
-              name,
-              reason: String(item.reason || item.description || item.effect || item.summary || "").trim(),
-            };
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeTechniques(techniques);
   }
 
   function normalizeMessageChanges(changes) {
-    return Array.isArray(changes)
-      ? changes
-          .map((item) => {
-            if (typeof item === "string") return item.trim();
-            if (!item || typeof item !== "object") return "";
-            return String(item.text || item.message || item.description || item.change || item.reason || "").trim();
-          })
-          .filter(Boolean)
-      : [];
+    return global.TtalkakMakeMessageModel.normalizeChanges(changes);
   }
 
   function normalizeLegacyAskAnswer(text) {
-    const source = String(text || "").trim();
-    if (!source) return { leadText: "", questions: [] };
-    const lines = source
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const questionLines = [];
-    const leadLines = [];
-    let foundQuestion = false;
-
-    lines.forEach((line) => {
-      const match = line.match(/^[•*-]\s*([^:：]{1,40})[:：]\s*(.+)$/);
-      if (match) {
-        foundQuestion = true;
-        questionLines.push({
-          field: match[1].trim(),
-          question: match[2].trim(),
-          reason: "",
-          importance: "required",
-        });
-        return;
-      }
-      if (!foundQuestion) leadLines.push(line);
-    });
-
-    if (!questionLines.length) return { leadText: source, questions: [] };
-
-    const leadText = leadLines
-      .map((line) => line.replace(/\*\*/g, "").trim())
-      .filter((line) => !/^아래\s+정보를/.test(line))
-      .join("\n");
-
-    return {
-      leadText,
-      questions: questionLines,
-    };
+    return global.TtalkakMakeMessageModel.parseLegacyQuestions(text);
   }
 
   function renderPromptTextWithPlaceholders(text, escapeHtml) {
@@ -136,28 +38,34 @@
   }
 
   function MessageQuestionsView(ctx, data) {
-    const { escapeHtml } = ctx;
-    const { isAsk, questions } = data;
+    const { escapeAttr, escapeHtml } = ctx;
+    const { isAsk, isThinking, messageId, questions } = data;
     const title = isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요";
+    const progressId = `ask-${messageId}-progress`;
 
     return `
-      <section class="message-question-section" aria-label="${escapeHtml(title)}">
+      <section class="message-question-section" aria-label="${escapeHtml(title)}" ${isAsk ? 'aria-live="polite"' : ""}>
         <strong>${escapeHtml(title)}</strong>
+        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" aria-busy="${isThinking ? "true" : "false"}" novalidate><div id="${escapeAttr(progressId)}" class="ask-answer-progress" data-ask-answer-progress role="status">${isThinking ? "답변을 전송하고 있습니다." : "필수 답변을 입력해주세요."}</div>` : ""}
         <ol>
-          ${questions
-            .map(
-              (item) => `
-                <li class="${item.importance === "required" ? "required" : "recommended"}">
-                  <span>${escapeHtml(item.question)}</span>
-                  <em>${item.importance === "required" ? "필수 정보" : "선택 정보"}</em>
-                  ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ""}
-                </li>
-              `,
-            )
-            .join("")}
+          ${questions.map((item, index) => AskQuestionItemView(ctx, { index, isAsk, isThinking, item, messageId, progressId })).join("")}
         </ol>
+        ${isAsk ? `<button class="ask-answer-submit" type="submit" ${isThinking ? "disabled" : ""}>${isThinking ? "전송 중" : "답변 제출"}</button></form>` : ""}
       </section>
     `;
+  }
+
+  function AskQuestionItemView(ctx, data) {
+    const { escapeAttr, escapeHtml } = ctx;
+    const { index, isAsk, isThinking, item, messageId, progressId } = data;
+    const inputId = `ask-${messageId}-${item.field || index}`;
+    const reasonId = `${inputId}-reason`;
+    const describedBy = [item.reason ? reasonId : "", progressId].filter(Boolean).join(" ");
+    return `<li class="${item.importance === "required" ? "required" : "recommended"}">
+      <label for="${escapeAttr(inputId)}"><span>${escapeHtml(item.question)}</span><em>${item.importance === "required" ? "필수" : "선택"}</em></label>
+      ${isAsk ? `<input id="${escapeAttr(inputId)}" name="${escapeAttr(item.field || `question_${index + 1}`)}" data-ask-answer-input ${item.importance === "required" ? 'required aria-required="true"' : ""} aria-describedby="${escapeAttr(describedBy)}" ${isThinking ? "disabled" : ""} />` : ""}
+      ${item.reason ? `<small id="${escapeAttr(reasonId)}">${escapeHtml(item.reason)}</small>` : ""}
+    </li>`;
   }
 
   function MessageFieldsView(ctx, data) {
@@ -221,8 +129,8 @@
     const { changes } = data;
 
     return `
-      <section class="message-changes-section" aria-label="가정한 부분">
-        <strong>가정한 부분</strong>
+      <section class="message-changes-section" aria-label="가정 및 개선 포인트">
+        <strong>가정 및 개선 포인트</strong>
         <ul>
           ${changes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>
@@ -232,6 +140,7 @@
 
   global.TtalkakMakeMessageParts = Object.freeze({
     MessageChangesView,
+    AskQuestionItemView,
     MessageEvidenceNoticeView,
     MessageFieldsView,
     MessageQuestionsView,

@@ -18,6 +18,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.util.*;
 import java.time.LocalDateTime;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/prompts")
@@ -30,6 +31,7 @@ public class PromptController {
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
+    private final Duration ragResponseTimeout;
 
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
@@ -41,7 +43,8 @@ public class PromptController {
                             AuthService authService,
                             MakeThreadRepository makeThreadRepository,
                             ObjectMapper objectMapper,
-                            WebClient.Builder webClientBuilder) {
+                            WebClient.Builder webClientBuilder,
+                            Duration ragResponseTimeout) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
@@ -50,6 +53,7 @@ public class PromptController {
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
+		this.ragResponseTimeout = ragResponseTimeout;
     }
 
     @GetMapping
@@ -405,6 +409,7 @@ public class PromptController {
 				"ragStatus",
 				response.get("ragStatus")
 		);
+		copyImproveContractFields(assistantMessage, response);
 		assistantMessage.put("createdAt", now);
 
 		messages.add(assistantMessage);
@@ -452,10 +457,29 @@ public class PromptController {
                 "ragStatus",
                 response.get("ragStatus")
         );
+        copyImproveContractFields(assistantMessage, response);
         assistantMessage.put("createdAt", now);
 
         messages.add(userMessage);
         messages.add(assistantMessage);
+    }
+
+    private void copyImproveContractFields(
+            Map<String, Object> target,
+            Map<String, Object> response
+    ) {
+        for (String field : List.of(
+                "mode",
+                "answer",
+                "summary",
+                "questions",
+                "fields",
+                "changes",
+                "techniquesApplied",
+                "score"
+        )) {
+            target.put(field, response.get(field));
+        }
     }
 
     private List<Map<String, Object>> readMessages(String json) {
@@ -669,7 +693,7 @@ public class PromptController {
                     .bodyValue(ragRequest)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .block();
+                    .block(ragResponseTimeout);
 
             if (response == null) {
                 throw new ApiException(
@@ -766,11 +790,16 @@ public class PromptController {
                 "answer",
                 "관련 프롬프트 기법 근거를 찾지 못했습니다."
         );
+        body.put("mode", "improve");
+        body.put("summary", "");
         body.put("improvedPrompt", prompt);
         body.put("sources", List.of());
         body.put("ragStatus", "no_evidence");
         body.put("techniquesApplied", List.of());
         body.put("changes", List.of());
+        body.put("questions", List.of());
+        body.put("fields", List.of());
+        body.put("score", null);
 
         return body;
     }
@@ -778,6 +807,39 @@ public class PromptController {
     private Map<String, Object> buildImproveResponse(
             Map<?, ?> ragResponse
     ) {
+        String mode = firstNonBlank(
+                ragResponse,
+                "mode",
+                "type"
+        );
+
+        boolean askMode =
+                "ask".equalsIgnoreCase(mode)
+                        || "question".equalsIgnoreCase(mode);
+
+        String summary = firstNonBlank(
+                ragResponse,
+                "summary"
+        );
+
+        List<?> questions = firstList(
+                ragResponse,
+                "questions",
+                "followUpQuestions",
+                "additionalQuestions"
+        );
+
+        if (askMode && questions.isEmpty()) {
+            questions = List.of(
+                    Map.of(
+                            "field", "details",
+                            "question", "원하는 결과를 더 정확히 만들기 위해 어떤 정보를 추가할 수 있나요?",
+                            "reason", "질문 모드 응답에 구체적인 후속 질문이 없어 기본 확인 질문을 제공합니다.",
+                            "importance", "required"
+                    )
+            );
+        }
+
         String improvedPrompt = firstNonBlank(
                 ragResponse,
                 "improvedPrompt",
@@ -794,7 +856,13 @@ public class PromptController {
                 "result"
         );
 
-        if (improvedPrompt == null && answer == null) {
+        if (askMode && answer == null) {
+            answer = summary == null || summary.isBlank()
+                    ? "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다."
+                    : summary;
+        }
+
+        if (!askMode && improvedPrompt == null && answer == null) {
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "AI_INVALID_RESPONSE",
@@ -829,13 +897,26 @@ public class PromptController {
                     : "ok";
         }
 
+
+        if (askMode) {
+            mode = "ask";
+            improvedPrompt = "";
+        } else {
+            mode = "improve";
+        }
+
         Map<String, Object> body =
                 new LinkedHashMap<>();
 
+        body.put("mode", mode);
         body.put("answer", answer);
         body.put("improvedPrompt", improvedPrompt);
         body.put("sources", sources);
         body.put("ragStatus", ragStatus);
+        body.put(
+                "summary",
+                summary
+        );
         body.put(
                 "techniquesApplied",
                 firstList(
@@ -848,6 +929,20 @@ public class PromptController {
                 "changes",
                 firstList(ragResponse, "changes")
         );
+        body.put(
+                "questions",
+                questions
+        );
+        body.put(
+                "fields",
+                firstList(
+                        ragResponse,
+                        "fields",
+                        "fieldState",
+                        "missingFields"
+                )
+        );
+        body.put("score", ragResponse.get("score"));
 
         return body;
     }
