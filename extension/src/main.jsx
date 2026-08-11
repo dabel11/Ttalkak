@@ -22,6 +22,7 @@ function App() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [ragConfig] = useState(loadBackendConfig);
   const composerRef = useRef(null);
+  const noticeTimerRef = useRef(null);
 
   const {
     authMode,
@@ -99,8 +100,8 @@ function App() {
 
   function showNotice(message) {
     setNotice(message);
-    window.clearTimeout(showNotice._timer);
-    showNotice._timer = window.setTimeout(() => setNotice(""), 1800);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(""), 1800);
   }
 
   function handleStartNewChat() {

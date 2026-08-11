@@ -183,4 +183,23 @@ describe("Extension improve request behavior", () => {
     nextRequest.resolve(improveResponse());
     await act(async () => { await submission; });
   });
+
+  test("closing the side panel aborts the active request and rejects its late response", async () => {
+    const request = deferred();
+    api.improve.mockReturnValue(request.promise);
+    const { result, unmount } = renderHook(() => useConversation(createProps()));
+
+    act(() => result.current.setComposerValue("close while waiting"));
+    let submission;
+    act(() => { submission = result.current.submitPrompt(); });
+    await waitFor(() => expect(api.improve).toHaveBeenCalledOnce());
+    const signal = api.improve.mock.calls[0][2].signal;
+    expect(signal.aborted).toBe(false);
+
+    unmount();
+    expect(signal.aborted).toBe(true);
+
+    request.resolve(improveResponse("response after close"));
+    await act(async () => { await submission; });
+  });
 });

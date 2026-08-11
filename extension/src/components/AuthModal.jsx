@@ -76,7 +76,7 @@ export function AuthModal({
   const isFindPassword = mode === "findPassword";
   const isWithdraw = mode === "withdraw";
   const [form, setForm] = useState(INITIAL_FORM);
-  const [duplicateChecks, setDuplicateChecks] = useState({});
+  const [duplicateChecks, setDuplicateChecks] = useState(/** @type {{ nickname?: string, userId?: string }} */ ({}));
   const [result, setResult] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingField, setCheckingField] = useState("");

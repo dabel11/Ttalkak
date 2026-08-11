@@ -41,7 +41,7 @@ export async function saveExtensionStorage(key, value) {
     return;
   }
 
-  await new Promise((resolve) => chromeStorage.set({ [key]: value }, resolve));
+  await new Promise((resolve) => chromeStorage.set({ [key]: value }, () => resolve(undefined)));
 }
 
 export async function removeExtensionStorage(key) {
@@ -53,7 +53,7 @@ export async function removeExtensionStorage(key) {
     return;
   }
 
-  await new Promise((resolve) => chromeStorage.remove([key], resolve));
+  await new Promise((resolve) => chromeStorage.remove([key], () => resolve(undefined)));
 }
 
 function createSessionUuid() {

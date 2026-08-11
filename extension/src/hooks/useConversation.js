@@ -201,6 +201,12 @@ export function useConversation({
 
   const activeImproveContext = useRef(null);
 
+  useEffect(() => () => {
+    improveRequests.current.cancel();
+    activeImproveContext.current = null;
+    improveRequestInFlight.current = false;
+  }, []);
+
   function beginImproveRequest(prompt, options = {}) {
     improveRequestInFlight.current = true;
     const request = improveRequests.current.start();

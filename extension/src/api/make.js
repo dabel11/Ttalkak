@@ -35,6 +35,7 @@ export function normalizeMakeThread(item, index = 0) {
 async function parseResponse(res) {
   const responseBody = await res.json().catch(() => null);
   if (!res.ok) {
+    /** @type {Error & { status?: number, code?: string, payload?: any }} */
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";

@@ -1,7 +1,21 @@
 import { forwardRef } from "react";
 import { Plus, Send } from "lucide-react";
 
-export const Composer = forwardRef(function Composer({ value, onChange, onSubmit, disabled, onNewChat, hasMessages }, ref) {
+/**
+ * @typedef {object} ComposerProps
+ * @property {string} value
+ * @property {(value: string) => void} onChange
+ * @property {() => void | Promise<void>} onSubmit
+ * @property {boolean} disabled
+ * @property {() => void} onNewChat
+ * @property {boolean} hasMessages
+ */
+
+/**
+ * @param {ComposerProps} props
+ * @param {import("react").ForwardedRef<HTMLTextAreaElement>} ref
+ */
+function ComposerView({ value, onChange, onSubmit, disabled, onNewChat, hasMessages }, ref) {
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       {hasMessages && (
@@ -29,4 +43,6 @@ export const Composer = forwardRef(function Composer({ value, onChange, onSubmit
       </button>
     </form>
   );
-});
+}
+
+export const Composer = forwardRef(ComposerView);

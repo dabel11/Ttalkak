@@ -23,6 +23,9 @@ bin/
 # ── Node (extension) ────────────────────────────────────────
 extension/node_modules/
 extension/dist/
+extension/dist-dev/
+extension/dist-prod/
+extension/dist-verify/
 extension/.npm-cache/
 prompt-hub-web-frontend/node_modules/
 prompt-hub-web-frontend/dist/

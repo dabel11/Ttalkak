@@ -1,6 +1,6 @@
 import { Bookmark, BookmarkCheck, X } from "lucide-react";
 
-export function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePrompt, onDelete }) {
+export function PromptList({ items, emptyText, mode, isSaved = (_item) => false, onOpenPrompt, onSavePrompt = (_item) => {}, onDelete = (_id) => {} }) {
   if (items.length === 0) return <p className="empty-list">{emptyText}</p>;
 
   return (

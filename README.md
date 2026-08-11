@@ -492,7 +492,7 @@ npm run build:dev
 Load the built extension in Chrome:
 
 ```text
-extension/dist
+extension/dist-dev
 ```
 
 Chrome loading steps:
@@ -500,7 +500,9 @@ Chrome loading steps:
 1. Open `chrome://extensions`
 2. Enable Developer mode
 3. Click "Load unpacked"
-4. Select the `extension/dist` folder
+4. Select the `extension/dist-dev` folder
+
+`npm run verify` writes its disposable production-like bundle to `extension/dist-verify`, so verification never overwrites the unpacked development extension. `npm run build:prod` writes only to `extension/dist-prod`.
 
 #### Structure
 
@@ -542,13 +544,13 @@ See `docs/WEB_STORE_RELEASE_CHECKLIST.md` for the Chrome Web Store release check
 For production packaging:
 
 1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL.
-2. Replace `https://SPRING_BOOT_PRODUCTION_HOST/*` in `manifest.production.example.json` with the same production host.
-3. Use the production manifest content for the packaged `manifest.json`.
+2. The build replaces `https://SPRING_BOOT_PRODUCTION_HOST/*` in the production manifest template with the same production host.
+3. Package the generated `extension/dist-prod` directory.
 4. Do not include `http://localhost:8080/*` or `http://127.0.0.1:8080/*` in the production manifest.
 5. Keep ChatGPT, Gemini, and Claude host permissions while Execute is supported.
 6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
 
-Production builds fail fast when `VITE_BACKEND_API_URL` is missing, so a package with an empty Backend API URL is not created by mistake.
+Production builds fail fast when `VITE_BACKEND_API_URL` is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development always targets `http://localhost:8080` in `dist-dev` even if a production URL remains in the shell environment.
 
 #### Production Extension ID
 

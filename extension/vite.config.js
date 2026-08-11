@@ -11,16 +11,30 @@ function toHostPermission(url) {
   }
 }
 
-function assertProductionBackendApiUrl(mode, backendApiUrl) {
+function assertProductionBackendApiUrl(mode, backendApiUrl, isVerificationBuild) {
   if (mode !== "production") return;
   const normalizedUrl = String(backendApiUrl || "").trim();
-  if (!normalizedUrl || normalizedUrl.includes("SPRING_BOOT_PRODUCTION_HOST")) {
+  const isExampleHost = /(^|\.)example\.(com|org|net|invalid)$/i.test(
+    (() => {
+      try {
+        return new URL(normalizedUrl).hostname;
+      } catch {
+        return "";
+      }
+    })()
+  );
+  if (
+    !normalizedUrl ||
+    !normalizedUrl.startsWith("https://") ||
+    normalizedUrl.includes("SPRING_BOOT_PRODUCTION_HOST") ||
+    (!isVerificationBuild && isExampleHost)
+  ) {
     throw new Error("Production extension builds require VITE_BACKEND_API_URL to be set to the Spring Boot HTTPS URL.");
   }
 }
 
-function extensionManifestPlugin(mode, backendApiUrl) {
-  assertProductionBackendApiUrl(mode, backendApiUrl);
+function extensionManifestPlugin(mode, backendApiUrl, outDir, isVerificationBuild) {
+  assertProductionBackendApiUrl(mode, backendApiUrl, isVerificationBuild);
   return {
     name: "ttalkak-extension-manifest",
     closeBundle() {
@@ -29,7 +43,7 @@ function extensionManifestPlugin(mode, backendApiUrl) {
         mode === "production"
           ? path.resolve(root, "manifest.production.example.json")
           : path.resolve(root, "public", "manifest.json");
-      const outPath = path.resolve(root, "dist", "manifest.json");
+      const outPath = path.resolve(root, outDir, "manifest.json");
       const manifest = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
 
       if (mode === "production") {
@@ -46,10 +60,22 @@ function extensionManifestPlugin(mode, backendApiUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const isVerificationBuild = process.env.TTALKAK_EXTENSION_BUILD_KIND === "verify";
+  const outDir = isVerificationBuild ? "dist-verify" : mode === "production" ? "dist-prod" : "dist-dev";
+  const backendApiUrl =
+    mode === "development"
+      ? env.VITE_BACKEND_API_URL || "http://localhost:8080"
+      : process.env.VITE_BACKEND_API_URL || env.VITE_BACKEND_API_URL || "";
   return {
-    plugins: [react(), extensionManifestPlugin(mode, env.VITE_BACKEND_API_URL || "")],
+    plugins: [
+      react(),
+      extensionManifestPlugin(mode, backendApiUrl, outDir, isVerificationBuild),
+    ],
+    define: {
+      "import.meta.env.VITE_BACKEND_API_URL": JSON.stringify(backendApiUrl),
+    },
     build: {
-      outDir: "dist",
+      outDir,
       emptyOutDir: true,
     },
   };
