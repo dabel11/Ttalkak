@@ -61,6 +61,10 @@ jobs:
           VITE_BACKEND_API_URL: ${{ vars.VITE_BACKEND_API_URL || 'https://api.example.invalid' }}
         run: npm run verify
 
+      - name: Verify development Extension identity
+        working-directory: extension
+        run: npm run build:dev && npm run check:dev-identity
+
   web-e2e:
     name: Web fixture browser E2E
     runs-on: ubuntu-latest

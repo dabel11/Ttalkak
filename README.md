@@ -504,6 +504,16 @@ Chrome loading steps:
 
 `npm run verify` writes its disposable production-like bundle to `extension/dist-verify`, so verification never overwrites the unpacked development extension. `npm run build:prod` writes only to `extension/dist-prod`.
 
+The development manifest contains a public key that keeps the unpacked Extension ID stable across machines and paths:
+
+```text
+djbhhlahjhaeccghbnajnhmbcdilccmn
+```
+
+This public key is not a secret. Never commit a matching private key. The Spring Boot development CORS default allows only this fixed Extension origin in addition to localhost web origins.
+
+Because Chrome isolates extension storage by Extension ID, conversations and settings created with a pre-stable development ID are not migrated automatically. This affects development data only; the Chrome Web Store production Extension ID and its storage are separate.
+
 #### Structure
 
 - `src/main.jsx`: Side Panel React UI
