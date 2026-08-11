@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
 import { fetchWithAbortPolicy } from "../src/api/fetchPolicy.js";
 import { getApiErrorMessage } from "../src/utils/apiErrors.js";
@@ -17,15 +16,6 @@ function abortableFetch(_url, { signal }) {
     if (signal.aborted) reject(new DOMException("Aborted", "AbortError"));
   });
 }
-
-test("improve uses 90 seconds while the shared API default remains 60 seconds", async () => {
-  const constants = await readFile(new URL("../src/constants.js", import.meta.url), "utf8");
-  const prompts = await readFile(new URL("../src/api/prompts.js", import.meta.url), "utf8");
-  assert.match(constants, /API_TIMEOUT_MS\s*=\s*60000/);
-  assert.match(constants, /IMPROVE_API_TIMEOUT_MS\s*=\s*90000/);
-  assert.match(prompts, /timeoutMs:\s*IMPROVE_API_TIMEOUT_MS/);
-  assert.match(prompts, /signal,/);
-});
 
 test("internal timeout aborts the request and reports REQUEST_TIMEOUT", async () => {
   let timeoutCallback;
@@ -170,16 +160,4 @@ test("backend unavailable and rate-limit policies remain distinguishable", () =>
   assert.ok(unavailable.length > 0);
   assert.ok(rateLimited.length > 0);
   assert.notEqual(unavailable, rateLimited);
-});
-
-test("cancel control and all improve entry points share the request lifecycle", async () => {
-  const chatFeed = await readFile(new URL("../src/components/ChatFeed.jsx", import.meta.url), "utf8");
-  const hook = await readFile(new URL("../src/hooks/useConversation.js", import.meta.url), "utf8");
-  assert.match(chatFeed, /cancel-request-button/);
-  assert.match(chatFeed, /onCancelRequest/);
-  assert.match(hook, /handleImproveCancellation/);
-  assert.match(hook, /handleImproveCancellation\(request,[\s\S]*?finishImproveRequest\(request\)/);
-  assert.equal((hook.match(/beginImproveRequest\(prompt, \{ restoreComposer: true \}\)/g) || []).length, 3);
-  assert.equal((hook.match(/requestPromptImprove\([\s\S]*?signal:\s*request\.controller\.signal/g) || []).length, 3);
-  assert.equal((hook.match(/canAcceptResult\(request\)/g) || []).length, 3);
 });

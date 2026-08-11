@@ -55,15 +55,11 @@ jobs:
         working-directory: extension
         run: npm ci
 
-      - name: Run extension tests
-        working-directory: extension
-        run: npm test
-
-      - name: Build extension for production
+      - name: Verify extension
         working-directory: extension
         env:
           VITE_BACKEND_API_URL: ${{ vars.VITE_BACKEND_API_URL || 'https://api.example.invalid' }}
-        run: npm run build:prod
+        run: npm run verify
 
   web-e2e:
     name: Web fixture browser E2E

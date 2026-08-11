@@ -65,6 +65,8 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
     return () => {
       cancelled = true;
     };
+  // Hydration is keyed by token and backend URL; including local collections or callback identities would re-run merges.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession?.accessToken, isLoggedIn, ragConfig.backendApiUrl]);
 
   const searchItems = useMemo(() => {

@@ -1,3 +1,4 @@
+// @ts-check
 export function createImproveRequestCoordinator() {
   let activeRequest = null;
   let sequence = 0;
@@ -5,7 +6,7 @@ export function createImproveRequestCoordinator() {
   return Object.freeze({
     start() {
       activeRequest?.controller.abort();
-      const request = { id: ++sequence, controller: new AbortController(), cancelled: false };
+      const request = { id: ++sequence, controller: new AbortController(), cancelled: false, cancellationHandled: false };
       activeRequest = request;
       return request;
     },

@@ -1,3 +1,4 @@
+// @ts-check
 import { API_TIMEOUT_MS, DEFAULT_RAG_CONFIG } from "../constants";
 import { assertBackendApiUrl } from "../config/backendConfig";
 import { fetchWithAbortPolicy } from "./fetchPolicy";

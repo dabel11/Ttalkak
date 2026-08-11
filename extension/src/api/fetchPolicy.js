@@ -1,3 +1,9 @@
+// @ts-check
+/**
+ * @param {string | URL | Request} url
+ * @param {RequestInit & { timeoutMs?: number }} [options]
+ * @param {{ defaultTimeoutMs?: number, fetchImpl?: typeof fetch, setTimer?: typeof setTimeout, clearTimer?: typeof clearTimeout }} [dependencies]
+ */
 export async function fetchWithAbortPolicy(url, options = {}, dependencies = {}) {
   const {
     defaultTimeoutMs,
@@ -33,12 +39,14 @@ export async function fetchWithAbortPolicy(url, options = {}, dependencies = {})
     return response;
   } catch (error) {
     if (abortCause === "timeout") {
+      /** @type {Error & { status?: number, code?: string }} */
       const timeoutError = new Error("응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.");
       timeoutError.status = 0;
       timeoutError.code = "REQUEST_TIMEOUT";
       throw timeoutError;
     }
     if (abortCause === "external" || error?.name === "AbortError") {
+      /** @type {Error & { status?: number, code?: string }} */
       const abortedError = new Error("요청이 취소되었습니다.");
       abortedError.status = 0;
       abortedError.code = "REQUEST_ABORTED";

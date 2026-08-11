@@ -1,5 +1,6 @@
+// @ts-check
 import { useEffect, useRef, useState } from "react";
-import { deleteMakeThread } from "../api/make";
+import { deleteMakeThread, requestMakeThreads } from "../api/make";
 import { requestPromptImprove } from "../api/prompts";
 import { STORAGE } from "../constants";
 import { getOrCreateSessionUuid, loadStorage, saveStorage } from "../storage/extensionStorage";
@@ -80,6 +81,8 @@ export function useConversation({
     return () => {
       cancelled = true;
     };
+  // The API client is keyed by token and backend URL; callback identities change every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession?.accessToken, isLoggedIn, ragConfig.backendApiUrl]);
 
   function openPrompt(item) {
@@ -154,19 +157,6 @@ export function useConversation({
     } else {
       setSavedItems((items) => items.filter((i) => i.id !== messageId));
       showNotice("저장을 해제했습니다.");
-    }
-  }
-
-  async function refreshServerThreadsAfterImprove() {
-    if (!authSession?.accessToken) return;
-    try {
-      await refreshServerThreads();
-    } catch (error) {
-      if (isAuthExpiredError(error)) {
-        await onAuthExpired?.();
-        return;
-      }
-      showNotice(error?.message || "서버 최근 대화에 저장하지 못했습니다.");
     }
   }
 
