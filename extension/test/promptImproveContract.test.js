@@ -41,6 +41,13 @@ test("ask hides copy and execute while improve keeps both actions", () => {
   );
 });
 
+test("cancelled status messages never expose assistant actions", () => {
+  assert.deepEqual(
+    getMessageActionVisibility({ role: "assistant", isCancelled: true, content: "cancelled" }),
+    { copy: false, save: false, execute: false },
+  );
+});
+
 test("extension uses the shared executable policy for utility-only responses", () => {
   assert.equal(getMessageActionVisibility({ role: "assistant", mode: "improve", executablePrompt: "관련 기법 근거 없이 기본 방식으로 다듬었습니다." }).execute, false);
   assert.equal(getMessageActionVisibility({ role: "assistant", mode: "improve", executablePrompt: "신규 사용자를 위한 안내문을 작성하세요." }).execute, true);

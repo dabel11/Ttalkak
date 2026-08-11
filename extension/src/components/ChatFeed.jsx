@@ -111,7 +111,12 @@ function MessageCard({
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;
 
   return (
-    <article className={`message-row ${message.role}${message.isError ? " error" : ""}`} data-mid={message.id}>
+    <article
+      className={`message-row ${message.role}${message.isError ? " error" : ""}${message.isCancelled ? " cancelled" : ""}`}
+      data-mid={message.id}
+      role={message.isCancelled ? "status" : undefined}
+      aria-live={message.isCancelled ? "polite" : undefined}
+    >
       <div className={`message-card${isEditing ? " editing" : ""}`}>
         {isEditing ? (
           <form className="message-edit-form" onSubmit={(event) => onSubmitEdit(event, message.id)}>
@@ -165,7 +170,7 @@ function MessageCard({
             )}
           </div>
         )}
-        {isAssistant && !message.isError && (
+        {isAssistant && !message.isError && !message.isCancelled && (
           <div className="card-actions">
             {actionVisibility.copy && <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "\uBCF5\uC0AC\uB428" : "\uBCF5\uC0AC"} onClick={() => onCopy(message)} />}
             {actionVisibility.save && <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />}

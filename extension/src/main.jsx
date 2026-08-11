@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -98,6 +98,14 @@ function App() {
     return recentThreads.filter((thread) => promptMatches({ ...thread, content: thread.title }, query));
   }, [query, recentThreads, activeTab]);
 
+  const latestMessage = messages.at(-1);
+  const answeringQuestions = !isLoading && latestMessage?.role === "assistant" && latestMessage?.mode === "ask";
+
+  useEffect(() => {
+    if (!answeringQuestions) return;
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }, [answeringQuestions, latestMessage?.id]);
+
   function showNotice(message) {
     setNotice(message);
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
@@ -174,6 +182,7 @@ function App() {
             disabled={isLoading}
             onNewChat={handleStartNewChat}
             hasMessages={messages.length > 0}
+            answeringQuestions={answeringQuestions}
           />
         </section>
       </section>

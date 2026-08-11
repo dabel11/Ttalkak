@@ -1,5 +1,6 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { createElement, Fragment } from "react";
 
 const api = vi.hoisted(() => ({
   improve: vi.fn(),
@@ -21,6 +22,8 @@ vi.mock("../src/storage/extensionStorage", () => ({
 }));
 
 import { useConversation } from "../src/hooks/useConversation";
+import { AssistantResponse } from "../src/components/AssistantResponse";
+import { Composer } from "../src/components/Composer";
 
 function deferred() {
   let resolve;
@@ -95,7 +98,8 @@ describe("Extension improve request behavior", () => {
   test("initial and ask follow-up cancellation immediately restores input and ignores a late response", async () => {
     const request = deferred();
     api.improve.mockReturnValue(request.promise);
-    const { result } = renderHook(() => useConversation(createProps()));
+    const props = createProps();
+    const { result } = renderHook(() => useConversation(props));
 
     act(() => result.current.setComposerValue("follow-up answer"));
     let submission;
@@ -106,7 +110,15 @@ describe("Extension improve request behavior", () => {
     act(() => expect(result.current.cancelImproveRequest()).toBe(true));
     expect(result.current.isLoading).toBe(false);
     expect(result.current.composerValue).toBe("follow-up answer");
-    expect(result.current.messages.at(-1)).toMatchObject({ isCancelled: true, excludeFromHistory: true });
+    expect(props.showNotice).toHaveBeenCalledWith(
+      "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.",
+    );
+    expect(result.current.messages.at(-1)).toMatchObject({
+      content: "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.",
+      isCancelled: true,
+      isError: false,
+      excludeFromHistory: true,
+    });
 
     request.resolve(improveResponse("late response"));
     await act(async () => { await submission; });
@@ -201,5 +213,36 @@ describe("Extension improve request behavior", () => {
 
     request.resolve(improveResponse("response after close"));
     await act(async () => { await submission; });
+  });
+});
+
+describe("Extension clarification UI", () => {
+  test("ask guidance labels required questions and points the composer at the answer", () => {
+    render(createElement(
+      Fragment,
+      null,
+      createElement(AssistantResponse, {
+        isAsk: true,
+        message: {
+          mode: "ask",
+          summary: "추가 정보가 필요합니다.",
+          questions: [{ question: "대상 독자는 누구인가요?", importance: "required" }],
+        },
+      }),
+      createElement(Composer, {
+        value: "",
+        onChange() {},
+        onSubmit() {},
+        disabled: false,
+        onNewChat() {},
+        hasMessages: true,
+        answeringQuestions: true,
+      }),
+    ));
+
+    expect(screen.getByText("아래 질문을 확인한 뒤 하단 입력란에 답변해 주세요.")).toBeTruthy();
+    expect(screen.getByLabelText("필수 질문: 대상 독자는 누구인가요?")).toBeTruthy();
+    expect(screen.getByLabelText("추가 질문 답변 입력").getAttribute("placeholder"))
+      .toBe("위 질문에 대한 답변을 입력하세요...");
   });
 });

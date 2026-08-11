@@ -34,12 +34,12 @@ export function createCancelledMessage(prompt, id = `assistant-${Date.now()}`) {
   return {
     id,
     role: "assistant",
-    content: "요청이 취소되었습니다. 입력한 내용은 유지됩니다.",
+    content: "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.",
     executablePrompt: null,
     sourcePrompt: String(prompt || ""),
     sources: [],
     saved: false,
-    isError: true,
+    isError: false,
     isCancelled: true,
     excludeFromHistory: true,
   };

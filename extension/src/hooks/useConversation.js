@@ -229,7 +229,7 @@ export function useConversation({
     setRagStatus("idle");
     if (restoreComposer) setComposerValue(prompt);
     setMessages((prev) => [...prev, createCancelledMessage(prompt)]);
-    showNotice("요청을 취소했습니다. 입력한 내용은 유지됩니다.");
+    showNotice("요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.");
     return true;
   }
 
