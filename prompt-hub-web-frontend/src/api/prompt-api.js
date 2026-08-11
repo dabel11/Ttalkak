@@ -45,8 +45,9 @@
       viewPrompt(promptId) {
         return request(`/api/prompts/${promptId}/view`, { method: "POST" });
       },
-      improvePrompt(payload, token) {
-        return request("/api/prompts/improve", { method: "POST", token, body: JSON.stringify(payload) }).then((result) =>
+      /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
+      improvePrompt(payload, token, { signal } = {}) {
+        return request("/api/prompts/improve", { method: "POST", token, signal, body: JSON.stringify(payload) }).then((result) =>
           normalizeImproveResult(result, payload?.prompt || ""),
         );
       },

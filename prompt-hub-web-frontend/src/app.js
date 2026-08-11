@@ -842,6 +842,7 @@ const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
 const makeRequestState = makeStateModule.createMakeRequestState();
+let activeMakeRequestController = null;
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
 let appBootstrap = null;
@@ -1218,6 +1219,9 @@ function waitForThinkingIndicatorPaint() {
 }
 
 function navigateTo(route) {
+  if (state.route === "make" && route !== "make" && activeMakeRequestController) {
+    activeMakeRequestController.abort();
+  }
   if (state.adminMode && route !== "admin") {
     state.route = "admin";
     render();
@@ -2449,10 +2453,26 @@ function getMakeControllerContext() {
     bumpInteraction: () => { makeInteractionVersion += 1; },
     renderPreservingScroll: renderPreservingMakeScroll,
     buildHistory: buildMakeImproveHistory,
-    startRequest: () => makeStateModule.startMakeRequest(makeRequestState),
-    completeRequest: () => makeStateModule.completeMakeRequest(makeRequestState),
+    startRequest: () => {
+      activeMakeRequestController?.abort();
+      activeMakeRequestController = new AbortController();
+      makeStateModule.startMakeRequest(makeRequestState);
+      return activeMakeRequestController.signal;
+    },
+    isCurrentRequest: (signal) => !signal || activeMakeRequestController?.signal === signal,
+    completeRequest: (signal) => {
+      if (signal && activeMakeRequestController?.signal !== signal) return false;
+      activeMakeRequestController = null;
+      makeStateModule.completeMakeRequest(makeRequestState);
+      return true;
+    },
     failRequest: (id, failure) => makeStateModule.failMakeRequest(makeRequestState, id, failure),
-    stopInFlight: () => { makeRequestState.inFlight = false; },
+    stopInFlight: (signal) => {
+      if (signal && activeMakeRequestController?.signal !== signal) return false;
+      activeMakeRequestController = null;
+      makeRequestState.inFlight = false;
+      return true;
+    },
     setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value),
     appendUser: (threadId, message) => appendMakeUserMessageState(state, threadId, message),
     appendAssistant: (message) => appendMakeAssistantMessageState(state, message),
@@ -3081,13 +3101,15 @@ function shouldUseImproveThreadSync() {
   return getMakeServerSyncEffects().shouldUseImproveThreadSync();
 }
 
+/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, signal?: AbortSignal }} [options] */
 async function improvePromptWithBackend(prompt, {
   history = buildMakeImproveHistory(),
   threadId = state.activeThreadId,
   messageId = "",
   category = "",
+  signal,
 } = {}) {
-  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category });
+  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, signal });
 }
 
 

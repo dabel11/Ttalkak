@@ -218,7 +218,7 @@ interface TtalkakApi {
   searchTags(options?: TtalkakPayload): Promise<unknown>;
   proposeTag(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   viewPrompt(promptId: TtalkakId): Promise<unknown>;
-  improvePrompt(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  improvePrompt(payload: TtalkakPayload, token: TtalkakToken, options?: { signal?: AbortSignal }): Promise<unknown>;
   savePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   unsavePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   likePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;

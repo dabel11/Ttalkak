@@ -1,6 +1,8 @@
 (function () {
   const API_BASE_URL = window.__API_BASE_URL__ || window.TTALKAK_API_BASE_URL || "http://localhost:8080";
-  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 60000);
+  // The backend may spend up to 75 seconds waiting for RAG. Keep a margin for
+  // request transit and response serialization so the browser does not abort first.
+  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 90000);
 
   function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
@@ -20,12 +22,25 @@
     const resolvedToken = token || storedToken;
     const defaultHeaders = fetchOptions.body ? { "Content-Type": "application/json" } : {};
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const externalSignal = fetchOptions.signal;
+    let abortCause = "";
+    const abortFromExternalSignal = () => {
+      if (controller.signal.aborted) return;
+      abortCause = "external";
+      controller.abort(externalSignal?.reason);
+    };
+    if (externalSignal?.aborted) abortFromExternalSignal();
+    else externalSignal?.addEventListener("abort", abortFromExternalSignal, { once: true });
+    const timeoutId = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
+      abortCause = "timeout";
+      controller.abort();
+    }, API_TIMEOUT_MS);
 
     try {
       const response = await fetch(buildUrl(path), {
         ...fetchOptions,
-        signal: fetchOptions.signal || controller.signal,
+        signal: controller.signal,
         headers: {
           ...defaultHeaders,
           ...(resolvedToken ? { Authorization: `Bearer ${resolvedToken}` } : {}),
@@ -47,13 +62,17 @@
       const text = await response.text();
       return text ? JSON.parse(text) : null;
     } catch (error) {
-      if (error?.name === "AbortError") {
+      if (error?.name === "AbortError" && abortCause === "timeout") {
         const timeoutError = Object.assign(new Error("백엔드 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."), { status: 0, code: "REQUEST_TIMEOUT", cause: error });
         throw timeoutError;
+      }
+      if (error?.name === "AbortError") {
+        throw Object.assign(new Error("요청이 취소되었습니다."), { status: 0, code: "REQUEST_ABORTED", cause: error });
       }
       throw error;
     } finally {
       window.clearTimeout(timeoutId);
+      externalSignal?.removeEventListener("abort", abortFromExternalSignal);
     }
   }
 

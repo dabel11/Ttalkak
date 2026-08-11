@@ -42,7 +42,7 @@
     const userMessageId = `user-${now}`;
     const assistantMessageId = `make-${now}`;
     const history = ctx.buildHistory(ctx.state.messages);
-    ctx.startRequest();
+    const signal = ctx.startRequest();
     ctx.setDraft("");
     ctx.appendUser(threadId, { id: userMessageId, role: "user", content: prompt });
     ctx.setThinking(true);
@@ -52,12 +52,18 @@
     let result;
     try {
       await ctx.waitForPaint();
-      result = await ctx.improve(prompt, { history, threadId });
+      result = await ctx.improve(prompt, { history, threadId, signal });
     } catch (error) {
+      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
       ctx.setThinking(false);
-      ctx.stopInFlight();
+      ctx.stopInFlight(signal);
+      if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+        ctx.failRequest(userMessageId, ctx.classifyError(error));
+        ctx.updateThread(threadId);
+        return;
+      }
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
-      if (recovered) { ctx.completeRequest(); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
+      if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
       ctx.failRequest(userMessageId, ctx.classifyError(error));
       if (!ctx.state.isLoggedIn) ctx.state.guestImproveCount = Math.max(0, ctx.state.guestImproveCount - 1);
       ctx.setBackendFailure();
@@ -66,8 +72,9 @@
       ctx.scrollLatest();
       return;
     }
+    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
-    ctx.completeRequest();
+    ctx.completeRequest(signal);
     ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt });
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
@@ -86,22 +93,25 @@
     const now = Date.now();
     const threadId = ctx.getActiveThreadId() || `thread-${now}`;
     const history = ctx.buildHistory(ctx.getMessages().slice(0, index));
-    ctx.startRequest();
+    const signal = ctx.startRequest();
     if (ctx.shouldSync()) {
-      if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(); ctx.notice(ctx.messages.missingThread); return; }
+      if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
       try {
-        await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques" });
+        await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", signal });
+        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
         ctx.clearEditing();
         const refreshed = await ctx.refreshThread(threadId);
         if (!refreshed) ctx.render();
         ctx.notice(ctx.messages.edited);
       } catch (error) {
+        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") return;
         ctx.setBackendFailure();
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot: [...ctx.getMessages()] }).catch(() => null);
         ctx.handleError(error, ctx.messages.editFailed);
         ctx.render();
-      } finally { ctx.stopInFlight(); }
+      } finally { ctx.stopInFlight(signal); }
       return;
     }
     const assistantMessageId = `make-${now}`;
@@ -112,10 +122,12 @@
     let result;
     try {
       await ctx.waitForPaint();
-      result = await ctx.improve(cleanValue, { history, threadId });
+      result = await ctx.improve(cleanValue, { history, threadId, signal });
     } catch (error) {
+      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
       ctx.setThinking(false);
-      ctx.stopInFlight();
+      ctx.stopInFlight(signal);
+      if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") return;
       ctx.failRequest(messageId, ctx.classifyError(error));
       ctx.setBackendFailure();
       ctx.handleError(error, ctx.messages.improveFailed);
@@ -123,8 +135,9 @@
       ctx.render();
       return;
     }
+    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
-    ctx.completeRequest();
+    ctx.completeRequest(signal);
     ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue });
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);

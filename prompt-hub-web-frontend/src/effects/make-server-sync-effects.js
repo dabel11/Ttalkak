@@ -149,11 +149,13 @@
       return payload;
     }
 
+    /** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, signal?: AbortSignal }} [options] */
     async function improvePromptWithBackend(prompt, {
       history = buildMakeImproveHistory(),
       threadId = state.activeThreadId,
       messageId = "",
       category = "",
+      signal,
     } = {}) {
       const api = getMakeApi();
       if (!api?.improvePrompt) {
@@ -169,6 +171,7 @@
         const improved = await api.improvePrompt(
           buildMakeImprovePayload(prompt, history, threadId, { messageId, category }),
           getMakeApiToken(),
+          { signal },
         );
         applyImproveThreadId(threadId, improved);
         const improvedText = typeof improved === "string" ? improved : improved?.text || "";
@@ -184,6 +187,7 @@
       } catch (error) {
         const status = Number(error?.status || error?.payload?.status || 0);
         const code = String(error?.payload?.code || error?.code || "").toUpperCase();
+        if (code === "REQUEST_ABORTED") throw error;
         const normalizedError = global.TtalkakMakeMessageModel.classifyMakeError(error);
         let fallbackMessage = normalizedError.message;
         if (status === 404) {

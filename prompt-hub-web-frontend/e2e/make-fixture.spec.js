@@ -139,6 +139,34 @@ test("recent conversation menu opens and closes through delegated events", async
   await expect(page.locator(".recent-thread-menu")).toHaveCount(0);
 });
 
+test("leaving Make aborts an in-flight request and preserves a non-retryable cancellation state", async ({ page }) => {
+  let requestStarted;
+  let releaseResponse;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  await openMake(page, [], {}, async (route) => {
+    requestStarted();
+    await release;
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "This response must be ignored." }),
+    }).catch(() => {});
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill("Cancel this request by leaving Make");
+  await page.locator('[data-composer] button[type="submit"]').click();
+  await started;
+  await page.locator('[data-route="home"]').first().click();
+  await expect(page.locator(".home-page")).toBeVisible();
+  releaseResponse();
+
+  await page.locator('[data-route="make"]').first().click();
+  await expect(page.locator(".message-failure-status")).toContainText("취소");
+  await expect(page.locator(".message-failure-status [data-retry-message]")).toHaveCount(0);
+  await expect(page.getByText("This response must be ignored.")).toHaveCount(0);
+});
+
 const errorCases = [
   { name: "network", expected: "백엔드에 연결할 수 없습니다", reply: (route) => route.abort("failed") },
   { name: "AI service", expected: "AI 서비스가 일시적으로 응답하지 않습니다", status: 503, code: "AI_SERVICE_UNAVAILABLE" },

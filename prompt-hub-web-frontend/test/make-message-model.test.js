@@ -68,6 +68,13 @@ test("errors are separated into actionable states", () => {
   assert.equal(model.classifyMakeError({}).kind, "network");
 });
 
+test("user cancellation is not reported as a retryable timeout", () => {
+  const failure = model.classifyMakeError({ code: "REQUEST_ABORTED" });
+  assert.equal(failure.kind, "cancelled");
+  assert.equal(failure.retryable, false);
+  assert.match(failure.message, /취소/);
+});
+
 test("executable policy rejects ask-only and utility-only responses", () => {
   assert.equal(model.isExecutableMessage({ role: "assistant", mode: "improve", executablePrompt: "관련 기법 근거 없이 기본 방식으로 다듬었습니다." }), false);
   assert.equal(model.isExecutableMessage({ role: "assistant", mode: "improve", executablePrompt: "추가 정보가 필요합니다. 대상 독자는 누구인가요?" }), false);

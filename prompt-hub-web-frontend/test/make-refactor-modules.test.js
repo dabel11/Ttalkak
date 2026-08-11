@@ -113,6 +113,68 @@ test("edited-message retry orchestration lives in the Make controller", async ()
   assert.deepEqual(calls, ["start", "apply", "thinking:true", "thinking:false", "complete", "after", "sync"]);
 });
 
+test("route cancellation leaves a classified non-retryable Make message state", async () => {
+  const OriginalFormData = global.FormData;
+  global.FormData = class { get() { return "cancel this request"; } };
+  const calls = [];
+  const state = { isLoggedIn: true, activeThreadId: "thread-1", messages: [] };
+  const controller = global.window.TtalkakMakeController;
+  try {
+    await controller.submitPrompt({
+      state, freeLimit: 3, guard: () => false, isBusy: () => false, notice: () => {},
+      bumpInteraction: () => {}, buildHistory: () => [], startRequest: () => new AbortController().signal,
+      setDraft: () => {}, appendUser: (_threadId, message) => state.messages.push(message),
+      setThinking: (value) => calls.push(`thinking:${value}`), updateThread: (id) => calls.push(`update:${id}`),
+      render: () => {}, scrollLatest: () => {}, waitForPaint: async () => {},
+      improve: async () => { throw Object.assign(new Error("cancelled"), { code: "REQUEST_ABORTED" }); },
+      stopInFlight: () => calls.push("stopped"), failRequest: (id, failure) => calls.push([id, failure]),
+      classifyError: () => ({ kind: "cancelled", message: "요청이 취소되었습니다.", retryable: false }),
+      recover: async () => { calls.push("unexpected-recovery"); return false; }, completeRequest: () => {},
+      setBackendFailure: () => calls.push("unexpected-backend-failure"), handleError: () => calls.push("unexpected-error-ui"),
+      appendAssistant: () => {}, applyPendingThread: () => {}, shouldSync: () => false,
+      refreshThread: async () => false, syncThread: () => {}, focusAsk: () => {},
+    }, {});
+  } finally {
+    global.FormData = OriginalFormData;
+  }
+  assert.equal(state.messages.length, 1);
+  assert.deepEqual(calls.slice(0, 4), ["thinking:true", "update:thread-1", "thinking:false", "stopped"]);
+  assert.equal(calls[4][1].retryable, false);
+  assert.match(calls[4][0], /^user-/);
+  assert.equal(calls[5], "update:thread-1");
+  assert.doesNotMatch(calls.join(" "), /unexpected/);
+});
+
+test("a stale cancelled request cannot clear a newer Make request", async () => {
+  const OriginalFormData = global.FormData;
+  global.FormData = class { get() { return "first request"; } };
+  const firstController = new AbortController();
+  const secondController = new AbortController();
+  let currentSignal = firstController.signal;
+  const calls = [];
+  try {
+    await global.window.TtalkakMakeController.submitPrompt({
+      state: { isLoggedIn: true, activeThreadId: "thread-1", messages: [] }, freeLimit: 3,
+      guard: () => false, isBusy: () => false, notice: () => {}, bumpInteraction: () => {},
+      buildHistory: () => [], startRequest: () => firstController.signal, setDraft: () => {},
+      appendUser: () => {}, setThinking: (value) => calls.push(`thinking:${value}`), updateThread: () => {},
+      render: () => {}, scrollLatest: () => {}, waitForPaint: async () => {},
+      improve: async () => {
+        currentSignal = secondController.signal;
+        throw Object.assign(new Error("stale cancellation"), { code: "REQUEST_ABORTED" });
+      },
+      isCurrentRequest: (signal) => currentSignal === signal,
+      stopInFlight: () => calls.push("unexpected-stop"), failRequest: () => calls.push("unexpected-failure"),
+      classifyError: (error) => error, recover: async () => false, completeRequest: () => {},
+      setBackendFailure: () => {}, handleError: () => {}, appendAssistant: () => {}, applyPendingThread: () => {},
+      shouldSync: () => false, refreshThread: async () => false, syncThread: () => {}, focusAsk: () => {},
+    }, {});
+  } finally {
+    global.FormData = OriginalFormData;
+  }
+  assert.deepEqual(calls, ["thinking:true"]);
+});
+
 test("Make persistence owns migration, deduplication, and persistence", () => {
   const state = { messages: [], recentThreads: [{ id: "same" }, { id: "same" }, {}] };
   let persisted = 0;
