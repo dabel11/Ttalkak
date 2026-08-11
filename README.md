@@ -402,10 +402,10 @@ The frontend removes reprocess/undo buttons for final report states and treats r
 
 The extension code lives in the repository root `extension` folder. It calls Spring Boot `POST /api/prompts/improve` and does not call FastAPI `/query` directly.
 
-Remaining extension checks:
+Extension notes and remaining checks:
 
 - Confirm real `chrome-extension://...` origin requests are allowed by backend CORS/security settings.
-- Confirm AI/RAG no-evidence, timeout, unavailable, and rate-limit response codes once backend/AI policies are final.
+- AI/RAG response policies are confirmed: no-evidence returns a successful fallback response, timeout and unavailable return `503 / AI_SERVICE_UNAVAILABLE`, and rate-limit returns `AI_RATE_LIMIT_EXCEEDED`.
 - Saved prompts and recent items are currently extension-local unless a later server sync scope is defined.
 
 #### Run
