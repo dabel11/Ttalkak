@@ -15,14 +15,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.ArrayList;
-import java.util.Optional;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -363,6 +361,28 @@ class PromptImproveConversationTest {
 				"http://rag.test");
 	}
 
+	private void useNeverRespondingRag(Duration timeout) {
+			WebClient.Builder webClientBuilder = WebClient.builder()
+					.exchangeFunction(request -> Mono.never());
+
+			controller = new PromptController(
+					promptRepository,
+					saveRepository,
+					likeRepository,
+					tagRepository,
+					authService,
+					makeThreadRepository,
+					objectMapper,
+					webClientBuilder,
+					timeout
+			);
+
+			ReflectionTestUtils.setField(
+					controller,
+					"ragServerUrl",
+					"http://rag.test");
+	}
+
 	private WebClient.Builder successfulRagWebClientBuilder() {
 		String responseBody = """
 				{
@@ -686,6 +706,35 @@ class PromptImproveConversationTest {
 		verify(
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void ragTimeoutReturnsServiceUnavailableAndDoesNotSaveThread() {
+			when(
+					authService.currentMemberIdOrNull(AUTHORIZATION))
+					.thenReturn(7L);
+
+			useNeverRespondingRag(Duration.ofMillis(100));
+
+			ApiException exception = assertThrows(
+					ApiException.class,
+					() -> controller.improve(
+							request(
+									"프롬프트를 개선해줘",
+									null,
+									null),
+							AUTHORIZATION));
+
+			assertEquals(
+					503,
+					exception.getStatusCode().value());
+			assertEquals(
+					"AI_SERVICE_UNAVAILABLE",
+					exception.getCode());
+
+			verify(
+					makeThreadRepository,
+					never()).save(any(MakeThread.class));
 	}
 
 	@Test
