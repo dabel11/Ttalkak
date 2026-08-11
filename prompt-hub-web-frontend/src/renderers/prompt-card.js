@@ -45,9 +45,9 @@
     ].join("");
 
     return `
-      <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${safePromptId}" tabindex="0" role="button" aria-label="${escapeAttr(`${prompt.title} 전체 보기`)}">
+      <article class="prompt-card ${isMine ? "mine-card" : ""} ${isReported ? "reported-card" : ""} ${isPendingUnsave ? "pending-unsave-card" : ""}" data-open-prompt="${safePromptId}">
         <div class="card-head">
-          <h2>${safeTitle}</h2>
+          <h2><button class="prompt-card-open" type="button" data-open-prompt-trigger="${safePromptId}" aria-label="${escapeAttr(`${prompt.title} 전체 보기`)}">${safeTitle}</button></h2>
           <div class="card-actions">
             ${
               isMine

@@ -2162,14 +2162,18 @@ function bindPromptInteractionEvents() {
 
   document.querySelectorAll("[data-open-prompt]").forEach((card) => {
     card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea, [role='button'], [role='menuitem']")) return;
       event.preventDefault();
       event.stopPropagation();
       openPromptDetail(card.dataset.openPrompt, { highlightCommentId: card.dataset.highlightComment || null });
     });
-    card.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
+  });
+
+  document.querySelectorAll("[data-open-prompt-trigger]").forEach((button) => {
+    button.addEventListener("click", (event) => {
       event.preventDefault();
-      openPromptDetail(card.dataset.openPrompt, { highlightCommentId: card.dataset.highlightComment || null });
+      event.stopPropagation();
+      openPromptDetail(button.dataset.openPromptTrigger);
     });
   });
 

@@ -880,6 +880,24 @@ h1 {
   -webkit-line-clamp: 2;
 }
 
+.prompt-card-open {
+  display: inline;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prompt-card-open:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #4f6f62;
+  outline-offset: 3px;
+}
+
 .card-actions {
   display: flex;
   flex: 1 1 100%;
