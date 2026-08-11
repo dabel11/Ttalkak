@@ -5,6 +5,9 @@ import tempfile
 from pathlib import Path
 
 from eval.multi_turn_eval import (
+    build_judge_prompt,
+    normalize_judge_result,
+    parse_judge_json,
     REQUIRED_CATEGORIES,
     average_non_null,
     build_cache_key,
@@ -621,6 +624,101 @@ def test_non_retryable_error_is_raised_immediately() -> None:
     assert get_error_status_code(ValueError("오류")) is None
     assert not is_retryable_generation_error(ValueError("오류"))
 
+def test_judge_prompt_contains_history_and_generation() -> None:
+    item = {
+        "history": [
+            {
+                "role": "user",
+                "content": "대학생 대상 시간 관리 글을 작성해줘.",
+            }
+        ],
+        "query": "친근한 말투와 5문단으로 바꿔줘.",
+        "expected_mode": "improve",
+        "must_include": ["대학생", "시간 관리", "5문단"],
+        "must_not_include": ["중학생"],
+    }
+
+    generation = {
+        "mode": "improve",
+        "answer": "개선했습니다.",
+        "improvedPrompt": (
+            "대학생을 대상으로 시간 관리 글을 "
+            "친근한 말투의 5문단으로 작성하라."
+        ),
+    }
+
+    prompt = build_judge_prompt(item, generation)
+
+    assert "대학생 대상 시간 관리 글" in prompt
+    assert "친근한 말투와 5문단" in prompt
+    assert generation["improvedPrompt"] in prompt
+    assert "contextRetention" in prompt
+    assert "hallucinationAvoidance" in prompt
+
+
+def test_parse_judge_json_accepts_markdown_fence() -> None:
+    raw_result = """```json
+{
+  "contextRetention": 5,
+  "instructionFollowing": 4,
+  "clarity": 5,
+  "hallucinationAvoidance": 4,
+  "reason": "이전 조건과 현재 요청을 모두 반영했습니다."
+}
+```"""
+
+    parsed = parse_judge_json(raw_result)
+
+    assert parsed is not None
+    assert parsed["contextRetention"] == 5
+    assert parsed["reason"] == (
+        "이전 조건과 현재 요청을 모두 반영했습니다."
+    )
+
+
+def test_normalize_judge_result_calculates_average() -> None:
+    result = normalize_judge_result({
+        "contextRetention": 5,
+        "instructionFollowing": "4",
+        "clarity": 3.0,
+        "hallucinationAvoidance": 4,
+        "reason": "전반적으로 조건을 충실히 반영했습니다.",
+    })
+
+    assert result["valid"] is True
+    assert result["scores"] == {
+        "contextRetention": 5,
+        "instructionFollowing": 4,
+        "clarity": 3,
+        "hallucinationAvoidance": 4,
+    }
+    assert result["averageScore"] == 4.0
+    assert result["error"] is None
+
+
+def test_normalize_judge_result_rejects_invalid_response() -> None:
+    invalid_json = normalize_judge_result("JSON이 아닌 응답")
+
+    assert invalid_json["valid"] is False
+    assert invalid_json["averageScore"] is None
+    assert invalid_json["error"] == "invalid_json"
+
+    invalid_scores = normalize_judge_result({
+        "contextRetention": 6,
+        "instructionFollowing": 4,
+        "clarity": 0,
+        "hallucinationAvoidance": 5,
+        "reason": "점수 범위가 잘못되었습니다.",
+    })
+
+    assert invalid_scores["valid"] is False
+    assert invalid_scores["averageScore"] is None
+    assert invalid_scores["error"] == "invalid_scores"
+    assert invalid_scores["invalidScoreKeys"] == [
+        "contextRetention",
+        "clarity",
+    ]
+
 def run_tests() -> None:
     tests = [
         test_cache_key_changes_with_history,
@@ -643,6 +741,10 @@ def run_tests() -> None:
         test_cached_generation_is_returned_as_copy,
         test_retry_succeeds_after_rate_limit,
         test_non_retryable_error_is_raised_immediately,
+        test_judge_prompt_contains_history_and_generation,
+        test_parse_judge_json_accepts_markdown_fence,
+        test_normalize_judge_result_calculates_average,
+        test_normalize_judge_result_rejects_invalid_response,
     ]
 
     for test in tests:

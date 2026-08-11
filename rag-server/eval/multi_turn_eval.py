@@ -475,3 +475,170 @@ def run_with_retry(
             sleep_fn(delay)
 
     raise RuntimeError("도달할 수 없는 재시도 상태입니다.")
+
+JUDGE_SCORE_KEYS = (
+    "contextRetention",
+    "instructionFollowing",
+    "clarity",
+    "hallucinationAvoidance",
+)
+
+
+def build_judge_prompt(
+    item: dict[str, Any],
+    generation: dict[str, Any],
+) -> str:
+    """다중 턴 프롬프트 개선 결과를 평가할 Judge 입력을 만든다."""
+    mode = normalize_mode(generation.get("mode"))
+
+    evaluation_target = (
+        generation.get("improvedPrompt", "")
+        if mode == "improve"
+        else generation.get("answer", "")
+    )
+
+    judge_input = {
+        "history": item.get("history", []),
+        "currentQuery": item.get("query", ""),
+        "expectedMode": normalize_mode(item.get("expected_mode")),
+        "actualMode": mode,
+        "evaluationTarget": str(evaluation_target or ""),
+        "mustInclude": item.get("must_include", []),
+        "mustNotInclude": item.get("must_not_include", []),
+    }
+
+    return f"""
+당신은 다중 턴 프롬프트 개선 시스템의 평가자입니다.
+아래 입력만 근거로 결과를 평가하세요.
+
+평가 기준:
+1. contextRetention
+   - 이전 대화에서 확정된 주제, 대상, 조건, 형식을 보존했는가
+   - 최신 요청이 이전 조건을 변경했다면 최신 조건을 우선했는가
+
+2. instructionFollowing
+   - 현재 요청과 명시적인 필수 조건을 정확히 반영했는가
+   - 사용자가 금지하거나 변경한 조건을 다시 포함하지 않았는가
+
+3. clarity
+   - 결과가 구체적이고 실행 가능하며 모호하지 않은가
+   - 불필요한 반복이나 서로 충돌하는 지시가 없는가
+
+4. hallucinationAvoidance
+   - 대화에 없던 중요한 사실이나 조건을 임의로 만들지 않았는가
+   - 정보가 부족한 경우 추측하지 않고 적절하게 질문했는가
+
+각 항목을 1점부터 5점까지의 정수로 평가하세요.
+5점은 기준을 매우 충실히 만족함을 의미합니다.
+
+반드시 다음 JSON 형식으로만 응답하세요:
+{{
+  "contextRetention": 1,
+  "instructionFollowing": 1,
+  "clarity": 1,
+  "hallucinationAvoidance": 1,
+  "reason": "판정 근거를 간결하게 작성"
+}}
+
+평가 입력:
+{json.dumps(judge_input, ensure_ascii=False, indent=2)}
+""".strip()
+
+
+def parse_judge_json(raw_result: Any) -> dict[str, Any] | None:
+    """Judge의 객체 또는 JSON 문자열 응답을 파싱한다."""
+    if isinstance(raw_result, dict):
+        return dict(raw_result)
+
+    if not isinstance(raw_result, str):
+        return None
+
+    text = raw_result.strip()
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+
+        if lines and lines[0].strip().lower() in {"```", "```json"}:
+            lines = lines[1:]
+
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+
+        text = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    return parsed if isinstance(parsed, dict) else None
+
+
+def normalize_judge_score(value: Any) -> int | None:
+    """Judge 점수를 1~5 범위의 정수로 검증한다."""
+    if isinstance(value, bool):
+        return None
+
+    if isinstance(value, int):
+        score = value
+    elif isinstance(value, float) and value.is_integer():
+        score = int(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+
+        if not stripped.isdigit():
+            return None
+
+        score = int(stripped)
+    else:
+        return None
+
+    return score if 1 <= score <= 5 else None
+
+
+def normalize_judge_result(raw_result: Any) -> dict[str, Any]:
+    """Judge 응답을 평가 결과에 저장할 공통 구조로 변환한다."""
+    parsed = parse_judge_json(raw_result)
+
+    if parsed is None:
+        return {
+            "valid": False,
+            "scores": {
+                key: None
+                for key in JUDGE_SCORE_KEYS
+            },
+            "averageScore": None,
+            "reason": "",
+            "error": "invalid_json",
+        }
+
+    scores = {
+        key: normalize_judge_score(parsed.get(key))
+        for key in JUDGE_SCORE_KEYS
+    }
+
+    invalid_keys = [
+        key
+        for key, score in scores.items()
+        if score is None
+    ]
+
+    if invalid_keys:
+        return {
+            "valid": False,
+            "scores": scores,
+            "averageScore": None,
+            "reason": str(parsed.get("reason") or "").strip(),
+            "error": "invalid_scores",
+            "invalidScoreKeys": invalid_keys,
+        }
+
+    average_score = sum(scores.values()) / len(scores)
+
+    return {
+        "valid": True,
+        "scores": scores,
+        "averageScore": average_score,
+        "reason": str(parsed.get("reason") or "").strip(),
+        "error": None,
+    }
