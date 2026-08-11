@@ -74,6 +74,7 @@ function App() {
     toggleSave,
     executeMessage,
     submitPrompt,
+    cancelImproveRequest,
     startEditMessage,
     setEditingDraft,
     cancelEditMessage,
@@ -158,6 +159,10 @@ function App() {
             onChangeEditDraft={setEditingDraft}
             onCancelEdit={cancelEditMessage}
             onSubmitEdit={submitEditedMessage}
+            onCancelRequest={() => {
+              if (!cancelImproveRequest()) return;
+              requestAnimationFrame(() => composerRef.current?.focus());
+            }}
             onSelectExample={handleSelectExample}
           />
           <Composer

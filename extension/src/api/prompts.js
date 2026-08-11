@@ -1,8 +1,9 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 import { normalizeImproveResult } from "../utils/normalizeImproveResult";
+import { IMPROVE_API_TIMEOUT_MS } from "../constants";
 
-export async function requestPromptImprove(config, payload) {
+export async function requestPromptImprove(config, payload, { signal } = {}) {
   const accessToken = payload?.accessToken || "";
   const sessionUuid = payload?.sessionUuid || "";
   const { accessToken: _accessToken, sessionUuid: _sessionUuid, ...requestPayload } = payload;
@@ -14,6 +15,8 @@ export async function requestPromptImprove(config, payload) {
       ...(!accessToken && sessionUuid ? { "X-Session-UUID": sessionUuid } : {}),
     },
     body: JSON.stringify(requestPayload),
+    signal,
+    timeoutMs: IMPROVE_API_TIMEOUT_MS,
   });
   const responseBody = await res.json().catch(() => null);
 

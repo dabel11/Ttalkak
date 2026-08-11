@@ -18,6 +18,7 @@ export function ChatFeed({
   onChangeEditDraft,
   onCancelEdit,
   onSubmitEdit,
+  onCancelRequest,
   onSelectExample,
 }) {
   const isEmpty = messages.length === 0 && !isLoading;
@@ -52,7 +53,7 @@ export function ChatFeed({
               key={message.id}
             />
           ))}
-          {isLoading && <TypingIndicator />}
+          {isLoading && <TypingIndicator onCancel={onCancelRequest} />}
         </div>
       )}
     </section>
@@ -190,10 +191,13 @@ function ActionButton({ icon, label, onClick }) {
   );
 }
 
-function TypingIndicator() {
+function TypingIndicator({ onCancel }) {
   return (
     <div className="message-row assistant">
-      <div className="typing-message" aria-label="프롬프트 개선 중"><span /><span /><span /></div>
+      <div className="typing-message" role="status" aria-live="polite" aria-label="프롬프트 개선 중">
+        <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+        <button className="cancel-request-button" type="button" onClick={onCancel} aria-label="요청 취소">취소</button>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { isAuthExpiredError } from "../utils/apiErrors";
 import { buildAskMessage, buildNoEvidenceMessage, getExecutablePrompt, getServerEditErrorMessage, hasPromptPlaceholders } from "../utils/conversationMessages";
 import { buildImproveHistory } from "../utils/conversationHistory";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
+import { createCancelledMessage, createImproveRequestCoordinator } from "../utils/improveRequestLifecycle";
 import { createServerThreadSync } from "./useServerThreads";
 
 export function useConversation({
@@ -31,6 +32,8 @@ export function useConversation({
   const [serverRecentThreads, setServerRecentThreads] = useState([]);
   const activeThreadId = useRef(null);
   const improveRequestInFlight = useRef(false);
+  const improveRequests = useRef(null);
+  if (!improveRequests.current) improveRequests.current = createImproveRequestCoordinator();
   const isLoggedIn = Boolean(authSession?.accessToken);
   const recentThreads = isLoggedIn ? serverRecentThreads : localRecentThreads;
   const {
@@ -206,15 +209,52 @@ export function useConversation({
     showNotice("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 복사한 프롬프트를 붙여넣어 주세요.");
   }
 
+  const activeImproveContext = useRef(null);
+
+  function beginImproveRequest(prompt, options = {}) {
+    improveRequestInFlight.current = true;
+    const request = improveRequests.current.start();
+    activeImproveContext.current = { request, prompt, ...options };
+    return request;
+  }
+
+  function finishImproveRequest(request) {
+    if (!improveRequests.current.finish(request)) return false;
+    if (activeImproveContext.current?.request === request) activeImproveContext.current = null;
+    improveRequestInFlight.current = false;
+    setIsLoading(false);
+    return true;
+  }
+
+  function handleImproveCancellation(request, prompt, { restoreComposer = false } = {}) {
+    if (!improveRequests.current.isCurrent(request)) return false;
+    if (request.cancellationHandled) return false;
+    request.cancellationHandled = true;
+    setRagStatus("idle");
+    if (restoreComposer) setComposerValue(prompt);
+    setMessages((prev) => [...prev, createCancelledMessage(prompt)]);
+    showNotice("요청을 취소했습니다. 입력한 내용은 유지됩니다.");
+    return true;
+  }
+
+  function cancelImproveRequest() {
+    const request = improveRequests.current.cancel();
+    if (!request) return false;
+    const context = activeImproveContext.current;
+    handleImproveCancellation(request, context?.prompt || "", context || {});
+    finishImproveRequest(request);
+    return true;
+  }
+
   async function submitPrompt() {
     const prompt = composerValue.trim();
     if (!prompt || isLoading || improveRequestInFlight.current) {
       if (prompt && improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
       return;
     }
-    improveRequestInFlight.current = true;
     const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
+    const request = beginImproveRequest(prompt, { restoreComposer: true });
 
     const userMsg = { id: `user-${Date.now()}`, role: "user", content: prompt };
     const history = buildImproveHistory(messages);
@@ -234,7 +274,8 @@ export function useConversation({
     setRagStatus("checking");
 
     try {
-      const data = await requestPromptImprove(ragConfig, improvePayload);
+      const data = await requestPromptImprove(ragConfig, improvePayload, { signal: request.controller.signal });
+      if (!improveRequests.current.canAcceptResult(request)) return;
       setRagStatus("connected");
       if (authSession?.accessToken && data.threadId) {
         activeThreadId.current = String(data.threadId);
@@ -341,6 +382,11 @@ export function useConversation({
         return [updatedThread, ...prev.filter((t) => t.id !== threadId)].slice(0, 30);
       });
     } catch (err) {
+      if (!improveRequests.current.isCurrent(request)) return;
+      if (err?.code === "REQUEST_ABORTED") {
+        handleImproveCancellation(request, prompt);
+        return;
+      }
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
       if (isAuthExpiredError(err)) {
@@ -369,8 +415,7 @@ export function useConversation({
         },
       ]);
     } finally {
-      improveRequestInFlight.current = false;
-      setIsLoading(false);
+      finishImproveRequest(request);
     }
   }
 
@@ -400,7 +445,7 @@ export function useConversation({
         return;
       }
 
-      improveRequestInFlight.current = true;
+      const request = beginImproveRequest(prompt, { restoreComposer: true });
       setEditingMessageId("");
       setEditingDraft("");
       setIsLoading(true);
@@ -413,11 +458,17 @@ export function useConversation({
           messageId,
           prompt,
           category: "prompt_techniques",
-        });
+        }, { signal: request.controller.signal });
+        if (!improveRequests.current.canAcceptResult(request)) return;
         setRagStatus("connected");
         await refreshActiveServerThread(String(threadId));
         showNotice("수정한 메시지로 다시 개선했습니다.");
       } catch (error) {
+        if (!improveRequests.current.isCurrent(request)) return;
+        if (error?.code === "REQUEST_ABORTED") {
+          handleImproveCancellation(request, prompt, { restoreComposer: true });
+          return;
+        }
         setRagStatus("error");
         if (isAuthExpiredError(error)) {
           await onAuthExpired?.();
@@ -430,8 +481,7 @@ export function useConversation({
         }
         showNotice(getServerEditErrorMessage(error));
       } finally {
-        improveRequestInFlight.current = false;
-        setIsLoading(false);
+        finishImproveRequest(request);
       }
       return;
     }
@@ -443,8 +493,6 @@ export function useConversation({
     const prompt = editingDraft.trim();
     const index = messages.findIndex((message) => message.id === messageId && message.role === "user");
     if (index < 0 || !prompt) return;
-    improveRequestInFlight.current = true;
-
     const baseMessages = messages.slice(0, index);
     const editedUserMsg = {
       ...messages[index],
@@ -454,6 +502,7 @@ export function useConversation({
     const history = buildImproveHistory(baseMessages);
     const guestSessionUuid = sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
+    const request = beginImproveRequest(prompt, { restoreComposer: true });
 
     setMessages([...baseMessages, editedUserMsg]);
     setEditingMessageId("");
@@ -467,7 +516,8 @@ export function useConversation({
         category: "prompt_techniques",
         sessionUuid: guestSessionUuid,
         history,
-      });
+      }, { signal: request.controller.signal });
+      if (!improveRequests.current.canAcceptResult(request)) return;
       setRagStatus("connected");
 
       const assistantMsg = {
@@ -508,6 +558,11 @@ export function useConversation({
       });
       showNotice("수정한 메시지를 다시 개선했습니다.");
     } catch (err) {
+      if (!improveRequests.current.isCurrent(request)) return;
+      if (err?.code === "REQUEST_ABORTED") {
+        handleImproveCancellation(request, prompt);
+        return;
+      }
       const isNetwork = err instanceof TypeError;
       setRagStatus("error");
       if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
@@ -527,8 +582,7 @@ export function useConversation({
         },
       ]);
     } finally {
-      improveRequestInFlight.current = false;
-      setIsLoading(false);
+      finishImproveRequest(request);
     }
   }
 
@@ -616,6 +670,7 @@ export function useConversation({
     toggleSave,
     executeMessage,
     submitPrompt,
+    cancelImproveRequest,
     startEditMessage,
     setEditingDraft,
     cancelEditMessage,
