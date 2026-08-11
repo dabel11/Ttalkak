@@ -404,7 +404,7 @@ The extension code lives in the repository root `extension` folder. It calls Spr
 
 Extension notes and remaining checks:
 
-- Confirm real `chrome-extension://...` origin requests are allowed by backend CORS/security settings.
+- Backend CORS/security settings were verified to allow requests from the configured `chrome-extension://...` origin.
 - AI/RAG response policies are confirmed: no-evidence returns a successful fallback response, timeout and unavailable return `503 / AI_SERVICE_UNAVAILABLE`, and rate-limit returns `AI_RATE_LIMIT_EXCEEDED`.
 - Saved prompts and recent items are currently extension-local unless a later server sync scope is defined.
 
