@@ -2,6 +2,7 @@ const { test, expect } = require("@playwright/test");
 const { gotoApp } = require("./support/app-ready.js");
 
 const STORAGE_KEY = "prompt_hub_web_state_v2";
+const TOKEN_KEY = "ttalkak_access_token";
 const API_PATTERN = "http://localhost:8080/**";
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -41,27 +42,34 @@ function persistedState(messages = [], extra = {}) {
 
 async function seedStorage(page, messages = [], extra = {}) {
   const value = persistedState(messages, extra);
-  await page.addInitScript(({ key, stored }) => {
+  const token = String(extra.authToken || extra.token || "");
+  await page.addInitScript(({ key, tokenKey, stored, token }) => {
     if (window.sessionStorage.getItem("__ttalkak_e2e_seeded__")) return;
     window.localStorage.clear();
     window.localStorage.setItem(key, stored);
+    if (token) window.localStorage.setItem(tokenKey, token);
     window.sessionStorage.setItem("__ttalkak_e2e_seeded__", "true");
-  }, { key: STORAGE_KEY, stored: value });
+  }, { key: STORAGE_KEY, tokenKey: TOKEN_KEY, stored: value, token });
 }
 
 async function mockBackend(page, improveHandler = async (route) => route.fulfill({
   status: 200,
   headers: CORS_HEADERS,
   body: JSON.stringify({ mode: "improve", improvedPrompt: "A production-ready improved prompt." }),
-})) {
+}), fixtures = {}) {
   await page.route(API_PATTERN, async (route) => {
     const request = route.request();
     if (request.method() === "OPTIONS") {
       await route.fulfill({ status: 204, headers: CORS_HEADERS, body: "" });
       return;
     }
-    if (new URL(request.url()).pathname === "/api/prompts/improve") {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/prompts/improve") {
       await improveHandler(route);
+      return;
+    }
+    if (pathname === "/api/make/threads" && request.method() === "GET" && fixtures.threads) {
+      await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: fixtures.threads }) });
       return;
     }
     await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: [] }) });
@@ -70,7 +78,7 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
 
 async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
-  await mockBackend(page, improveHandler);
+  await mockBackend(page, improveHandler, { threads: extra.backendThreads });
   await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
@@ -165,6 +173,114 @@ test("leaving Make aborts an in-flight request and preserves a non-retryable can
   await expect(page.locator(".message-failure-status")).toContainText("취소");
   await expect(page.locator(".message-failure-status [data-retry-message]")).toHaveCount(0);
   await expect(page.getByText("This response must be ignored.")).toHaveCount(0);
+});
+
+test("the explicit cancel button aborts the request, preserves the prompt, and ignores a late response", async ({ page }) => {
+  let requestStarted;
+  let releaseResponse;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  await openMake(page, [], {}, async (route) => {
+    requestStarted();
+    await release;
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "Cancelled late response" }),
+    }).catch(() => {});
+  });
+
+  const prompt = "Preserve this prompt after cancellation";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+  await started;
+  const cancel = page.locator("[data-cancel-make-request]");
+  await expect(cancel).toBeVisible();
+  await cancel.click();
+
+  const failure = page.locator(".message-failure-status");
+  await expect(failure).toContainText("취소");
+  await expect(failure.locator("[data-retry-message]")).toHaveCount(0);
+  await expect(page.getByText(prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+  releaseResponse();
+  await expect(page.getByText("Cancelled late response", { exact: true })).toHaveCount(0);
+});
+
+test("cancelling an edited-message resend preserves the edit and clears the thinking UI", async ({ page }) => {
+  let requestStarted;
+  let releaseResponse;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  const messages = [
+    { id: "user-edit", role: "user", content: "Original editable prompt" },
+    { id: "assistant-edit", role: "assistant", mode: "improve", improvedPrompt: "Original result" },
+  ];
+  await openMake(page, messages, {}, async (route) => {
+    requestStarted();
+    await release;
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "Late edited response" }),
+    }).catch(() => {});
+  });
+
+  await page.locator('[data-edit-message="user-edit"]').click();
+  const editForm = page.locator('[data-edit-message-form="user-edit"]');
+  await editForm.locator('textarea[name="message"]').fill("Preserved edited prompt");
+  await editForm.locator('button[type="submit"]').click();
+  await started;
+  await page.locator("[data-cancel-make-request]").click();
+
+  await expect(page.locator("[data-cancel-make-request]")).toHaveCount(0);
+  await expect(page.locator('[data-message-id="user-edit"] p')).toHaveText("Preserved edited prompt");
+  await expect(page.locator(".message-failure-status")).toContainText("취소");
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+  releaseResponse();
+  await expect(page.getByText("Late edited response", { exact: true })).toHaveCount(0);
+});
+
+test("a signed-in server-thread edit exposes cancellation and preserves its draft", async ({ page }) => {
+  let requestStarted;
+  let releaseResponse;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  const messages = [
+    { id: "server-user-edit", role: "user", content: "Server original prompt" },
+    { id: "server-assistant-edit", role: "assistant", mode: "improve", improvedPrompt: "Server original result" },
+  ];
+  const thread = { id: 77, serverId: 77, title: "Server fixture", preview: "Server original prompt", folderId: "uncategorized", createdAt: 1, messages };
+  await openMake(page, messages, {
+    isLoggedIn: true,
+    currentUser: "Fixture User",
+    currentUserId: 7,
+    currentUserRole: "user",
+    authToken: "fixture-token",
+    token: "fixture-token",
+    activeThreadId: 77,
+    recentThreads: [thread],
+    backendThreads: [thread],
+  }, async (route) => {
+    requestStarted();
+    await release;
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ mode: "improve", improvedPrompt: "Late server response" }) }).catch(() => {});
+  });
+
+  await page.locator('[data-edit-message="server-user-edit"]').click();
+  const editForm = page.locator('[data-edit-message-form="server-user-edit"]');
+  await editForm.locator('textarea[name="message"]').fill("Preserved server edit");
+  await editForm.locator('button[type="submit"]').click();
+  await started;
+  await expect(page.locator("[data-cancel-make-request]")).toBeVisible();
+  await page.locator("[data-cancel-make-request]").click();
+
+  await expect(page.locator("[data-cancel-make-request]")).toHaveCount(0);
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue("Preserved server edit");
+  await expect(page.locator(".message-failure-status")).toContainText("취소");
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+  releaseResponse();
+  await expect(page.getByText("Late server response", { exact: true })).toHaveCount(0);
 });
 
 const errorCases = [

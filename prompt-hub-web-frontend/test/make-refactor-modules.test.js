@@ -145,6 +145,53 @@ test("route cancellation leaves a classified non-retryable Make message state", 
   assert.doesNotMatch(calls.join(" "), /unexpected/);
 });
 
+test("edited-message cancellation clears thinking, preserves the edit, and renders cancellation", async () => {
+  const calls = [];
+  const messages = [{ id: "user-1", role: "user", content: "before" }];
+  const ctx = {
+    findEditableMessage: () => 0, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "thread-1", getMessages: () => messages,
+    buildHistory: () => [], startRequest: () => new AbortController().signal, shouldSync: () => false,
+    applyEdit: (_index, value) => { messages[0].content = value; },
+    setThinking: (value) => calls.push(`thinking:${value}`), queueScroll: () => {}, render: () => {},
+    waitForPaint: async () => {}, improve: async () => { throw Object.assign(new Error("cancelled"), { code: "REQUEST_ABORTED" }); },
+    stopInFlight: () => calls.push("stopped"), failRequest: (id, failure) => calls.push([id, failure.kind]),
+    classifyError: () => ({ kind: "cancelled", retryable: false }), clearEditing: () => calls.push("clear-editing"),
+    updateThread: () => calls.push("update"), renderCancellation: () => calls.push("render-cancellation"),
+    setBackendFailure: () => calls.push("unexpected-backend"), handleError: () => calls.push("unexpected-error"),
+  };
+
+  await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "edited prompt");
+
+  assert.equal(messages[0].content, "edited prompt");
+  assert.deepEqual(calls, ["thinking:true", "thinking:false", "stopped", ["user-1", "cancelled"], "clear-editing", "update", "render-cancellation"]);
+});
+
+test("server-synced edited-message cancellation exposes thinking and preserves the draft", async () => {
+  const calls = [];
+  const ctx = {
+    findEditableMessage: () => 0, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "thread-1", getMessages: () => [{ id: "user-1", role: "user", content: "before" }],
+    buildHistory: () => [], startRequest: () => new AbortController().signal, shouldSync: () => true,
+    getBackendThreadId: () => "77", setThinking: (value) => calls.push(`thinking:${value}`),
+    queueScroll: () => calls.push("queue-scroll"), render: () => calls.push("render"),
+    improve: async () => { throw Object.assign(new Error("cancelled"), { code: "REQUEST_ABORTED" }); },
+    failRequest: (id, failure) => calls.push([id, failure.kind]), classifyError: () => ({ kind: "cancelled", retryable: false }),
+    setDraft: (value) => calls.push(`draft:${value}`), clearEditing: () => calls.push("clear-editing"),
+    updateThread: () => calls.push("update"), renderCancellation: () => calls.push("render-cancellation"),
+    stopInFlight: () => calls.push("stopped"), setBackendFailure: () => calls.push("unexpected-backend"),
+    refreshThreads: async () => {}, recover: async () => null, handleError: () => calls.push("unexpected-error"),
+    refreshThread: async () => false, notice: () => {}, messages: { missingThread: "missing", edited: "edited", editFailed: "failed" },
+  };
+
+  await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "server edited prompt");
+
+  assert.deepEqual(calls, [
+    "thinking:true", "queue-scroll", "render", "thinking:false", ["user-1", "cancelled"],
+    "draft:server edited prompt", "clear-editing", "update", "render-cancellation", "stopped",
+  ]);
+});
+
 test("a stale cancelled request cannot clear a newer Make request", async () => {
   const OriginalFormData = global.FormData;
   global.FormData = class { get() { return "first request"; } };
@@ -201,4 +248,15 @@ test("Make event routing is defined outside app.js", () => {
   const button = { dataset: {}, matches: (selector) => selector === "[data-new-chat]" };
   handlers.click({ target: { closest: () => button } });
   assert.deepEqual(calls, [["newChat"]]);
+});
+
+test("Make event routing delegates the explicit request cancellation control", () => {
+  const calls = [];
+  const handlers = global.window.TtalkakMakeEvents.createDelegatedMakeHandlers({
+    state: {}, maxFolders: 5,
+    actions: new Proxy({}, { get: (_target, key) => key === "guard" ? () => false : (...args) => calls.push([key, ...args]) }),
+  });
+  const button = { dataset: {}, matches: (selector) => selector === "[data-cancel-make-request]" };
+  handlers.click({ target: { closest: (selector) => selector.includes("[data-cancel-make-request]") ? button : null } });
+  assert.deepEqual(calls, [["cancelRequest"]]);
 });

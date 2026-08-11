@@ -60,6 +60,7 @@
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
         ctx.failRequest(userMessageId, ctx.classifyError(error));
         ctx.updateThread(threadId);
+        ctx.renderCancellation?.();
         return;
       }
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
@@ -96,16 +97,28 @@
     const signal = ctx.startRequest();
     if (ctx.shouldSync()) {
       if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
+      ctx.setThinking(true);
+      ctx.queueScroll(messageId);
+      ctx.render();
       try {
         await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", signal });
         if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        ctx.setThinking(false);
         ctx.clearEditing();
         const refreshed = await ctx.refreshThread(threadId);
         if (!refreshed) ctx.render();
         ctx.notice(ctx.messages.edited);
       } catch (error) {
         if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
-        if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") return;
+        ctx.setThinking(false);
+        if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+          ctx.failRequest(messageId, ctx.classifyError(error));
+          ctx.setDraft(cleanValue);
+          ctx.clearEditing();
+          ctx.updateThread(threadId);
+          ctx.renderCancellation?.();
+          return;
+        }
         ctx.setBackendFailure();
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot: [...ctx.getMessages()] }).catch(() => null);
@@ -127,7 +140,13 @@
       if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
-      if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") return;
+      if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+        ctx.failRequest(messageId, ctx.classifyError(error));
+        ctx.clearEditing();
+        ctx.updateThread(threadId);
+        ctx.renderCancellation?.();
+        return;
+      }
       ctx.failRequest(messageId, ctx.classifyError(error));
       ctx.setBackendFailure();
       ctx.handleError(error, ctx.messages.improveFailed);

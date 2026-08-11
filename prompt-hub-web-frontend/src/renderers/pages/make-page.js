@@ -77,6 +77,7 @@
         <article class="message assistant thinking-message" aria-live="polite">
           <span class="thinking-label">\uC0DD\uAC01 \uC911</span>
           <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+          <button class="make-request-cancel" type="button" data-cancel-make-request aria-label="요청 취소">취소</button>
         </article>
       </div>
     `;

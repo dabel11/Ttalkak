@@ -59,8 +59,7 @@ const {
 } = modules.interactions.comments || {};
 const { createCommentView } = modules.interactions.commentView || {};
 const { createPromptWorkflows } = modules.interactions.workflows || {};
-const { createShareController, getShareTagSuggestions: getShareTagSuggestionsModel } = modules.share.controller || {};
-const { bindShareEvents } = modules.share.events || {};
+const loadShareRuntime = modules.share.loadRuntime;
 const { createModalController } = modules.modal.controller || {};
 const { bindModalEvents } = modules.modal.events || {};
 const { createModalView } = modules.modal.view || {};
@@ -69,10 +68,8 @@ const { getUserIdValidationMessage, isValidEmail } = modules.auth.validation || 
 const { createAuthController } = modules.auth.controller || {};
 const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = modules.auth.events || {};
 const { createAuthView } = modules.auth.view || {};
-const { bindAdminEvents } = modules.admin.events || {};
 const { createAdminSelectors } = modules.admin.selectors || {};
-const { createAdminController } = modules.admin.controller || {};
-const { createAdminView } = modules.admin.view || {};
+const loadAdminRuntime = modules.admin.loadRuntime;
 const { createAppBootstrap } = modules.bootstrap || {};
 const {
   makePreview,
@@ -84,10 +81,10 @@ const {
 const {
   createMakeServerSyncEffects,
 } = modules.effects.makeServerSync || {};
-const { createMakeWorkflows } = modules.make.workflows || {};
+const loadMakeRuntime = modules.make.loadRuntime;
 const apiClient = modules.api;
-const makeControllerModule = modules.make.controller;
-const makeEventsModule = modules.make.events;
+let makeControllerModule = null;
+let makeEventsModule = null;
 const makeFocusModule = modules.make.focus;
 const makeMessageModel = modules.make.messageModel;
 const makePersistenceModule = modules.make.persistence;
@@ -126,9 +123,7 @@ if (
     syncPromptCommentCountModel,
     createCommentView,
     createPromptWorkflows,
-    createShareController,
-    getShareTagSuggestionsModel,
-    bindShareEvents,
+    loadShareRuntime,
     createModalController,
     bindModalEvents,
     createModalView,
@@ -140,16 +135,14 @@ if (
     bindAuthControls,
     bindAuthForm,
     createAuthView,
-    bindAdminEvents,
     createAdminSelectors,
-    createAdminController,
-    createAdminView,
+    loadAdminRuntime,
     createAppBootstrap,
     makePreview,
     sanitizeMakeBackendMessage,
     recoverActiveMakeThreadAfterFailure,
     createMakeServerSyncEffects,
-    createMakeWorkflows,
+    loadMakeRuntime,
   ].some((fn) => typeof fn !== "function")
 ) {
   throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
@@ -938,7 +931,7 @@ const promptEngagementController = createPromptEngagementController({
   findCommentInList: commentRepository.findInList,
   confirm: (...args) => modalController.openConfirm(...args),
   deleteCommentState,
-  refreshAdmin: (options) => adminController.refreshAdminAfterMutation(options),
+  refreshAdmin: (options) => callAdminController("refreshAdminAfterMutation", options),
 });
 const hydratePromptComments = (...args) => promptEngagementController.hydratePromptComments(...args);
 const syncPromptCommentCount = commentRepository.syncCount;
@@ -975,13 +968,33 @@ const {
   getAdminTagStatus,
 } = adminSelectors;
 
-const shareController = createShareController({
-  state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
-  escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
-  hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: (...args) => promptWorkflows.removePromptById(...args),
-  handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
-  applyShared: applySharedPromptState, notice: showNotice,
-});
+let shareController = null;
+let bindShareEvents = null;
+let getShareTagSuggestionsModel = null;
+let shareRuntimePromise = null;
+async function ensureShareRuntime() {
+  if (shareController && bindShareEvents && getShareTagSuggestionsModel) return true;
+  shareRuntimePromise ||= loadShareRuntime().then((runtime) => {
+    const { createShareController, getShareTagSuggestions } = runtime.controller || {};
+    bindShareEvents = runtime.events?.bindShareEvents || null;
+    if (typeof createShareController !== "function" || typeof getShareTagSuggestions !== "function" || typeof bindShareEvents !== "function") throw new Error("TTALKAK Share 모듈을 불러오지 못했습니다.");
+    getShareTagSuggestionsModel = getShareTagSuggestions;
+    shareController = createShareController({
+      state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
+      escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
+      hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: (...args) => promptWorkflows.removePromptById(...args),
+      handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
+      applyShared: applySharedPromptState, notice: showNotice,
+    });
+    return true;
+  }).catch((error) => {
+    shareRuntimePromise = null;
+    reportWarning("share", "load-runtime", error);
+    showNotice("공유 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+    return false;
+  });
+  return shareRuntimePromise;
+}
 const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
 const authSession = createAuthSession({ state, applyIdentity: applyAuthenticatedIdentityState, resetBackend: resetSessionBackendStateValue, clearState: clearAuthenticatedSessionState, normalizeLikes: normalizePersistedLikeCounts, writeToken: (token) => writeStorageItem(AUTH_TOKEN_KEY, token), removeToken: () => removeStorageItem(AUTH_TOKEN_KEY) });
 const getCurrentAccountScopeKey = authSession.key;
@@ -994,39 +1007,81 @@ const clearAuthenticatedSession = authSession.clear;
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons });
 const { AuthModal } = authView;
-const adminController = createAdminController({
-  state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
-  normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, popularPrompts, savedPrompts, getUniquePrompts,
-  applyAdminUserActivityRefreshState, applyAdminUserBlockActivityState, applyAdminTagDecisionState, applyAdminReportStatusState,
-  applyAdminRevisionRequestState, applyAdminPromptHiddenState, canTransitionAdminTagStatus, getAdminTagStatus,
-  resolveAdminTagStatus, normalizeTag, getReportRecord, mapFrontendReportStatus, mapBackendReportStatus, isFinalReportStatus,
-  makeRevisionRequestKey, getRevisionRequestTarget, isRevisionTargetOwnedByCurrentUser,
-  refreshAdminAfterMutationEffect, refreshAdminAuditLogsEffect, hydratePromptComments, isBackendNumericId,
-  refreshBackendHomePrompts, getPromptMutationStateContext, normalizeAdminSearchText, getAdminUserActivity,
-  hydrateBackendAdminDataIfNeeded, finishAdminRevisionRequestState, getBackendErrorCode, getSortedPromptComments,
-  getAdminReportRecords, getAdminTagStatusLabel, getReportStatusLabel, getAuthorRevisionStatusLabel,
-  commentsByPrompt, findCommentInList: commentRepository.findInList, findPromptById, getAdminHydrationEffectContext,
-  reportWarning,
-});
-const adminView = createAdminView({
-  state, popularPrompts, savedPrompts, getUniquePrompts, getAdminReportRecords, getAdminManagedTags,
-  matchesAdminPromptFilter, matchesAdminPromptQuery, canUseDemoFallback, formatNumber, getReportStatusLabel,
-  escapeHtml, escapeAttr, getAdminTagStatusLabel, getTagStats, getAdminPromptsByTag, PromptCard,
-  normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, getSortedPromptComments,
-  normalizeAdminSearchText, getAdminUserActivity, getAdminKnownMemberId: adminController.getAdminKnownMemberId,
-  getIcons: () => icons, getRevisionRequestTarget, getAuthorRevisionStatusLabel,
-  AdminRevisionRequestModalView, truncateText, AdminUserBlockDialog, formatShortDate,
-  getAdminTagStatusClass, getPromptCommentCount, getPromptCreatedAt, getPromptLikes,
-  getPromptRevisionRequest, getPromptSaveCount, getPromptViewCount, isFinalReportStatus, makePreview,
-  renderAdminInlineAuthorControl, AdminPageView, AdminReportsPanelView, AdminPromptsPanelView,
-  AdminTagsPanelView, AdminUsersPanelView, AdminAuditPanelView,
-});
-const {
-  getAdminTabs, getAdminCanShowData, getAdminReportFilters, getAdminPromptFilters, getAdminTagFilters,
-  getActiveAdminPanel, AdminRevisionRequestModal, AdminUserBlockModal, getAdminPanelRendererContext,
-  AdminPage, AdminTagPromptUsagePanel, getAdminAuditActionLabel, getAdminAuditTargetLabel,
-  getAdminModeNotice, AdminUserActivitySummary,
-} = adminView;
+let adminController = null;
+let adminView = null;
+let bindAdminEvents = null;
+let adminRuntimePromise = null;
+
+function callAdminController(method, ...args) {
+  if (adminController?.[method]) return adminController[method](...args);
+  return ensureAdminRuntime().then(() => adminController?.[method]?.(...args));
+}
+
+function callAdminView(method, fallback, ...args) {
+  return adminView?.[method]?.(...args) ?? fallback;
+}
+
+async function ensureAdminRuntime() {
+  if (adminController && adminView && bindAdminEvents) return true;
+  adminRuntimePromise ||= loadAdminRuntime().then((runtime) => {
+    const { createAdminController } = runtime.controller || {};
+    const { createAdminView } = runtime.view || {};
+    bindAdminEvents = runtime.events?.bindAdminEvents || null;
+    if (typeof createAdminController !== "function" || typeof createAdminView !== "function" || typeof bindAdminEvents !== "function") {
+      throw new Error("TTALKAK Admin 모듈을 불러오지 못했습니다.");
+    }
+    adminController = createAdminController({
+      state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
+      normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, popularPrompts, savedPrompts, getUniquePrompts,
+      applyAdminUserActivityRefreshState, applyAdminUserBlockActivityState, applyAdminTagDecisionState, applyAdminReportStatusState,
+      applyAdminRevisionRequestState, applyAdminPromptHiddenState, canTransitionAdminTagStatus, getAdminTagStatus,
+      resolveAdminTagStatus, normalizeTag, getReportRecord, mapFrontendReportStatus, mapBackendReportStatus, isFinalReportStatus,
+      makeRevisionRequestKey, getRevisionRequestTarget, isRevisionTargetOwnedByCurrentUser,
+      refreshAdminAfterMutationEffect, refreshAdminAuditLogsEffect, hydratePromptComments, isBackendNumericId,
+      refreshBackendHomePrompts, getPromptMutationStateContext, normalizeAdminSearchText, getAdminUserActivity,
+      hydrateBackendAdminDataIfNeeded, finishAdminRevisionRequestState, getBackendErrorCode, getSortedPromptComments,
+      getAdminReportRecords, getAdminTagStatusLabel, getReportStatusLabel, getAuthorRevisionStatusLabel,
+      commentsByPrompt, findCommentInList: commentRepository.findInList, findPromptById, getAdminHydrationEffectContext,
+      reportWarning,
+    });
+    adminView = createAdminView({
+      state, popularPrompts, savedPrompts, getUniquePrompts, getAdminReportRecords, getAdminManagedTags,
+      matchesAdminPromptFilter, matchesAdminPromptQuery, canUseDemoFallback, formatNumber, getReportStatusLabel,
+      escapeHtml, escapeAttr, getAdminTagStatusLabel, getTagStats, getAdminPromptsByTag, PromptCard,
+      normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, getSortedPromptComments,
+      normalizeAdminSearchText, getAdminUserActivity, getAdminKnownMemberId: (...args) => adminController.getAdminKnownMemberId(...args),
+      getIcons: () => icons, getRevisionRequestTarget, getAuthorRevisionStatusLabel,
+      AdminRevisionRequestModalView, truncateText, AdminUserBlockDialog, formatShortDate,
+      getAdminTagStatusClass, getPromptCommentCount, getPromptCreatedAt, getPromptLikes,
+      getPromptRevisionRequest, getPromptSaveCount, getPromptViewCount, isFinalReportStatus, makePreview,
+      renderAdminInlineAuthorControl, AdminPageView, AdminReportsPanelView, AdminPromptsPanelView,
+      AdminTagsPanelView, AdminUsersPanelView, AdminAuditPanelView,
+    });
+    return true;
+  }).catch((error) => {
+    adminRuntimePromise = null;
+    reportWarning("admin", "load-runtime", error);
+    showNotice("관리자 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+    return false;
+  });
+  return adminRuntimePromise;
+}
+
+const getAdminTabs = (...args) => callAdminView("getAdminTabs", [], ...args);
+const getAdminCanShowData = (...args) => callAdminView("getAdminCanShowData", false, ...args);
+const getAdminReportFilters = (...args) => callAdminView("getAdminReportFilters", [], ...args);
+const getAdminPromptFilters = (...args) => callAdminView("getAdminPromptFilters", [], ...args);
+const getAdminTagFilters = (...args) => callAdminView("getAdminTagFilters", [], ...args);
+const getActiveAdminPanel = (...args) => callAdminView("getActiveAdminPanel", "", ...args);
+const AdminRevisionRequestModal = (...args) => callAdminView("AdminRevisionRequestModal", "", ...args);
+const AdminUserBlockModal = (...args) => callAdminView("AdminUserBlockModal", "", ...args);
+const getAdminPanelRendererContext = (...args) => callAdminView("getAdminPanelRendererContext", {}, ...args);
+const AdminPage = (...args) => callAdminView("AdminPage", '<section class="route-module-status" role="status">관리자 기능을 불러오는 중입니다.</section>', ...args);
+const AdminTagPromptUsagePanel = (...args) => callAdminView("AdminTagPromptUsagePanel", "", ...args);
+const getAdminAuditActionLabel = (...args) => callAdminView("getAdminAuditActionLabel", "", ...args);
+const getAdminAuditTargetLabel = (...args) => callAdminView("getAdminAuditTargetLabel", "", ...args);
+const getAdminModeNotice = (...args) => callAdminView("getAdminModeNotice", "", ...args);
+const AdminUserActivitySummary = (...args) => callAdminView("AdminUserActivitySummary", "", ...args);
 const modalView = createModalView({
   state, findPromptById, PromptDetailModalView, PromptEditModalView, ReportModalView, ConfirmDialog,
   ExecuteModalView, getDisplayPromptAuthor, getPromptCommentCount, getPromptLikes, getPromptSaveCount,
@@ -1036,48 +1091,103 @@ const modalView = createModalView({
   canShowReportedState, getPromptCreatedAt, findCommentById, getFinalPromptText,
 });
 const { PromptDetailModal, PromptEditModal, ReportModal, ConfirmModal, ExecuteModal } = modalView;
-const searchAdminUserCandidates = adminController.searchAdminUserCandidates;
-const openAdminUserActivity = adminController.openAdminUserActivity;
-const getAdminKnownMemberId = adminController.getAdminKnownMemberId;
-const updateAdminUserBlockState = adminController.updateAdminUserBlockState;
-const updateAdminTagDecision = adminController.updateAdminTagDecision;
-const updateReportRecordStatus = adminController.updateReportRecordStatus;
-const requestPromptRevision = adminController.requestPromptRevision;
-const updateAuthorRevisionRequest = adminController.updateAuthorRevisionRequest;
-const updateAdminCommentHiddenState = adminController.updateAdminCommentHiddenState;
-const toggleAdminPromptHidden = adminController.toggleAdminPromptHidden;
-const refreshAdminAuditLogs = adminController.refreshAdminAuditLogs;
+const searchAdminUserCandidates = (...args) => callAdminController("searchAdminUserCandidates", ...args);
+const openAdminUserActivity = (...args) => callAdminController("openAdminUserActivity", ...args);
+const getAdminKnownMemberId = (...args) => adminController?.getAdminKnownMemberId(...args) || null;
+const updateAdminUserBlockState = (...args) => callAdminController("updateAdminUserBlockState", ...args);
+const updateAdminTagDecision = (...args) => callAdminController("updateAdminTagDecision", ...args);
+const updateReportRecordStatus = (...args) => callAdminController("updateReportRecordStatus", ...args);
+const requestPromptRevision = (...args) => callAdminController("requestPromptRevision", ...args);
+const updateAuthorRevisionRequest = (...args) => callAdminController("updateAuthorRevisionRequest", ...args);
+const updateAdminCommentHiddenState = (...args) => callAdminController("updateAdminCommentHiddenState", ...args);
+const toggleAdminPromptHidden = (...args) => callAdminController("toggleAdminPromptHidden", ...args);
+const refreshAdminAuditLogs = (...args) => callAdminController("refreshAdminAuditLogs", ...args);
 const openAuth = authController.open;
 const closeTopModal = modalController.closeTop;
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
-const makeWorkflows = createMakeWorkflows({
-  state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
-  showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
-  copyTextToClipboard, makePromptTitle, normalizeSearchText, persistState, getMakeApi, getMakeApiToken,
-  handleMakeBackendSyncError, getMakeThreadById, getMakeBackendThreadId, isBackendNumericId,
-  normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
-  getMakeServerSyncContext, getMakeControllerContext, submitMakePrompt, openAuth, deleteMakeThreadState,
-  createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState,
-  MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext,
-  toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
-  openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
-  handleBackendAccessError,
-  reportWarning,
-});
-const {
-  performDeleteThread, guardMakeFolderMutation, normalizeMakeFolderName, hasMakeFolderName,
-  createLocalMakeFolder, removeLocalMakeFolder, restoreThreadFolder, createMakeFolder,
-  createMakeFolderAndMoveThread, getCustomMakeFolderCount, renameMakeFolder, performDeleteFolder,
-  moveThreadToFolder, moveThreadToFolderOnBackend, countThreadsInFolder, getThreadFolderId,
-  getActiveFolderName, copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage,
-  openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders,
-  executeMakeMessage, getExecuteTarget, updateRecentThread, openRecentThread, openSavedMakePrompt,
-  startNewChat, getRecentThreadKeyFromThread, getRecentThreadKey, applyTemplate, toggleTemplateBar,
-  createBackendMakeFolder, updateBackendMakeFolderName, deleteBackendMakeFolder, createBackendMakeThread,
-  ensureBackendMakeThreadId, getBackendFolderId, syncMakeThreadWithBackend, refreshMakeThreadsFromBackend,
-  refreshActiveMakeThreadFromBackend,
-} = makeWorkflows;
+let makeWorkflows = null;
+let makeRuntimePromise = null;
+async function ensureMakeRuntime() {
+  if (makeWorkflows && makeControllerModule && makeEventsModule) return true;
+  makeRuntimePromise ||= loadMakeRuntime().then((runtime) => {
+    const { createMakeWorkflows } = runtime.workflows || {};
+    makeControllerModule = runtime.controller || null;
+    makeEventsModule = runtime.events || null;
+    if (typeof createMakeWorkflows !== "function" || !makeControllerModule || !makeEventsModule) throw new Error("TTALKAK Make 모듈을 불러오지 못했습니다.");
+    makeWorkflows = createMakeWorkflows({
+      state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
+      showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
+      copyTextToClipboard, makePromptTitle, normalizeSearchText, persistState, getMakeApi, getMakeApiToken,
+      handleMakeBackendSyncError, getMakeThreadById, getMakeBackendThreadId, isBackendNumericId,
+      normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
+      getMakeServerSyncContext, getMakeControllerContext, submitMakePrompt, openAuth, deleteMakeThreadState,
+      createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState,
+      MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext,
+      toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
+      openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
+      handleBackendAccessError, reportWarning,
+    });
+    return true;
+  }).catch((error) => {
+    makeRuntimePromise = null;
+    reportWarning("make", "load-runtime", error);
+    showNotice("Make 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+    return false;
+  });
+  return makeRuntimePromise;
+}
+
+function callMakeWorkflow(method, fallback, ...args) {
+  if (makeWorkflows?.[method]) return makeWorkflows[method](...args);
+  ensureMakeRuntime().then((loaded) => { if (loaded) makeWorkflows?.[method]?.(...args); });
+  return fallback;
+}
+
+const performDeleteThread = (...args) => callMakeWorkflow("performDeleteThread", undefined, ...args);
+const guardMakeFolderMutation = (...args) => callMakeWorkflow("guardMakeFolderMutation", true, ...args);
+const normalizeMakeFolderName = (...args) => callMakeWorkflow("normalizeMakeFolderName", String(args[0] || "").trim(), ...args);
+const hasMakeFolderName = (...args) => callMakeWorkflow("hasMakeFolderName", false, ...args);
+const createLocalMakeFolder = (...args) => callMakeWorkflow("createLocalMakeFolder", null, ...args);
+const removeLocalMakeFolder = (...args) => callMakeWorkflow("removeLocalMakeFolder", undefined, ...args);
+const restoreThreadFolder = (...args) => callMakeWorkflow("restoreThreadFolder", undefined, ...args);
+const createMakeFolder = (...args) => callMakeWorkflow("createMakeFolder", undefined, ...args);
+const createMakeFolderAndMoveThread = (...args) => callMakeWorkflow("createMakeFolderAndMoveThread", undefined, ...args);
+const getCustomMakeFolderCount = (...args) => callMakeWorkflow("getCustomMakeFolderCount", 0, ...args);
+const renameMakeFolder = (...args) => callMakeWorkflow("renameMakeFolder", undefined, ...args);
+const performDeleteFolder = (...args) => callMakeWorkflow("performDeleteFolder", undefined, ...args);
+const moveThreadToFolder = (...args) => callMakeWorkflow("moveThreadToFolder", undefined, ...args);
+const moveThreadToFolderOnBackend = (...args) => callMakeWorkflow("moveThreadToFolderOnBackend", false, ...args);
+const countThreadsInFolder = (...args) => callMakeWorkflow("countThreadsInFolder", 0, ...args);
+const getThreadFolderId = (...args) => callMakeWorkflow("getThreadFolderId", "uncategorized", ...args);
+const getActiveFolderName = (...args) => callMakeWorkflow("getActiveFolderName", "최근 대화", ...args);
+const copyMakeMessage = (...args) => callMakeWorkflow("copyMakeMessage", undefined, ...args);
+const saveMakeMessage = (...args) => callMakeWorkflow("saveMakeMessage", undefined, ...args);
+const resendEditedMessage = (...args) => callMakeWorkflow("resendEditedMessage", undefined, ...args);
+const openShareFromMakeMessage = (...args) => callMakeWorkflow("openShareFromMakeMessage", undefined, ...args);
+const openExecuteModal = (...args) => callMakeWorkflow("openExecuteModal", undefined, ...args);
+const openPromptExecuteModal = (...args) => callMakeWorkflow("openPromptExecuteModal", undefined, ...args);
+const confirmPlaceholderExecution = (...args) => callMakeWorkflow("confirmPlaceholderExecution", false, ...args);
+const hasPromptPlaceholders = (...args) => callMakeWorkflow("hasPromptPlaceholders", false, ...args);
+const executeMakeMessage = (...args) => callMakeWorkflow("executeMakeMessage", undefined, ...args);
+const getExecuteTarget = (...args) => callMakeWorkflow("getExecuteTarget", null, ...args);
+const updateRecentThread = (...args) => callMakeWorkflow("updateRecentThread", undefined, ...args);
+const openRecentThread = (...args) => callMakeWorkflow("openRecentThread", undefined, ...args);
+const openSavedMakePrompt = (...args) => callMakeWorkflow("openSavedMakePrompt", undefined, ...args);
+const startNewChat = (...args) => callMakeWorkflow("startNewChat", undefined, ...args);
+const getRecentThreadKeyFromThread = (...args) => callMakeWorkflow("getRecentThreadKeyFromThread", "", ...args);
+const getRecentThreadKey = (...args) => callMakeWorkflow("getRecentThreadKey", "", ...args);
+const applyTemplate = (...args) => callMakeWorkflow("applyTemplate", undefined, ...args);
+const toggleTemplateBar = (...args) => callMakeWorkflow("toggleTemplateBar", undefined, ...args);
+const createBackendMakeFolder = (...args) => callMakeWorkflow("createBackendMakeFolder", "", ...args);
+const updateBackendMakeFolderName = (...args) => callMakeWorkflow("updateBackendMakeFolderName", false, ...args);
+const deleteBackendMakeFolder = (...args) => callMakeWorkflow("deleteBackendMakeFolder", false, ...args);
+const createBackendMakeThread = (...args) => callMakeWorkflow("createBackendMakeThread", "", ...args);
+const ensureBackendMakeThreadId = (...args) => callMakeWorkflow("ensureBackendMakeThreadId", "", ...args);
+const getBackendFolderId = (...args) => callMakeWorkflow("getBackendFolderId", null, ...args);
+const syncMakeThreadWithBackend = (...args) => callMakeWorkflow("syncMakeThreadWithBackend", undefined, ...args);
+const refreshMakeThreadsFromBackend = (...args) => callMakeWorkflow("refreshMakeThreadsFromBackend", false, ...args);
+const refreshActiveMakeThreadFromBackend = (...args) => callMakeWorkflow("refreshActiveMakeThreadFromBackend", false, ...args);
 const promptWorkflows = createPromptWorkflows({
   state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction,
   findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId,
@@ -1219,6 +1329,15 @@ function waitForThinkingIndicatorPaint() {
 }
 
 function navigateTo(route) {
+  if (route === "admin" && !adminController) {
+    ensureAdminRuntime().then((loaded) => { if (loaded && state.route === "admin") render(); });
+  }
+  if (route === "share" && !shareController) {
+    ensureShareRuntime().then((loaded) => { if (loaded && state.route === "share") render(); });
+  }
+  if (route === "make" && !makeWorkflows) {
+    ensureMakeRuntime().then((loaded) => { if (loaded && state.route === "make") render(); });
+  }
   if (state.route === "make" && route !== "make" && activeMakeRequestController) {
     activeMakeRequestController.abort();
   }
@@ -1479,6 +1598,9 @@ function getPromptCardPreviewTags(tags) {
 
 
 function MakePage() {
+  if (!makeWorkflows) {
+    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="make">Make 기능을 불러오는 중입니다.</section>';
+  }
   const hasMessages = state.messages.length > 0;
 
   return MakePageView(
@@ -1759,6 +1881,9 @@ function SavedEmptyMessage() {
 }
 
 function SharePage() {
+  if (!shareController) {
+    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="share">Share 기능을 불러오는 중입니다.</section>';
+  }
   const draft = state.shareDraft || {};
   const draftTags = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
   const selectedTags = parseSharedTags(draftTags);
@@ -1830,9 +1955,10 @@ function bindCoreEvents() {
   bindAuthControls(document, authController);
   bindModalControlEvents();
   bindPromptInteractionEvents();
+  bindPromptEditAndExecuteEvents();
   bindPromptEngagementEvents(document, promptEngagementController);
   bindHomeSearchEvents();
-  bindAdminEvents(document, { state, actions: {
+  bindAdminEvents?.(document, { state, actions: {
     togglePromptHidden: toggleAdminPromptHidden,
     cancelPromptSearch: () => discoveryController.cancelAdminPromptSearch(),
     schedulePromptSearch: scheduleAdminPromptSearchCommit,
@@ -1843,7 +1969,6 @@ function bindCoreEvents() {
     updateUserBlock: updateAdminUserBlockState,
     confirm: openConfirmAction,
     render,
-    bindPromptEditAndExecute: bindPromptEditAndExecuteEvents,
   } });
   bindFormSubmitEvents();
 }
@@ -1933,6 +2058,7 @@ function bindGlobalActionEvents() {
       }
       state.adminMode = !state.adminMode;
       state.route = state.adminMode ? "admin" : "home";
+      if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); });
       showNotice(state.adminMode ? "관리자 운영 화면으로 이동했습니다." : "사용자 화면을 읽기 전용으로 확인합니다.");
     });
   });
@@ -2166,7 +2292,7 @@ function bindFormSubmitEvents() {
 }
 
 function bindShareFormEvents() {
-  bindShareEvents(document, shareController, state);
+  if (shareController) bindShareEvents?.(document, shareController, state);
 }
 
 function bindReportAndCommentFormEvents() {
@@ -2249,7 +2375,7 @@ function bindReportAndCommentFormEvents() {
 
 
 function getShareTagSuggestions(query, selectedTags = []) {
-  return getShareTagSuggestionsModel(query, selectedTags, getKnownTags(), normalizeTag);
+  return getShareTagSuggestionsModel?.(query, selectedTags, getKnownTags(), normalizeTag) || [];
 }
 
 function updatePromptField(promptId, field, delta) {
@@ -2403,6 +2529,7 @@ function toggleLibraryDemoData() {
 }
 
 function bindMakeEvents() {
+  if (!makeEventsModule) return;
   bindDelegatedMakeEvents();
   bindMakeFeedScrollEvents({ state });
   document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
@@ -2419,6 +2546,7 @@ function bindDelegatedMakeEvents() {
       setEditing: (id) => makeStateModule.setMakeEditingMessage(state, id),
       setPendingScroll: (id) => { pendingMessageScrollId = id; },
       autosize: autosizeTextarea, submitComposer: submitMakeComposer, submitPrompt: submitMakePrompt,
+      cancelRequest: cancelActiveMakeRequest,
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
@@ -2441,6 +2569,12 @@ function submitMakeComposer(composer) {
 
 async function submitMakePrompt(composer) {
   return makeControllerModule.submitPrompt(getMakeControllerContext(), composer);
+}
+
+function cancelActiveMakeRequest() {
+  if (!activeMakeRequestController) return false;
+  activeMakeRequestController.abort();
+  return true;
 }
 
 function getMakeControllerContext() {
@@ -2486,6 +2620,11 @@ function getMakeControllerContext() {
     classifyError: makeMessageModel.classifyMakeError,
     setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
     handleError: handleBackendAccessError,
+    renderCancellation: () => {
+      if (state.route !== "make") return;
+      render();
+      window.setTimeout(() => document.querySelector('[data-composer] textarea[name="prompt"]')?.focus(), 0);
+    },
     applyPendingThread: applyPendingImproveThreadId,
     shouldSync: shouldUseImproveThreadSync,
     refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true }),
@@ -3297,8 +3436,27 @@ appBootstrap = createAppBootstrap({
   hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, normalizeDemoCopy,
   normalizeAssistantPromptOutputs, ensureDemoComments,
 });
-const hydration = appBootstrap.bootstrap();
-document.documentElement.dataset.ttalkakReady = "true";
-document.dispatchEvent(new CustomEvent("ttalkak:ready"));
+const bootstrapResult = appBootstrap.bootstrap();
+const needsAdminRuntime = state.adminMode || state.route === "admin";
+const needsShareRuntime = state.route === "share";
+const needsMakeRuntime = state.route === "make";
+const routeRuntime = needsAdminRuntime
+  ? ensureAdminRuntime()
+  : needsShareRuntime
+    ? ensureShareRuntime()
+    : needsMakeRuntime
+      ? ensureMakeRuntime()
+      : Promise.resolve(true);
+const routeReady = routeRuntime.then((loaded) => {
+  if (loaded) render();
+  return loaded;
+});
+const hydration = Promise.all([Promise.resolve(bootstrapResult), routeReady]).then(([result]) => result);
+const markApplicationReady = () => {
+  document.documentElement.dataset.ttalkakReady = "true";
+  document.dispatchEvent(new CustomEvent("ttalkak:ready"));
+};
+if (needsAdminRuntime || needsShareRuntime || needsMakeRuntime) routeReady.finally(markApplicationReady);
+else markApplicationReady();
 return hydration;
 }

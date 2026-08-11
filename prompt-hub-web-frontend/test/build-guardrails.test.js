@@ -33,6 +33,33 @@ test("production renderers keep Admin, Make, and Share behind route chunks", () 
   });
 });
 
+test("Admin controller view and events load only through the Admin runtime chunk", () => {
+  const adminEntry = fs.readFileSync(path.resolve(__dirname, "../src/admin/index.js"), "utf8");
+  assert.doesNotMatch(adminEntry, /^import "\.\/admin-(?:events|controller|view)\.js";/m);
+  ["admin-events.js", "admin-controller.js", "admin-view.js"].forEach((file) => {
+    assert.match(adminEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
+  });
+  assert.match(adminEntry, /loadAdminRuntime/);
+});
+
+test("Share controller and events load only through the Share runtime chunk", () => {
+  const shareEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/index.js"), "utf8");
+  assert.doesNotMatch(shareEntry, /^import "\.\/share-(?:controller|events)\.js";/m);
+  ["share-controller.js", "share-events.js"].forEach((file) => {
+    assert.match(shareEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
+  });
+  assert.match(shareEntry, /loadShareRuntime/);
+});
+
+test("Make controller events and workflows load only through the Make runtime chunk", () => {
+  const makeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/index.js"), "utf8");
+  ["make-controller.js", "make-events.js", "make-workflows.js"].forEach((file) => {
+    assert.doesNotMatch(makeEntry, new RegExp(`^import ["']\\./${file}["'];`, "m"));
+    assert.match(makeEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
+  });
+  assert.match(makeEntry, /loadMakeRuntime/);
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));

@@ -7,7 +7,7 @@ require("../src/renderers/pages/make-message-parts.js");
 require("../src/renderers/pages/make-page.js");
 
 const { MessageQuestionsView } = global.window.TtalkakMakeMessageParts;
-const { MessageBubbleView } = global.window.TtalkakRenderers;
+const { MakeFeedView, MessageBubbleView } = global.window.TtalkakRenderers;
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
 
@@ -72,4 +72,17 @@ test("ask messages hide copy and execute actions", () => {
   assert.match(html, /data-ask-answer-form/);
   assert.doesNotMatch(html, /data-copy-message/);
   assert.doesNotMatch(html, /data-execute-message/);
+});
+
+test("thinking messages expose an accessible request cancellation control", () => {
+  const html = MakeFeedView({ icons: { make: "make", send: "send" } }, {
+    hasMessages: true,
+    isThinking: true,
+    messages: [],
+    renderMessageBubble: () => "",
+    templateBarHtml: "",
+  });
+  assert.match(html, /data-cancel-make-request/);
+  assert.match(html, /aria-label="요청 취소"/);
+  assert.match(html, /aria-live="polite"/);
 });

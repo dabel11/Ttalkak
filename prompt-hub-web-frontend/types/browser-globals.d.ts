@@ -112,11 +112,21 @@ interface TtalkakModuleRegistry {
   saved: { createSavedLibraryController: Function };
   discovery: { createDiscoveryController: Function };
   interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
-  share: { controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  share: { loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule }> };
   modal: { controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
   auth: { session: TtalkakCallableModule; validation: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
-  admin: { events: TtalkakCallableModule; selectors: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule };
-  make: { preview: TtalkakCallableModule; messageModel: TtalkakCallableModule; state: TtalkakCallableModule; controller: TtalkakCallableModule; focus: TtalkakCallableModule; persistence: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  admin: {
+    selectors: TtalkakCallableModule;
+    loadRuntime(): Promise<{ events: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule }>;
+  };
+  make: {
+    preview: TtalkakCallableModule;
+    messageModel: TtalkakCallableModule;
+    state: TtalkakCallableModule;
+    focus: TtalkakCallableModule;
+    persistence: TtalkakCallableModule;
+    loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule }>;
+  };
   bootstrap: TtalkakCallableModule;
   components: TtalkakCallableModule;
   events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule };
@@ -192,7 +202,7 @@ interface TtalkakApiNormalizers {
   normalizeImproveResult(...values: unknown[]): TtalkakRecord;
 }
 interface TtalkakApiCore {
-  request(path: string, options?: RequestInit & { token?: string }): Promise<TtalkakRecord | TtalkakRecord[] | null>;
+  request(path: string, options?: RequestInit & { token?: string; timeoutMs?: number }): Promise<TtalkakRecord | TtalkakRecord[] | null>;
   unwrapItems(payload: unknown): TtalkakRecord[];
   unwrapPageMeta(payload: unknown): Record<string, unknown>;
 }
@@ -285,6 +295,7 @@ interface Window {
   __API_BASE_URL__?: string;
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
+  TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
   TTALKAK_API_CORE: TtalkakApiCore;
   TTALKAK_API_NORMALIZERS: TtalkakApiNormalizers;
   TTALKAK_AUTH_API: (context: TtalkakApiContext) => TtalkakCallableModule;

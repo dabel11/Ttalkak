@@ -6,9 +6,13 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "../src");
 
-test("browser API timeout leaves margin beyond the backend RAG timeout", () => {
+test("regular API requests keep 60 seconds while Make improvement receives 90 seconds", () => {
   const source = fs.readFileSync(path.join(root, "api/core-api.js"), "utf8");
-  assert.match(source, /TTALKAK_API_TIMEOUT_MS \|\| 90000/);
+  const promptApi = fs.readFileSync(path.join(root, "api/prompt-api.js"), "utf8");
+  assert.match(source, /TTALKAK_API_TIMEOUT_MS \|\| 60000/);
+  assert.match(source, /timeoutMs = API_TIMEOUT_MS/);
+  assert.match(promptApi, /TTALKAK_IMPROVE_TIMEOUT_MS \|\| 90000/);
+  assert.match(promptApi, /timeoutMs: IMPROVE_TIMEOUT_MS/);
 });
 
 test("Make improvement forwards cancellation from route lifecycle to fetch", () => {
@@ -16,7 +20,7 @@ test("Make improvement forwards cancellation from route lifecycle to fetch", () 
   const effects = fs.readFileSync(path.join(root, "effects/make-server-sync-effects.js"), "utf8");
   const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
   const globals = fs.readFileSync(path.resolve(__dirname, "../types/browser-globals.d.ts"), "utf8");
-  assert.match(promptApi, /signal, body: JSON\.stringify\(payload\)/);
+  assert.match(promptApi, /signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON\.stringify\(payload\)/);
   assert.match(effects, /getMakeApiToken\(\),\s*\{ signal \}/);
   assert.match(app, /state\.route === "make" && route !== "make"/);
   assert.match(app, /activeMakeRequestController\.abort\(\)/);

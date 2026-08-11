@@ -1,17 +1,16 @@
 (function () {
   const API_BASE_URL = window.__API_BASE_URL__ || window.TTALKAK_API_BASE_URL || "http://localhost:8080";
-  // The backend may spend up to 75 seconds waiting for RAG. Keep a margin for
-  // request transit and response serialization so the browser does not abort first.
-  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 90000);
+  const API_TIMEOUT_MS = Number(window.TTALKAK_API_TIMEOUT_MS || 60000);
 
   function buildUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
     return `${API_BASE_URL}${path}`;
   }
 
-  /** @param {string} path @param {RequestInit & { token?: string }} [options] */
+  /** @param {string} path @param {RequestInit & { token?: string, timeoutMs?: number }} [options] */
   async function request(path, options = {}) {
-    const { token, headers, ...fetchOptions } = options;
+    const { token, headers, timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options;
+    const requestTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : API_TIMEOUT_MS;
     const storedToken = (() => {
       try {
         return window.localStorage?.getItem("ttalkak_access_token") || "";
@@ -35,7 +34,7 @@
       if (controller.signal.aborted) return;
       abortCause = "timeout";
       controller.abort();
-    }, API_TIMEOUT_MS);
+    }, requestTimeoutMs);
 
     try {
       const response = await fetch(buildUrl(path), {

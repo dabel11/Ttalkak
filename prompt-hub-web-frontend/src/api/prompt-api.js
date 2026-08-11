@@ -1,4 +1,5 @@
 (function () {
+  const IMPROVE_TIMEOUT_MS = Number(window.TTALKAK_IMPROVE_TIMEOUT_MS || 90000);
   window.TTALKAK_PROMPT_API = function createPromptApi({ request, unwrapItems, unwrapPageMeta, normalizers }) {
     const {
       normalizePrompt,
@@ -47,7 +48,7 @@
       },
       /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
       improvePrompt(payload, token, { signal } = {}) {
-        return request("/api/prompts/improve", { method: "POST", token, signal, body: JSON.stringify(payload) }).then((result) =>
+        return request("/api/prompts/improve", { method: "POST", token, signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
           normalizeImproveResult(result, payload?.prompt || ""),
         );
       },

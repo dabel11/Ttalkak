@@ -15,7 +15,6 @@
     root.querySelectorAll("[data-admin-user-unblock]").forEach((button) => button.addEventListener("click", () => actions.updateUserBlock(button.dataset.adminUserUnblock, false, button.dataset.adminUserName)));
     root.querySelectorAll("[data-admin-tab]").forEach((button) => button.addEventListener("click", () => { state.adminTab = button.dataset.adminTab || "reports"; actions.render(); }));
     root.querySelectorAll("[data-admin-request-revision]").forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); state.adminRequestTargetKey = button.dataset.adminRequestRevision; actions.render(); }));
-    actions.bindPromptEditAndExecute();
   }
   const api = Object.freeze({ bindAdminEvents }); if (typeof module !== "undefined" && module.exports) module.exports = api; global.TtalkakAdminEvents = api;
 })(typeof window !== "undefined" ? window : globalThis);
