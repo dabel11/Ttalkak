@@ -2,34 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { assertProductionBackendApiUrl } from "./scripts/build-policy.mjs";
 
 function toHostPermission(url) {
   try {
     return `${new URL(url).origin}/*`;
   } catch {
     return "https://SPRING_BOOT_PRODUCTION_HOST/*";
-  }
-}
-
-function assertProductionBackendApiUrl(mode, backendApiUrl, isVerificationBuild) {
-  if (mode !== "production") return;
-  const normalizedUrl = String(backendApiUrl || "").trim();
-  const isExampleHost = /(^|\.)example\.(com|org|net|invalid)$/i.test(
-    (() => {
-      try {
-        return new URL(normalizedUrl).hostname;
-      } catch {
-        return "";
-      }
-    })()
-  );
-  if (
-    !normalizedUrl ||
-    !normalizedUrl.startsWith("https://") ||
-    normalizedUrl.includes("SPRING_BOOT_PRODUCTION_HOST") ||
-    (!isVerificationBuild && isExampleHost)
-  ) {
-    throw new Error("Production extension builds require VITE_BACKEND_API_URL to be set to the Spring Boot HTTPS URL.");
   }
 }
 
@@ -44,6 +23,10 @@ function extensionManifestPlugin(mode, backendApiUrl, outDir, isVerificationBuil
           ? path.resolve(root, "manifest.production.example.json")
           : path.resolve(root, "public", "manifest.json");
       const outPath = path.resolve(root, outDir, "manifest.json");
+      if (isVerificationBuild) {
+        fs.rmSync(outPath, { force: true });
+        return;
+      }
       const manifest = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
 
       if (mode === "production") {

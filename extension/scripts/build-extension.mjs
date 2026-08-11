@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,4 +27,11 @@ const result = spawnSync(process.execPath, [viteEntry, "build", "--mode", mode],
 });
 
 if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
+if (result.status !== 0) {
+  process.exitCode = result.status ?? 1;
+} else if (kind === "verify") {
+  const manifestPath = path.resolve(extensionRoot, "dist-verify", "manifest.json");
+  if (fs.existsSync(manifestPath)) {
+    throw new Error("Verification output must not contain manifest.json.");
+  }
+}
