@@ -550,6 +550,7 @@ The previous direct RAG URL setting is no longer the intended frontend path.
 `public/manifest.json` is the development manifest and keeps localhost permissions for local testing.
 `manifest.production.example.json` is the production manifest template and is used by `npm run build:prod`.
 See `docs/WEB_STORE_RELEASE_CHECKLIST.md` for the Chrome Web Store release checklist and backend CORS handoff steps.
+Frontend-wide deployment configuration, API change, response fixture, user copy, privacy, and support policies are documented in `docs/FRONTEND_OPERATING_POLICIES.md`.
 
 For production packaging:
 

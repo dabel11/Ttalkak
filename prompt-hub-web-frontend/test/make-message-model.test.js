@@ -123,3 +123,24 @@ test("shared response normalization covers fields changes techniques and executa
   assert.equal(result.techniques[0].name, "역할 부여");
   assert.equal(model.isExecutableMessage(result), true);
 });
+
+test("shared compatibility fixtures normalize consistently in the web client", () => {
+  for (const name of ["missingOptionalFields", "unknownAdditionalField", "emptyCollections", "noEvidence"]) {
+    const result = model.normalizeImproveResponse(fixtures[name]);
+    assert.equal(result.mode, "improve");
+    assert.ok(result.improvedPrompt);
+  }
+
+  assert.equal(model.normalizeImproveResponse(fixtures.noEvidence).ragStatus, "no_evidence");
+  assert.equal(model.classifyMakeError(fixtures.aiUnavailable).kind, "ai");
+  assert.equal(model.classifyMakeError(fixtures.timeout).kind, "timeout");
+
+  const cancelled = model.migrateMakeMessage(fixtures.cancelled);
+  assert.equal(cancelled.isCancelled, true);
+  assert.equal(cancelled.isError, false);
+  assert.equal(cancelled.excludeFromHistory, true);
+  assert.equal(model.isExecutableMessage(cancelled), false);
+
+  const legacy = model.migrateMakeMessage(fixtures.legacyAssistant);
+  assert.match(legacy.content, /구형 저장 응답/);
+});

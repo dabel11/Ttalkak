@@ -1,0 +1,18 @@
+{
+  "responses": {
+    "improve": { "mode": "improve", "answer": "요청을 구체화했습니다.", "improvedPrompt": "신규 사용자를 대상으로 제품 출시 안내문을 작성하라.", "questions": [], "fields": [], "sources": [], "ragStatus": "ok" },
+    "ask": { "mode": "ask", "answer": "정확한 결과를 위해 추가 정보가 필요합니다.", "summary": "목적과 대상 독자를 확인해주세요.", "improvedPrompt": "", "questions": [{ "field": "purpose", "question": "이 글의 목적은 무엇인가요?", "reason": "결과의 방향을 정하는 데 필요합니다.", "importance": "required" }, { "field": "audience", "question": "주요 독자는 누구인가요?", "reason": "어휘 수준을 조정하는 데 필요합니다.", "importance": "recommended" }], "fields": [], "sources": [], "ragStatus": "ok" },
+    "missingOptionalFields": { "mode": "improve", "answer": "간결하게 개선했습니다.", "improvedPrompt": "핵심 요구사항을 세 문장으로 요약하라.", "questions": [], "fields": [], "ragStatus": "ok" },
+    "unknownAdditionalField": { "mode": "improve", "answer": "추가 필드를 무시해도 정상 처리됩니다.", "improvedPrompt": "회의 결과를 결정 사항과 후속 작업으로 구분하라.", "questions": [], "fields": [], "sources": [], "ragStatus": "ok", "futureOptionalField": { "enabled": true } },
+    "emptyCollections": { "mode": "improve", "answer": "빈 선택 필드를 포함한 정상 응답입니다.", "summary": "", "improvedPrompt": "사용자 요청을 명확한 작업 지시로 바꿔라.", "questions": [], "fields": [], "sources": [], "changes": [], "techniques": [], "ragStatus": "ok" },
+    "noEvidence": { "mode": "improve", "answer": "관련 자료 없이 기본 방식으로 개선했습니다.", "improvedPrompt": "주어진 내용만 사용해 안내문을 작성하라.", "questions": [], "fields": [], "sources": [], "ragStatus": "no_evidence" }
+  },
+  "errors": {
+    "aiUnavailable": { "status": 503, "code": "AI_SERVICE_UNAVAILABLE", "message": "AI 서비스를 일시적으로 사용할 수 없습니다." },
+    "timeout": { "status": 408, "code": "REQUEST_TIMEOUT", "message": "요청 시간이 초과되었습니다." }
+  },
+  "clientMessages": {
+    "cancelled": { "role": "assistant", "content": "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.", "isCancelled": true, "isError": false, "excludeFromHistory": true },
+    "legacyAssistant": { "role": "assistant", "answer": "구형 저장 응답 본문입니다.", "summary": "구형 저장 응답 요약입니다." }
+  }
+}

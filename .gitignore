@@ -51,7 +51,10 @@ rag-server/eval/.temp_*.log
 # ── 계약 문서 (git 미포함 · 백엔드/프론트 담당에게 별도 공유) ──
 rag-server/CONTRACT_*.md
 
-docs/
+docs/*
+!docs/prompt-improve-contract.schema.json
+!docs/FRONTEND_OPERATING_POLICIES.md
+!docs/WEB_STORE_RELEASE_CHECKLIST.md
 .gitignore
 
 extension/.env.production.local
