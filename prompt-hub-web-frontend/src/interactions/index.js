@@ -1,8 +1,8 @@
 // @ts-check
-import "./prompt-engagement-controller.js";
-import "./prompt-engagement-events.js";
-import "./comment-model.js";
-import "./comment-view.js";
-import "./prompt-workflows.js";
+import * as engagement from "./prompt-engagement-controller.mjs";
+import * as events from "./prompt-engagement-events.mjs";
+import * as comments from "./comment-model.mjs";
+import * as commentView from "./comment-view.mjs";
+import * as workflows from "./prompt-workflows.mjs";
 
-export const interactions = Object.freeze({ engagement: window.TtalkakPromptEngagementController, events: window.TtalkakPromptEngagementEvents, comments: window.TtalkakCommentModel, commentView: window.TtalkakCommentView, workflows: window.TtalkakPromptWorkflows });
+export const interactions = Object.freeze({ engagement, events, comments, commentView, workflows });

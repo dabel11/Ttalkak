@@ -1,4 +1,3 @@
-(function attachAppBootstrap(global) {
   "use strict";
 
   function createAppBootstrap(ctx) {
@@ -106,7 +105,4 @@
     });
   }
 
-  const api = Object.freeze({ createAppBootstrap });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakAppBootstrap = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createAppBootstrap };

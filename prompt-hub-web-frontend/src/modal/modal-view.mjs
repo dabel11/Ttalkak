@@ -1,4 +1,3 @@
-(function attachModalView(global) {
   "use strict";
   function createModalView(ctx) {
     const { state, findPromptById, PromptDetailModalView, PromptEditModalView, ReportModalView, ConfirmDialog, ExecuteModalView, getDisplayPromptAuthor, getPromptCommentCount, getPromptLikes, getPromptSaveCount, getPromptViewCount, getSortedPromptComments, CommentItem, escapeAttr, escapeHtml, formatNumber, formatShortDate, getPromptRevisionRequest, makePreview, renderAdminInlineAuthorControl, renderAuthorSearchControl, isPromptSaved, isPromptPendingUnsave, canShowReportedState, getPromptCreatedAt, findCommentById, getFinalPromptText } = ctx;
@@ -120,7 +119,4 @@
 
     return Object.freeze({ PromptDetailModal, PromptEditModal, ReportModal, ConfirmModal, ExecuteModal });
   }
-  const api = Object.freeze({ createModalView });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakModalView = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createModalView };

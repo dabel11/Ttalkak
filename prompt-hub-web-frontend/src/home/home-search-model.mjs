@@ -1,4 +1,3 @@
-(function attachHomeSearchModel(global) {
   "use strict";
 
   const VALID_SEARCH_SCOPES = new Set(["all", "tag", "keyword", "author"]);
@@ -143,6 +142,4 @@
     uniquePrompts,
   });
 
-  global.TtalkakHomeSearchModel = HomeSearchModel;
-  if (typeof module !== "undefined" && module.exports) module.exports = HomeSearchModel;
-})(typeof window !== "undefined" ? window : globalThis);
+export { HomeSearchModel };

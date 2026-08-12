@@ -1,4 +1,3 @@
-(function attachPromptWorkflows(global) {
   "use strict";
   function createPromptWorkflows(ctx) {
     const { api, state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction, findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId, hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext, getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState, makeRevisionRequestKey, removePromptByIdState, refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag, parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState, applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE } = ctx;
@@ -241,7 +240,4 @@
 
     return Object.freeze({ openReportPrompt, openReportComment, submitReport, reportPrompt, reportComment, deleteOwnPrompt, unshareOwnPrompt, publishSavedPrompt, updateOwnPrompt, performDeletePrompt, performUnsharePrompt, removePromptById });
   }
-  const api = Object.freeze({ createPromptWorkflows });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakPromptWorkflows = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createPromptWorkflows };

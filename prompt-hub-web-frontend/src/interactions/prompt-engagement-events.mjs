@@ -1,4 +1,3 @@
-(function attachPromptEngagementEvents(global) {
   "use strict";
 
   function bindPromptEngagementEvents(root, actions) {
@@ -14,7 +13,4 @@
     root.querySelectorAll("[data-delete-comment]").forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); actions.deleteOwnComment(button.dataset.deleteComment); }));
   }
 
-  const api = Object.freeze({ bindPromptEngagementEvents });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakPromptEngagementEvents = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { bindPromptEngagementEvents };

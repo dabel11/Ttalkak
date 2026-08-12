@@ -1,4 +1,3 @@
-(function attachHomeController(global) {
   "use strict";
 
   function createHomeController(ctx) {
@@ -6,7 +5,7 @@
     let searchTipTimer = null;
 
     function cancelSearchCommit() {
-      global.clearTimeout(searchCommitTimer);
+      globalThis.clearTimeout(searchCommitTimer);
       searchCommitTimer = null;
     }
 
@@ -33,17 +32,17 @@
 
     function scheduleSearchCommit(value) {
       cancelSearchCommit();
-      searchCommitTimer = global.setTimeout(() => commitSearchQuery(value), ctx.debounceMs);
+      searchCommitTimer = globalThis.setTimeout(() => commitSearchQuery(value), ctx.debounceMs);
     }
 
     function showSearchTipOnce() {
       if (ctx.state.searchTipShown) return false;
       ctx.state.searchTipShown = true;
       ctx.state.searchTipVisible = true;
-      global.clearTimeout(searchTipTimer);
+      globalThis.clearTimeout(searchTipTimer);
       ctx.render();
       restoreSearchFocus();
-      searchTipTimer = global.setTimeout(() => {
+      searchTipTimer = globalThis.setTimeout(() => {
         ctx.state.searchTipVisible = false;
         ctx.root.querySelector("[data-search-help]")?.classList.remove("show-tip");
       }, 2000);
@@ -72,7 +71,4 @@
     return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, scheduleSearchCommit, showSearchTipOnce });
   }
 
-  const api = Object.freeze({ createHomeController });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakHomeController = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createHomeController };

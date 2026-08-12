@@ -1,9 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
+let createPromptWorkflows;
 let threadPolicy;
 let createMakeWorkflows;
 test.before(async () => {
+  ({ createPromptWorkflows } = await import("../src/interactions/prompt-workflows.mjs"));
   threadPolicy = await import("../src/make/make-thread-policy.mjs");
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
 });

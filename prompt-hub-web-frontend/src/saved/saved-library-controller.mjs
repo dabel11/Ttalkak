@@ -1,5 +1,4 @@
 // @ts-check
-(function attachSavedLibraryController(global) {
   "use strict";
 
   /** @param {TtalkakSavedLibraryContext} ctx */
@@ -94,7 +93,4 @@
     return Object.freeze({ getLocalPrompts, getPagePrompts, getSaveCount, getSorter, isHiddenDemoLibraryPrompt, isSaved, matchesFilter, normalizeOwnership, normalizeSavedCounts });
   }
 
-  const api = Object.freeze({ createSavedLibraryController });
-  (/** @type {Window & typeof globalThis} */ (global)).TtalkakSavedLibraryController = api;
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createSavedLibraryController };

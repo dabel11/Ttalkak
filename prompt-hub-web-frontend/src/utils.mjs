@@ -1,4 +1,3 @@
-(function attachTtalkakUtils(global) {
   "use strict";
 
   function normalizeSearchText(value) {
@@ -98,7 +97,7 @@
     }).format(new Date(time));
   }
 
-  global.TtalkakUtils = Object.freeze({
+  const utils = Object.freeze({
     normalizeSearchText,
     normalizeTag,
     isValidPhone,
@@ -110,4 +109,4 @@
     formatShortDate,
     parseTimestamp,
   });
-})(window);
+export { utils };

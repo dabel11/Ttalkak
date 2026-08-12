@@ -1,8 +1,9 @@
-(function attachTtalkakComponents(global) {
+import { utils } from "./utils.mjs";
+
   "use strict";
 
   function escapeHtml(value) {
-    const escape = global.TtalkakUtils?.escapeHtml;
+    const escape = utils.escapeHtml;
     if (typeof escape === "function") return escape(value);
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -13,7 +14,7 @@
   }
 
   function escapeAttr(value) {
-    const escape = global.TtalkakUtils?.escapeAttr;
+    const escape = utils.escapeAttr;
     if (typeof escape === "function") return escape(value);
     return escapeHtml(value);
   }
@@ -76,9 +77,9 @@
     `;
   }
 
-  global.TtalkakComponents = Object.freeze({
+  const components = Object.freeze({
     AdminUserBlockDialog,
     ConfirmDialog,
     Pagination,
   });
-})(window);
+export { components };

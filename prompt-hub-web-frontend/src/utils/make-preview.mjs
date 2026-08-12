@@ -1,4 +1,3 @@
-(function exposeMakePreviewUtils(global) {
   function makePreview(text) {
     const clean = cleanMakePreviewText(text);
     if (!clean) return "대화 내용 없음";
@@ -42,8 +41,8 @@
     );
   }
 
-  global.TtalkakMakePreview = {
+  const makePreviewUtils = {
     makePreview,
     sanitizeMakeBackendMessage,
   };
-})(window);
+export { makePreviewUtils };

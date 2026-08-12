@@ -1,7 +1,8 @@
 import { createDeferredMethodFacade, createLazyRuntimeFacade, createMethodFacade } from "./runtime/lazy-runtime-facade.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
-if (!modules) throw new Error("TTALKAK application modules are not initialized");
+const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
+if (!modules) throw moduleLoadError("application");
 const toWarningError = (...args) => {
   const error = args.find((value) => value instanceof Error) || new Error(args.map(String).join(" "));
   return error;
@@ -12,23 +13,13 @@ const {
   normalizeTag,
   isValidPhone,
   isFutureDate,
-  escapeHtml: utilEscapeHtml,
-  escapeAttr: utilEscapeAttr,
+  escapeHtml,
+  escapeAttr,
   getFinalPromptText,
   formatNumber,
   formatShortDate,
   parseTimestamp,
-} = modules.utils || {};
-function fallbackEscapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-const escapeHtml = typeof utilEscapeHtml === "function" ? utilEscapeHtml : fallbackEscapeHtml;
-const escapeAttr = typeof utilEscapeAttr === "function" ? utilEscapeAttr : escapeHtml;
+} = modules.utils;
 const {
   collectPopularTags,
   getValidSearchScope,
@@ -36,14 +27,14 @@ const {
   selectVisiblePrompts,
   sortPrompts,
   uniquePrompts,
-} = modules.home.model || {};
+} = modules.home.model;
 const getUniquePrompts = uniquePrompts;
-const { createHomeController } = modules.home.controller || {};
-const { bindHomeEvents } = modules.home.events || {};
-const { createSavedLibraryController } = modules.saved || {};
-const { createDiscoveryController } = modules.discovery || {};
-const { createPromptEngagementController } = modules.interactions.engagement || {};
-const { bindPromptEngagementEvents } = modules.interactions.events || {};
+const { createHomeController } = modules.home.controller;
+const { bindHomeEvents } = modules.home.events;
+const { createSavedLibraryController } = modules.saved;
+const { createDiscoveryController } = modules.discovery;
+const { createPromptEngagementController } = modules.interactions.engagement;
+const { bindPromptEngagementEvents } = modules.interactions.events;
 const {
   canDeleteComment: canDeleteCommentModel,
   countCommentThread: countCommentThreadModel,
@@ -54,31 +45,31 @@ const {
   getCommentLikes: getCommentLikesModel,
   sortComments: sortCommentsModel,
   syncPromptCommentCount: syncPromptCommentCountModel,
-} = modules.interactions.comments || {};
-const { createCommentView } = modules.interactions.commentView || {};
-const { createPromptWorkflows } = modules.interactions.workflows || {};
+} = modules.interactions.comments;
+const { createCommentView } = modules.interactions.commentView;
+const { createPromptWorkflows } = modules.interactions.workflows;
 const loadShareRuntime = modules.share.loadRuntime;
-const { createModalController } = modules.modal.controller || {};
-const { bindModalEvents } = modules.modal.events || {};
-const { createModalView } = modules.modal.view || {};
-const { createAuthSession, normalizeAuthResult } = modules.auth.session || {};
-const { getUserIdValidationMessage, isValidEmail } = modules.auth.validation || {};
-const { createAuthController } = modules.auth.controller || {};
-const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = modules.auth.events || {};
-const { createAuthView } = modules.auth.view || {};
-const { createAdminSelectors } = modules.admin.selectors || {};
+const { createModalController } = modules.modal.controller;
+const { bindModalEvents } = modules.modal.events;
+const { createModalView } = modules.modal.view;
+const { createAuthSession, normalizeAuthResult } = modules.auth.session;
+const { getUserIdValidationMessage, isValidEmail } = modules.auth.validation;
+const { createAuthController } = modules.auth.controller;
+const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = modules.auth.events;
+const { createAuthView } = modules.auth.view;
+const { createAdminSelectors } = modules.admin.selectors;
 const loadAdminRuntime = modules.admin.loadRuntime;
-const { createAppBootstrap } = modules.bootstrap || {};
+const { createAppBootstrap } = modules.bootstrap;
 const {
   makePreview,
   sanitizeMakeBackendMessage,
-} = modules.make.preview || {};
+} = modules.make.preview;
 const {
   recoverActiveMakeThreadAfterFailure,
-} = modules.effects.makeFailureRecovery || {};
+} = modules.effects.makeFailureRecovery;
 const {
   createMakeServerSyncEffects,
-} = modules.effects.makeServerSync || {};
+} = modules.effects.makeServerSync;
 const loadMakeRuntime = modules.make.loadRuntime;
 const apiClient = modules.api;
 let makeControllerModule = null;
@@ -87,7 +78,7 @@ const makeFocusModule = modules.make.focus;
 const makeMessageModel = modules.make.messageModel;
 const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
-const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy || {};
+const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
 if (
   [
     normalizeSearchText,
@@ -143,19 +134,19 @@ if (
     loadMakeRuntime,
   ].some((fn) => typeof fn !== "function")
 ) {
-  throw new Error("TTALKAK 공통 유틸을 불러오지 못했습니다.");
+  throw moduleLoadError("공통 유틸");
 }
 const {
   AdminUserBlockDialog,
   ConfirmDialog,
   Pagination: BasePagination,
-} = modules.components || {};
+} = modules.components;
 if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
-  throw new Error("TTALKAK 공통 컴포넌트를 불러오지 못했습니다.");
+  throw moduleLoadError("공통 컴포넌트");
 }
-const { bindAppEvents } = modules.events.app || {};
+const { bindAppEvents } = modules.events.app;
 if (typeof bindAppEvents !== "function") {
-  throw new Error("TTALKAK 이벤트 바인더를 불러오지 못했습니다.");
+  throw moduleLoadError("이벤트 바인더");
 }
 const {
   bindMakeFeedScrollEvents,
@@ -164,7 +155,7 @@ const {
   scheduleMakeLatestScroll: scheduleMakeLatestScrollEffect,
   scrollToMakeLatestMessage,
   scrollToPendingLatestMakeMessage,
-} = modules.events.makeScroll || {};
+} = modules.events.makeScroll;
 if (
   [
     bindMakeFeedScrollEvents,
@@ -175,7 +166,7 @@ if (
     scrollToPendingLatestMakeMessage,
   ].some((fn) => typeof fn !== "function")
 ) {
-  throw new Error("TTALKAK Make scroll events failed to load.");
+  throw moduleLoadError("Make scroll events");
 }
 const {
   applyBackendHomePromptsResult,
@@ -194,7 +185,7 @@ const {
   hydrateBackendMakeDataEffect,
   hydrateBackendMyPageDataEffect,
   refreshBackendHomePromptsEffect,
-} = modules.effects.backend || {};
+} = modules.effects.backend;
 if (
   [
     applyBackendHomePromptsResult,
@@ -215,7 +206,7 @@ if (
     refreshBackendHomePromptsEffect,
   ].some((fn) => typeof fn !== "function")
 ) {
-  throw new Error("TTALKAK 백엔드 후처리 헬퍼를 불러오지 못했습니다.");
+  throw moduleLoadError("백엔드 후처리 헬퍼");
 }
 const {
   canTransitionAdminTagStatus,
@@ -227,7 +218,7 @@ const {
   refreshAdminAfterMutationEffect,
   refreshAdminAuditLogsEffect,
   resolveAdminTagStatus,
-} = modules.effects.admin || {};
+} = modules.effects.admin;
 if (
   [
     canTransitionAdminTagStatus,
@@ -241,11 +232,11 @@ if (
     resolveAdminTagStatus,
   ].some((fn) => typeof fn !== "function")
 ) {
-  throw new Error("TTALKAK admin effects failed to load.");
+  throw moduleLoadError("admin effects");
 }
-const { handleBackendAccessErrorEffect } = modules.effects.error || {};
+const { handleBackendAccessErrorEffect } = modules.effects.error;
 if (typeof handleBackendAccessErrorEffect !== "function") {
-  throw new Error("TTALKAK error effects failed to load.");
+  throw moduleLoadError("error effects");
 }
 const {
   STORAGE_KEY,
@@ -393,7 +384,7 @@ if (
     writeStorageItem,
   ].some((fn) => typeof fn !== "function")
 ) {
-  throw new Error("TTALKAK 상태 헬퍼를 불러오지 못했습니다.");
+  throw moduleLoadError("상태 헬퍼");
 }
 const {
   AdminAuditPanelView,
@@ -426,13 +417,13 @@ const {
   HeaderView,
   SidebarView,
   renderAppShell,
-} = modules.renderers || {};
+} = modules.renderers;
 if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
-  throw new Error("TTALKAK 렌더러를 불러오지 못했습니다.");
+  throw moduleLoadError("렌더러");
 }
-const { resolvePageView } = modules.routing || {};
+const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
-  throw new Error("TTALKAK 라우팅 헬퍼를 불러오지 못했습니다.");
+  throw moduleLoadError("라우팅 헬퍼");
 }
 const DEMO_FALLBACK_ENABLED = window.TTALKAK_DEMO_FALLBACK_ENABLED === true;
 const popularPrompts = [
@@ -935,7 +926,7 @@ const shareRuntime = createLazyRuntimeFacade({
   initialize(runtime) {
     const { createShareController, getShareTagSuggestions } = runtime.controller || {};
     const bindShareEvents = runtime.events?.bindShareEvents || null;
-    if (typeof createShareController !== "function" || typeof getShareTagSuggestions !== "function" || typeof bindShareEvents !== "function") throw new Error("TTALKAK Share 모듈을 불러오지 못했습니다.");
+    if (typeof createShareController !== "function" || typeof getShareTagSuggestions !== "function" || typeof bindShareEvents !== "function") throw moduleLoadError("Share");
     const controller = createShareController({
       state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
       escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
@@ -969,7 +960,7 @@ const adminRuntime = createLazyRuntimeFacade({
     const { createAdminView } = runtime.view || {};
     const bindAdminEvents = runtime.events?.bindAdminEvents || null;
     if (typeof createAdminController !== "function" || typeof createAdminView !== "function" || typeof bindAdminEvents !== "function") {
-      throw new Error("TTALKAK Admin 모듈을 불러오지 못했습니다.");
+      throw moduleLoadError("Admin");
     }
     const controller = createAdminController({
       state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
@@ -1044,7 +1035,7 @@ async function ensureMakeRuntime() {
     const { createMakeWorkflows } = runtime.workflows || {};
     makeControllerModule = runtime.controller || null;
     makeEventsModule = runtime.events || null;
-    if (typeof createMakeWorkflows !== "function" || typeof runtime.pageAdapter?.createMakePageAdapter !== "function" || !makeControllerModule || !makeEventsModule) throw new Error("TTALKAK Make 모듈을 불러오지 못했습니다.");
+    if (typeof createMakeWorkflows !== "function" || typeof runtime.pageAdapter?.createMakePageAdapter !== "function" || !makeControllerModule || !makeEventsModule) throw moduleLoadError("Make");
     makeWorkflows = createMakeWorkflows({
       state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
       showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,

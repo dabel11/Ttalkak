@@ -1,4 +1,3 @@
-(function attachPageRouter(global) {
   "use strict";
 
   function resolvePageView(ctx) {
@@ -33,8 +32,7 @@
     return HomePage();
   }
 
-  global.TtalkakRouting = Object.freeze({
-    ...(global.TtalkakRouting || {}),
+  const routing = Object.freeze({
     resolvePageView,
   });
-})(window);
+export { routing };

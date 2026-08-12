@@ -7,16 +7,15 @@ let makeStateApi;
 let makeController;
 let makeEvents;
 let errorEffects;
+let normalizeAndPersistMakeState;
 test.before(async () => {
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
   makeStateApi = await import("../src/make/make-state.mjs");
   makeController = await import("../src/make/make-controller.mjs");
   makeEvents = await import("../src/make/make-events.mjs");
   ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
+  ({ normalizeAndPersistMakeState } = await import("../src/make/make-persistence.mjs"));
 });
-
-global.window = { setTimeout: (callback) => callback() };
-require("../src/make/make-persistence.js");
 
 test("Make request state transitions are centralized", () => {
   const api = makeStateApi;
@@ -72,7 +71,6 @@ test("backend UI policy consumes the shared normalized error model", () => {
     showNotice: (message) => notices.push(message),
     state,
   };
-  global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
   errorEffects.handleBackendAccessErrorEffect(ctx, { status: 401, code: "LOGIN_REQUIRED" });
   assert.equal(cleared, 1);
   assert.equal(state.authView, "login");
@@ -226,7 +224,7 @@ test("a stale cancelled request cannot clear a newer Make request", async () => 
 test("Make persistence owns migration, deduplication, and persistence", () => {
   const state = { messages: [], recentThreads: [{ id: "same" }, { id: "same" }, {}] };
   let persisted = 0;
-  global.window.TtalkakMakePersistence.normalizeAndPersistMakeState(
+  normalizeAndPersistMakeState(
     state,
     { migratePersistedMakeState: (value) => value },
     makeStateApi,

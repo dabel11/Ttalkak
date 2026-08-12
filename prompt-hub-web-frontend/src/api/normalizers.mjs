@@ -1,6 +1,5 @@
 import { unwrapItems } from "./core-api.mjs";
-import "../utils/make-message-model.js";
-const { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } = window.TtalkakMakeMessageModel;
+import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } from "../utils/make-message-model.mjs";
 
   function normalizeTags(value) {
     if (Array.isArray(value)) {

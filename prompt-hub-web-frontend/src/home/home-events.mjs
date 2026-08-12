@@ -1,4 +1,3 @@
-(function attachHomeEvents(global) {
   "use strict";
 
   function bindHomeEvents(root, controller, state) {
@@ -22,7 +21,4 @@
     root.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => controller.changePage(button.dataset.page)));
   }
 
-  const api = Object.freeze({ bindHomeEvents });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakHomeEvents = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { bindHomeEvents };

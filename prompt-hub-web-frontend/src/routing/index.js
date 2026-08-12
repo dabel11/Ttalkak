@@ -1,3 +1,2 @@
 // @ts-check
-import "./page-router.js";
-export const routing = window.TtalkakRouting;
+export { routing } from "./page-router.mjs";

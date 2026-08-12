@@ -2,7 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createAppBootstrap } = require("../src/bootstrap/app-bootstrap.js");
+let createAppBootstrap;
+test.before(async () => {
+  ({ createAppBootstrap } = await import("../src/bootstrap/app-bootstrap.mjs"));
+});
 
 test("bootstrap runs persistence normalization render and home hydration in order", async () => {
   const calls = [];

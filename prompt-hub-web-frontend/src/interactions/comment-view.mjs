@@ -1,4 +1,3 @@
-(function attachCommentView(global) {
   "use strict";
   function createCommentView(ctx) {
     const { state, canDeleteComment, canShowReportedState, escapeAttr, escapeHtml, formatNumber, formatShortDate, getCommentLikes, getSortedCommentReplies } = ctx;
@@ -114,7 +113,4 @@
 
     return Object.freeze({ CommentItem, ReplyItem });
   }
-  const api = Object.freeze({ createCommentView });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakCommentView = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createCommentView };

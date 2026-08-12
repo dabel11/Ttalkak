@@ -1,4 +1,3 @@
-(function attachCommentModel(global) {
   "use strict";
   function findCommentInList(comments, commentId) { for (const comment of comments || []) { if (comment.id === commentId) return comment; const reply = findCommentInList(comment.replies || [], commentId); if (reply) return reply; } return null; }
   function findCommentById(groups, commentId) { if (!commentId) return null; for (const comments of Object.values(groups || {})) { const found = findCommentInList(comments, commentId); if (found) return found; } return null; }
@@ -28,7 +27,4 @@
       syncCount: (promptId) => syncPromptCommentCount(promptId, commentsByPrompt[promptId], promptLists),
     });
   }
-  const api = Object.freeze({ canDeleteComment, countCommentThread, createCommentRepository, findCommentById, findCommentInList, findPromptIdByCommentId, getCommentLikes, sortComments, syncPromptCommentCount });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakCommentModel = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { canDeleteComment, countCommentThread, createCommentRepository, findCommentById, findCommentInList, findPromptIdByCommentId, getCommentLikes, sortComments, syncPromptCommentCount };

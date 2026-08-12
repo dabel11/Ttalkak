@@ -2,8 +2,6 @@ type TtalkakId = string | number;
 type TtalkakToken = string | undefined;
 type TtalkakPayload = Record<string, unknown>;
 type TtalkakCallableModule = Record<string, Function>;
-type TtalkakGlobal = typeof globalThis & { TtalkakStateDomains?: Record<string, TtalkakCallableModule> };
-declare function require(path: string): unknown;
 type TtalkakStateModule = TtalkakCallableModule & {
   STORAGE_KEY: string;
   AUTH_TOKEN_KEY: string;
@@ -308,28 +306,7 @@ interface Window {
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
   TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
-  TtalkakMakeMessageModel: TtalkakCallableModule;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
-  TtalkakUtils: TtalkakCallableModule;
-  TtalkakHomeSearchModel: TtalkakCallableModule;
-  TtalkakHomeController: TtalkakCallableModule;
-  TtalkakHomeEvents: TtalkakCallableModule;
-  TtalkakSavedLibraryController: TtalkakCallableModule;
-  TtalkakDiscoveryController: TtalkakCallableModule;
-  TtalkakPromptEngagementController: TtalkakCallableModule;
-  TtalkakPromptEngagementEvents: TtalkakCallableModule;
-  TtalkakCommentModel: TtalkakCallableModule;
-  TtalkakCommentView: TtalkakCallableModule;
-  TtalkakPromptWorkflows: TtalkakCallableModule;
-  TtalkakModalController: TtalkakCallableModule;
-  TtalkakModalEvents: TtalkakCallableModule;
-  TtalkakModalView: TtalkakCallableModule;
-  TtalkakAppBootstrap: TtalkakCallableModule;
-  TtalkakMakeFocus: TtalkakCallableModule;
-  TtalkakMakePersistence: TtalkakCallableModule;
-  TtalkakMakePreview: TtalkakCallableModule;
-  TtalkakComponents: TtalkakCallableModule;
-  TtalkakRouting: TtalkakCallableModule;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
 }
 

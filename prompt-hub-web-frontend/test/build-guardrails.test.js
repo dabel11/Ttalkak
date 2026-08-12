@@ -107,3 +107,38 @@ test("legacy global audit recognizes dot and bracket access on every browser glo
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("production source remains free of legacy Ttalkak globals", () => {
+  const frontendRoot = path.resolve(__dirname, "..");
+  const baseline = JSON.parse(fs.readFileSync(path.join(frontendRoot, "legacy-global-baseline.json"), "utf8"));
+  const result = auditLegacyGlobals(path.join(frontendRoot, "src"));
+  assert.deepEqual(
+    { files: result.files, references: result.references, assignments: result.assignments },
+    { files: 0, references: 0, assignments: 0 },
+  );
+  assert.deepEqual(baseline.allowedIdentifiers, []);
+  assert.deepEqual(baseline.maximumReferencesByFile, {});
+});
+
+test("converted domains import named ESM implementations without legacy JavaScript fallbacks", () => {
+  const frontendRoot = path.resolve(__dirname, "..");
+  const converted = {
+    bootstrap: ["app-bootstrap"],
+    discovery: ["discovery-controller"],
+    home: ["home-controller", "home-events", "home-search-model"],
+    interactions: ["comment-model", "comment-view", "prompt-engagement-controller", "prompt-engagement-events", "prompt-workflows"],
+    modal: ["modal-controller", "modal-events", "modal-view"],
+    saved: ["saved-library-controller"],
+  };
+  for (const [domain, modules] of Object.entries(converted)) {
+    const entry = fs.readFileSync(path.join(frontendRoot, "src", domain, "index.js"), "utf8");
+    for (const moduleName of modules) {
+      assert.match(entry, new RegExp(`${moduleName}\\.mjs`));
+      assert.equal(fs.existsSync(path.join(frontendRoot, "src", domain, `${moduleName}.js`)), false);
+    }
+  }
+  ["components", "utils"].forEach((moduleName) => {
+    assert.equal(fs.existsSync(path.join(frontendRoot, "src", `${moduleName}.mjs`)), true);
+    assert.equal(fs.existsSync(path.join(frontendRoot, "src", `${moduleName}.js`)), false);
+  });
+});

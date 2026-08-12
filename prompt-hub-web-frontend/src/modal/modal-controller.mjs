@@ -1,4 +1,3 @@
-(function attachModalController(global) {
   "use strict";
 
   function createModalController(ctx) {
@@ -7,7 +6,7 @@
     function restoreFocus() {
       const target = returnFocusTarget;
       returnFocusTarget = null;
-      global.setTimeout(() => {
+      globalThis.setTimeout(() => {
         const restoredFolderTrigger = target?.folderId && typeof ctx.root.querySelectorAll === "function"
           ? [...ctx.root.querySelectorAll("[data-folder-item]")].find((item) => item.dataset.folderItem === target.folderId)?.querySelector("[data-folder-menu]")
           : null;
@@ -25,7 +24,7 @@
     }
 
     function focusActive() {
-      global.setTimeout(() => {
+      globalThis.setTimeout(() => {
         if (typeof ctx.root.querySelectorAll !== "function") return;
         const modals = ctx.root.querySelectorAll(".modal");
         const modal = modals[modals.length - 1];
@@ -67,7 +66,4 @@
     return Object.freeze({ closeTop, focusActive, openConfirm, runConfirmed });
   }
 
-  const api = Object.freeze({ createModalController });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakModalController = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createModalController };

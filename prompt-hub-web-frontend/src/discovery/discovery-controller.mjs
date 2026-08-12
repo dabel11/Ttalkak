@@ -1,5 +1,4 @@
 // @ts-check
-(function attachDiscoveryController(global) {
   "use strict";
 
   /** @param {TtalkakDiscoveryContext} ctx */
@@ -20,7 +19,7 @@
       const key = kind === "prompt" ? "adminPromptQuery" : "adminTagQuery";
       const selector = kind === "prompt" ? "[data-admin-prompt-search]" : "[data-admin-tag-search]";
       const nextQuery = String(value || "");
-      global.clearTimeout(timers[kind]);
+      globalThis.clearTimeout(timers[kind]);
       if (ctx.state[key] === nextQuery) return;
       ctx.state[key] = nextQuery;
       ctx.render();
@@ -29,8 +28,8 @@
 
     /** @param {"prompt" | "tag"} kind @param {unknown} value */
     function scheduleAdminSearch(kind, value) {
-      global.clearTimeout(timers[kind]);
-      timers[kind] = global.setTimeout(() => commitAdminSearch(kind, value), ctx.searchDebounceMs);
+      globalThis.clearTimeout(timers[kind]);
+      timers[kind] = globalThis.setTimeout(() => commitAdminSearch(kind, value), ctx.searchDebounceMs);
     }
 
     /** @param {unknown} tag */
@@ -56,8 +55,8 @@
     }
 
     return Object.freeze({
-      cancelAdminPromptSearch: () => global.clearTimeout(timers.prompt),
-      cancelAdminTagSearch: () => global.clearTimeout(timers.tag),
+      cancelAdminPromptSearch: () => globalThis.clearTimeout(timers.prompt),
+      cancelAdminTagSearch: () => globalThis.clearTimeout(timers.tag),
       commitAdminPromptSearch: (/** @type {unknown} */ value) => commitAdminSearch("prompt", value),
       commitAdminTagSearch: (/** @type {unknown} */ value) => commitAdminSearch("tag", value),
       scheduleAdminPromptSearch: (/** @type {unknown} */ value) => scheduleAdminSearch("prompt", value),
@@ -69,7 +68,4 @@
     });
   }
 
-  const api = Object.freeze({ createDiscoveryController });
-  (/** @type {Window & typeof globalThis} */ (global)).TtalkakDiscoveryController = api;
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createDiscoveryController };

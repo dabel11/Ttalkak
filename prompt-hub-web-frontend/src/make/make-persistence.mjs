@@ -1,4 +1,3 @@
-(function attachMakePersistence(global) {
   "use strict";
   function normalizeAndPersistMakeState(state, model, stateApi, persist) {
     model.migratePersistedMakeState(state);
@@ -13,5 +12,4 @@
     persist();
     return state;
   }
-  global.TtalkakMakePersistence = Object.freeze({ normalizeAndPersistMakeState });
-})(window);
+export { normalizeAndPersistMakeState };

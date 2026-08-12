@@ -2,9 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createPromptEngagementController } = require("../src/interactions/prompt-engagement-controller.js");
-const { bindPromptEngagementEvents } = require("../src/interactions/prompt-engagement-events.js");
-const commentModel = require("../src/interactions/comment-model.js");
+let createPromptEngagementController;
+let bindPromptEngagementEvents;
+let commentModel;
+test.before(async () => {
+  ({ createPromptEngagementController } = await import("../src/interactions/prompt-engagement-controller.mjs"));
+  ({ bindPromptEngagementEvents } = await import("../src/interactions/prompt-engagement-events.mjs"));
+  commentModel = await import("../src/interactions/comment-model.mjs");
+});
 
 function createContext(overrides = {}) {
   const calls = [];
@@ -59,7 +64,7 @@ test("app delegates engagement workflows without duplicate controller functions"
   const entry = fs.readFileSync(path.join(frontendRoot, "src", "app-entry.js"), "utf8");
   const interactionEntry = fs.readFileSync(path.join(frontendRoot, "src", "interactions", "index.js"), "utf8");
   assert.match(entry, /interactions\/index\.js/);
-  assert.match(interactionEntry, /prompt-engagement-controller\.js/);
+  assert.match(interactionEntry, /prompt-engagement-controller\.mjs/);
   assert.match(interactionEntry, /export const interactions/);
   assert.match(appSource, /createPromptEngagementController/);
   ["toggleSavedPrompt", "toggleLikePrompt", "toggleLikeComment", "addPromptComment", "addCommentReply", "updateOwnComment"].forEach((name) => {

@@ -1,4 +1,3 @@
-(function attachPromptEngagementController(global) {
   "use strict";
 
   function createPromptEngagementController(ctx) {
@@ -154,7 +153,4 @@
     return Object.freeze({ addCommentReply, addPromptComment, deleteOwnComment, hydratePromptComments, openPromptComments, performDeleteComment, toggleEditComment, toggleLikeComment, toggleLikePrompt, toggleReplyForm, toggleSavedPrompt, updateOwnComment });
   }
 
-  const api = Object.freeze({ createPromptEngagementController });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakPromptEngagementController = api;
-})(typeof window !== "undefined" ? window : globalThis);
+export { createPromptEngagementController };
