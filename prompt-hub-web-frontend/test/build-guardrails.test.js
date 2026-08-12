@@ -26,15 +26,24 @@ test("production build splits optional demo data out of the initial bundle", () 
   assert.match(packageJson.scripts.verify, /analyze:bundle/);
 });
 
-test("production renderers keep Admin, Make, and Share behind route chunks", () => {
+test("production renderers share the Admin, Make, and Share runtime chunks", () => {
   const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
   const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
   ["admin-panels.mjs", "pages/admin-page.mjs", "pages/make-message-parts.mjs", "pages/make-page.mjs", "pages/share-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(`import ["']\\./${file.replaceAll(".", "\\.")}["']`));
   });
-  ["admin", "make", "share"].forEach((route) => {
-    assert.match(loader, new RegExp(`${route}: \\(\\) => import\\(["']\\./routes/${route}\\.js["']\\)`));
-  });
+  assert.match(loader, /admin: \(\) => import\(["']\.\.\/admin\/admin-runtime\.mjs["']\)/);
+  assert.match(loader, /make: \(\) => import\(["']\.\.\/make\/make-runtime\.mjs["']\)/);
+  assert.match(loader, /share: \(\) => import\(["']\.\.\/share\/share-runtime\.mjs["']\)/);
+  const runtimeSources = {
+    admin: fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8"),
+    make: fs.readFileSync(path.resolve(__dirname, "../src/make/make-runtime.mjs"), "utf8"),
+    share: fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8"),
+  };
+  assert.match(runtimeSources.admin, /renderers\/pages\/admin-page\.mjs/);
+  assert.match(runtimeSources.admin, /renderers\/admin-panels\.mjs/);
+  assert.match(runtimeSources.make, /renderers\/pages\/make-page\.mjs/);
+  assert.match(runtimeSources.share, /renderers\/pages\/share-page\.mjs/);
 });
 
 test("Admin controller view and events load only through the Admin runtime chunk", () => {

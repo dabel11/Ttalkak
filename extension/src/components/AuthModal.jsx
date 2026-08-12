@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, Plus, X } from "lucide-react";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "../constants";
+import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
 
 const INITIAL_FORM = {
   nickname: "",
@@ -89,7 +90,7 @@ export function AuthModal({
       : isFindPassword
         ? "아이디와 이메일로 비밀번호 재설정을 요청합니다."
         : isWithdraw
-          ? "탈퇴하면 다시 로그인할 수 없고 사용한 아이디는 재가입에 사용할 수 없습니다. 기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다. 개인정보는 탈퇴 정책에 따라 익명화 또는 삭제되며, 이 기기에만 저장된 대화와 보관함은 유지됩니다."
+          ? ACCOUNT_WITHDRAWAL_NOTICE
           : "Spring Boot 계정으로 로그인해 웹과 동일한 회원 정보를 사용합니다.";
 
   function updateField(field, value) {

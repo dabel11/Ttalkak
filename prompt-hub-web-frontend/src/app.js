@@ -1102,6 +1102,9 @@ function getPromptCardPreviewTags(tags) {
 }
 function MakePage() {
   if (!makeWorkflows || !makePageAdapter) {
+    if (document.documentElement.dataset.routeRuntime === "make:error") {
+      return '<section class="route-module-status route-module-error" role="alert" data-route-module-error="make">화면을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</section>';
+    }
     return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="make">Make 기능을 불러오는 중입니다.</section>';
   }
   return makePageAdapter.render();

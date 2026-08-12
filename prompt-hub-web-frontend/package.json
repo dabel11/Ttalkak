@@ -2,8 +2,8 @@
   "name": "ttalkak-web-frontend",
   "private": true,
   "scripts": {
-    "build:shared": "node ../scripts/build-make-message-model.cjs",
-    "check:shared": "node ../scripts/check-make-message-model.cjs",
+    "build:shared": "node ../scripts/build-make-message-model.cjs && node ../scripts/build-account-withdrawal-policy.cjs",
+    "check:shared": "node ../scripts/check-make-message-model.cjs && node ../scripts/check-account-withdrawal-policy.cjs",
     "check:api": "node ../scripts/check-web-api-contracts.cjs",
     "check:bundle": "node ../scripts/check-web-bundle-size.cjs",
     "analyze:bundle": "node ../scripts/create-web-bundle-report.cjs",

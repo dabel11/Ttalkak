@@ -1,7 +1,7 @@
 const routeImports = Object.freeze({
-  admin: () => import("./routes/admin.js"),
-  make: () => import("./routes/make.js"),
-  share: () => import("./routes/share.js"),
+  admin: () => import("../admin/admin-runtime.mjs"),
+  make: () => import("../make/make-runtime.mjs"),
+  share: () => import("../share/share-runtime.mjs"),
 });
 
 const routeState = new Map();

@@ -101,7 +101,7 @@ test("withdrawal explains the policy, discards the account scope, and preserves 
 
   await gotoApp(page);
   await page.locator('[data-open-auth="withdraw"]').click();
-  await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없으며");
+  await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없습니다");
   await expect(page.locator(".auth-helper")).toContainText("기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다");
   await expect(page.locator(".auth-helper")).toContainText("이 기기에만 저장된 대화와 보관함은 유지됩니다");
   await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
