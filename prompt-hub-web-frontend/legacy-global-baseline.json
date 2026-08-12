@@ -1,10 +1,10 @@
 {
-  "maximumFiles": 86,
-  "maximumReferences": 167,
-  "maximumAssignments": 67,
+  "maximumFiles": 30,
+  "maximumReferences": 44,
+  "maximumAssignments": 19,
   "maximumReferencesByFile": {
     "admin/admin-controller.js": 1, "admin/admin-events.js": 1, "admin/admin-selectors.js": 1, "admin/admin-view.js": 1, "admin/index.js": 4,
-    "api/api-contract.js": 1, "api/index.js": 1, "api/normalizers.js": 2,
+    "api/api-contract.js": 1, "api/index.js": 1, "api/normalizers.mjs": 2,
     "auth/auth-controller.js": 1, "auth/auth-events.js": 1, "auth/auth-session.js": 1, "auth/auth-validation.js": 1, "auth/auth-view.js": 1, "auth/index.js": 5,
     "bootstrap/app-bootstrap.js": 1, "bootstrap/index.js": 1, "components.js": 3, "discovery/index.js": 1,
     "effects/admin-effects.js": 2, "effects/backend-effects.js": 10, "effects/error-effects.js": 3, "effects/index.js": 5, "effects/make-failure-recovery-effects.js": 1, "effects/make-server-sync-effects.js": 6,

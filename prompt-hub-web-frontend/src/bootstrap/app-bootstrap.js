@@ -20,7 +20,7 @@
 
     function getBackendHydrationEffectContext() {
       return {
-        api: global.TTALKAK_API,
+        api: ctx.api,
         applyContext: getBackendDataEffectContext,
         canUseDemoFallback: ctx.canUseDemoFallback,
         clearAuthenticatedSession: ctx.clearAuthenticatedSession,
@@ -57,7 +57,7 @@
 
     function getAdminHydrationEffectContext() {
       return {
-        api: global.TTALKAK_API,
+        api: ctx.api,
         canUseDemoFallback: ctx.canUseDemoFallback,
         formatShortDate: ctx.formatShortDate,
         getAuthToken: ctx.getAuthToken,

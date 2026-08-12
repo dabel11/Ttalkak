@@ -1,7 +1,7 @@
 (function attachPromptWorkflows(global) {
   "use strict";
   function createPromptWorkflows(ctx) {
-    const { state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction, findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId, hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext, getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState, makeRevisionRequestKey, removePromptByIdState, refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag, parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState, applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE } = ctx;
+    const { api, state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction, findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId, hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext, getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState, makeRevisionRequestKey, removePromptByIdState, refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag, parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState, applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE } = ctx;
 
     function openReportPrompt(promptId) {
       if (!findPromptById(promptId)) return;
@@ -64,7 +64,7 @@
           return;
         }
         try {
-          await window.TTALKAK_API?.reportPrompt?.(promptId, { reason: content }, token);
+          await api?.reportPrompt?.(promptId, { reason: content }, token);
         } catch (error) {
           handleBackendAccessError(error, "신고 요청에 실패했습니다.");
           return;
@@ -93,7 +93,7 @@
           return;
         }
         try {
-          await window.TTALKAK_API?.reportComment?.(commentId, { reason: content }, token);
+          await api?.reportComment?.(commentId, { reason: content }, token);
         } catch (error) {
           handleBackendAccessError(error, "댓글 신고 요청에 실패했습니다.");
           return;
@@ -160,9 +160,9 @@
       }
 
       let backendPrompt = null;
-      if (isBackendNumericId(promptId) && hasBackendAuthToken() && window.TTALKAK_API?.shareExistingPrompt) {
+      if (isBackendNumericId(promptId) && hasBackendAuthToken() && api?.shareExistingPrompt) {
         try {
-          backendPrompt = await window.TTALKAK_API.shareExistingPrompt(promptId, getAuthToken() || undefined);
+          backendPrompt = await api.shareExistingPrompt(promptId, getAuthToken() || undefined);
         } catch (error) {
           handleBackendAccessError(error, "공유 상태 변경 요청에 실패했습니다.");
           return;
@@ -189,9 +189,9 @@
       }
 
       let backendPrompt = null;
-      if (isBackendNumericId(promptId) && window.TTALKAK_API?.updatePrompt) {
+      if (isBackendNumericId(promptId) && api?.updatePrompt) {
         try {
-          backendPrompt = await window.TTALKAK_API.updatePrompt(
+          backendPrompt = await api.updatePrompt(
             promptId,
             { title, text, tags },
             getAuthToken() || undefined,

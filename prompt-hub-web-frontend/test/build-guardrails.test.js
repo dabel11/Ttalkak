@@ -16,8 +16,8 @@ test("production build splits optional demo data out of the initial bundle", () 
   const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
   assert.match(entry, /TTALKAK_DEMO_FALLBACK_ENABLED\s*===\s*true/);
-  assert.match(entry, /await import\(["']\.\/demo-data\.js["']\)/);
-  assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.js["'];?$/m);
+  assert.match(entry, /await import\(["']\.\/demo-data\.mjs["']\)/);
+  assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.mjs["'];?$/m);
   assert.match(build, /splitting:\s*true/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);
@@ -28,7 +28,7 @@ test("production build splits optional demo data out of the initial bundle", () 
 test("production renderers keep Admin, Make, and Share behind route chunks", () => {
   const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
   const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
-  ["admin-panels.js", "pages/admin-page.js", "pages/make-message-parts.js", "pages/make-page.js", "pages/share-page.js"].forEach((file) => {
+  ["admin-panels.mjs", "pages/admin-page.mjs", "pages/make-message-parts.mjs", "pages/make-page.mjs", "pages/share-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(`import ["']\\./${file.replaceAll(".", "\\.")}["']`));
   });
   ["admin", "make", "share"].forEach((route) => {
@@ -40,7 +40,7 @@ test("Admin controller view and events load only through the Admin runtime chunk
   const adminEntry = fs.readFileSync(path.resolve(__dirname, "../src/admin/index.js"), "utf8");
   assert.match(adminEntry, /import\(["']\.\/admin-runtime\.mjs["']\)/);
   const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8");
-  ["admin-events.js", "admin-controller.js", "admin-view.js"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
+  ["admin-events.mjs", "admin-controller.mjs", "admin-view.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
   assert.match(adminEntry, /loadAdminRuntime/);
 });
 
@@ -48,7 +48,7 @@ test("Share controller and events load only through the Share runtime chunk", ()
   const shareEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/index.js"), "utf8");
   assert.match(shareEntry, /import\(["']\.\/share-runtime\.mjs["']\)/);
   const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8");
-  ["share-controller.js", "share-events.js"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
+  ["share-controller.mjs", "share-events.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
   assert.match(shareEntry, /loadShareRuntime/);
 });
 

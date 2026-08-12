@@ -9,9 +9,8 @@ global.window = {
     removeItem: (key) => storageValues.delete(key),
   },
 };
-["persistence", "core", "interaction", "prompt", "admin", "make"].forEach((domain) => require(`../src/state/state-${domain}.js`));
-require("../src/state/app-state.js");
-const stateApi = global.window.TtalkakState;
+let stateApi;
+test.before(async () => { ({ state: stateApi } = await import("../src/state/app-state.mjs")); });
 
 test("core state domain owns initial home modal and session transitions", () => {
   const state = stateApi.createInitialState({ homePageSize: 8 });

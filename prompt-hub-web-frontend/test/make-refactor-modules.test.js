@@ -6,16 +6,17 @@ let createMakeWorkflows;
 let makeStateApi;
 let makeController;
 let makeEvents;
+let errorEffects;
 test.before(async () => {
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
   makeStateApi = await import("../src/make/make-state.mjs");
   makeController = await import("../src/make/make-controller.mjs");
   makeEvents = await import("../src/make/make-events.mjs");
+  ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
 });
 
 global.window = { setTimeout: (callback) => callback() };
 require("../src/make/make-persistence.js");
-require("../src/effects/error-effects.js");
 
 test("Make request state transitions are centralized", () => {
   const api = makeStateApi;
@@ -42,13 +43,11 @@ test("Make state mutations use named helpers", () => {
 
 test("application state is composed from focused domain modules", () => {
   const root = path.resolve(__dirname, "..");
-  const appState = fs.readFileSync(path.join(root, "src/state/app-state.js"), "utf8");
-  const entry = fs.readFileSync(path.join(root, "src/state/index.js"), "utf8");
+  const appState = fs.readFileSync(path.join(root, "src/state/app-state.mjs"), "utf8");
   ["persistence", "core", "prompt", "admin", "interaction", "make"].forEach((domain) => {
-    assert.match(entry, new RegExp(`state-${domain}\\.js`));
-    assert.match(appState, new RegExp(`domains\\.${domain}`));
+    assert.match(appState, new RegExp(`state-${domain}\\.mjs`));
   });
-  assert.ok(appState.split(/\r?\n/).length < 250, "app-state.js should remain a small compatibility facade");
+  assert.ok(appState.split(/\r?\n/).length < 250, "app-state.mjs should remain a small compatibility facade");
   assert.doesNotMatch(appState, /function\s+(?:apply|delete|create|persist|load)[A-Z]/);
 });
 
@@ -74,7 +73,7 @@ test("backend UI policy consumes the shared normalized error model", () => {
     state,
   };
   global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
-  global.window.TtalkakErrorEffects.handleBackendAccessErrorEffect(ctx, { status: 401, code: "LOGIN_REQUIRED" });
+  errorEffects.handleBackendAccessErrorEffect(ctx, { status: 401, code: "LOGIN_REQUIRED" });
   assert.equal(cleared, 1);
   assert.equal(state.authView, "login");
   assert.match(notices[0], /로그인/);
@@ -82,14 +81,14 @@ test("backend UI policy consumes the shared normalized error model", () => {
 
 test("strict Make architecture has no duplicated execution, state, or error policy", () => {
   const root = path.resolve(__dirname, "..", "..");
-  const backendEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/backend-effects.js"), "utf8");
-  const syncEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/make-server-sync-effects.js"), "utf8");
-  const errorEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/error-effects.js"), "utf8");
+  const backendEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/backend-effects.mjs"), "utf8");
+  const syncEffects = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/make-server-sync-effects.mjs"), "utf8");
+  const errorEffectsSource = fs.readFileSync(path.join(root, "prompt-hub-web-frontend/src/effects/error-effects.mjs"), "utf8");
   const messageActions = fs.readFileSync(path.join(root, "extension/src/utils/messageActions.js"), "utf8");
   const conversationMessages = fs.readFileSync(path.join(root, "extension/src/utils/conversationMessages.js"), "utf8");
   assert.doesNotMatch(`${backendEffects}\n${syncEffects}`, /state\.(makeBackendStatus|makeBackendMessage)\s*=/);
-  assert.match(errorEffects, /switch \(normalized\.kind\)/);
-  assert.doesNotMatch(errorEffects, /AI_SERVICE_UNAVAILABLE|AI_RATE_LIMIT_EXCEEDED|AI_INVALID_RESPONSE/);
+  assert.match(errorEffectsSource, /switch \(normalized\.kind\)/);
+  assert.doesNotMatch(errorEffectsSource, /AI_SERVICE_UNAVAILABLE|AI_RATE_LIMIT_EXCEEDED|AI_INVALID_RESPONSE/);
   assert.match(messageActions, /isExecutableMessage\(message\)/);
   assert.match(conversationMessages, /isExecutableMessage\(/);
   assert.doesNotMatch(`${messageActions}\n${conversationMessages}`, /NON_EXECUTABLE_PROMPT_FRAGMENTS|isUtilityOnlyPrompt|isAskOnlyResponse/);

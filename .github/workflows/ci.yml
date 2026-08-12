@@ -47,8 +47,26 @@ jobs:
         working-directory: prompt-hub-web-frontend
         run: npm ci
 
+      - name: Build automatic base-branch bundle reference
+        env:
+          BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BUNDLE_BASE_SHA" || "$BUNDLE_BASE_SHA" =~ ^0+$ ]]; then
+            BUNDLE_BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git worktree add --detach "$RUNNER_TEMP/ttalkak-bundle-base" "$BUNDLE_BASE_SHA"
+          npm ci --prefix "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
+          npm run build:prod --prefix "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
+          node scripts/create-web-bundle-reference.cjs --dist "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend/dist" --output "$RUNNER_TEMP/web-bundle-reference.json" --commit "$BUNDLE_BASE_SHA"
+
+      - name: Clean automatic base-branch bundle worktree
+        if: always()
+        run: git worktree remove --force "$RUNNER_TEMP/ttalkak-bundle-base" || true
+
       - name: Verify and build web frontend
         working-directory: prompt-hub-web-frontend
+        env:
+          TTALKAK_BUNDLE_REFERENCE_PATH: ${{ runner.temp }}/web-bundle-reference.json
         run: npm run verify
 
       - name: Upload web bundle analysis

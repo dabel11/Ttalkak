@@ -19,12 +19,11 @@ import { routing } from "./routing/index.js";
 import { startApp } from "./app.js";
 import { clientErrorReporter, installGlobalErrorObservers } from "./observability/index.js";
 
-if (window.TTALKAK_DEMO_FALLBACK_ENABLED === true) {
-  await import("./demo-data.js");
-}
+let demoCopy = null;
+if (window.TTALKAK_DEMO_FALLBACK_ENABLED === true) ({ demoCopy } = await import("./demo-data.mjs"));
 
 installGlobalErrorObservers(window, clientErrorReporter);
-const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, observability: clientErrorReporter, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
+const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, demo: demoCopy, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, observability: clientErrorReporter, renderers, routing, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });
 startApp(modules);
 
 export { admin, api, apiContract, auth, bootstrap, clientErrorReporter, components, createDiscoveryController, createSavedLibraryController, domains, effects, events, home, interactions, make, modal, renderers, routing, share, startApp, state, utils };

@@ -20,7 +20,8 @@ function ensureRouteRenderers(route) {
 
   const state = { status: "loading", error: null, promise: null };
   state.promise = load()
-    .then(() => {
+    .then((module) => {
+      Object.assign(loadedRenderers, module.renderers || {});
       state.status = "loaded";
       document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-changed", { detail: { route, status: "loaded" } }));
     })

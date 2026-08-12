@@ -1,4 +1,4 @@
 // @ts-check
-import "./app-events.js";
-import "./make-scroll-events.js";
-export const events = Object.freeze({ app: window.TtalkakEvents, makeScroll: window.TtalkakMakeScrollEvents });
+import { appEvents as app } from "./app-events.mjs";
+import { makeScrollEvents as makeScroll } from "./make-scroll-events.mjs";
+export const events = Object.freeze({ app, makeScroll });

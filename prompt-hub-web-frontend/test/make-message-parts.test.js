@@ -2,14 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fixtures = require("./fixtures/make-responses.js");
 const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
+const messageModel = require("../src/utils/make-message-model.js");
 
-global.window = {};
-global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
-require("../src/renderers/pages/make-message-parts.js");
-require("../src/renderers/pages/make-page.js");
-
-const { MessageQuestionsView } = global.window.TtalkakMakeMessageParts;
-const { MakeFeedView, MessageBubbleView } = global.window.TtalkakRenderers;
+let MessageQuestionsView; let MakeFeedView; let MessageBubbleView;
+test.before(async () => {
+  const { parts } = await import("../src/renderers/pages/make-message-parts.mjs");
+  const { renderers } = await import("../src/renderers/pages/make-page.mjs");
+  ({ MessageQuestionsView } = parts);
+  ({ MakeFeedView, MessageBubbleView } = renderers);
+});
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
 
@@ -119,7 +120,7 @@ test("thinking messages expose an accessible request cancellation control", () =
 });
 
 test("real response regressions keep ask inputs and executable results distinct", () => {
-  const ask = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
+  const ask = messageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
   const askHtml = MessageBubbleView({
     icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
     escapeAttr,
@@ -129,7 +130,7 @@ test("real response regressions keep ask inputs and executable results distinct"
   assert.match(ask.questions[0].question, /예: 여행, 음식, 제품/);
   assert.match(askHtml, /data-ask-answer-input/);
 
-  const improve = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.improveWithNonActionableQuestions);
+  const improve = messageModel.normalizeImproveResponse(fixtureMatrix.regressions.improveWithNonActionableQuestions);
   const improveHtml = MessageBubbleView({
     icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
     escapeAttr,
@@ -142,7 +143,7 @@ test("real response regressions keep ask inputs and executable results distinct"
 
 test("markdown descriptions in improve responses are not parsed as questions", () => {
   const regression = fixtureMatrix.regressions.markdownDescription;
-  const parsed = global.window.TtalkakMakeMessageModel.parseLegacyQuestions(regression.answer);
+  const parsed = messageModel.parseLegacyQuestions(regression.answer);
   assert.equal(parsed.questions.length, 0);
   assert.equal(fixtures.improve.mode, "improve");
 });

@@ -1,7 +1,7 @@
 // @ts-check
-import "./backend-effects.js";
-import "./admin-effects.js";
-import "./error-effects.js";
-import "./make-server-sync-effects.js";
-import "./make-failure-recovery-effects.js";
-export const effects = Object.freeze({ backend: window.TtalkakBackendEffects, admin: window.TtalkakAdminEffects, error: window.TtalkakErrorEffects, makeServerSync: window.TtalkakMakeServerSyncEffects, makeFailureRecovery: window.TtalkakMakeFailureRecoveryEffects });
+import { backendEffects as backend } from "./backend-effects.mjs";
+import { adminEffects as admin } from "./admin-effects.mjs";
+import { errorEffects as error } from "./error-effects.mjs";
+import { makeServerSyncEffects as makeServerSync } from "./make-server-sync-effects.mjs";
+import { makeFailureRecoveryEffects as makeFailureRecovery } from "./make-failure-recovery-effects.mjs";
+export const effects = Object.freeze({ backend, admin, error, makeServerSync, makeFailureRecovery });

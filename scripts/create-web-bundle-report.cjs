@@ -19,10 +19,11 @@ function walk(directory) {
 function createReport() {
   const manifest = JSON.parse(fs.readFileSync(path.join(distRoot, "build-manifest.json"), "utf8"));
   const metafile = JSON.parse(fs.readFileSync(path.join(distRoot, "bundle-metafile.json"), "utf8"));
-  const reference = JSON.parse(fs.readFileSync(path.join(webRoot, "bundle-reference.json"), "utf8"));
+  const referencePath = process.env.TTALKAK_BUNDLE_REFERENCE_PATH || path.join(webRoot, "bundle-reference.json");
+  const reference = JSON.parse(fs.readFileSync(referencePath, "utf8"));
   const head = gitRevision("HEAD");
   const parent = gitRevision("HEAD^");
-  if (![head, parent].some((revision) => revision.startsWith(reference.commit) || reference.commit.startsWith(revision))) {
+  if (!process.env.TTALKAK_BUNDLE_REFERENCE_PATH && ![head, parent].some((revision) => revision.startsWith(reference.commit) || reference.commit.startsWith(revision))) {
     throw new Error(`Bundle reference ${reference.commit} must identify HEAD (${head}) during local development or its direct parent (${parent}) in CI.`);
   }
   const chunks = walk(path.join(distRoot, "assets")).filter((file) => file.endsWith(".js")).map((file) => ({
@@ -46,4 +47,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { createReport };
+module.exports = { createReport, gzipBytes, walk };

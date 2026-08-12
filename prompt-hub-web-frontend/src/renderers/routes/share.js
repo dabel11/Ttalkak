@@ -1,1 +1,1 @@
-import "../pages/share-page.js";
+export { renderers } from "../pages/share-page.mjs";

@@ -1,2 +1,1 @@
-import "../pages/make-message-parts.js";
-import "../pages/make-page.js";
+export { renderers } from "../pages/make-page.mjs";

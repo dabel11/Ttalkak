@@ -106,7 +106,15 @@ interface TtalkakStateContext {
   getAdminUserActivity(nickname: string): TtalkakStateEntity;
   normalizeAdminSearchText(value: string): string;
 }
+interface TtalkakApiContractModule {
+  assertApiContract(api: unknown): TtalkakApi;
+  assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
+  assertCollectionResponse(value: unknown, operation?: string): unknown[];
+  validateApiResponse(method: string, value: unknown): unknown;
+  wrapApiResponses(api: TtalkakApi): TtalkakApi;
+}
 interface TtalkakModuleRegistry {
+  demo: { fallbackPopularTags?: string[]; promptOverrides?: Record<string, string>; commentOverrides?: Record<string, string> } | null;
   utils: TtalkakCallableModule;
   home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
   saved: { createSavedLibraryController: Function };
@@ -138,7 +146,7 @@ interface TtalkakModuleRegistry {
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
   api: TtalkakApi;
-  apiContract: Window["TtalkakApiContract"];
+  apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
   state: { api: TtalkakStateModule; domains: Readonly<Record<string, TtalkakCallableModule>> };
 }
@@ -300,23 +308,7 @@ interface Window {
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
   TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
-  TTALKAK_API_CORE: TtalkakApiCore;
-  TTALKAK_API_NORMALIZERS: TtalkakApiNormalizers;
-  TTALKAK_AUTH_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_PROMPT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_COMMENT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_MYPAGE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_MAKE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_ADMIN_API: (context: TtalkakApiContext) => TtalkakCallableModule;
   TtalkakMakeMessageModel: TtalkakCallableModule;
-  TTALKAK_API: TtalkakApi;
-  TtalkakApiContract: {
-    assertApiContract(api: unknown): TtalkakApi;
-    assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
-    assertCollectionResponse(value: unknown, operation?: string): unknown[];
-    validateApiResponse(method: string, value: unknown): unknown;
-    wrapApiResponses(api: TtalkakApi): TtalkakApi;
-  };
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TtalkakUtils: TtalkakCallableModule;
   TtalkakHomeSearchModel: TtalkakCallableModule;
@@ -329,43 +321,16 @@ interface Window {
   TtalkakCommentModel: TtalkakCallableModule;
   TtalkakCommentView: TtalkakCallableModule;
   TtalkakPromptWorkflows: TtalkakCallableModule;
-  TtalkakShareController: TtalkakCallableModule;
-  TtalkakShareEvents: TtalkakCallableModule;
   TtalkakModalController: TtalkakCallableModule;
   TtalkakModalEvents: TtalkakCallableModule;
   TtalkakModalView: TtalkakCallableModule;
-  TtalkakAuthSession: TtalkakCallableModule;
-  TtalkakAuthValidation: TtalkakCallableModule;
-  TtalkakAuthController: TtalkakCallableModule;
-  TtalkakAuthEvents: TtalkakCallableModule;
-  TtalkakAuthView: TtalkakCallableModule;
-  TtalkakAdminEvents: TtalkakCallableModule;
-  TtalkakAdminSelectors: TtalkakCallableModule;
-  TtalkakAdminController: TtalkakCallableModule;
-  TtalkakAdminView: TtalkakCallableModule;
   TtalkakAppBootstrap: TtalkakCallableModule;
   TtalkakMakeFocus: TtalkakCallableModule;
   TtalkakMakePersistence: TtalkakCallableModule;
   TtalkakMakePreview: TtalkakCallableModule;
-  TtalkakMakeFailureRecoveryEffects: TtalkakCallableModule;
-  TtalkakMakeServerSyncEffects: TtalkakCallableModule;
   TtalkakComponents: TtalkakCallableModule;
-  TtalkakEvents: TtalkakCallableModule;
-  TtalkakMakeScrollEvents: TtalkakCallableModule;
-  TtalkakBackendEffects: TtalkakCallableModule;
-  TtalkakAdminEffects: TtalkakCallableModule;
-  TtalkakErrorEffects: TtalkakCallableModule;
-  TtalkakState: TtalkakStateModule;
-  TtalkakStateDomains?: Record<string, TtalkakCallableModule>;
-  TtalkakRenderers: TtalkakCallableModule;
   TtalkakRouting: TtalkakCallableModule;
-  TtalkakMakeMessageParts: TtalkakCallableModule;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
-  TTALKAK_DEMO_COPY?: {
-    fallbackPopularTags?: string[];
-    promptOverrides?: Record<string, string>;
-    commentOverrides?: Record<string, string>;
-  };
 }
 
 interface EventTarget {

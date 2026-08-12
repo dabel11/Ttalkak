@@ -10,11 +10,10 @@ global.window = {
     removeItem: (key) => values.delete(key),
   },
 };
-["persistence", "core", "interaction", "prompt", "admin", "make"].forEach((domain) => require(`../src/state/state-${domain}.js`));
-require("../src/state/app-state.js");
+let storage;
+test.before(async () => { ({ state: storage } = await import("../src/state/app-state.mjs")); });
 
 test("legacy localStorage messages are migrated and saved with schemaVersion", () => {
-  const storage = global.window.TtalkakState;
   storage.writePersistedPayload({
     state: {
       messages: [{ role: "assistant", improvedPrompt: "구형 본문" }, { role: "assistant" }],

@@ -165,8 +165,7 @@ function promptContext(overrides = {}) {
 
 test("prompt reporting validates content and does not mutate after API failure", async () => {
   let applied = 0;
-  global.window = { TTALKAK_API: { reportPrompt: async () => { throw new Error("offline"); } } };
-  const ctx = promptContext({ applyPromptReportedState: () => { applied += 1; } });
+  const ctx = promptContext({ api: { reportPrompt: async () => { throw new Error("offline"); } }, applyPromptReportedState: () => { applied += 1; } });
   const workflows = createPromptWorkflows(ctx);
   await workflows.reportPrompt("7", "   ");
   assert.match(ctx.notices.at(-1), /사유/);

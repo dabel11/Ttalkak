@@ -1,5 +1,10 @@
-const test = require("node:test"); const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path"); const { createAuthSession, normalizeAuthResult } = require("../src/auth/auth-session.js"); const validation = require("../src/auth/auth-validation.js");
-const { createAuthController } = require("../src/auth/auth-controller.js");
+const test = require("node:test"); const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path");
+let validation; let createAuthSession; let normalizeAuthResult; let createAuthController;
+test.before(async () => {
+  validation = await import("../src/auth/auth-validation.mjs");
+  ({ createAuthSession, normalizeAuthResult } = await import("../src/auth/auth-session.mjs"));
+  ({ createAuthController } = await import("../src/auth/auth-controller.mjs"));
+});
 test("auth response normalization accepts backend aliases", () => { const result = normalizeAuthResult({ accessToken: "token", member: { memberId: 7, username: "user", name: "닉네임", role: "ROLE_ADMIN" } }); assert.equal(result.token, "token"); assert.equal(result.user.role, "admin"); assert.equal(result.user.id, 7); });
 test("auth validation rejects Korean and malformed ids", () => { assert.match(validation.getUserIdValidationMessage("한글"), /한글/); assert.match(validation.getUserIdValidationMessage("Upper"), /소문자/); assert.equal(validation.isValidEmail("a@example.com"), true); });
 test("auth session isolates account-scoped collections", () => { const state = { isLoggedIn: false, currentUserRole: "user", currentUserId: "", currentUser: "", userLibraryPromptIds: new Set(["guest"]), likedPromptIds: new Set(), likedCommentIds: new Set(), reportedPromptIds: new Set(), reportedCommentIds: new Set(), accountScopes: {} }; const session = createAuthSession({ state, applyIdentity(target, result) { target.isLoggedIn = true; target.currentUserId = result.user.id; }, resetBackend() {}, clearState(target) { target.isLoggedIn = false; target.currentUserId = ""; }, normalizeLikes() {}, writeToken() {}, removeToken() {} }); session.applyUser({ token: "t", user: { id: "1" } }); assert.deepEqual([...state.userLibraryPromptIds], []); session.clear(); assert.deepEqual([...state.userLibraryPromptIds], ["guest"]); });
