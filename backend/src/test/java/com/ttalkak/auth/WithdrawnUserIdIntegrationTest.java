@@ -125,4 +125,93 @@ class WithdrawnUserIdIntegrationTest {
                 .andExpect(jsonPath("$.message")
                         .value("이미 사용 중인 아이디입니다."));
     }
+
+    @Test
+    void allowsNicknameReuseAfterWithdrawal()
+            throws Exception {
+
+        String originalNickname =
+                "reusable-withdrawn-nickname";
+
+        String firstUserId =
+                "nickname-reuse-first-user";
+
+        String signupResponse = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": "%s",
+                                  "name": "First Nickname User",
+                                  "birth": null,
+                                  "phone": null,
+                                  "email": "nickname-first@example.com",
+                                  "userId": "%s",
+                                  "password": "%s",
+                                  "passwordConfirm": "%s",
+                                  "agreeTerms": true,
+                                  "agreePrivacy": true
+                                }
+                                """.formatted(
+                                        originalNickname,
+                                        firstUserId,
+                                        PASSWORD,
+                                        PASSWORD
+                                )))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String accessToken = objectMapper
+                .readTree(signupResponse)
+                .get("accessToken")
+                .asText();
+
+        mockMvc.perform(delete("/api/auth/withdraw")
+                        .header(
+                                "Authorization",
+                                "Bearer " + accessToken
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "password": "%s",
+                                  "credential": null
+                                }
+                                """.formatted(PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+
+        Member withdrawnMember = memberRepository
+                .findByUserId(firstUserId)
+                .orElseThrow();
+
+        assertFalse(withdrawnMember.isActive());
+        assertTrue(
+                withdrawnMember.getNickname()
+                        .startsWith("withdrawn_user_")
+        );
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": "%s",
+                                  "name": "Second Nickname User",
+                                  "birth": null,
+                                  "phone": null,
+                                  "email": "nickname-second@example.com",
+                                  "userId": "nickname-reuse-second-user",
+                                  "password": "%s",
+                                  "passwordConfirm": "%s",
+                                  "agreeTerms": true,
+                                  "agreePrivacy": true
+                                }
+                                """.formatted(
+                                        originalNickname,
+                                        PASSWORD,
+                                        PASSWORD
+                                )))
+                .andExpect(status().isOk());
+    }
 }
