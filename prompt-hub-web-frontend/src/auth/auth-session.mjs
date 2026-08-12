@@ -7,7 +7,19 @@
     function applyScope(scope = {}) { ["userLibraryPromptIds", "likedPromptIds", "likedCommentIds", "reportedPromptIds", "reportedCommentIds"].forEach((name) => { ctx.state[name] = new Set(Array.isArray(scope[name]) ? scope[name] : []); }); ctx.state.hideReportedPrompts = Boolean(scope.hideReportedPrompts); ctx.normalizeLikes(); }
     const restoreScope = () => applyScope(ctx.state.accountScopes?.[key()] || {});
     function applyUser(result) { saveScope(); ctx.applyIdentity(ctx.state, result); ctx.resetBackend(ctx.state); restoreScope(); ctx.writeToken(result.token); }
-    function clear(options = {}) { saveScope(); ctx.clearState(ctx.state, options); restoreScope(); ctx.removeToken(); }
+    function clear(options = {}) {
+      const currentScopeKey = key();
+      if (options.discardCurrentScope) {
+        const nextScopes = { ...(ctx.state.accountScopes || {}) };
+        delete nextScopes[currentScopeKey];
+        ctx.state.accountScopes = nextScopes;
+      } else {
+        saveScope();
+      }
+      ctx.clearState(ctx.state, options);
+      restoreScope();
+      ctx.removeToken();
+    }
     return Object.freeze({ applyScope, applyUser, clear, key, restoreScope, saveScope, snapshot });
   }
 export { createAuthSession, normalizeAuthResult };

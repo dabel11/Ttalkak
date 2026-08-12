@@ -85,6 +85,39 @@ test("an expired authenticated session returns to the login state", async ({ pag
   await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
 });
 
+test("withdrawal explains the policy, discards the account scope, and preserves local conversations", async ({ page }) => {
+  await seed(page, {
+    isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token",
+    accountScopes: { "user:7": { userLibraryPromptIds: ["private"] } },
+    recentThreads: [{ id: "local-thread", title: "로컬 대화", messages: [] }],
+  }, "token");
+  await mockBackend(page, async (route, request) => {
+    if (new URL(request.url()).pathname === "/api/auth/withdraw" && request.method() === "DELETE") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) });
+      return true;
+    }
+    return false;
+  });
+
+  await gotoApp(page);
+  await page.locator('[data-open-auth="withdraw"]').click();
+  await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없으며");
+  await expect(page.locator(".auth-helper")).toContainText("기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다");
+  await expect(page.locator(".auth-helper")).toContainText("이 기기에만 저장된 대화와 보관함은 유지됩니다");
+  await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
+  await page.locator('[data-auth-form]').getByRole("button", { name: "회원탈퇴", exact: true }).click();
+  await page.locator("[data-confirm-action]").click();
+  await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
+
+  const persisted = await page.evaluate(({ storageKey, tokenKey }) => ({
+    payload: JSON.parse(localStorage.getItem(storageKey) || "{}"),
+    token: localStorage.getItem(tokenKey),
+  }), { storageKey: STORAGE_KEY, tokenKey: TOKEN_KEY });
+  expect(persisted.token).toBeNull();
+  expect(persisted.payload.state.recentThreads).toHaveLength(1);
+  expect(persisted.payload.state.accountScopes["user:7"]).toBeUndefined();
+});
+
 test("administrator report and tag mutations update through fixture APIs", async ({ page }) => {
   let reportStatus = "pending";
   let tagStatus = "pending";
@@ -159,4 +192,36 @@ test("administrator user block failure rolls back and a retry succeeds", async (
   await page.locator('[data-admin-user-block-form] textarea[name="reason"]').fill("fixture reason");
   await page.locator('[data-admin-user-block-form] button[type="submit"]').click();
   await expect(page.locator('[data-admin-user-unblock="5"]')).toBeVisible();
+});
+
+test("administrator views anonymize withdrawn users and hide account mutations", async ({ page }) => {
+  await seed(page, { isLoggedIn: true, currentUser: "Admin", currentUserId: "1", currentUserRole: "admin", adminMode: true, route: "admin", adminTab: "users", authToken: "admin-token", token: "admin-token" }, "admin-token");
+  await mockBackend(page, async (route, request) => {
+    const url = new URL(request.url());
+    if (["/api/admin/reports", "/api/admin/tags", "/api/admin/prompts", "/api/admin/revision-requests", "/api/admin/audit-logs"].includes(url.pathname)) {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) }); return true;
+    }
+    if (url.pathname === "/api/admin/users" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [{ id: 9, nickname: "withdrawn_user_9", active: false }] }) }); return true;
+    }
+    if (url.pathname === "/api/admin/users/9/activity" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ member: { id: 9, nickname: "withdrawn_user_9", active: false }, activities: [] }) }); return true;
+    }
+    if (/^\/api\/admin\/users\/9\/(prompts|comments|replies|reports\/submitted|reports\/received)$/.test(url.pathname)) {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) }); return true;
+    }
+    return false;
+  });
+
+  await gotoApp(page);
+  const search = page.locator("[data-admin-user-search-form]");
+  await search.locator('input[name="nickname"]').fill("withdrawn");
+  await search.locator('button[type="submit"]').click();
+  await expect(page.locator('[data-admin-user-select="9"]')).toContainText("탈퇴한 사용자");
+  await expect(page.locator('[data-admin-user-select="9"]')).not.toContainText("withdrawn_user_9");
+  await page.locator('[data-admin-user-select="9"]').click();
+  await expect(page.locator(".admin-user-activity-result")).toContainText("탈퇴한 사용자");
+  await expect(page.locator(".admin-user-activity-result")).toContainText("탈퇴한 사용자는 차단 상태를 변경할 수 없습니다");
+  await expect(page.locator('[data-admin-user-block="9"]')).toHaveCount(0);
+  await expect(page.locator('[data-admin-user-unblock="9"]')).toHaveCount(0);
 });

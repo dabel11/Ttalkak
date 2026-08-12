@@ -20,3 +20,15 @@ export function upsertPrompt(list, prompt) {
 export function parseSharedTags(value) {
   return String(value || "").split(/[,\s]+/).map((tag) => tag.replace(/^#+/, "").trim()).filter(Boolean);
 }
+/** @param {unknown} value @param {string} withdrawnLabel */
+export function normalizeDisplayAuthorName(value, withdrawnLabel) {
+  if (!value) return "";
+  if (typeof value === "object") {
+    const authorRecord = /** @type {Record<string, unknown>} */ (value);
+    if (authorRecord.active === false || authorRecord.enabled === false || authorRecord.withdrawn === true) return withdrawnLabel;
+    const author = String(authorRecord.nickname || authorRecord.name || authorRecord.userId || authorRecord.username || "").trim();
+    return /^withdrawn_user_/i.test(author) ? withdrawnLabel : author;
+  }
+  const author = String(value).trim();
+  return /^withdrawn_user_/i.test(author) ? withdrawnLabel : author;
+}

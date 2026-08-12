@@ -1,6 +1,12 @@
 import { unwrapItems } from "./core-api.mjs";
 import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } from "../utils/make-message-model.mjs";
 
+  const WITHDRAWN_USER_LABEL = "탈퇴한 사용자";
+  function isWithdrawnUser(user = {}) {
+    if (user.active === false || user.enabled === false || user.withdrawn === true) return true;
+    return /^withdrawn_user_/i.test(String(user.nickname || user.memberNickname || "").trim());
+  }
+
   function normalizeTags(value) {
     if (Array.isArray(value)) {
       return value
@@ -41,8 +47,12 @@ import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } fro
 
   function normalizeAuthor(value, fallback = "익명 사용자") {
     if (!value) return fallback;
-    if (typeof value === "string") return value.trim() || fallback;
-    return String(
+    if (typeof value === "string") {
+      const author = value.trim();
+      return /^withdrawn_user_/i.test(author) ? WITHDRAWN_USER_LABEL : author || fallback;
+    }
+    if (isWithdrawnUser(value)) return WITHDRAWN_USER_LABEL;
+    const author = String(
       value.nickname ||
         value.authorNickname ||
         value.name ||
@@ -50,7 +60,8 @@ import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } fro
         value.userId ||
         value.id ||
         fallback,
-    ).trim() || fallback;
+    ).trim();
+    return /^withdrawn_user_/i.test(author) ? WITHDRAWN_USER_LABEL : author || fallback;
   }
 
   function normalizePrompt(item, index = 0) {
@@ -155,7 +166,9 @@ import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } fro
     const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
     const member = data.member || data.user || {};
     const activities = unwrapItems(data.activities || data.items || data.content);
-    const nickname = normalizeAuthor(member, data.nickname || data.memberNickname || "사용자");
+    const statusSource = { ...data, ...member };
+    const active = !isWithdrawnUser(statusSource);
+    const nickname = active ? normalizeAuthor(member, data.nickname || data.memberNickname || "사용자") : WITHDRAWN_USER_LABEL;
     const memberId = member.id || member.memberId || data.memberId || data.userId || data.id || "";
     const blocked = Boolean(member.blocked ?? member.isBlocked ?? data.blocked ?? data.isBlocked ?? false);
     const groups = { prompts: [], comments: [], replies: [], reportsMade: [], reportsReceived: [] };
@@ -181,6 +194,7 @@ import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } fro
     return {
       nickname,
       memberId: String(memberId || ""),
+      active,
       blocked,
       blockReason: String(member.blockReason || data.blockReason || data.reason || ""),
       summary: data.summary || {},
@@ -191,10 +205,11 @@ import { migrateMakeMessage, migrateMakeMessages, normalizeImproveResponse } fro
 
   function normalizeAdminUser(item, index = 0) {
     const data = item?.data && typeof item.data === "object" ? item.data : item || {};
+    const active = !isWithdrawnUser(data);
     return {
       id: String(data.id || data.memberId || data.userId || `admin-user-${index}`),
-      nickname: normalizeAuthor(data, data.nickname || data.memberNickname || data.name || "사용자"),
-      active: Boolean(data.active ?? data.enabled ?? !data.withdrawn),
+      nickname: active ? normalizeAuthor(data, data.nickname || data.memberNickname || data.name || "사용자") : WITHDRAWN_USER_LABEL,
+      active,
       blocked: Boolean(data.blocked ?? data.isBlocked ?? false),
       raw: data,
     };

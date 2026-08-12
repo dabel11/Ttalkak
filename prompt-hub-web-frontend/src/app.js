@@ -1,6 +1,6 @@
 import { createDeferredMethodFacade, createLazyRuntimeFacade, createMethodFacade } from "./runtime/lazy-runtime-facade.mjs";
 import { createAppStaticData } from "./runtime/app-static-data.mjs";
-import { autosizeTextarea, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
+import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -1682,16 +1682,9 @@ function incrementPromptViews(promptId) {
     updated.add(prompt);
   }
 }
-function normalizeAuthorName(value) {
-  if (!value) return "";
-  if (typeof value === "object") {
-    return String(value.nickname || value.name || value.userId || value.username || "").trim();
-  }
-  return String(value).trim();
-}
 function getDisplayPromptAuthor(prompt) {
-  const author = normalizeAuthorName(prompt?.author || prompt?.authorNickname || prompt?.nickname || prompt?.raw?.author);
-  const owner = normalizeAuthorName(prompt?.owner || prompt?.ownerNickname || prompt?.raw?.owner);
+  const author = normalizeDisplayAuthorName(prompt?.author || prompt?.authorNickname || prompt?.nickname || prompt?.raw?.author, WITHDRAWN_AUTHOR_LABEL);
+  const owner = normalizeDisplayAuthorName(prompt?.owner || prompt?.ownerNickname || prompt?.raw?.owner, WITHDRAWN_AUTHOR_LABEL);
   const currentUser = String(state.currentUser || "").trim();
   if (state.isLoggedIn && currentUser && (owner === currentUser || author === currentUser || author === "나")) {
     return "나";

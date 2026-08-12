@@ -304,7 +304,8 @@
   function AdminUserSearchResultButton(ctx, user) {
     const { escapeAttr, escapeHtml } = ctx;
     const memberId = String(user.id || user.memberId || "").trim();
-    const nickname = String(user.nickname || "사용자").trim();
+    const isActive = user.active !== false && !/^withdrawn_user_/i.test(String(user.nickname || ""));
+    const nickname = isActive ? String(user.nickname || "사용자").trim() : "탈퇴한 사용자";
 
     return `
       <button class="admin-user-search-result" type="button" data-admin-user-select="${escapeAttr(memberId)}" data-admin-user-name="${escapeAttr(nickname)}" ${memberId ? "" : "disabled"}>
@@ -312,7 +313,7 @@
           <strong>${escapeHtml(nickname)}</strong>
           <small>memberId ${escapeHtml(memberId || "확인 필요")}</small>
         </span>
-        <em class="${user.blocked ? "blocked" : ""}">${user.blocked ? "차단됨" : "활성"}</em>
+        <em class="${user.blocked || !isActive ? "blocked" : ""}">${!isActive ? "탈퇴함" : user.blocked ? "차단됨" : "활성"}</em>
       </button>
     `;
   }

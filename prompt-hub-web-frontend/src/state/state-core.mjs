@@ -252,6 +252,13 @@ function clearSessionBackendDataState(/** @type {TtalkakApplicationState} */ sta
   state.backendAdminReports = [];
   state.backendAdminReportsLoaded = false;
   state.backendAdminTags = [];
+  state.backendAdminPrompts = [];
+  state.backendAdminRevisionRequests = [];
+  state.backendAdminUserActivities = {};
+  state.backendAdminAuditLogs = [];
+  state.adminAuditSyncMessage = "";
+  state.adminUserSearchResults = [];
+  state.adminUserSearchMessage = "";
 }
 
 

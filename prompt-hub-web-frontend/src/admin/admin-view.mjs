@@ -1,3 +1,16 @@
+function getAdminUserActivityPresentation(activity = {}, memberId = "") {
+  const isWithdrawn = activity.active === false || /^withdrawn_user_/i.test(String(activity.nickname || ""));
+  const canManage = !isWithdrawn && Boolean(String(memberId || "").trim());
+  return {
+    canManage,
+    displayNickname: isWithdrawn ? "탈퇴한 사용자" : String(activity.nickname || "사용자").trim() || "사용자",
+    isWithdrawn,
+    unavailableMessage: isWithdrawn
+      ? "탈퇴한 사용자는 차단 상태를 변경할 수 없습니다."
+      : "샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.",
+  };
+}
+
 export function createAdminView(ctx) {
     const {
       state, popularPrompts, savedPrompts, getUniquePrompts, getAdminReportRecords, getAdminManagedTags,
@@ -341,6 +354,7 @@ export function createAdminView(ctx) {
     function AdminUserActivitySummary(activity) {
       const memberId = String(activity.memberId || getAdminKnownMemberId(activity.nickname) || "").trim();
       const isBlocked = Boolean(activity.blocked);
+      const presentation = getAdminUserActivityPresentation(activity, memberId);
       const groups = [
         { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
         { id: "comments", title: "작성한 댓글", items: activity.comments, empty: "작성한 댓글이 없습니다." },
@@ -353,12 +367,13 @@ export function createAdminView(ctx) {
         <div class="admin-user-activity-result">
           <div class="admin-user-activity-title">
             <div>
-              <strong>${escapeHtml(activity.nickname)}</strong>
+              <strong>${escapeHtml(presentation.displayNickname)}</strong>
+              ${presentation.isWithdrawn ? `<span class="status-badge private">탈퇴함</span>` : ""}
               <span>프롬프트 ${formatNumber(activity.prompts.length)}개 · 댓글 ${formatNumber(activity.comments.length)}개 · 답글 ${formatNumber(activity.replies.length)}개</span>
               ${isBlocked ? `<span class="status-badge private">차단됨</span>` : ""}
             </div>
             ${
-              memberId
+              presentation.canManage
                 ? `<div class="admin-user-activity-actions">
                     ${
                       isBlocked
@@ -366,7 +381,7 @@ export function createAdminView(ctx) {
                         : `<button type="button" data-admin-user-block="${escapeHtml(memberId)}" data-admin-user-name="${escapeHtml(activity.nickname)}">차단</button>`
                     }
                   </div>`
-                : `<span class="status-badge pending-unsave">샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.</span>`
+                : `<span class="status-badge pending-unsave">${presentation.unavailableMessage}</span>`
             }
           </div>
           <div class="admin-user-activity-grid">
@@ -406,3 +421,4 @@ export function createAdminView(ctx) {
 
     return Object.freeze({ getAdminTabs, getAdminCanShowData, getAdminReportFilters, getAdminPromptFilters, getAdminTagFilters, getActiveAdminPanel, AdminRevisionRequestModal, AdminUserBlockModal, getAdminPanelRendererContext, AdminPage, AdminTagPromptUsagePanel, getAdminAuditActionLabel, getAdminAuditTargetLabel, getAdminModeNotice, AdminUserActivitySummary });
   }
+export { getAdminUserActivityPresentation };
