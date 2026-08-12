@@ -110,6 +110,17 @@ test("bundle reference permits unrelated commits and rejects stale bundle inputs
   );
 });
 
+test("local verification reads secrets without printing them and restores database environment", () => {
+  const script = fs.readFileSync(path.resolve(__dirname, "../../scripts/verify-local.ps1"), "utf8");
+  assert.match(script, /Read-EnvironmentFile/);
+  assert.match(script, /MYSQL_ROOT_PASSWORD/);
+  assert.match(script, /\$previousDatabaseEnvironment/);
+  assert.match(script, /finally\s*\{/);
+  assert.match(script, /\$env:DB_PASSWORD\s*=\s*\$previousDatabaseEnvironment\.DB_PASSWORD/);
+  assert.doesNotMatch(script, /Write-(?:Host|Output)[^\r\n]*(?:MYSQL_ROOT_PASSWORD|DB_PASSWORD|\$settings)/i);
+  assert.doesNotMatch(script, /ConvertTo-(?:Json|SecureString)/i);
+});
+
 test("console warnings are owned only by the observability reporter", () => {
   assert.doesNotThrow(() => assertConsoleWarningBoundary([{ file: "observability/client-error-reporter.mjs", count: 1 }]));
   assert.throws(() => assertConsoleWarningBoundary([

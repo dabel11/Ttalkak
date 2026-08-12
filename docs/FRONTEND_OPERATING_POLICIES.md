@@ -98,3 +98,5 @@ Review this document when an API contract changes, before a public release, when
 ## 8. Account withdrawal integration smoke
 
 Use `ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md` for the disposable-account integration check. Never record test passwords, access tokens, database credentials, or production user data in the checklist or test output.
+
+Run `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1` for the complete local web, Extension, and backend verification. The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes.
