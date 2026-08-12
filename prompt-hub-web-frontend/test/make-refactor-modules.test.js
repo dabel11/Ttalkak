@@ -2,21 +2,23 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-require("../src/make/make-sync-workflows.js");
-require("../src/make/make-folder-workflows.js");
-require("../src/make/make-execution-workflows.js");
 let createMakeWorkflows;
-test.before(async () => { ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs")); });
+let makeStateApi;
+let makeController;
+let makeEvents;
+test.before(async () => {
+  ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
+  makeStateApi = await import("../src/make/make-state.mjs");
+  makeController = await import("../src/make/make-controller.mjs");
+  makeEvents = await import("../src/make/make-events.mjs");
+});
 
 global.window = { setTimeout: (callback) => callback() };
-require("../src/make/make-state.js");
 require("../src/make/make-persistence.js");
-require("../src/make/make-controller.js");
-require("../src/make/make-events.js");
 require("../src/effects/error-effects.js");
 
 test("Make request state transitions are centralized", () => {
-  const api = global.window.TtalkakMakeState;
+  const api = makeStateApi;
   const request = api.createMakeRequestState();
   api.startMakeRequest(request);
   assert.equal(request.inFlight, true);
@@ -26,12 +28,12 @@ test("Make request state transitions are centralized", () => {
   assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null });
 });
 test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
-test("Make workflow composition bundles its four focused submodules behind one lazy boundary", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.mjs"), "utf8"); ["make-folder-workflows.js", "make-execution-workflows.js", "make-sync-workflows.js", "make-recent-workflows.mjs"].forEach((file) => assert.match(composite, new RegExp(`(?:from\\s+)?["']\\./${file.replaceAll(".", "\\.")}["']`))); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
+test("Make workflow composition bundles its four focused submodules behind one lazy boundary", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.mjs"), "utf8"); ["make-folder-workflows.mjs", "make-execution-workflows.mjs", "make-sync-workflows.mjs", "make-recent-workflows.mjs"].forEach((file) => assert.match(composite, new RegExp(`(?:from\\s+)?["']\\./${file.replaceAll(".", "\\.")}["']`))); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
 test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
 
 test("Make state mutations use named helpers", () => {
   const state = {};
-  const api = global.window.TtalkakMakeState;
+  const api = makeStateApi;
   api.setMakeComposerDraft(state, "draft");
   api.setMakeEditingMessage(state, "message-1");
   api.setMakeBackendFailure(state, "offline");
@@ -52,9 +54,9 @@ test("application state is composed from focused domain modules", () => {
 
 test("Make backend status changes use one state API", () => {
   const state = {};
-  global.window.TtalkakMakeState.setMakeBackendState(state, "checking", "connecting");
+  makeStateApi.setMakeBackendState(state, "checking", "connecting");
   assert.deepEqual(state, { makeBackendStatus: "checking", makeBackendMessage: "connecting" });
-  global.window.TtalkakMakeState.setMakeBackendFailure(state, "offline");
+  makeStateApi.setMakeBackendFailure(state, "offline");
   assert.deepEqual(state, { makeBackendStatus: "fallback", makeBackendMessage: "offline" });
 });
 
@@ -109,7 +111,7 @@ test("edited-message retry orchestration lives in the Make controller", async ()
     notice: () => {}, focusAsk: () => {}, stopInFlight: () => {}, failRequest: () => {},
     classifyError: (error) => error, setBackendFailure: () => {}, handleError: () => {},
   };
-  await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "after");
+  await makeController.resendEdited(ctx, "user-1", "after");
   assert.deepEqual(calls, ["start", "apply", "thinking:true", "thinking:false", "complete", "after", "sync"]);
 });
 
@@ -118,7 +120,7 @@ test("route cancellation leaves a classified non-retryable Make message state", 
   global.FormData = class { get() { return "cancel this request"; } };
   const calls = [];
   const state = { isLoggedIn: true, activeThreadId: "thread-1", messages: [] };
-  const controller = global.window.TtalkakMakeController;
+  const controller = makeController;
   try {
     await controller.submitPrompt({
       state, freeLimit: 3, guard: () => false, isBusy: () => false, notice: () => {},
@@ -161,7 +163,7 @@ test("edited-message cancellation clears thinking, preserves the edit, and rende
     setBackendFailure: () => calls.push("unexpected-backend"), handleError: () => calls.push("unexpected-error"),
   };
 
-  await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "edited prompt");
+  await makeController.resendEdited(ctx, "user-1", "edited prompt");
 
   assert.equal(messages[0].content, "edited prompt");
   assert.deepEqual(calls, ["thinking:true", "thinking:false", "stopped", ["user-1", "cancelled"], "clear-editing", "update", "render-cancellation"]);
@@ -184,7 +186,7 @@ test("server-synced edited-message cancellation exposes thinking and preserves t
     refreshThread: async () => false, notice: () => {}, messages: { missingThread: "missing", edited: "edited", editFailed: "failed" },
   };
 
-  await global.window.TtalkakMakeController.resendEdited(ctx, "user-1", "server edited prompt");
+  await makeController.resendEdited(ctx, "user-1", "server edited prompt");
 
   assert.deepEqual(calls, [
     "thinking:true", "queue-scroll", "render", "thinking:false", ["user-1", "cancelled"],
@@ -200,7 +202,7 @@ test("a stale cancelled request cannot clear a newer Make request", async () => 
   let currentSignal = firstController.signal;
   const calls = [];
   try {
-    await global.window.TtalkakMakeController.submitPrompt({
+    await makeController.submitPrompt({
       state: { isLoggedIn: true, activeThreadId: "thread-1", messages: [] }, freeLimit: 3,
       guard: () => false, isBusy: () => false, notice: () => {}, bumpInteraction: () => {},
       buildHistory: () => [], startRequest: () => firstController.signal, setDraft: () => {},
@@ -228,7 +230,7 @@ test("Make persistence owns migration, deduplication, and persistence", () => {
   global.window.TtalkakMakePersistence.normalizeAndPersistMakeState(
     state,
     { migratePersistedMakeState: (value) => value },
-    global.window.TtalkakMakeState,
+    makeStateApi,
     () => { persisted += 1; },
   );
   assert.equal(state.recentThreads.length, 2);
@@ -244,7 +246,7 @@ test("Make event routing is defined outside app.js", () => {
     if (key === "folderCount") return () => 0;
     return (...args) => calls.push([key, ...args]);
   } });
-  const handlers = global.window.TtalkakMakeEvents.createDelegatedMakeHandlers({ state, maxFolders: 5, actions });
+  const handlers = makeEvents.createDelegatedMakeHandlers({ state, maxFolders: 5, actions });
   const button = { dataset: {}, matches: (selector) => selector === "[data-new-chat]" };
   handlers.click({ target: { closest: () => button } });
   assert.deepEqual(calls, [["newChat"]]);
@@ -252,7 +254,7 @@ test("Make event routing is defined outside app.js", () => {
 
 test("Make event routing delegates the explicit request cancellation control", () => {
   const calls = [];
-  const handlers = global.window.TtalkakMakeEvents.createDelegatedMakeHandlers({
+  const handlers = makeEvents.createDelegatedMakeHandlers({
     state: {}, maxFolders: 5,
     actions: new Proxy({}, { get: (_target, key) => key === "guard" ? () => false : (...args) => calls.push([key, ...args]) }),
   });

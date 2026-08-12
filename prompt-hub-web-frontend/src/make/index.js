@@ -1,7 +1,7 @@
 // @ts-check
 import "../utils/make-preview.js";
 import "../utils/make-message-model.js";
-import "./make-state.js";
+import { makeState } from "./make-state.mjs";
 import "./make-focus.js";
 import "./make-persistence.js";
 import { makeThreadPolicy } from "./make-thread-policy.mjs";
@@ -33,12 +33,12 @@ let runtimePromise;
 export function loadMakeRuntime() {
   runtimePromise ||= Promise.all([loadMakeStyles(), import("./make-runtime.mjs")])
     .then(([, runtime]) => Object.freeze({
-      controller: window.TtalkakMakeController,
-      events: window.TtalkakMakeEvents,
+      controller: runtime.controller,
+      events: runtime.events,
       workflows: runtime.workflows,
       pageAdapter: runtime.pageAdapter,
     }));
   return runtimePromise;
 }
 
-export const make = Object.freeze({ preview: window.TtalkakMakePreview, messageModel: window.TtalkakMakeMessageModel, state: window.TtalkakMakeState, focus: window.TtalkakMakeFocus, persistence: window.TtalkakMakePersistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });
+export const make = Object.freeze({ preview: window.TtalkakMakePreview, messageModel: window.TtalkakMakeMessageModel, state: makeState, focus: window.TtalkakMakeFocus, persistence: window.TtalkakMakePersistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });

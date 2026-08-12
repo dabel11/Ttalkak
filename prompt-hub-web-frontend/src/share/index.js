@@ -1,7 +1,7 @@
 // @ts-check
 let runtimePromise;
 export function loadShareRuntime() {
-  runtimePromise ||= Promise.all([import("./share-controller.js"), import("./share-events.js")])
+  runtimePromise ||= import("./share-runtime.mjs")
     .then(() => Object.freeze({ controller: window.TtalkakShareController, events: window.TtalkakShareEvents }));
   return runtimePromise;
 }

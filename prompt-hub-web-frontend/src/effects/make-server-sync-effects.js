@@ -17,6 +17,7 @@
       isBackendNumericId,
       makePreview,
       makePromptTitle,
+      makeState,
       normalizeRecentThreads,
       openRecentMakeThreadState,
       polishPrompt,
@@ -177,9 +178,9 @@
         const improvedText = typeof improved === "string" ? improved : improved?.text || "";
         const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
         if (ragStatus === "no_evidence" || ragStatus === "no_evidence_found" || ragStatus === "fallback") {
-          global.TtalkakMakeState.setMakeBackendState(state, "connected", "Make API 연결됨: 관련 근거 없이 기본 방식으로 다듬었습니다.");
+          makeState.setMakeBackendState(state, "connected", "Make API 연결됨: 관련 근거 없이 기본 방식으로 다듬었습니다.");
         } else {
-          global.TtalkakMakeState.setMakeBackendState(state, "connected", "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.");
+          makeState.setMakeBackendState(state, "connected", "Make API 연결됨: POST /api/prompts/improve 응답을 반영했습니다.");
         }
         return typeof improved === "object" && improved
           ? { ...improved, text: improvedText || polishPrompt(prompt), mode: improved.mode || "improve" }
@@ -199,7 +200,7 @@
         } else if (canUseDemoFallback()) {
           fallbackMessage = `${normalizedError.message} 지금은 데모 첨삭을 표시합니다.`;
         }
-        global.TtalkakMakeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
+        makeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
           ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
           : getApiFailureMessage("Make 첨삭 API"));
         handleBackendAccessError(error, fallbackMessage);
@@ -253,7 +254,7 @@
         try {
           const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
           if (refreshedThread?.id) {
-            global.TtalkakMakeState.setMakeRecentThreads(state, [
+            makeState.setMakeRecentThreads(state, [
               refreshedThread,
               ...state.recentThreads.filter((thread) => {
                 const id = String(thread.id || "");

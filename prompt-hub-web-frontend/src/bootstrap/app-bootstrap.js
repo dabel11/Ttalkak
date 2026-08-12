@@ -6,6 +6,7 @@
       return {
         isBackendNumericId: ctx.isBackendNumericId,
         makePreview: ctx.makePreview,
+        makeState: ctx.makeState,
         normalizeMakeFolders: ctx.normalizeMakeFolders,
         normalizePersistedLikeCounts: ctx.normalizePersistedLikeCounts,
         normalizeRecentThreads: ctx.normalizeRecentThreads,
@@ -31,6 +32,7 @@
         getMakeInteractionVersion: ctx.getMakeInteractionVersion,
         getValidSearchScope: ctx.getValidSearchScope,
         handleBackendAccessError: ctx.handleBackendAccessError,
+        makeState: ctx.makeState,
         homePageSize: ctx.homePageSize,
         render: ctx.render,
         reportWarning: ctx.reportWarning,

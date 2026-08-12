@@ -344,14 +344,8 @@ interface Window {
   TtalkakAdminController: TtalkakCallableModule;
   TtalkakAdminView: TtalkakCallableModule;
   TtalkakAppBootstrap: TtalkakCallableModule;
-  TtalkakMakeController: TtalkakCallableModule;
-  TtalkakMakeEvents: TtalkakCallableModule;
   TtalkakMakeFocus: TtalkakCallableModule;
   TtalkakMakePersistence: TtalkakCallableModule;
-  TtalkakMakeState: TtalkakCallableModule;
-  TtalkakMakeSyncWorkflows: TtalkakCallableModule;
-  TtalkakMakeFolderWorkflows: TtalkakCallableModule;
-  TtalkakMakeExecutionWorkflows: TtalkakCallableModule;
   TtalkakMakePreview: TtalkakCallableModule;
   TtalkakMakeFailureRecoveryEffects: TtalkakCallableModule;
   TtalkakMakeServerSyncEffects: TtalkakCallableModule;

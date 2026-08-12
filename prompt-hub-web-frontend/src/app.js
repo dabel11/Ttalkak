@@ -1111,7 +1111,11 @@ let makeWorkflows = null;
 let makePageAdapter = null;
 let makeRuntimePromise = null;
 async function ensureMakeRuntime() {
-  if (makeWorkflows && makeControllerModule && makeEventsModule) return true;
+  if (makeWorkflows && makeControllerModule && makeEventsModule) {
+    document.documentElement.dataset.routeRuntime = "make:ready";
+    return true;
+  }
+  document.documentElement.dataset.routeRuntime = "make:loading";
   makeRuntimePromise ||= loadMakeRuntime().then((runtime) => {
     const { createMakeWorkflows } = runtime.workflows || {};
     makeControllerModule = runtime.controller || null;
@@ -1139,9 +1143,11 @@ async function ensureMakeRuntime() {
       countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
       makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
     });
+    document.documentElement.dataset.routeRuntime = "make:ready";
     return true;
   }).catch((error) => {
     makeRuntimePromise = null;
+    document.documentElement.dataset.routeRuntime = "make:error";
     reportWarning("make", "load-runtime", error);
     showNotice("Make 기능을 불러오지 못했습니다. 다시 시도해주세요.");
     return false;
@@ -3157,6 +3163,7 @@ function getMakeServerSyncContext() {
     handleMakeBackendSyncError,
     hasBackendAuthToken,
     isBackendNumericId,
+    makeState: makeStateModule,
     makePreview,
     makePromptTitle,
     normalizeRecentThreads,
@@ -3291,6 +3298,7 @@ function normalizeDemoCopy() {
 
 appBootstrap = createAppBootstrap({
   state, popularPrompts, savedPrompts, isBackendNumericId, makePreview, normalizeMakeFolders,
+  makeState: makeStateModule,
   normalizePersistedLikeCounts, normalizeRecentThreads, updateBackendHomePageMeta, upsertPrompt,
   canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken,
   hasBackendAuthToken, getMakeApi, getMakeApiToken, getMakeInteractionVersion: () => makeInteractionVersion,

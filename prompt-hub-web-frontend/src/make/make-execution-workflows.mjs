@@ -1,7 +1,6 @@
-(function attach(global) {
-  "use strict";
-  function createMakeExecutionWorkflows(ctx) {
-    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState } = ctx;
+"use strict";
+export function createMakeExecutionWorkflows(ctx) {
+    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState } = ctx;
     async function copyMakeMessage(messageId) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
@@ -30,7 +29,7 @@
     }
 
     async function resendEditedMessage(messageId, value) {
-      return window.TtalkakMakeController.resendEdited(getMakeControllerContext(), messageId, value);
+      return makeController.resendEdited(getMakeControllerContext(), messageId, value);
     }
 
     function openShareFromMakeMessage(messageId) {
@@ -122,7 +121,7 @@
       if (!template) return false;
 
       if (startNew) startNewMakeChatState(state);
-      window.TtalkakMakeState.setMakeComposerDraft(state, template.prompt);
+      makeState.setMakeComposerDraft(state, template.prompt);
       render();
       window.setTimeout(() => {
         const textarea = document.querySelector("[data-autosize-textarea]");
@@ -161,7 +160,3 @@
 
     return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
   }
-  const api = Object.freeze({ createMakeExecutionWorkflows });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakMakeExecutionWorkflows = api;
-})(typeof window !== "undefined" ? window : globalThis);

@@ -6,6 +6,7 @@
     "check:shared": "node ../scripts/check-make-message-model.cjs",
     "check:api": "node ../scripts/check-web-api-contracts.cjs",
     "check:bundle": "node ../scripts/check-web-bundle-size.cjs",
+    "analyze:bundle": "node ../scripts/create-web-bundle-report.cjs",
     "check:globals": "node ../scripts/check-web-legacy-globals.cjs",
     "check:observability": "node ../scripts/check-web-observability.cjs",
     "build": "node ../scripts/build-web.cjs",
@@ -25,7 +26,7 @@
     "test:e2e": "playwright test",
     "test:e2e:firefox": "playwright test --config=playwright.firefox.config.js",
     "test:e2e:prod": "playwright test --config=playwright.production.config.js",
-    "verify": "npm run check:shared && npm run check:api && npm run check:globals && npm run check:observability && npm run lint && npm run typecheck && npm run typecheck:strict && npm run test:coverage && npm run build:prod && npm run check:bundle",
+    "verify": "npm run check:shared && npm run check:api && npm run check:globals && npm run check:observability && npm run lint && npm run typecheck && npm run typecheck:strict && npm run test:coverage && npm run build:prod && npm run check:bundle && npm run analyze:bundle",
     "verify:full": "npm run verify && npm run test:e2e && npm run test:e2e:firefox && npm run test:e2e:prod"
   },
   "devDependencies": {

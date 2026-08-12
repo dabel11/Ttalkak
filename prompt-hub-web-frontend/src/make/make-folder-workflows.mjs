@@ -1,6 +1,5 @@
-(function attach(global) {
-  "use strict";
-  function createMakeFolderWorkflows(ctx) {
+"use strict";
+export function createMakeFolderWorkflows(ctx) {
     const { state, render, showNotice, guardAdminUserAction, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext, getMakeApi, getMakeApiToken, isBackendNumericId, handleMakeBackendSyncError, ensureBackendMakeThreadId, reportWarning } = ctx;
 
     function guardMakeFolderMutation(clearSelection) {
@@ -302,7 +301,3 @@
 
     return Object.freeze({ guardMakeFolderMutation, normalizeMakeFolderName, hasMakeFolderName, createLocalMakeFolder, removeLocalMakeFolder, restoreThreadFolder, createMakeFolder, createMakeFolderAndMoveThread, getCustomMakeFolderCount, renameMakeFolder, performDeleteFolder, moveThreadToFolder, moveThreadToFolderOnBackend, countThreadsInFolder, getThreadFolderId, getActiveFolderName, createBackendMakeFolder, updateBackendMakeFolderName, deleteBackendMakeFolder, getBackendFolderId });
   }
-  const api = Object.freeze({ createMakeFolderWorkflows });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakMakeFolderWorkflows = api;
-})(typeof window !== "undefined" ? window : globalThis);

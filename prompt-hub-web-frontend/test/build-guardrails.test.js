@@ -20,6 +20,9 @@ test("production build splits optional demo data out of the initial bundle", () 
   assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.js["'];?$/m);
   assert.match(build, /splitting:\s*true/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
+  assert.match(build, /bundle-metafile\.json/);
+  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
+  assert.match(packageJson.scripts.verify, /analyze:bundle/);
 });
 
 test("production renderers keep Admin, Make, and Share behind route chunks", () => {
@@ -35,28 +38,26 @@ test("production renderers keep Admin, Make, and Share behind route chunks", () 
 
 test("Admin controller view and events load only through the Admin runtime chunk", () => {
   const adminEntry = fs.readFileSync(path.resolve(__dirname, "../src/admin/index.js"), "utf8");
-  assert.doesNotMatch(adminEntry, /^import "\.\/admin-(?:events|controller|view)\.js";/m);
-  ["admin-events.js", "admin-controller.js", "admin-view.js"].forEach((file) => {
-    assert.match(adminEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
-  });
+  assert.match(adminEntry, /import\(["']\.\/admin-runtime\.mjs["']\)/);
+  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8");
+  ["admin-events.js", "admin-controller.js", "admin-view.js"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
   assert.match(adminEntry, /loadAdminRuntime/);
 });
 
 test("Share controller and events load only through the Share runtime chunk", () => {
   const shareEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/index.js"), "utf8");
-  assert.doesNotMatch(shareEntry, /^import "\.\/share-(?:controller|events)\.js";/m);
-  ["share-controller.js", "share-events.js"].forEach((file) => {
-    assert.match(shareEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
-  });
+  assert.match(shareEntry, /import\(["']\.\/share-runtime\.mjs["']\)/);
+  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8");
+  ["share-controller.js", "share-events.js"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
   assert.match(shareEntry, /loadShareRuntime/);
 });
 
 test("Make controller events and workflows load only through the Make runtime chunk", () => {
   const makeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/index.js"), "utf8");
   assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/);
-  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.doesNotMatch(makeEntry, new RegExp(file.replaceAll(".", "\\."))));
+  ["make-controller.mjs", "make-events.mjs", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.doesNotMatch(makeEntry, new RegExp(file.replaceAll(".", "\\."))));
   const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/make-runtime.mjs"), "utf8");
-  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file.replaceAll(".", "\\.")}["']`)));
+  ["make-controller.mjs", "make-events.mjs", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file.replaceAll(".", "\\.")}["']`)));
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
   ["MakeFeed", "MakeTemplateBar", "MakeComposer", "MakeSidePanel", "MakeFolderButton", "MessageBubble"].forEach((name) => {
     assert.doesNotMatch(app, new RegExp(`function\\s+${name}\\s*\\(`));

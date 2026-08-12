@@ -41,6 +41,7 @@ async function build() {
   fs.mkdirSync(outputRoot, { recursive: true });
   let html = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
   let bundle = "src/app-entry.js";
+  let bundleMetafile = null;
   if (production) {
     const result = await esbuild.build({
       entryPoints: [path.join(webRoot, "src", "app-entry.js")],
@@ -55,6 +56,7 @@ async function build() {
       chunkNames: "chunks/[name]-[hash]",
       metafile: true,
     });
+    bundleMetafile = result.metafile;
     const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
@@ -67,6 +69,7 @@ async function build() {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });
   }
   fs.writeFileSync(path.join(outputRoot, "index.html"), html, "utf8");
+  if (bundleMetafile) fs.writeFileSync(path.join(outputRoot, "bundle-metafile.json"), `${JSON.stringify(bundleMetafile, null, 2)}\n`, "utf8");
   fs.writeFileSync(
     path.join(outputRoot, "build-manifest.json"),
     `${JSON.stringify({

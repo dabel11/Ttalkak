@@ -1,8 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-require("../src/make/make-sync-workflows.js");
-require("../src/make/make-folder-workflows.js");
-require("../src/make/make-execution-workflows.js");
 const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
 let threadPolicy;
 let createMakeWorkflows;

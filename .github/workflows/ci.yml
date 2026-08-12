@@ -51,6 +51,17 @@ jobs:
         working-directory: prompt-hub-web-frontend
         run: npm run verify
 
+      - name: Upload web bundle analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-bundle-analysis-${{ github.run_attempt }}
+          path: |
+            prompt-hub-web-frontend/dist/bundle-analysis.json
+            prompt-hub-web-frontend/dist/bundle-analysis.md
+            prompt-hub-web-frontend/dist/bundle-metafile.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Install extension dependencies
         working-directory: extension
         run: npm ci

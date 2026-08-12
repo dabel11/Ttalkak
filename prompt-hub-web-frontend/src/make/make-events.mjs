@@ -1,5 +1,4 @@
-(function attachMakeEvents(global) {
-  "use strict";
+"use strict";
   const boundRoots = new WeakSet();
   function updateAskProgress(input) {
     const form = input.closest("[data-ask-answer-form]");
@@ -92,5 +91,4 @@
       },
     };
   }
-  global.TtalkakMakeEvents = Object.freeze({ bindDelegatedMakeEvents, createDelegatedMakeHandlers, updateAskProgress });
-})(window);
+export { bindDelegatedMakeEvents, createDelegatedMakeHandlers, updateAskProgress };

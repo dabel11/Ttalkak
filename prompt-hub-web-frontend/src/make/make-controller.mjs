@@ -1,5 +1,4 @@
-(function attachMakeController(global) {
-  "use strict";
+"use strict";
   function collectAskAnswerPayload(form, model) {
     const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
     const questions = inputs.map((input) => ({ field: input.name, question: input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name, importance: input.required ? "required" : "recommended" }));
@@ -167,5 +166,4 @@
     if (result.mode === "ask") ctx.focusAsk();
   }
 
-  global.TtalkakMakeController = Object.freeze({ collectAskAnswerPayload, submitAskAnswers, submitPrompt, resendEdited });
-})(window);
+export { collectAskAnswerPayload, submitAskAnswers, submitPrompt, resendEdited };

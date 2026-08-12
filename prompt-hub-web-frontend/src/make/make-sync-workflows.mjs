@@ -1,6 +1,5 @@
-(function attach(global) {
-  "use strict";
-  function createMakeSyncWorkflows(ctx) {
+"use strict";
+export function createMakeSyncWorkflows(ctx) {
     const { state, getMakeServerSyncEffects } = ctx;
 
     async function createBackendMakeThread(thread) {
@@ -25,7 +24,3 @@
 
     return Object.freeze({ createBackendMakeThread, ensureBackendMakeThreadId, syncMakeThreadWithBackend, refreshMakeThreadsFromBackend, refreshActiveMakeThreadFromBackend });
   }
-  const api = Object.freeze({ createMakeSyncWorkflows });
-  if (typeof module !== "undefined" && module.exports) module.exports = api;
-  global.TtalkakMakeSyncWorkflows = api;
-})(typeof window !== "undefined" ? window : globalThis);
