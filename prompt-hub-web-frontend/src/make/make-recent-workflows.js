@@ -1,7 +1,7 @@
 (function attach(global) {
   "use strict";
   function createMakeRecentWorkflows(ctx) {
-    const { state, savedPrompts, render, showNotice, makePreview, makePromptTitle, getMakeApi, getMakeApiToken, isBackendNumericId, hasBackendAuthToken, deleteMakeThreadState, handleBackendAccessError, refreshMakeThreadsFromBackend, updateRecentMakeThreadState, getMakeMutationStateContext, openRecentMakeThreadState, openSavedMakePromptState, startNewMakeChatState } = ctx;
+    const { state, savedPrompts, render, showNotice, makePreview, makePromptTitle, getMakeApi, getMakeApiToken, isBackendNumericId, canSplitMakeThread, findMakeThread, hasBackendAuthToken, deleteMakeThreadState, handleBackendAccessError, refreshMakeThreadsFromBackend, updateRecentMakeThreadState, getMakeMutationStateContext, openRecentMakeThreadState, openSavedMakePromptState, startNewMakeChatState } = ctx;
 
     async function performDeleteThread(threadId) {
       const thread = state.recentThreads.find((item) => item.id === threadId || item.serverId === threadId);
@@ -65,10 +65,8 @@
     function splitThreadFromMessage(messageId) {
       const splitIndex = state.messages.findIndex((item) => item.id === messageId && item.role === "user");
       if (splitIndex <= 0) return false;
-      const sourceThread = state.recentThreads.find(
-        (item) => item.id === state.activeThreadId || item.serverId === state.activeThreadId,
-      );
-      if (!sourceThread || isBackendNumericId(sourceThread.serverId || sourceThread.id)) return false;
+      const sourceThread = findMakeThread(state.recentThreads, state.activeThreadId);
+      if (!canSplitMakeThread(sourceThread, isBackendNumericId)) return false;
       const sourceMessages = state.messages.slice(0, splitIndex).map((item) => ({ ...item }));
       const splitMessages = state.messages.slice(splitIndex).map((item) => ({ ...item }));
       const lastSource = [...sourceMessages].reverse().find((item) => item.role === "assistant" || item.role === "user");

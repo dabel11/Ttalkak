@@ -50,12 +50,13 @@
   }
 
   function MakeFeedView(ctx, data) {
-    const { icons } = ctx;
-    const { hasMessages, isThinking, messages, renderMessageBubble, templateBarHtml } = data;
+    const { icons, escapeHtml } = ctx;
+    const { hasMessages, isThinking, messages, renderMessageBubble, templateBarHtml, threadPolicyNote } = data;
 
     return `
       <div class="chat-feed">
         ${templateBarHtml}
+        ${threadPolicyNote ? `<p class="make-thread-policy-note" role="note">${escapeHtml(threadPolicyNote)}</p>` : ""}
         ${
           hasMessages
             ? messages.map(renderMessageBubble).join("")

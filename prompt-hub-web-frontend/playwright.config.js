@@ -7,6 +7,7 @@ module.exports = defineConfig({
   workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "line" : "list",
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
   use: {
     baseURL: "http://127.0.0.1:4173",
     browserName: "chromium",

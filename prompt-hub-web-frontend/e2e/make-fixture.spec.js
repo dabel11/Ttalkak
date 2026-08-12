@@ -11,6 +11,25 @@ const CORS_HEADERS = {
   "content-type": "application/json; charset=utf-8",
 };
 
+async function stabilizeVisuals(page) {
+  await page.addStyleTag({ content: `
+    *, *::before, *::after {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition: none !important;
+      caret-color: transparent !important;
+    }
+  ` });
+}
+
+async function expectComponentScreenshot(locator, name) {
+  await expect(locator).toHaveScreenshot(name, {
+    animations: "disabled",
+    maxDiffPixelRatio: 0.08,
+    threshold: 0.3,
+  });
+}
+
 const askMessage = {
   id: "assistant-ask",
   role: "assistant",
@@ -260,6 +279,7 @@ for (const threadIdentity of [
 
   await expect(page.locator('[data-message-id="server-topic-two"]')).toBeVisible();
   await expect(page.locator('[data-split-thread-from]')).toHaveCount(0);
+  await expect(page.getByText("대화 분리는 로컬 대화에서 사용할 수 있습니다.", { exact: true })).toBeVisible();
 });
 
 test("leaving Make aborts an in-flight request and preserves a non-retryable cancellation state", async ({ page }) => {
@@ -422,3 +442,76 @@ for (const scenario of errorCases) {
     await expect(failure.locator("[data-retry-message]")).toHaveCount(scenario.retryable === false ? 0 : 1);
   });
 }
+
+test.describe("Make component visual regressions", () => {
+  test("selected folder and recent conversation", async ({ page }) => {
+    const messages = [{ id: "visual-user", role: "user", content: "Visual fixture prompt" }];
+    const thread = { id: "visual-thread", title: "Visual conversation", preview: "Visual fixture prompt", folderId: "uncategorized", createdAt: 1, messages };
+    await openMake(page, messages, { activeThreadId: thread.id, recentThreads: [thread] });
+    await stabilizeVisuals(page);
+    await expectComponentScreenshot(page.locator(".make-side-panel"), "make-sidebar-selection.png");
+  });
+
+  test("ask question card", async ({ page }) => {
+    await openMake(page, [askMessage]);
+    await stabilizeVisuals(page);
+    await expectComponentScreenshot(page.locator('[data-message-id="assistant-ask"] .message'), "make-ask-question-card.png");
+  });
+
+  test("improved prompt with collapsed details", async ({ page }) => {
+    const result = {
+      id: "visual-result",
+      role: "assistant",
+      mode: "improve",
+      answer: "The request was refined for a product announcement.",
+      improvedPrompt: "Write a concise product announcement for new customers.",
+      fields: [{ name: "Audience", role: "optional", status: "empty" }],
+      changes: ["Clarified the audience and output format."],
+      techniques: [{ name: "Audience targeting" }],
+    };
+    await openMake(page, [result]);
+    await stabilizeVisuals(page);
+    await expect(page.locator(".message-detail-section[open]")).toHaveCount(0);
+    await expectComponentScreenshot(page.locator('[data-message-id="visual-result"] .message'), "make-result-collapsed-details.png");
+  });
+
+  test("template conversation choice dialog", async ({ page }) => {
+    await openMake(page, [{ id: "visual-existing", role: "user", content: "Existing conversation" }]);
+    await page.locator("[data-template]").first().click();
+    await stabilizeVisuals(page);
+    await expectComponentScreenshot(page.getByRole("dialog"), "make-template-choice-dialog.png");
+  });
+
+  test("retry status card", async ({ page }) => {
+    await openMake(page, [], {}, async (route) => route.fulfill({
+      status: 503,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ code: "AI_SERVICE_UNAVAILABLE", message: "AI unavailable" }),
+    }));
+    await page.locator('[data-composer] textarea[name="prompt"]').fill("Visual retry request");
+    await page.locator('[data-composer] button[type="submit"]').click();
+    await expect(page.locator(".message-failure-status")).toBeVisible();
+    await stabilizeVisuals(page);
+    await expectComponentScreenshot(page.locator(".message.user").last(), "make-retry-status-card.png");
+  });
+
+  test("cancellation status card", async ({ page }) => {
+    let requestStarted;
+    let releaseResponse;
+    const started = new Promise((resolve) => { requestStarted = resolve; });
+    const release = new Promise((resolve) => { releaseResponse = resolve; });
+    await openMake(page, [], {}, async (route) => {
+      requestStarted();
+      await release;
+      await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ mode: "improve", improvedPrompt: "Late visual response" }) }).catch(() => {});
+    });
+    await page.locator('[data-composer] textarea[name="prompt"]').fill("Visual cancellation request");
+    await page.locator('[data-composer] button[type="submit"]').click();
+    await started;
+    await page.locator("[data-cancel-make-request]").click();
+    await expect(page.locator(".message-failure-status")).toBeVisible();
+    await stabilizeVisuals(page);
+    await expectComponentScreenshot(page.locator(".message.user").last(), "make-cancellation-status-card.png");
+    releaseResponse();
+  });
+});

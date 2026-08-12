@@ -89,6 +89,7 @@ const makeFocusModule = modules.make.focus;
 const makeMessageModel = modules.make.messageModel;
 const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
+const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy || {};
 
 if (
   [
@@ -1127,6 +1128,7 @@ async function ensureMakeRuntime() {
       toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
       openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
       handleBackendAccessError, reportWarning,
+      canSplitMakeThread, findMakeThread,
     });
     return true;
   }).catch((error) => {
@@ -1618,14 +1620,18 @@ function MakePage() {
 }
 
 function MakeFeed(hasMessages) {
+  const activeThread = findMakeThread(state.recentThreads, state.activeThreadId);
   return MakeFeedView(
-    { icons },
+    { icons, escapeHtml },
     {
       hasMessages,
       isThinking: isMakeThinking,
       messages: state.messages,
       renderMessageBubble: MessageBubble,
       templateBarHtml: MakeTemplateBar(),
+      threadPolicyNote: activeThread && !canSplitMakeThread(activeThread, isBackendNumericId)
+        ? "대화 분리는 로컬 대화에서 사용할 수 있습니다."
+        : "",
     },
   );
 }
@@ -1716,12 +1722,8 @@ function MakeFolderButton(folderId, name, count) {
 
 function MessageBubble(message) {
   const isAssistant = message.role === "assistant";
-  const activeThread = state.recentThreads.find(
-    (thread) => thread.id === state.activeThreadId || thread.serverId === state.activeThreadId,
-  );
-  const canSplitLocalThread = Boolean(
-    activeThread && !isBackendNumericId(activeThread.serverId || activeThread.id),
-  );
+  const activeThread = findMakeThread(state.recentThreads, state.activeThreadId);
+  const canSplitLocalThread = canSplitMakeThread(activeThread, isBackendNumericId);
 
   return MessageBubbleView(
     { icons, escapeAttr, escapeHtml },

@@ -6,6 +6,8 @@ require("../src/make/make-execution-workflows.js");
 require("../src/make/make-recent-workflows.js");
 const { createMakeWorkflows } = require("../src/make/make-workflows.js");
 const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
+let threadPolicy;
+test.before(async () => { threadPolicy = await import("../src/make/make-thread-policy.mjs"); });
 
 function makeContext(overrides = {}) {
   const notices = [];
@@ -36,6 +38,8 @@ function makeContext(overrides = {}) {
     getMakeApi: () => ({}),
     getMakeApiToken: () => "token",
     isBackendNumericId: (value) => /^\d+$/.test(String(value || "")),
+    canSplitMakeThread: threadPolicy.canSplitMakeThread,
+    findMakeThread: threadPolicy.findMakeThread,
     handleMakeBackendSyncError() {},
     hasBackendAuthToken: () => true,
     handleBackendAccessError() {},
@@ -57,6 +61,22 @@ test("folder creation rejects duplicate and maximum folder counts", async () => 
   await createMakeWorkflows(maximum).createMakeFolder("추가");
   assert.equal(maximum.state.makeFolders.length, 6);
   assert.match(maximum.notices.at(-1), /최대 5개/);
+});
+
+test("thread split policy uses the same server identity rules for UI and workflows", async () => {
+  const { canSplitMakeThread, findMakeThread } = threadPolicy;
+  const isBackendNumericId = (value) => /^\d+$/.test(String(value || ""));
+  const local = { id: "local-thread", serverId: "" };
+  const synchronized = { id: "local-shell", serverId: "42" };
+  const legacyServer = { id: 42 };
+  const threads = [local, synchronized, legacyServer];
+
+  assert.equal(findMakeThread(threads, "local-thread"), local);
+  assert.equal(findMakeThread(threads, "42"), synchronized);
+  assert.equal(canSplitMakeThread(local, isBackendNumericId), true);
+  assert.equal(canSplitMakeThread(synchronized, isBackendNumericId), false);
+  assert.equal(canSplitMakeThread(legacyServer, isBackendNumericId), false);
+  assert.equal(canSplitMakeThread(null, isBackendNumericId), false);
 });
 
 test("folder creation rolls local state back after backend failure", async () => {

@@ -125,6 +125,10 @@ interface TtalkakModuleRegistry {
     state: TtalkakCallableModule;
     focus: TtalkakCallableModule;
     persistence: TtalkakCallableModule;
+    threadPolicy: {
+      canSplitMakeThread(thread: TtalkakStateEntity | null | undefined, isBackendNumericId: (value: unknown) => boolean): boolean;
+      findMakeThread(threads: TtalkakStateEntity[], threadId: unknown): TtalkakStateEntity | null;
+    };
     loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule }>;
   };
   bootstrap: TtalkakCallableModule;

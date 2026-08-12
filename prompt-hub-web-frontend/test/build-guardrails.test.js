@@ -58,6 +58,13 @@ test("Make controller events and workflows load only through the Make runtime ch
     assert.match(makeEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
   });
   assert.match(makeEntry, /loadMakeRuntime/);
+  assert.match(makeEntry, /loadMakeStyles/);
+});
+
+test("Make styles are declared but not loaded before the Make route", () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
+  assert.match(html, /data-make-style-href=["'][^"']*make\.css/);
+  assert.doesNotMatch(html, /<link[^>]+href=["'][^"']*make\.css/);
 });
 
 test("bundle budgets accept values at the limit and reject regressions", () => {

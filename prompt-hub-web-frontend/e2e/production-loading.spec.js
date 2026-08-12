@@ -7,14 +7,17 @@ function routeChunkRequested(requests, route) {
 
 test("Home defers Share and Make chunks until their routes are opened", async ({ page }) => {
   const scripts = [];
+  const styles = [];
   page.on("request", (request) => {
     if (request.resourceType() === "script") scripts.push(request.url());
+    if (request.resourceType() === "stylesheet") styles.push(request.url());
   });
 
   await gotoApp(page);
   expect(routeChunkRequested(scripts, "share")).toBe(false);
   expect(routeChunkRequested(scripts, "make")).toBe(false);
   expect(routeChunkRequested(scripts, "admin")).toBe(false);
+  expect(styles.some((url) => new URL(url).pathname.endsWith("/assets/styles/make.css"))).toBe(false);
 
   await page.locator('[data-route="share"]').first().click();
   await expect(page.locator(".share-page")).toBeVisible();
@@ -23,6 +26,7 @@ test("Home defers Share and Make chunks until their routes are opened", async ({
   await page.locator('[data-route="make"]').first().click();
   await expect(page.locator(".make-page")).toBeVisible();
   expect(routeChunkRequested(scripts, "make")).toBe(true);
+  expect(styles.some((url) => new URL(url).pathname.endsWith("/assets/styles/make.css"))).toBe(true);
   expect(routeChunkRequested(scripts, "admin")).toBe(false);
 });
 
