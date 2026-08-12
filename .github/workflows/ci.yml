@@ -52,7 +52,7 @@ jobs:
         run: npm run verify
 
       - name: Upload web bundle analysis
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: web-bundle-analysis-${{ github.run_attempt }}
           path: |
@@ -117,7 +117,7 @@ jobs:
 
       - name: Upload E2E failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-test-results-${{ github.run_attempt }}
           path: prompt-hub-web-frontend/test-results/
