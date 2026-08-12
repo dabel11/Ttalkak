@@ -94,3 +94,7 @@ Accessibility checks such as keyboard operation, 200% zoom, focus management, re
 ## 7. Review cadence
 
 Review this document when an API contract changes, before a public release, when a new browser becomes supported, or when telemetry is proposed. Avoid speculative implementation before one of those triggers occurs.
+
+## 8. Account withdrawal integration smoke
+
+Use `ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md` for the disposable-account integration check. Never record test passwords, access tokens, database credentials, or production user data in the checklist or test output.

@@ -55,6 +55,7 @@ docs/*
 !docs/prompt-improve-contract.schema.json
 !docs/FRONTEND_OPERATING_POLICIES.md
 !docs/WEB_STORE_RELEASE_CHECKLIST.md
+!docs/ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md
 .gitignore
 
 extension/.env.production.local

@@ -9,6 +9,37 @@ const distRoot = path.join(webRoot, "dist");
 
 function gzipBytes(file) { return zlib.gzipSync(fs.readFileSync(file)).length; }
 function gitRevision(reference) { return execFileSync("git", ["rev-parse", "--short", reference], { cwd: repositoryRoot, encoding: "utf8" }).trim(); }
+function isGitAncestor(reference) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", reference, "HEAD"], { cwd: repositoryRoot, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function changedPaths(reference) {
+  return execFileSync("git", ["diff", "--name-only", `${reference}..HEAD`], { cwd: repositoryRoot, encoding: "utf8" })
+    .split(/\r?\n/)
+    .filter(Boolean);
+}
+function isBundleInput(file) {
+  const normalized = file.replaceAll("\\", "/");
+  return normalized === "prompt-hub-web-frontend/index.html"
+    || normalized === "prompt-hub-web-frontend/package.json"
+    || normalized === "prompt-hub-web-frontend/package-lock.json"
+    || normalized.startsWith("prompt-hub-web-frontend/src/")
+    || normalized === "scripts/build-web.cjs";
+}
+function assertLocalReference(referenceCommit, { head, parent, paths, ancestor = true }) {
+  const identifies = (revision) => revision.startsWith(referenceCommit) || referenceCommit.startsWith(revision);
+  if (identifies(head) || identifies(parent)) return;
+  if (!ancestor) throw new Error(`Bundle reference ${referenceCommit} is not an ancestor of HEAD (${head}).`);
+  const changedInputs = paths.filter(isBundleInput);
+  if (changedInputs.length === 0) return;
+  throw new Error(
+    `Bundle reference ${referenceCommit} predates bundle input changes for HEAD (${head}): ${changedInputs.slice(0, 5).join(", ")}`,
+  );
+}
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const target = path.join(directory, entry.name);
@@ -23,8 +54,13 @@ function createReport() {
   const reference = JSON.parse(fs.readFileSync(referencePath, "utf8"));
   const head = gitRevision("HEAD");
   const parent = gitRevision("HEAD^");
-  if (!process.env.TTALKAK_BUNDLE_REFERENCE_PATH && ![head, parent].some((revision) => revision.startsWith(reference.commit) || reference.commit.startsWith(revision))) {
-    throw new Error(`Bundle reference ${reference.commit} must identify HEAD (${head}) during local development or its direct parent (${parent}) in CI.`);
+  if (!process.env.TTALKAK_BUNDLE_REFERENCE_PATH) {
+    assertLocalReference(reference.commit, {
+      head,
+      parent,
+      paths: changedPaths(reference.commit),
+      ancestor: isGitAncestor(reference.commit),
+    });
   }
   const chunks = walk(path.join(distRoot, "assets")).filter((file) => file.endsWith(".js")).map((file) => ({
     file: path.relative(distRoot, file).replaceAll("\\", "/"), rawBytes: fs.statSync(file).size, gzipBytes: gzipBytes(file),
@@ -47,4 +83,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { createReport, gzipBytes, walk };
+module.exports = { assertLocalReference, createReport, gzipBytes, isBundleInput, walk };

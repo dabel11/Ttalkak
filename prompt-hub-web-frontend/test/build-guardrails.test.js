@@ -6,6 +6,7 @@ const path = require("node:path");
 const { assertBundleBudgets } = require("../../scripts/check-web-bundle-size.cjs");
 const { assertLegacyGlobalBaseline, auditLegacyGlobals } = require("../../scripts/check-web-legacy-globals.cjs");
 const { assertConsoleWarningBoundary } = require("../../scripts/check-web-observability.cjs");
+const { assertLocalReference, isBundleInput } = require("../../scripts/create-web-bundle-report.cjs");
 
 test("preview server serves ESM module files with a JavaScript MIME type", () => {
   const previewServer = fs.readFileSync(path.resolve(__dirname, "../preview-server.cjs"), "utf8");
@@ -88,6 +89,25 @@ test("bundle budgets accept values at the limit and reject regressions", () => {
   assert.throws(() => assertBundleBudgets({ javascript: { files: 2, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 11, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.rawBytes/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files: required asset is missing/);
+});
+
+test("bundle reference permits unrelated commits and rejects stale bundle inputs", () => {
+  const revisions = { head: "abcdef1", parent: "bcdef12" };
+  assert.equal(isBundleInput("docker-compose.yml"), false);
+  assert.equal(isBundleInput("backend/src/main/App.java"), false);
+  assert.equal(isBundleInput("prompt-hub-web-frontend/test/example.test.js"), false);
+  assert.equal(isBundleInput("prompt-hub-web-frontend/src/app.js"), true);
+  assert.equal(isBundleInput("scripts/build-web.cjs"), true);
+  assert.doesNotThrow(() => assertLocalReference("1234567", { ...revisions, paths: ["docker-compose.yml", "backend/README.md"] }));
+  assert.doesNotThrow(() => assertLocalReference("bcdef12", { ...revisions, paths: ["prompt-hub-web-frontend/src/app.js"] }));
+  assert.throws(
+    () => assertLocalReference("1234567", { ...revisions, paths: [], ancestor: false }),
+    /not an ancestor/,
+  );
+  assert.throws(
+    () => assertLocalReference("1234567", { ...revisions, paths: ["prompt-hub-web-frontend/src/app.js"] }),
+    /predates bundle input changes/,
+  );
 });
 
 test("console warnings are owned only by the observability reporter", () => {
