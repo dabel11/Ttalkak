@@ -62,7 +62,7 @@
         const closeThreadMenu = state.openThreadMenuId && !event.target.closest?.("[data-thread-item]");
         if (closeFolderMenu) state.openFolderMenuId = null;
         if (closeThreadMenu) { state.openThreadMenuId = null; state.creatingThreadFolderId = null; }
-        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-retry-message], [data-copy-message], [data-edit-message], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
+        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-retry-message], [data-copy-message], [data-edit-message], [data-split-thread-from], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
         if (!target) { if (closeFolderMenu || closeThreadMenu) actions.render(); return; }
         if (closeFolderMenu || closeThreadMenu) actions.render();
         if (target.matches("[data-template]")) actions.applyTemplate(target.dataset.template);
@@ -71,6 +71,7 @@
         else if (target.matches("[data-retry-message]")) { const message = state.messages.find((item) => item.id === target.dataset.retryMessage && item.role === "user"); if (message) actions.resend(message.id, message.content); }
         else if (target.matches("[data-copy-message]")) actions.copy(target.dataset.copyMessage);
         else if (target.matches("[data-edit-message]")) { actions.setEditing(target.dataset.editMessage); actions.setPendingScroll(target.dataset.editMessage); actions.render(); }
+        else if (target.matches("[data-split-thread-from]")) actions.splitThread(target.dataset.splitThreadFrom);
         else if (target.matches("[data-cancel-message-edit]")) { const form = target.closest("[data-edit-message-form]"); actions.setPendingScroll(form?.dataset.editMessageForm || state.editingMessageId); actions.setEditing(); actions.render(); }
         else if (target.matches("[data-save-message]")) actions.save(target.dataset.saveMessage);
         else if (target.matches("[data-share-message]")) actions.share(target.dataset.shareMessage);

@@ -32,8 +32,8 @@
     `;
   }
 
-  /** @param {{ title?: unknown, message?: unknown, confirmLabel?: string, danger?: boolean }} [options] */
-  function ConfirmDialog({ title, message, confirmLabel = "확인", danger = false } = {}) {
+  /** @param {{ title?: unknown, message?: unknown, confirmLabel?: string, alternativeLabel?: string, danger?: boolean }} [options] */
+  function ConfirmDialog({ title, message, confirmLabel = "확인", alternativeLabel = "", danger = false } = {}) {
     return `
       <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
         <article class="modal confirm-modal">
@@ -43,6 +43,7 @@
           <p class="confirm-message">${escapeHtml(message)}</p>
           <div class="modal-actions">
             <button class="secondary-button" type="button" data-cancel-confirm>취소</button>
+            ${alternativeLabel ? `<button class="secondary-button" type="button" data-confirm-alternative>${escapeHtml(alternativeLabel)}</button>` : ""}
             <button class="primary-button ${danger ? "danger-primary" : ""}" type="button" data-confirm-action>${escapeHtml(confirmLabel)}</button>
           </div>
         </article>

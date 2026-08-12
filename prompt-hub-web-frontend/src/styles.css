@@ -180,20 +180,6 @@ svg {
   }
 }
 
-@keyframes template-panel-out {
-  from {
-    max-height: 110px;
-    opacity: 1;
-    transform: translateY(0) scaleY(1);
-  }
-
-  to {
-    max-height: 0;
-    opacity: 0;
-    transform: translateY(-5px) scaleY(0.94);
-  }
-}
-
 .admin-nav-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1995,10 +1981,6 @@ h1 {
   box-shadow: none;
 }
 
-.make-template-bar.collapsing {
-  pointer-events: none;
-}
-
 .make-template-bar:hover {
   box-shadow: none;
 }
@@ -2035,10 +2017,6 @@ h1 {
   transform-origin: top center;
   animation: template-panel-in var(--motion-menu) both;
   will-change: max-height, opacity, transform;
-}
-
-.make-template-bar.collapsing .template-list {
-  animation: template-panel-out var(--motion-menu) both;
 }
 
 .template-list button {
@@ -2427,19 +2405,6 @@ h1 {
   line-height: inherit;
   overflow-wrap: anywhere;
   word-break: keep-all;
-}
-
-.message-question-section li.recommended::marker {
-  color: #0b5143;
-  font-weight: 800;
-}
-
-.message-question-section small {
-  display: block;
-  margin-top: 3px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .message-actions {
@@ -6316,221 +6281,6 @@ input[type="checkbox"] {
   background: rgba(18, 63, 52, 0.08);
 }
 
-.make-folder-section {
-  margin-bottom: 22px;
-}
-
-.make-folder-list {
-  display: grid;
-  gap: 8px;
-}
-
-.make-folder-limit {
-  margin: 8px 0 0;
-  color: var(--muted-dark);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.make-backend-note {
-  margin: 8px 0 0;
-  color: var(--muted-dark);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.make-side-head button:disabled,
-.thread-folder-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.make-folder-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.make-folder-item.menu-open {
-  z-index: 80;
-}
-
-.make-folder-item > button,
-.make-folder-edit-form {
-  min-width: 0;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--edge-shadow);
-}
-
-.make-folder-item > button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 12px;
-  color: var(--brand-green);
-  text-align: left;
-}
-
-.make-folder-item.user-folder > button {
-  padding-right: 44px;
-}
-
-.make-folder-item > button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.make-folder-item:hover > button,
-.make-folder-item.active > button,
-.make-folder-item.menu-open > button,
-.make-folder-item > button:hover {
-  background: var(--brand-green);
-  color: #fff;
-}
-
-.make-folder-more,
-.thread-folder-select {
-  border: 0;
-  border-radius: 10px;
-  background: rgba(18, 63, 52, 0.08);
-  color: var(--brand-green);
-  box-shadow: var(--edge-shadow);
-}
-
-.make-folder-menu-wrap {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  min-width: 30px;
-  transform: translateY(-50%);
-}
-
-.make-folder-more {
-  width: 30px;
-  height: 30px;
-  opacity: 0;
-  pointer-events: none;
-  cursor: pointer;
-  transition: opacity 0.16s, background 0.16s, color 0.16s, box-shadow 0.16s;
-}
-
-.make-folder-item:hover .make-folder-more,
-.make-folder-item.active .make-folder-more,
-.make-folder-item.menu-open .make-folder-more,
-.make-folder-more:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.make-folder-more:hover,
-.make-folder-item.menu-open .make-folder-more {
-  background: var(--brand-green);
-  color: #fff;
-  box-shadow: var(--edge-shadow-hover);
-}
-
-.make-folder-more svg {
-  width: 16px;
-  height: 16px;
-}
-
-.make-folder-menu {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
-  z-index: 90;
-  display: grid;
-  gap: 4px;
-  min-width: 122px;
-  padding: 6px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: var(--edge-shadow-hover);
-  pointer-events: auto;
-}
-
-.make-folder-menu button {
-  display: grid;
-  grid-template-columns: 15px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  border: 0;
-  border-radius: 9px;
-  padding: 0 9px;
-  background: transparent;
-  color: var(--brand-green);
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.make-folder-menu button:hover {
-  background: #eef4ef;
-}
-
-.make-folder-menu svg {
-  width: 14px;
-  height: 14px;
-}
-
-.make-folder-edit-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 6px;
-  padding: 8px;
-}
-
-.make-folder-edit-form input {
-  min-width: 0;
-  border: 0;
-  border-radius: 9px;
-  padding: 8px 10px;
-  outline: 0;
-  background: rgba(18, 63, 52, 0.08);
-}
-
-.make-folder-edit-form button {
-  border: 0;
-  border-radius: 9px;
-  padding: 8px 10px;
-  background: #fff;
-  color: var(--brand-green);
-}
-
-.thread-folder-select {
-  width: 96px;
-  min-width: 96px;
-  height: 32px;
-  padding: 0 28px 0 10px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--brand-green);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.recent-thread.active .thread-folder-select,
-.recent-thread:hover .thread-folder-select {
-  background: #fff;
-  color: var(--brand-green);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.78), var(--edge-shadow);
-}
-
-.thread-folder-select option {
-  color: var(--brand-green);
-  background: #fff;
-}
 
 .prompt-detail-layout {
   display: grid;

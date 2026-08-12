@@ -147,6 +147,91 @@ test("recent conversation menu opens and closes through delegated events", async
   await expect(page.locator(".recent-thread-menu")).toHaveCount(0);
 });
 
+test("compact Make sidebar removes duplicate previews and exposes consistent create controls", async ({ page }) => {
+  const messages = [{ id: "user-compact", role: "user", content: "중복 없는 대화" }];
+  const thread = {
+    id: "compact-thread",
+    title: "중복 없는 대화",
+    preview: "중복 없는 대화",
+    folderId: "uncategorized",
+    createdAt: Date.now(),
+    messages,
+  };
+  await openMake(page, messages, { activeThreadId: thread.id, recentThreads: [thread] });
+
+  const folderCreate = page.getByRole("button", { name: "새 폴더" });
+  const chatCreate = page.getByRole("button", { name: "새 대화" });
+  await expect(folderCreate).toHaveText("+");
+  await expect(chatCreate).toHaveText("+");
+
+  const recent = page.locator('[data-thread-item="compact-thread"]');
+  await expect(recent.locator(".recent-thread-main span")).toHaveCount(0);
+  await expect(recent.locator("small")).toContainText("오늘");
+  await expect(recent).toHaveClass(/active/);
+  await expect(page.locator(".make-side-title").first().locator("small")).toHaveText("2");
+});
+
+test("template categories collapse immediately without a layout-animation state", async ({ page }) => {
+  await openMake(page);
+
+  const toggle = page.locator("[data-toggle-templates]");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".template-list")).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".template-list")).toHaveCount(0);
+  await expect(page.locator(".make-template-bar.collapsing")).toHaveCount(0);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".template-list")).toBeVisible();
+});
+
+test("template selection starts a new conversation by default while preserving the previous thread", async ({ page }) => {
+  const messages = [{ id: "existing-topic", role: "user", content: "Existing Instagram topic" }];
+  await openMake(page, messages);
+
+  await page.locator("[data-template]").first().click();
+  await expect(page.getByRole("dialog")).toContainText("템플릿을 어디에 적용할까요?");
+  await expect(page.locator("[data-confirm-action]")).toBeFocused();
+  await page.locator("[data-confirm-action]").click();
+
+  await expect(page.locator(".message-group")).toHaveCount(0);
+  await expect(page.locator("[data-composer] textarea")).not.toHaveValue("");
+  await expect(page.locator('[data-thread-item="fixture-thread"]')).toBeVisible();
+});
+
+test("template selection can explicitly keep the current conversation", async ({ page }) => {
+  const messages = [{ id: "existing-topic", role: "user", content: "Existing Instagram topic" }];
+  await openMake(page, messages);
+
+  await page.locator("[data-template]").first().click();
+  await page.locator("[data-confirm-alternative]").click();
+
+  await expect(page.locator('[data-message-id="existing-topic"]')).toBeVisible();
+  await expect(page.locator("[data-composer] textarea")).not.toHaveValue("");
+});
+
+test("a later user message can be split into a new local conversation", async ({ page }) => {
+  const messages = [
+    { id: "topic-one", role: "user", content: "Instagram campaign" },
+    { id: "reply-one", role: "assistant", mode: "improve", content: "Instagram result", improvedPrompt: "Instagram result" },
+    { id: "topic-two", role: "user", content: "Explain machine learning" },
+    { id: "reply-two", role: "assistant", mode: "improve", content: "Machine learning result", improvedPrompt: "Machine learning result" },
+  ];
+  await openMake(page, messages);
+
+  await page.locator('[data-split-thread-from="topic-two"]').click();
+  await expect(page.locator('[data-message-id="topic-one"]')).toHaveCount(0);
+  await expect(page.locator('[data-message-id="topic-two"]')).toBeVisible();
+  await expect(page.locator(".recent-thread")).toHaveCount(2);
+
+  await page.locator('[data-thread-item="fixture-thread"] [data-open-thread]').click();
+  await expect(page.locator('[data-message-id="topic-one"]')).toBeVisible();
+  await expect(page.locator('[data-message-id="topic-two"]')).toHaveCount(0);
+});
+
 test("leaving Make aborts an in-flight request and preserves a non-retryable cancellation state", async ({ page }) => {
   let requestStarted;
   let releaseResponse;

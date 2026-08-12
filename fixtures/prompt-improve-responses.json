@@ -14,5 +14,29 @@
   "clientMessages": {
     "cancelled": { "role": "assistant", "content": "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.", "isCancelled": true, "isError": false, "excludeFromHistory": true },
     "legacyAssistant": { "role": "assistant", "answer": "구형 저장 응답 본문입니다.", "summary": "구형 저장 응답 요약입니다." }
+  },
+  "regressions": {
+    "exampleInQuestion": {
+      "mode": "ask",
+      "answer": "무엇에 대한 캡션을 작성하고 싶으신가요? (예: 여행, 음식, 제품)",
+      "questions": [{ "field": "topic", "question": "무엇에 대한 캡션을 작성하고 싶으신가요? (예: 여행, 음식, 제품)", "importance": "required" }]
+    },
+    "markdownDescription": {
+      "mode": "improve",
+      "answer": "**대상**: 일반인에게 설명하기 위해\n**방향**: 머신 러닝을 중심으로",
+      "improvedPrompt": "일반 독자에게 머신 러닝을 명확하게 설명하는 글을 작성해 주세요.",
+      "questions": [],
+      "ragStatus": "no_evidence"
+    },
+    "improveWithNonActionableQuestions": {
+      "mode": "improve",
+      "answer": "요청을 실행 가능한 프롬프트로 개선했습니다.",
+      "improvedPrompt": "신규 서비스의 장점을 강조하는 인스타그램 캡션을 작성해 주세요.",
+      "questions": [{ "field": "audience", "question": "대상 독자는 누구인가요?", "importance": "recommended" }],
+      "fields": [{ "name": "대상 독자", "value": "신규 사용자" }],
+      "changes": ["목적을 구체화했습니다."],
+      "techniques": [{ "name": "대상 독자 고려" }],
+      "ragStatus": "ok"
+    }
   }
 }

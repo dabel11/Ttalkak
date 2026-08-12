@@ -1,8 +1,7 @@
 (function attach(global) {
   "use strict";
   function createMakeExecutionWorkflows(ctx) {
-    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea } = ctx;
-    let templateToggleTimer = null;
+    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState } = ctx;
     async function copyMakeMessage(messageId) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
@@ -118,10 +117,11 @@
       return targets[targetId] || null;
     }
 
-    function applyTemplate(templateId) {
+    function performTemplateApply(templateId, startNew = false) {
       const template = promptTemplates.find((item) => item.id === templateId);
-      if (!template) return;
+      if (!template) return false;
 
+      if (startNew) startNewMakeChatState(state);
       window.TtalkakMakeState.setMakeComposerDraft(state, template.prompt);
       render();
       window.setTimeout(() => {
@@ -135,35 +135,31 @@
         textarea.setSelectionRange(cursorPosition, cursorPosition);
         autosizeTextarea(textarea);
       }, 0);
+      return true;
     }
 
-    function toggleTemplateBar(button) {
-      window.clearTimeout(templateToggleTimer);
-
-      if (state.templateCollapsed) {
-        state.templateCollapsed = false;
-        render();
+    function applyTemplate(templateId) {
+      if (state.messages.length && typeof openConfirmAction === "function") {
+        openConfirmAction({
+          type: "apply-template-new-chat",
+          alternativeType: "apply-template-current-chat",
+          targetId: templateId,
+          title: "템플릿을 어디에 적용할까요?",
+          message: "새 주제라면 새 대화에서 시작해야 기존 대화의 맥락과 섞이지 않습니다.",
+          confirmLabel: "새 대화에서 시작",
+          alternativeLabel: "현재 대화에 적용",
+        });
         return;
       }
-
-      const templateBar = button.closest(".make-template-bar");
-      if (!templateBar) {
-        state.templateCollapsed = true;
-        render();
-        return;
-      }
-
-      templateBar.classList.add("collapsing");
-      button.setAttribute("aria-label", "분야 버튼 펼치기");
-      button.setAttribute("aria-expanded", "false");
-      button.innerHTML = "&gt;";
-      templateToggleTimer = window.setTimeout(() => {
-        state.templateCollapsed = true;
-        render();
-      }, 190);
+      performTemplateApply(templateId, false);
     }
 
-    return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, toggleTemplateBar });
+    function toggleTemplateBar() {
+      state.templateCollapsed = !state.templateCollapsed;
+      render();
+    }
+
+    return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
   }
   const api = Object.freeze({ createMakeExecutionWorkflows });
   if (typeof module !== "undefined" && module.exports) module.exports = api;

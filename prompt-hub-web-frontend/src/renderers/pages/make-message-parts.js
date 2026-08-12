@@ -70,27 +70,16 @@
 
   function MessageFieldsView(ctx, data) {
     const { escapeHtml } = ctx;
-    const { fields } = data;
+    const { collapsible = false, fields } = data;
     const visibleFields = fields.filter((item) => item.status !== "filled");
     if (!visibleFields.length) return "";
 
-    return `
-      <section class="message-field-section" aria-label="채워야 할 정보">
-        <strong>채워야 할 정보</strong>
-        <ul>
-          ${visibleFields
-            .map(
-              (item) => `
-                <li class="${item.role}">
-                  <span>${escapeHtml(item.name)}</span>
-                  <em>${item.role === "required" ? "필수" : item.role === "fact" ? "사실 확인" : "선택"}</em>
-                </li>
-              `,
-            )
-            .join("")}
-        </ul>
-      </section>
-    `;
+    const content = `<ul>${visibleFields
+      .map((item) => `<li class="${item.role}"><span>${escapeHtml(item.name)}</span><em>${item.role === "required" ? "필수" : item.role === "fact" ? "사실 확인" : "선택"}</em></li>`)
+      .join("")}</ul>`;
+    if (collapsible) return `<details class="message-detail-section message-field-section"><summary><span>채워야 할 정보</span><em>${visibleFields.length}</em></summary>${content}</details>`;
+
+    return `<section class="message-field-section" aria-label="채워야 할 정보"><strong>채워야 할 정보</strong>${content}</section>`;
   }
 
   function MessageTechniquesView(ctx, data) {
@@ -98,8 +87,8 @@
     const { techniques } = data;
 
     return `
-      <section class="message-technique-section" aria-label="참고한 프롬프트 기법">
-        <strong>참고한 프롬프트 기법</strong>
+      <details class="message-detail-section message-technique-section">
+        <summary><span>참고한 프롬프트 기법</span><em>${techniques.length}</em></summary>
         <ul class="message-technique-list">
           ${techniques
             .map(
@@ -112,14 +101,15 @@
             )
             .join("")}
         </ul>
-      </section>
+      </details>
     `;
   }
 
   function MessageEvidenceNoticeView() {
     return `
-      <div class="message-evidence-notice" role="note">
-        <span>참고 근거 없이 기본 방식으로 다듬었습니다.</span>
+      <div class="message-evidence-notice" role="note" title="검색된 참고 자료가 없어 기본 방식으로 결과를 생성했습니다.">
+        <span aria-hidden="true">ⓘ</span>
+        <span>참고 자료 없이 생성됨</span>
       </div>
     `;
   }
@@ -129,12 +119,12 @@
     const { changes } = data;
 
     return `
-      <section class="message-changes-section" aria-label="가정 및 개선 포인트">
-        <strong>가정 및 개선 포인트</strong>
+      <details class="message-detail-section message-changes-section">
+        <summary><span>가정 및 개선 포인트</span><em>${changes.length}</em></summary>
         <ul>
           ${changes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>
-      </section>
+      </details>
     `;
   }
 

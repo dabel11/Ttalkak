@@ -14,6 +14,7 @@
       const question = text(source.question || source.text || source.content || source.label);
       if (!question) return null;
       const field = text(source.field || source.key || source.name || `question_${index + 1}`);
+      if (/\(\s*예\s*$/u.test(field) && /\)\s*$/u.test(question)) return null;
       return { field, question, reason: text(source.reason || source.description || source.effect || source.helpText), importance: String(source.importance || source.priority || "recommended").toLowerCase() === "required" ? "required" : "recommended" };
     }).filter((item) => {
       if (!item) return false;
@@ -54,7 +55,8 @@
     const questions = [];
     let found = false;
     source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
-      const pair = line.match(/^(?:[-*•]|\d+[.)])?\s*([^:：]{1,48})[:：]\s*(.+)$/);
+      const pair = line.match(/^(?:[-*•]|\d+[.)])\s+([^:：?？()]{1,24})[:：]\s*(.+)$/)
+        || line.match(/^([^:：?？()*]{1,24})[:：]\s*(.+[?？])$/);
       const bullet = line.match(/^(?:[-*•]|\d+[.)])\s*(.+[?？])$/);
       if (pair || bullet) {
         found = true;

@@ -46,11 +46,11 @@
       focusActive();
     }
 
-    async function runConfirmed(handlers) {
+    async function runConfirmed(handlers, useAlternative = false) {
       const action = ctx.state.confirmAction;
       if (!action) return false;
       ctx.state.confirmAction = null;
-      const handler = handlers[action.type];
+      const handler = handlers[useAlternative ? action.alternativeType : action.type];
       if (!handler) {
         ctx.render();
         restoreFocus();

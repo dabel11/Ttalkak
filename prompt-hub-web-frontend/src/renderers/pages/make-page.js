@@ -139,12 +139,12 @@
       <aside class="make-side-panel" aria-label="Make 최근 대화">
         <section class="make-folder-section">
           <div class="make-side-head">
-            <strong>폴더</strong>
-            <button type="button" data-show-folder-form ${canCreateFolder ? "" : "disabled"} title="${canManageFolders ? (canCreateFolder ? "새 폴더 만들기" : `폴더는 최대 ${maxCustomFolders}개까지 만들 수 있습니다.`) : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">새 폴더</button>
+            <span class="make-side-title"><strong>폴더</strong><small>${visibleFolders.length + 1}</small></span>
+            <button class="make-side-create" type="button" data-show-folder-form ${canCreateFolder ? "" : "disabled"} aria-label="새 폴더" title="${canManageFolders ? (canCreateFolder ? "새 폴더 만들기" : `폴더는 최대 ${maxCustomFolders}개까지 만들 수 있습니다.`) : "로그인하면 대화를 폴더로 정리할 수 있습니다."}">+</button>
           </div>
           ${!canManageFolders ? `<p class="make-folder-limit">로그인하면 대화를 폴더로 정리할 수 있습니다.</p>` : ""}
           ${canManageFolders && !canCreateFolder ? `<p class="make-folder-limit">폴더는 최대 ${maxCustomFolders}개까지 만들 수 있습니다.</p>` : ""}
-          ${makeBackendMessage ? `<p class="make-backend-note">${escapeHtml(makeBackendMessage)}</p>` : ""}
+          ${makeBackendMessage ? `<div class="make-backend-note"><span>${escapeHtml(makeBackendMessage)}</span>${makeBackendMessage.startsWith("데모 계정") ? `<details class="make-info-disclosure"><summary aria-label="데모 계정 저장 방식 자세히 보기">i</summary><span class="make-info-popover" role="note">서버와 동기화하지 않고 이 브라우저에만 대화를 저장합니다.</span></details>` : ""}</div>` : ""}
           ${
             creatingFolder
               ? `<form class="make-folder-form" data-folder-create-form>
@@ -156,12 +156,12 @@
           }
           <div class="make-folder-list">
             ${renderFolderButton("all", "전체", threadCount)}
-            ${visibleFolders.map((folder) => renderFolderButton(folder.id, formatMakeSidebarLabel(folder.name, "새 폴더", 18), folder.threadCount)).join("")}
+            ${visibleFolders.map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
           </div>
         </section>
         <div class="make-side-head">
-          <strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong>
-          <button type="button" data-new-chat>새 대화</button>
+          <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
+          <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
         </div>
         ${
           visibleThreads.length
@@ -170,8 +170,8 @@
                   <article class="recent-thread ${activeThreadId === thread.id ? "active" : ""} ${openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${escapeAttr(thread.id)}">
                     <button class="recent-thread-main" type="button" data-open-thread="${escapeAttr(thread.id)}">
                       <strong title="${escapeAttr(thread.title)}">${escapeHtml(formatMakeSidebarLabel(thread.title, "대화", 24))}</strong>
-                      <span title="${escapeAttr(thread.preview)}">${escapeHtml(formatMakeSidebarLabel(thread.preview, "대화 내용 없음", 36))}</span>
-                      <small>${formatShortDate(thread.createdAt)}</small>
+                      ${isDuplicateThreadPreview(thread.title, thread.preview) ? "" : `<span title="${escapeAttr(thread.preview)}">${escapeHtml(formatMakeSidebarLabel(thread.preview, "대화 내용 없음", 36))}</span>`}
+                      <small>${formatMakeSidebarDate(thread.createdAt, formatShortDate)}</small>
                     </button>
                     <div class="recent-thread-menu-wrap">
                       <button class="recent-thread-more" type="button" data-thread-menu="${escapeAttr(thread.id)}" aria-label="대화 더보기" aria-expanded="${openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
@@ -223,10 +223,34 @@
     return clipMakeSidebarText(clean, maxLength);
   }
 
+  function normalizeSidebarComparisonText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  }
+
+  function isDuplicateThreadPreview(title, preview) {
+    const normalizedTitle = normalizeSidebarComparisonText(title);
+    const normalizedPreview = normalizeSidebarComparisonText(preview);
+    return !normalizedPreview || normalizedPreview === normalizedTitle;
+  }
+
+  function formatMakeSidebarDate(value, fallbackFormatter) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return fallbackFormatter(value);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayDifference = Math.round((today.getTime() - target.getTime()) / 86400000);
+    if (dayDifference === 0) return `오늘 ${date.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })}`;
+    if (dayDifference === 1) return "어제";
+    if (date.getFullYear() === now.getFullYear()) return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+    return fallbackFormatter(value);
+  }
+
   function MakeFolderButtonView(ctx, data) {
     const { icons, escapeAttr, escapeHtml, formatNumber } = ctx;
     const { canManage, count, folderId, isActive, isEditing, isMenuOpen, isUserFolder, name } = data;
     const safeFolderId = escapeAttr(folderId);
+    const displayName = formatMakeSidebarLabel(name, "새 폴더", 18);
 
     if (isEditing) {
       return `
@@ -240,7 +264,7 @@
 
     return `
       <div class="make-folder-item ${isUserFolder ? "user-folder" : "system-folder"} ${isActive ? "active" : ""} ${isMenuOpen ? "menu-open" : ""}" data-folder-item="${safeFolderId}">
-        <button type="button" data-open-folder="${safeFolderId}">${icons.bookmark}<span>${escapeHtml(name)}</span><em>${formatNumber(count)}</em></button>
+        <button type="button" data-open-folder="${safeFolderId}" title="${escapeAttr(name)}">${icons.bookmark}<span>${escapeHtml(displayName)}</span><em>${formatNumber(count)}</em></button>
         ${
           canManage
             ? `<div class="make-folder-menu-wrap">
@@ -262,7 +286,7 @@
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -274,17 +298,21 @@
     const safeMessageId = escapeAttr(id);
     const safeContent = escapeHtml(content);
     const recoveredContent = String(content || answer || summary || improvedPrompt || "").trim();
+    const resultPrompt = hasExecutablePrompt ? String(improvedPrompt || content || answer || summary || "").trim() : "";
+    const explanationText = String(summary || answer || "").trim();
     const leadText = normalizedQuestions.length
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
-      : recoveredContent;
-    const questionSection = normalizedQuestions.length
+      : hasExecutablePrompt
+        ? explanationText && explanationText !== resultPrompt ? explanationText : ""
+        : recoveredContent;
+    const questionSection = effectiveIsAsk && normalizedQuestions.length
       ? MessageQuestionsView({ escapeAttr, escapeHtml }, { isAsk: effectiveIsAsk, isThinking, messageId: id, questions: normalizedQuestions })
       : "";
     const changeSection = normalizedChanges.length
       ? MessageChangesView({ escapeHtml }, { changes: normalizedChanges })
       : "";
     const fieldSection = normalizedFields.length
-      ? MessageFieldsView({ escapeHtml }, { fields: normalizedFields })
+      ? MessageFieldsView({ escapeHtml }, { collapsible: hasExecutablePrompt, fields: normalizedFields })
       : "";
     const techniqueSection = normalizedTechniques.length
       ? MessageTechniquesView({ escapeHtml }, { techniques: normalizedTechniques })
@@ -299,19 +327,20 @@
           <article class="message assistant">
             ${evidenceSection}
             ${leadText ? `<p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>` : ""}
+            ${resultPrompt ? `<section class="message-result-prompt" aria-label="개선된 프롬프트"><strong>개선된 프롬프트</strong><div>${renderPromptTextWithPlaceholders(resultPrompt, escapeHtml)}</div></section>` : ""}
+            ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
             ${fieldSection}
             ${changeSection}
             ${questionSection}
             ${techniqueSection}
           </article>
-          ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
         </div>
       `;
     }
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${UserMessageView(ctx, { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
+        ${UserMessageView(ctx, { canSplit, content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
       </div>
     `;
   }
@@ -329,9 +358,9 @@
 
   function UserMessageView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    const { canSplit, content, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
     if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
-    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}<div class="user-message-actions"><button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="alert">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   global.TtalkakRenderers = Object.freeze({

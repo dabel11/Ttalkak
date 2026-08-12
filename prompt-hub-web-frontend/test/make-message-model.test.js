@@ -53,6 +53,15 @@ test("legacy answer questions migrate into structured ask data", () => {
   assert.equal(message.content, "추가 정보가 필요합니다.");
 });
 
+test("example colons inside a question do not create fake legacy questions", () => {
+  const source = "무엇에 대한 캡션을 작성하고 싶으신가요? (예: 여행, 음식, 제품)";
+  const parsed = model.parseLegacyQuestions(source);
+  assert.equal(parsed.questions.length, 0);
+  assert.equal(parsed.leadText, source);
+  assert.equal(model.normalizeQuestions([{ field: "무엇을 작성할까요? (예", question: "여행, 음식, 제품)" }]).length, 0);
+  assert.equal(model.parseLegacyQuestions("**대상**: 일반인에게 설명하기 위해").questions.length, 0);
+});
+
 test("question duplicates and history are normalized", () => {
   assert.equal(model.normalizeQuestions([{ field: "purpose", question: "목적은?" }, { field: " purpose ", question: " 목적은? " }]).length, 1);
   assert.deepEqual(model.buildImproveHistory([{ role: "user", content: "글 써줘" }, { role: "assistant", mode: "ask", answer: "목적은?" }]), [{ role: "user", content: "글 써줘" }, { role: "assistant", content: "목적은?" }]);

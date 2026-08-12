@@ -11,6 +11,7 @@ test("shared fixture matrix contains every required compatibility case", () => {
   assert.deepEqual(Object.keys(fixtures.responses).sort(), ["ask", "emptyCollections", "improve", "missingOptionalFields", "noEvidence", "unknownAdditionalField"]);
   assert.deepEqual(Object.keys(fixtures.errors).sort(), ["aiUnavailable", "timeout"]);
   assert.deepEqual(Object.keys(fixtures.clientMessages).sort(), ["cancelled", "legacyAssistant"]);
+  assert.deepEqual(Object.keys(fixtures.regressions).sort(), ["exampleInQuestion", "improveWithNonActionableQuestions", "markdownDescription"]);
 });
 
 test("optional, unknown, empty, and no-evidence fixtures remain normalizable", () => {
@@ -28,4 +29,17 @@ test("shared cancellation fixture is informational and non-actionable", () => {
   assert.equal(cancelled.isError, false);
   assert.equal(cancelled.excludeFromHistory, true);
   assert.deepEqual(getMessageActionVisibility(cancelled), { copy: false, save: false, execute: false });
+});
+
+test("real response regressions preserve ask questions and executable improve results", () => {
+  const ask = normalizeImproveResult(fixtures.regressions.exampleInQuestion);
+  assert.equal(ask.mode, "ask");
+  assert.equal(ask.questions.length, 1);
+  assert.match(ask.questions[0].question, /예: 여행, 음식, 제품/);
+  assert.deepEqual(getMessageActionVisibility({ role: "assistant", ...ask }), { copy: false, save: true, execute: false });
+
+  const improve = normalizeImproveResult(fixtures.regressions.improveWithNonActionableQuestions);
+  assert.equal(improve.mode, "improve");
+  assert.ok(improve.improvedPrompt);
+  assert.equal(getMessageActionVisibility({ role: "assistant", ...improve }).execute, true);
 });

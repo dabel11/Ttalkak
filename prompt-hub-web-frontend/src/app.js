@@ -1158,6 +1158,8 @@ const renameMakeFolder = (...args) => callMakeWorkflow("renameMakeFolder", undef
 const performDeleteFolder = (...args) => callMakeWorkflow("performDeleteFolder", undefined, ...args);
 const moveThreadToFolder = (...args) => callMakeWorkflow("moveThreadToFolder", undefined, ...args);
 const moveThreadToFolderOnBackend = (...args) => callMakeWorkflow("moveThreadToFolderOnBackend", false, ...args);
+const performTemplateApply = (...args) => callMakeWorkflow("performTemplateApply", false, ...args);
+const splitThreadFromMessage = (...args) => callMakeWorkflow("splitThreadFromMessage", false, ...args);
 const countThreadsInFolder = (...args) => callMakeWorkflow("countThreadsInFolder", 0, ...args);
 const getThreadFolderId = (...args) => callMakeWorkflow("getThreadFolderId", "uncategorized", ...args);
 const getActiveFolderName = (...args) => callMakeWorkflow("getActiveFolderName", "최근 대화", ...args);
@@ -1204,6 +1206,8 @@ const {
   removePromptById,
 } = promptWorkflows;
 const confirmActionHandlers = {
+  "apply-template-new-chat": (action) => performTemplateApply(action.targetId, true),
+  "apply-template-current-chat": (action) => performTemplateApply(action.targetId, false),
   "delete-prompt": (action) => performDeletePrompt(action.targetId),
   "unshare-prompt": (action) => performUnsharePrompt(action.targetId),
   "delete-comment": (action) => promptEngagementController.performDeleteComment(action.targetId),
@@ -1722,6 +1726,7 @@ function MessageBubble(message) {
       fields: message.fields || [],
       hasExecutablePrompt: isAssistant && isExecutableMakeMessage(message),
       id: message.id,
+      canSplit: !isAssistant && Boolean(state.activeThreadId) && state.messages.findIndex((item) => item.id === message.id) > 0,
       improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
@@ -2146,7 +2151,7 @@ function bindDiscoveryEvents() {
 }
 
 function bindModalControlEvents() {
-  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: () => modalController.runConfirmed(confirmActionHandlers) }, state);
+  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
 }
 
 function bindPromptInteractionEvents() {
@@ -2556,6 +2561,7 @@ function bindDelegatedMakeEvents() {
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
       applyTemplate, toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
       share: openShareFromMakeMessage, execute: openExecuteModal, newChat: startNewChat,
+      splitThread: splitThreadFromMessage,
       openThread: openRecentThread, confirm: openConfirmAction, folderCount: getCustomMakeFolderCount,
       focusLater: (selector) => window.setTimeout(() => document.querySelector(selector)?.focus(), 0),
     },

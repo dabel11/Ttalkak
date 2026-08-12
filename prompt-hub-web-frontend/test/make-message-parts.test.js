@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fixtures = require("./fixtures/make-responses.js");
+const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
 
 global.window = {};
 global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
@@ -53,6 +55,35 @@ test("improve suggestions do not render answer inputs", () => {
   assert.doesNotMatch(html, /data-ask-answer-form/);
 });
 
+test("executable improve messages do not expose non-actionable question lists", () => {
+  const html = MessageBubbleView({
+    icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
+    escapeAttr,
+    escapeHtml,
+  }, {
+    id: "assistant-improve",
+    role: "assistant",
+    mode: "improve",
+    content: "Improved prompt",
+    improvedPrompt: "Improved prompt",
+    questions: [{ field: "audience", question: "Who is the audience?", importance: "required" }],
+    fields: [{ name: "Audience", role: "fact", status: "empty" }],
+    changes: ["Assumed a professional tone"],
+    techniques: [{ name: "Role prompting" }],
+    hasExecutablePrompt: true,
+  });
+
+  assert.doesNotMatch(html, /message-question-section/);
+  assert.match(html, /message-result-prompt/);
+  assert.match(html, />개선된 프롬프트</);
+  assert.match(html, /<details class="message-detail-section message-field-section">/);
+  assert.match(html, /<details class="message-detail-section message-changes-section">/);
+  assert.match(html, /<details class="message-detail-section message-technique-section">/);
+  assert.ok(html.indexOf("message-result-prompt") < html.indexOf("message-actions"));
+  assert.ok(html.indexOf("message-actions") < html.indexOf("message-field-section"));
+  assert.match(html, /data-execute-message/);
+});
+
 test("ask messages hide copy and execute actions", () => {
   const html = MessageBubbleView({
     icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
@@ -85,4 +116,33 @@ test("thinking messages expose an accessible request cancellation control", () =
   assert.match(html, /data-cancel-make-request/);
   assert.match(html, /aria-label="요청 취소"/);
   assert.match(html, /aria-live="polite"/);
+});
+
+test("real response regressions keep ask inputs and executable results distinct", () => {
+  const ask = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
+  const askHtml = MessageBubbleView({
+    icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
+    escapeAttr,
+    escapeHtml,
+  }, { id: "regression-ask", role: "assistant", ...ask, hasExecutablePrompt: false });
+  assert.equal(ask.questions.length, 1);
+  assert.match(ask.questions[0].question, /예: 여행, 음식, 제품/);
+  assert.match(askHtml, /data-ask-answer-input/);
+
+  const improve = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.improveWithNonActionableQuestions);
+  const improveHtml = MessageBubbleView({
+    icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
+    escapeAttr,
+    escapeHtml,
+  }, { id: "regression-improve", role: "assistant", ...improve, hasExecutablePrompt: true });
+  assert.doesNotMatch(improveHtml, /message-question-section/);
+  assert.match(improveHtml, /message-result-prompt/);
+  assert.match(improveHtml, /data-execute-message/);
+});
+
+test("markdown descriptions in improve responses are not parsed as questions", () => {
+  const regression = fixtureMatrix.regressions.markdownDescription;
+  const parsed = global.window.TtalkakMakeMessageModel.parseLegacyQuestions(regression.answer);
+  assert.equal(parsed.questions.length, 0);
+  assert.equal(fixtures.improve.mode, "improve");
 });

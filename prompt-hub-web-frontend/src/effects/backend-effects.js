@@ -240,7 +240,7 @@
         state.authView = "login";
       }
       global.TtalkakMakeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
-        ? "데모 계정은 서버 대화 조회 없이 로컬 Make 대화를 사용합니다."
+        ? "데모 계정 · 대화는 이 기기에 저장됩니다."
         : wasLoggedIn
           ? "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다."
           : "로그인하면 서버에 저장된 Make 대화를 불러올 수 있습니다.");
