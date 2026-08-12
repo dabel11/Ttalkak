@@ -18,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 
 class AuthControllerProviderIsolationTest {
 
@@ -141,6 +144,45 @@ class AuthControllerProviderIsolationTest {
                 HttpStatus.UNAUTHORIZED,
                 exception.getStatusCode()
         );
+    }
+
+    @Test
+    void rejectsSignupWithWithdrawnMemberUserId() {
+        when(memberRepository.existsByUserId("withdrawn-user"))
+                .thenReturn(true);
+
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> controller.signup(
+                        new AuthController.SignupRequest(
+                                "new-nickname",
+                                "New User",
+                                null,
+                                null,
+                                "new@example.com",
+                                "withdrawn-user",
+                                "password",
+                                "password",
+                                true,
+                                true
+                        )
+                )
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("이미 사용 중인 아이디입니다.", exception.getReason());
+        verify(memberRepository, never()).save(any(Member.class));
+    }
+
+    @Test
+    void reportsWithdrawnMemberUserIdAsUnavailable() {
+        when(memberRepository.existsByUserId("withdrawn-user"))
+                .thenReturn(true);
+
+        Map<String, Object> response =
+                controller.checkUserId("withdrawn-user");
+
+        assertFalse((Boolean) response.get("available"));
     }
 
     @Test
