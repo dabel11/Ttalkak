@@ -15,6 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -213,5 +217,100 @@ class WithdrawnUserIdIntegrationTest {
                                         PASSWORD
                                 )))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void anonymizesPersonalInformationAfterWithdrawal()
+            throws Exception {
+
+        String userId =
+                "withdrawal-privacy-user";
+
+        String originalNickname =
+                "withdrawal-privacy-nickname";
+
+        String originalName =
+                "Privacy Test User";
+
+        String originalEmail =
+                "withdrawal-privacy@example.com";
+
+        String originalPhone =
+                "010-1234-5678";
+
+        String signupResponse = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "nickname": "%s",
+                                  "name": "%s",
+                                  "birth": null,
+                                  "phone": "%s",
+                                  "email": "%s",
+                                  "userId": "%s",
+                                  "password": "%s",
+                                  "passwordConfirm": "%s",
+                                  "agreeTerms": true,
+                                  "agreePrivacy": true
+                                }
+                                """.formatted(
+                                        originalNickname,
+                                        originalName,
+                                        originalPhone,
+                                        originalEmail,
+                                        userId,
+                                        PASSWORD,
+                                        PASSWORD
+                                )))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String accessToken = objectMapper
+                .readTree(signupResponse)
+                .get("accessToken")
+                .asText();
+
+        mockMvc.perform(delete("/api/auth/withdraw")
+                        .header(
+                                "Authorization",
+                                "Bearer " + accessToken
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "password": "%s",
+                                  "credential": null
+                                }
+                                """.formatted(PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+
+        Member withdrawnMember = memberRepository
+                .findByUserId(userId)
+                .orElseThrow();
+
+        assertFalse(withdrawnMember.isActive());
+        assertNotNull(withdrawnMember.getWithdrawnAt());
+
+        assertEquals(userId, withdrawnMember.getUserId());
+
+        assertNotEquals(
+                originalNickname,
+                withdrawnMember.getNickname()
+        );
+        assertTrue(
+                withdrawnMember.getNickname()
+                        .startsWith("withdrawn_user_")
+        );
+
+        assertNotEquals(
+                originalName,
+                withdrawnMember.getName()
+        );
+
+        assertNull(withdrawnMember.getPhone());
+        assertNull(withdrawnMember.getEmail());
     }
 }
