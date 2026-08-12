@@ -1,4 +1,4 @@
-import { getDefaultBackendApiUrl } from "./config/backendConfig";
+import { getDefaultBackendApiUrl } from "./config/backendConfig.js";
 
 export const STORAGE = {
   SAVED: "pp_saved_prompts",

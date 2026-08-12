@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -8,6 +8,7 @@ import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
+import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import "./styles.css";
@@ -98,13 +99,7 @@ function App() {
     return recentThreads.filter((thread) => promptMatches({ ...thread, content: thread.title }, query));
   }, [query, recentThreads, activeTab]);
 
-  const latestMessage = messages.at(-1);
-  const answeringQuestions = !isLoading && latestMessage?.role === "assistant" && latestMessage?.mode === "ask";
-
-  useEffect(() => {
-    if (!answeringQuestions) return;
-    requestAnimationFrame(() => composerRef.current?.focus());
-  }, [answeringQuestions, latestMessage?.id]);
+  const { answeringQuestions } = useAskAnswers({ messages, isLoading, composerRef });
 
   function showNotice(message) {
     setNotice(message);

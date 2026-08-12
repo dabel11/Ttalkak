@@ -5,9 +5,9 @@ function cleanUrl(value = "") {
 }
 
 export function getDefaultBackendApiUrl() {
-  const configuredUrl = cleanUrl(import.meta.env.VITE_BACKEND_API_URL);
+  const configuredUrl = cleanUrl(import.meta.env?.VITE_BACKEND_API_URL);
   if (configuredUrl) return configuredUrl;
-  return import.meta.env.DEV ? DEVELOPMENT_BACKEND_API_URL : "";
+  return import.meta.env?.DEV ? DEVELOPMENT_BACKEND_API_URL : "";
 }
 
 export function assertBackendApiUrl(url) {

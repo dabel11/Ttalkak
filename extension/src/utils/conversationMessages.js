@@ -1,4 +1,4 @@
-import { EXAMPLE_QUERIES } from "../constants";
+import { EXAMPLE_QUERIES } from "../constants.js";
 import { classifyMakeError, isExecutableMessage } from "../../../shared/make-message-model.js";
 
 export function buildNoEvidenceMessage(prompt, data) {

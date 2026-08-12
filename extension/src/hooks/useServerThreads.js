@@ -1,6 +1,6 @@
 import { requestMakeThread, requestMakeThreads } from "../api/make";
 
-export function createServerThreadSync({
+export function useServerThreadSync({
   activeThreadId,
   authSession,
   ragConfig,

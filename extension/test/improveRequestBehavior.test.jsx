@@ -24,6 +24,7 @@ vi.mock("../src/storage/extensionStorage", () => ({
 import { useConversation } from "../src/hooks/useConversation";
 import { AssistantResponse } from "../src/components/AssistantResponse";
 import { Composer } from "../src/components/Composer";
+import { useAskAnswers } from "../src/hooks/useAskAnswers";
 
 function deferred() {
   let resolve;
@@ -217,6 +218,16 @@ describe("Extension improve request behavior", () => {
 });
 
 describe("Extension clarification UI", () => {
+  test("ask answer state focuses the composer through its dedicated hook", async () => {
+    const focus = vi.fn();
+    renderHook(() => useAskAnswers({
+      messages: [{ id: "ask-1", role: "assistant", mode: "ask" }],
+      isLoading: false,
+      composerRef: { current: { focus } },
+    }));
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce());
+  });
+
   test("ask guidance labels required questions and points the composer at the answer", () => {
     render(createElement(
       Fragment,
