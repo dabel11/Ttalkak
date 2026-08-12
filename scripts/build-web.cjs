@@ -49,6 +49,7 @@ async function build() {
       format: "esm",
       splitting: true,
       minify: true,
+      charset: "utf8",
       sourcemap: false,
       target: ["es2023"],
       outdir: path.join(outputRoot, "assets"),

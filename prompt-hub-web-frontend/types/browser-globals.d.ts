@@ -143,6 +143,7 @@ interface TtalkakModuleRegistry {
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
+  runtimeConfig: { apiBaseUrl: string; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };

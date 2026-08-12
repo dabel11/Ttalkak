@@ -28,7 +28,7 @@
           isFindPassword,
           isWithdraw,
           isLoggedIn: state.isLoggedIn,
-          hasGoogleCredential: Boolean(window.TTALKAK_GOOGLE_CREDENTIAL),
+          hasGoogleCredential: Boolean(ctx.runtimeConfig?.googleCredential),
           nicknameChecked,
           userIdChecked,
           authDraft: state.authDraft,

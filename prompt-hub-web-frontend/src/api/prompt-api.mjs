@@ -1,4 +1,5 @@
-const IMPROVE_TIMEOUT_MS = Number(window.TTALKAK_IMPROVE_TIMEOUT_MS || 90000);
+import { runtimeConfig } from "../runtime/runtime-config.mjs";
+const IMPROVE_TIMEOUT_MS = runtimeConfig.improveTimeoutMs;
 export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normalizers }) {
     const {
       normalizePrompt,

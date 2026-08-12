@@ -15,10 +15,11 @@ test("preview server serves ESM module files with a JavaScript MIME type", () =>
 test("production build splits optional demo data out of the initial bundle", () => {
   const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
-  assert.match(entry, /TTALKAK_DEMO_FALLBACK_ENABLED\s*===\s*true/);
+  assert.match(entry, /runtimeConfig\.demoFallbackEnabled/);
   assert.match(entry, /await import\(["']\.\/demo-data\.mjs["']\)/);
   assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.mjs["'];?$/m);
   assert.match(build, /splitting:\s*true/);
+  assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);
   const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
@@ -141,4 +142,24 @@ test("converted domains import named ESM implementations without legacy JavaScri
     assert.equal(fs.existsSync(path.join(frontendRoot, "src", `${moduleName}.mjs`)), true);
     assert.equal(fs.existsSync(path.join(frontendRoot, "src", `${moduleName}.js`)), false);
   });
+});
+
+test("runtime configuration globals are read only by the config boundary", () => {
+  const frontendRoot = path.resolve(__dirname, "..");
+  const files = [];
+  const walk = (directory) => fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) walk(target);
+    else if (/\.(?:js|mjs)$/.test(entry.name)) files.push(target);
+  });
+  walk(path.join(frontendRoot, "src"));
+  const owners = files.filter((file) => /window\.(?:__API_BASE_URL__|TTALKAK_(?:API|IMPROVE|GOOGLE|DEMO))/.test(fs.readFileSync(file, "utf8")));
+  assert.deepEqual(owners.map((file) => path.relative(frontendRoot, file).replaceAll("\\", "/")), []);
+  const config = fs.readFileSync(path.join(frontendRoot, "src/runtime/runtime-config.mjs"), "utf8");
+  ["__API_BASE_URL__", "TTALKAK_API_TIMEOUT_MS", "TTALKAK_IMPROVE_TIMEOUT_MS", "TTALKAK_GOOGLE_CREDENTIAL", "TTALKAK_DEMO_FALLBACK_ENABLED"].forEach((name) => assert.match(config, new RegExp(name)));
+});
+
+test("app orchestration stays within the reviewed size boundary", () => {
+  const lines = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8").split(/\r?\n/).length - 1;
+  assert.ok(lines <= 2500, `app.js grew to ${lines} lines`);
 });
