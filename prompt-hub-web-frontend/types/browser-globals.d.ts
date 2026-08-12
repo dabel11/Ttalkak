@@ -129,7 +129,7 @@ interface TtalkakModuleRegistry {
       canSplitMakeThread(thread: TtalkakStateEntity | null | undefined, isBackendNumericId: (value: unknown) => boolean): boolean;
       findMakeThread(threads: TtalkakStateEntity[], threadId: unknown): TtalkakStateEntity | null;
     };
-    loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule }>;
+    loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule; pageAdapter: { createMakePageAdapter(context: Record<string, unknown>): { render(): string } } }>;
   };
   bootstrap: TtalkakCallableModule;
   components: TtalkakCallableModule;
@@ -349,11 +349,9 @@ interface Window {
   TtalkakMakeFocus: TtalkakCallableModule;
   TtalkakMakePersistence: TtalkakCallableModule;
   TtalkakMakeState: TtalkakCallableModule;
-  TtalkakMakeWorkflows: TtalkakCallableModule;
   TtalkakMakeSyncWorkflows: TtalkakCallableModule;
   TtalkakMakeFolderWorkflows: TtalkakCallableModule;
   TtalkakMakeExecutionWorkflows: TtalkakCallableModule;
-  TtalkakMakeRecentWorkflows: TtalkakCallableModule;
   TtalkakMakePreview: TtalkakCallableModule;
   TtalkakMakeFailureRecoveryEffects: TtalkakCallableModule;
   TtalkakMakeServerSyncEffects: TtalkakCallableModule;

@@ -3,11 +3,13 @@ const assert = require("node:assert/strict");
 require("../src/make/make-sync-workflows.js");
 require("../src/make/make-folder-workflows.js");
 require("../src/make/make-execution-workflows.js");
-require("../src/make/make-recent-workflows.js");
-const { createMakeWorkflows } = require("../src/make/make-workflows.js");
 const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
 let threadPolicy;
-test.before(async () => { threadPolicy = await import("../src/make/make-thread-policy.mjs"); });
+let createMakeWorkflows;
+test.before(async () => {
+  threadPolicy = await import("../src/make/make-thread-policy.mjs");
+  ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
+});
 
 function makeContext(overrides = {}) {
   const notices = [];

@@ -1108,6 +1108,7 @@ const closeTopModal = modalController.closeTop;
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
 let makeWorkflows = null;
+let makePageAdapter = null;
 let makeRuntimePromise = null;
 async function ensureMakeRuntime() {
   if (makeWorkflows && makeControllerModule && makeEventsModule) return true;
@@ -1115,7 +1116,7 @@ async function ensureMakeRuntime() {
     const { createMakeWorkflows } = runtime.workflows || {};
     makeControllerModule = runtime.controller || null;
     makeEventsModule = runtime.events || null;
-    if (typeof createMakeWorkflows !== "function" || !makeControllerModule || !makeEventsModule) throw new Error("TTALKAK Make 모듈을 불러오지 못했습니다.");
+    if (typeof createMakeWorkflows !== "function" || typeof runtime.pageAdapter?.createMakePageAdapter !== "function" || !makeControllerModule || !makeEventsModule) throw new Error("TTALKAK Make 모듈을 불러오지 못했습니다.");
     makeWorkflows = createMakeWorkflows({
       state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
       showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
@@ -1129,6 +1130,14 @@ async function ensureMakeRuntime() {
       openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
       handleBackendAccessError, reportWarning,
       canSplitMakeThread, findMakeThread,
+    });
+    makePageAdapter = runtime.pageAdapter.createMakePageAdapter({
+      state, icons, escapeAttr, escapeHtml, formatNumber, formatShortDate, promptTemplates,
+      isThinking: () => isMakeThinking, requestState: makeRequestState, messageModel: makeMessageModel,
+      MakePageView, MakeFeedView, MakeTemplateBarView, MakeComposerView, MakeSidePanelView,
+      MakeFolderButtonView, MessageBubbleView, findMakeThread, canSplitMakeThread, isBackendNumericId,
+      countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
+      makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
     });
     return true;
   }).catch((error) => {
@@ -1604,172 +1613,10 @@ function getPromptCardPreviewTags(tags) {
 
 
 function MakePage() {
-  if (!makeWorkflows) {
+  if (!makeWorkflows || !makePageAdapter) {
     return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="make">Make 기능을 불러오는 중입니다.</section>';
   }
-  const hasMessages = state.messages.length > 0;
-
-  return MakePageView(
-    { icons, escapeAttr, escapeHtml },
-    {
-      composerHtml: MakeComposer(hasMessages),
-      feedHtml: MakeFeed(hasMessages),
-      sidePanelHtml: MakeSidePanel(),
-    },
-  );
-}
-
-function MakeFeed(hasMessages) {
-  const activeThread = findMakeThread(state.recentThreads, state.activeThreadId);
-  return MakeFeedView(
-    { icons, escapeHtml },
-    {
-      hasMessages,
-      isThinking: isMakeThinking,
-      messages: state.messages,
-      renderMessageBubble: MessageBubble,
-      templateBarHtml: MakeTemplateBar(),
-      threadPolicyNote: activeThread && !canSplitMakeThread(activeThread, isBackendNumericId)
-        ? "대화 분리는 로컬 대화에서 사용할 수 있습니다."
-        : "",
-    },
-  );
-}
-
-function MakeTemplateBar() {
-  return MakeTemplateBarView(
-    { escapeAttr, escapeHtml },
-    {
-      promptTemplates,
-      templateCollapsed: state.templateCollapsed,
-    },
-  );
-}
-
-function MakeComposer(hasMessages) {
-  return MakeComposerView(
-    { icons, escapeHtml },
-    {
-      composerDraft: state.composerDraft,
-      hasMessages,
-      isThinking: isMakeThinking || makeRequestState.inFlight,
-    },
-  );
-}
-
-function MakeSidePanel() {
-  const uncategorizedCount = countThreadsInFolder("uncategorized");
-  const visibleFolders = state.makeFolders.filter((folder) => folder.id !== "uncategorized" || uncategorizedCount > 0);
-  const customFolderCount = getCustomMakeFolderCount();
-  const canManageFolders = state.isLoggedIn;
-  const canCreateFolder = canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS;
-  if (state.activeFolderId === "uncategorized" && uncategorizedCount === 0) {
-    state.activeFolderId = "all";
-  }
-  const visibleThreads =
-    state.activeFolderId === "all"
-      ? state.recentThreads
-      : state.recentThreads.filter((thread) => (thread.folderId || "uncategorized") === state.activeFolderId);
-  const previewThreads = visibleThreads.map((thread) => ({
-    ...thread,
-    preview: makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
-  }));
-
-  return MakeSidePanelView(
-    { icons, escapeAttr, escapeHtml, formatShortDate },
-    {
-      activeFolderName: getActiveFolderName(),
-      activeThreadId: state.activeThreadId,
-      canCreateFolder,
-      canManageFolders,
-      canStartThreadFolderCreate: canManageFolders && customFolderCount < MAX_CUSTOM_MAKE_FOLDERS,
-      creatingFolder: state.creatingFolder,
-      creatingThreadFolderId: state.creatingThreadFolderId,
-      customFolderCount,
-      folders: state.makeFolders,
-      getThreadFolderId,
-      makeBackendMessage: sanitizeMakeBackendMessage(state.makeBackendMessage),
-      maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS,
-      openThreadMenuId: state.openThreadMenuId,
-      renderFolderButton: MakeFolderButton,
-      threadCount: state.recentThreads.length,
-      visibleFolders: visibleFolders.map((folder) => ({ ...folder, threadCount: countThreadsInFolder(folder.id) })),
-      visibleThreads: previewThreads,
-    },
-  );
-}
-
-function MakeFolderButton(folderId, name, count) {
-  const isUserFolder = folderId !== "all" && folderId !== "uncategorized";
-  const canManage = state.isLoggedIn && isUserFolder;
-  const isEditing = canManage && state.editingFolderId === folderId;
-  const isMenuOpen = canManage && state.openFolderMenuId === folderId;
-
-  return MakeFolderButtonView(
-    { icons, escapeAttr, escapeHtml, formatNumber },
-    {
-      canManage,
-      count,
-      folderId,
-      isActive: state.activeFolderId === folderId,
-      isEditing,
-      isMenuOpen,
-      isUserFolder,
-      name,
-    },
-  );
-}
-
-function MessageBubble(message) {
-  const isAssistant = message.role === "assistant";
-  const activeThread = findMakeThread(state.recentThreads, state.activeThreadId);
-  const canSplitLocalThread = canSplitMakeThread(activeThread, isBackendNumericId);
-
-  return MessageBubbleView(
-    { icons, escapeAttr, escapeHtml },
-    {
-      content: message.content,
-      answer: message.answer || "",
-      changes: message.changes || [],
-      fields: message.fields || [],
-      hasExecutablePrompt: isAssistant && isExecutableMakeMessage(message),
-      id: message.id,
-      canSplit: !isAssistant && canSplitLocalThread && state.messages.findIndex((item) => item.id === message.id) > 0,
-      improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
-      isCopied: state.copiedMessageId === message.id,
-      isEditing: !isAssistant && state.editingMessageId === message.id,
-      failureMessage: !isAssistant && makeRequestState.failedMessageId === message.id ? makeRequestState.failure?.message || "" : "",
-      failureRetryable: !isAssistant && makeRequestState.failedMessageId === message.id && Boolean(makeRequestState.failure?.retryable),
-      isSaved: isAssistant && isPromptSaved(message.id),
-      isThinking: isMakeThinking || makeRequestState.inFlight,
-      mode: message.mode || "improve",
-      questions: message.questions || [],
-      ragStatus: message.ragStatus || "",
-      role: message.role,
-      summary: message.summary || "",
-      techniques: message.techniques || [],
-    },
-  );
-}
-
-function isExecutableMakeMessage(message) {
-  return makeMessageModel.isExecutableMessage(message);
-}
-
-function isAskOnlyMakeResponse(text) {
-  const value = String(text || "").trim();
-  if (!value) return true;
-  return [
-    /확인이\s*필요/i,
-    /답변이\s*필요/i,
-    /추가\s*정보가\s*필요/i,
-    /정보를\s*보완해\s*주세요/i,
-    /개선안(?:을)?\s*만들\s*수\s*없/i,
-    /만들\s*수\s*없어요/i,
-    /아래\s*정보를\s*알려주시면/i,
-    /어떤\s*주제/i,
-    /무엇에\s*대한\s*글/i,
-  ].some((pattern) => pattern.test(value));
+  return makePageAdapter.render();
 }
 
 function SavedPage() {

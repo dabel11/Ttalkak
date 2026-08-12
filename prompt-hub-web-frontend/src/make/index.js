@@ -39,9 +39,12 @@ export function loadMakeRuntime() {
     import("./make-sync-workflows.js"),
     import("./make-folder-workflows.js"),
     import("./make-execution-workflows.js"),
-    import("./make-recent-workflows.js"),
-  ]).then(() => import("./make-workflows.js"))
-    .then(() => Object.freeze({ controller: window.TtalkakMakeController, events: window.TtalkakMakeEvents, workflows: window.TtalkakMakeWorkflows }));
+    import("./make-recent-workflows.mjs"),
+    import("./make-page-adapter.mjs"),
+  ]).then(async (loaded) => {
+    const workflows = await import("./make-workflows.mjs");
+    return Object.freeze({ controller: window.TtalkakMakeController, events: window.TtalkakMakeEvents, workflows, pageAdapter: loaded.at(-1) });
+  });
   return runtimePromise;
 }
 

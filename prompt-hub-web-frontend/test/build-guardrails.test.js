@@ -53,9 +53,13 @@ test("Share controller and events load only through the Share runtime chunk", ()
 
 test("Make controller events and workflows load only through the Make runtime chunk", () => {
   const makeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/index.js"), "utf8");
-  ["make-controller.js", "make-events.js", "make-workflows.js"].forEach((file) => {
+  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => {
     assert.doesNotMatch(makeEntry, new RegExp(`^import ["']\\./${file}["'];`, "m"));
     assert.match(makeEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
+  });
+  const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
+  ["MakeFeed", "MakeTemplateBar", "MakeComposer", "MakeSidePanel", "MakeFolderButton", "MessageBubble"].forEach((name) => {
+    assert.doesNotMatch(app, new RegExp(`function\\s+${name}\\s*\\(`));
   });
   assert.match(makeEntry, /loadMakeRuntime/);
   assert.match(makeEntry, /loadMakeStyles/);
