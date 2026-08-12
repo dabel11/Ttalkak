@@ -53,10 +53,10 @@ test("Share controller and events load only through the Share runtime chunk", ()
 
 test("Make controller events and workflows load only through the Make runtime chunk", () => {
   const makeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/index.js"), "utf8");
-  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => {
-    assert.doesNotMatch(makeEntry, new RegExp(`^import ["']\\./${file}["'];`, "m"));
-    assert.match(makeEntry, new RegExp(`import\\(["']\\./${file}["']\\)`));
-  });
+  assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/);
+  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.doesNotMatch(makeEntry, new RegExp(file.replaceAll(".", "\\."))));
+  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/make/make-runtime.mjs"), "utf8");
+  ["make-controller.js", "make-events.js", "make-workflows.mjs", "make-page-adapter.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file.replaceAll(".", "\\.")}["']`)));
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
   ["MakeFeed", "MakeTemplateBar", "MakeComposer", "MakeSidePanel", "MakeFolderButton", "MessageBubble"].forEach((name) => {
     assert.doesNotMatch(app, new RegExp(`function\\s+${name}\\s*\\(`));
@@ -72,8 +72,9 @@ test("Make styles are declared but not loaded before the Make route", () => {
 });
 
 test("bundle budgets accept values at the limit and reject regressions", () => {
-  const budgets = { javascript: { rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
+  const budgets = { javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));
+  assert.throws(() => assertBundleBudgets({ javascript: { files: 2, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 11, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.rawBytes/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files: required asset is missing/);
 });

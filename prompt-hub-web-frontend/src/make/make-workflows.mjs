@@ -1,4 +1,7 @@
 // @ts-check
+import "./make-sync-workflows.js";
+import "./make-folder-workflows.js";
+import "./make-execution-workflows.js";
 import { createMakeRecentWorkflows } from "./make-recent-workflows.mjs";
 
 /** @param {Record<string, any>} ctx */

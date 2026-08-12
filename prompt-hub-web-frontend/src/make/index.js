@@ -31,20 +31,13 @@ function loadMakeStyles() {
 
 let runtimePromise;
 export function loadMakeRuntime() {
-  runtimePromise ||= Promise.all([loadMakeStyles(),
-    // @ts-expect-error Legacy global script is intentionally loaded for its side effect.
-    import("./make-controller.js"),
-    // @ts-expect-error Legacy global script is intentionally loaded for its side effect.
-    import("./make-events.js"),
-    import("./make-sync-workflows.js"),
-    import("./make-folder-workflows.js"),
-    import("./make-execution-workflows.js"),
-    import("./make-recent-workflows.mjs"),
-    import("./make-page-adapter.mjs"),
-  ]).then(async (loaded) => {
-    const workflows = await import("./make-workflows.mjs");
-    return Object.freeze({ controller: window.TtalkakMakeController, events: window.TtalkakMakeEvents, workflows, pageAdapter: loaded.at(-1) });
-  });
+  runtimePromise ||= Promise.all([loadMakeStyles(), import("./make-runtime.mjs")])
+    .then(([, runtime]) => Object.freeze({
+      controller: window.TtalkakMakeController,
+      events: window.TtalkakMakeEvents,
+      workflows: runtime.workflows,
+      pageAdapter: runtime.pageAdapter,
+    }));
   return runtimePromise;
 }
 
