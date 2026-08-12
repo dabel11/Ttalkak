@@ -82,6 +82,31 @@ test("thread deletion treats backend 404 as an idempotent success", async () => 
   assert.match(ctx.notices.at(-1), /이미 삭제/);
 });
 
+test("message splitting rejects server threads even when called outside the UI", () => {
+  const messages = [
+    { id: "first", role: "user", content: "First topic" },
+    { id: "answer", role: "assistant", content: "First answer" },
+    { id: "second", role: "user", content: "Second topic" },
+  ];
+  for (const thread of [
+    { id: "server-thread", serverId: "77", messages: messages.map((item) => ({ ...item })) },
+    { id: 77, messages: messages.map((item) => ({ ...item })) },
+  ]) {
+    const ctx = makeContext({
+      state: {
+        activeThreadId: thread.id,
+        messages: messages.map((item) => ({ ...item })),
+        recentThreads: [thread],
+      },
+    });
+    const before = JSON.parse(JSON.stringify(ctx.state));
+
+    assert.equal(createMakeWorkflows(ctx).splitThreadFromMessage("second"), false);
+    assert.deepEqual(ctx.state, before);
+    assert.deepEqual(ctx.notices, []);
+  }
+});
+
 test("execution helpers detect placeholders and keep supported targets fixed", () => {
   const workflows = createMakeWorkflows(makeContext());
   assert.equal(workflows.hasPromptPlaceholders("안녕하세요 [이름]"), true);

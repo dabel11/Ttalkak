@@ -230,6 +230,36 @@ test("a later user message can be split into a new local conversation", async ({
   await page.locator('[data-thread-item="fixture-thread"] [data-open-thread]').click();
   await expect(page.locator('[data-message-id="topic-one"]')).toBeVisible();
   await expect(page.locator('[data-message-id="topic-two"]')).toHaveCount(0);
+
+  await page.reload();
+  await page.locator('[data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.locator('[data-message-id="topic-one"]')).toBeVisible();
+  await expect(page.locator('[data-message-id="topic-two"]')).toHaveCount(0);
+  await expect(page.locator(".recent-thread")).toHaveCount(2);
+});
+
+for (const threadIdentity of [
+  { label: "explicit serverId", id: "server-thread-77", serverId: "77" },
+  { label: "legacy numeric id", id: 77 },
+]) test(`server-synced conversations with ${threadIdentity.label} do not expose local-only message splitting`, async ({ page }) => {
+  const messages = [
+    { id: "server-topic-one", role: "user", content: "Server topic one" },
+    { id: "server-reply-one", role: "assistant", mode: "improve", content: "Server result one", improvedPrompt: "Server result one" },
+    { id: "server-topic-two", role: "user", content: "Server topic two" },
+  ];
+  const thread = {
+    ...threadIdentity,
+    title: "Server conversation",
+    preview: "Server topic two",
+    folderId: "uncategorized",
+    createdAt: 1,
+    messages,
+  };
+  await openMake(page, messages, { activeThreadId: thread.id, recentThreads: [thread] });
+
+  await expect(page.locator('[data-message-id="server-topic-two"]')).toBeVisible();
+  await expect(page.locator('[data-split-thread-from]')).toHaveCount(0);
 });
 
 test("leaving Make aborts an in-flight request and preserves a non-retryable cancellation state", async ({ page }) => {

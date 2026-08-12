@@ -65,14 +65,15 @@
     function splitThreadFromMessage(messageId) {
       const splitIndex = state.messages.findIndex((item) => item.id === messageId && item.role === "user");
       if (splitIndex <= 0) return false;
+      const sourceThread = state.recentThreads.find(
+        (item) => item.id === state.activeThreadId || item.serverId === state.activeThreadId,
+      );
+      if (!sourceThread || isBackendNumericId(sourceThread.serverId || sourceThread.id)) return false;
       const sourceMessages = state.messages.slice(0, splitIndex).map((item) => ({ ...item }));
       const splitMessages = state.messages.slice(splitIndex).map((item) => ({ ...item }));
-      const sourceThread = state.recentThreads.find((item) => item.id === state.activeThreadId);
-      if (sourceThread) {
-        const lastSource = [...sourceMessages].reverse().find((item) => item.role === "assistant" || item.role === "user");
-        sourceThread.messages = sourceMessages;
-        sourceThread.preview = makePreview(lastSource?.content || lastSource?.answer || "");
-      }
+      const lastSource = [...sourceMessages].reverse().find((item) => item.role === "assistant" || item.role === "user");
+      sourceThread.messages = sourceMessages;
+      sourceThread.preview = makePreview(lastSource?.content || lastSource?.answer || "");
       const firstUser = splitMessages.find((item) => item.role === "user");
       const lastSplit = [...splitMessages].reverse().find((item) => item.role === "assistant" || item.role === "user");
       const threadId = `split-thread-${Date.now()}`;

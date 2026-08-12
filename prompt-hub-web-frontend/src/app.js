@@ -1716,6 +1716,12 @@ function MakeFolderButton(folderId, name, count) {
 
 function MessageBubble(message) {
   const isAssistant = message.role === "assistant";
+  const activeThread = state.recentThreads.find(
+    (thread) => thread.id === state.activeThreadId || thread.serverId === state.activeThreadId,
+  );
+  const canSplitLocalThread = Boolean(
+    activeThread && !isBackendNumericId(activeThread.serverId || activeThread.id),
+  );
 
   return MessageBubbleView(
     { icons, escapeAttr, escapeHtml },
@@ -1726,7 +1732,7 @@ function MessageBubble(message) {
       fields: message.fields || [],
       hasExecutablePrompt: isAssistant && isExecutableMakeMessage(message),
       id: message.id,
-      canSplit: !isAssistant && Boolean(state.activeThreadId) && state.messages.findIndex((item) => item.id === message.id) > 0,
+      canSplit: !isAssistant && canSplitLocalThread && state.messages.findIndex((item) => item.id === message.id) > 0,
       improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
       isCopied: state.copiedMessageId === message.id,
       isEditing: !isAssistant && state.editingMessageId === message.id,
