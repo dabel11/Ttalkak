@@ -30,6 +30,15 @@ async function expectComponentScreenshot(locator, name) {
   });
 }
 
+async function setVisualFrame(locator, { width, height = "auto" }) {
+  await locator.evaluate((element, frame) => {
+    element.style.width = frame.width;
+    element.style.height = frame.height;
+    element.style.overflow = "hidden";
+    element.style.boxSizing = "border-box";
+  }, { width, height });
+}
+
 const askMessage = {
   id: "assistant-ask",
   role: "assistant",
@@ -472,7 +481,9 @@ test.describe("Make component visual regressions", () => {
     await openMake(page, [result]);
     await stabilizeVisuals(page);
     await expect(page.locator(".message-detail-section[open]")).toHaveCount(0);
-    await expectComponentScreenshot(page.locator('[data-message-id="visual-result"] .message'), "make-result-collapsed-details.png");
+    const resultCard = page.locator('[data-message-id="visual-result"] .message');
+    await setVisualFrame(resultCard, { width: "474px", height: "520px" });
+    await expectComponentScreenshot(resultCard, "make-result-collapsed-details.png");
   });
 
   test("template conversation choice dialog", async ({ page }) => {
@@ -511,7 +522,9 @@ test.describe("Make component visual regressions", () => {
     await page.locator("[data-cancel-make-request]").click();
     await expect(page.locator(".message-failure-status")).toBeVisible();
     await stabilizeVisuals(page);
-    await expectComponentScreenshot(page.locator(".message.user").last(), "make-cancellation-status-card.png");
+    const cancellationCard = page.locator(".message.user").last();
+    await setVisualFrame(cancellationCard, { width: "300px" });
+    await expectComponentScreenshot(cancellationCard, "make-cancellation-status-card.png");
     releaseResponse();
   });
 });
