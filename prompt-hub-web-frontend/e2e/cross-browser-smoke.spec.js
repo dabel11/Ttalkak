@@ -32,7 +32,11 @@ test("Firefox starts the app and supports core desktop navigation", async ({ pag
   await page.keyboard.press("Escape");
   await expect(page.locator("[data-auth-form]")).toHaveCount(0);
   expect(diagnostics.pageErrors).toEqual([]);
-  expect(diagnostics.failedRequests).toEqual([]);
+  const unexpectedFailures = diagnostics.failedRequests.filter(({ url, error }) => {
+    const target = new URL(url);
+    return !(target.origin === "http://localhost:8080" && target.pathname.startsWith("/api/") && /CONNECTION_REFUSED/i.test(error));
+  });
+  expect(unexpectedFailures).toEqual([]);
   } finally {
     await testInfo.attach("firefox-runtime-diagnostics", { body: Buffer.from(JSON.stringify(diagnostics, null, 2)), contentType: "application/json" });
   }

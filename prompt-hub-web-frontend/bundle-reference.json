@@ -1,5 +1,5 @@
 {
-  "commit": "628881d",
-  "javascript": { "files": 12, "rawBytes": 432989, "gzipBytes": 117126 },
-  "initialJavascript": { "rawBytes": 309446, "gzipBytes": 80925 }
+  "commit": "d811844",
+  "javascript": { "files": 10, "rawBytes": 431882, "gzipBytes": 115782 },
+  "initialJavascript": { "rawBytes": 308600, "gzipBytes": 80784 }
 }
