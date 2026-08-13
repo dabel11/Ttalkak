@@ -1,15 +1,5 @@
-function getAdminUserActivityPresentation(activity = {}, memberId = "") {
-  const isWithdrawn = activity.active === false || /^withdrawn_user_/i.test(String(activity.nickname || ""));
-  const canManage = !isWithdrawn && Boolean(String(memberId || "").trim());
-  return {
-    canManage,
-    displayNickname: isWithdrawn ? "탈퇴한 사용자" : String(activity.nickname || "사용자").trim() || "사용자",
-    isWithdrawn,
-    unavailableMessage: isWithdrawn
-      ? "탈퇴한 사용자는 차단 상태를 변경할 수 없습니다."
-      : "샘플 작성자는 실제 회원 ID가 없어 차단할 수 없습니다.",
-  };
-}
+import { getAdminPromptFilters, getAdminReportFilters, getAdminTagFilters, selectAdminPanel } from "./admin-view-model.mjs";
+import { getAdminUserActivityPresentation } from "./admin-user-view-model.mjs";
 
 export function createAdminView(ctx) {
     const {
@@ -54,52 +44,8 @@ export function createAdminView(ctx) {
       return state.adminBackendStatus === "connected" || canUseDemoFallback();
     }
 
-    function getAdminReportFilters(reportRecords) {
-      return [
-        { id: "all", label: "전체", count: reportRecords.length },
-        { id: "prompt", label: "프롬프트", count: reportRecords.filter((record) => record.type === "prompt").length },
-        { id: "comment", label: "댓글", count: reportRecords.filter((record) => record.type === "comment").length },
-      ];
-    }
-
-    function getAdminPromptFilters() {
-      return [
-        { id: "all", label: "전체" },
-        { id: "shared", label: "공개" },
-        { id: "private", label: "비공개" },
-        { id: "hidden", label: "숨김" },
-        { id: "reported", label: "신고됨" },
-      ];
-    }
-
-    function getAdminTagFilters() {
-      return [
-        { id: "all", label: "전체" },
-        { id: "pending", label: "검토 중" },
-        { id: "approved", label: "검토 완료" },
-        { id: "rejected", label: "반려" },
-        { id: "disabled", label: "추천 제외" },
-      ];
-    }
-
     function getActiveAdminPanel(activeAdminTab, panels) {
-      if (activeAdminTab === "prompts") {
-        return panels.prompts;
-      }
-
-      if (activeAdminTab === "tags") {
-        return panels.tags;
-      }
-
-      if (activeAdminTab === "users") {
-        return panels.users;
-      }
-
-      if (activeAdminTab === "audit") {
-        return panels.audit;
-      }
-
-      return panels.reports;
+      return selectAdminPanel(activeAdminTab, panels);
     }
 
     function AdminRevisionRequestModal() {

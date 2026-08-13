@@ -1,6 +1,8 @@
 import { createDeferredMethodFacade, createLazyRuntimeFacade, createMethodFacade } from "./runtime/lazy-runtime-facade.mjs";
 import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
+import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
+import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -35,6 +37,7 @@ const getUniquePrompts = uniquePrompts;
 const { createHomeController } = modules.home.controller;
 const { bindHomeEvents } = modules.home.events;
 const { createSavedLibraryController } = modules.saved;
+const { createMyPageDataModel } = modules.saved;
 const { createDiscoveryController } = modules.discovery;
 const { createPromptEngagementController } = modules.interactions.engagement;
 const { bindPromptEngagementEvents } = modules.interactions.events;
@@ -101,6 +104,7 @@ if (
     createHomeController,
     bindHomeEvents,
     createSavedLibraryController,
+    createMyPageDataModel,
     createDiscoveryController,
     createPromptEngagementController,
     bindPromptEngagementEvents,
@@ -148,7 +152,9 @@ if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn
   throw moduleLoadError("공통 컴포넌트");
 }
 const { bindAppEvents } = modules.events.app;
-if (typeof bindAppEvents !== "function") {
+const { bindGlobalMenuAndRouteEvents } = modules.events.navigation;
+const { bindReportAndCommentFormEvents: bindReportCommentForms } = modules.events.reportCommentForms;
+if ([bindAppEvents, bindGlobalMenuAndRouteEvents, bindReportCommentForms].some((fn) => typeof fn !== "function")) {
   throw moduleLoadError("이벤트 바인더");
 }
 const {
@@ -561,6 +567,7 @@ const {
   isFinalReportStatus, getAuthorRevisionStatusLabel, matchesAdminPromptQuery, matchesAdminPromptFilter,
   getAdminTagStatus,
 } = adminSelectors;
+const myPageDataModel = createMyPageDataModel({ state, savedPrompts, commentsByPrompt, canUseDemoFallback, isHiddenDemo: isHiddenDemoLibraryPrompt, uniquePrompts: getUniquePrompts, findPrompt: findPromptById, findComment: commentRepository.findById, mapBackendReportStatus, getReportRecord, getRevisionTarget: getRevisionRequestTarget, isOwnedRevisionTarget: isRevisionTargetOwnedByCurrentUser });
 const shareRuntime = createLazyRuntimeFacade({
   name: "Share", load: loadShareRuntime,
   initialize(runtime) {
@@ -832,7 +839,7 @@ function render() {
 }
 document.addEventListener("ttalkak:route-renderers-changed", (event) => {
   if (!(event instanceof CustomEvent)) return;
-  if (event.detail?.route === state.route || (event.detail?.route === "admin" && state.adminMode)) render();
+  if (event.detail?.route === "overlays" || event.detail?.route === state.route || (event.detail?.route === "admin" && state.adminMode)) render();
 });
 function renderPreservingMakeScroll() {
   renderWithPreservedMakeScroll(render);
@@ -1015,12 +1022,6 @@ function SortOption(value, label) {
 }
 function SearchScopeOption(value, label) {
   return `<option value="${escapeAttr(value)}" ${state.searchScope === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
-}
-function getSearchPlaceholder(scope) {
-  if (scope === "tag") return "해시태그를 입력하세요...";
-  if (scope === "keyword") return "프롬프트 제목이나 내용을 검색하세요...";
-  if (scope === "author") return "작성자 닉네임을 입력하세요...";
-  return "프롬프트를 검색하세요...";
 }
 function Pagination(totalPages, currentPage) {
   return BasePagination({ totalPages, currentPage, pageAttribute: "data-page", ariaLabel: "인기 프롬프트 페이지" });
@@ -1292,29 +1293,8 @@ function bindCoreEvents() {
   bindFormSubmitEvents();
 }
 function bindGlobalNavigationEvents() {
-  bindGlobalMenuDismissEvents();
-  bindRouteNavigationEvents();
+  bindGlobalMenuAndRouteEvents(document, { state, render, closeTopModal, navigateTo });
   bindGlobalActionEvents();
-}
-function bindGlobalMenuDismissEvents() {
-  document.querySelector("#app")?.addEventListener("click", (event) => {
-    const shouldClosePromptCardMenu = state.openPromptCardMenuId && !event.target.closest(".prompt-card-menu-wrap");
-    if (!shouldClosePromptCardMenu) return;
-    if (shouldClosePromptCardMenu) state.openPromptCardMenuId = null;
-    render();
-  });
-  document.onkeydown = (event) => {
-    if (event.key === "Escape") {
-      closeTopModal();
-    }
-  };
-}
-function bindRouteNavigationEvents() {
-  document.querySelectorAll("[data-route]").forEach((button) => {
-    button.addEventListener("click", () => {
-      navigateTo(button.dataset.route);
-    });
-  });
 }
 function bindGlobalActionEvents() {
   document.querySelectorAll("[data-toggle-reported]").forEach((button) => {
@@ -1582,71 +1562,11 @@ function bindShareFormEvents() {
   if (shareRuntime.isReady()) shareRuntime.get("events")?.bindShareEvents?.(document, shareRuntime.get("controller"), state);
 }
 function bindReportAndCommentFormEvents() {
-  const reportForm = document.querySelector("[data-report-form]");
-  if (reportForm) {
-    reportForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      submitReport(reportForm.dataset.reportType, reportForm.dataset.reportForm, new FormData(/** @type {HTMLFormElement} */ (reportForm)).get("reason"));
-    });
-  }
-  const adminUserBlockForm = document.querySelector("[data-admin-user-block-form]");
-  if (adminUserBlockForm) {
-    adminUserBlockForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const formData = new FormData(/** @type {HTMLFormElement} */ (adminUserBlockForm));
-      updateAdminUserBlockState(
-        adminUserBlockForm.dataset.adminUserBlockForm,
-        true,
-        adminUserBlockForm.dataset.adminUserName,
-        formData.get("reason")
-      );
-    });
-  }
-  const promptEditForm = document.querySelector("[data-prompt-edit-form]");
-  if (promptEditForm) {
-    promptEditForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      updateOwnPrompt(promptEditForm.dataset.promptEditForm, new FormData(/** @type {HTMLFormElement} */ (promptEditForm)));
-    });
-  }
-  const adminRevisionRequestForm = document.querySelector("[data-admin-revision-request-form]");
-  if (adminRevisionRequestForm) {
-    adminRevisionRequestForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      requestPromptRevision(adminRevisionRequestForm.dataset.adminRevisionRequestForm, new FormData(/** @type {HTMLFormElement} */ (adminRevisionRequestForm)).get("reason"));
-    });
-  }
-  document.querySelectorAll("[data-toggle-comments]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const promptId = button.dataset.toggleComments;
-      state.expandedComments[promptId] = !state.expandedComments[promptId];
-      render();
-    });
-  });
-  document.querySelectorAll("[data-show-comments]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const promptId = button.dataset.showComments;
-      state.expandedComments[promptId] = true;
-      render();
-    });
-  });
-  document.querySelectorAll("[data-admin-toggle-comment-hidden]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const value = String(button.dataset.adminToggleCommentHidden || "");
-      const separatorIndex = value.lastIndexOf(":");
-      const commentId = value.slice(0, separatorIndex);
-      const mode = value.slice(separatorIndex + 1);
-      updateAdminCommentHiddenState(commentId, mode !== "unhide");
-    });
-  });
-  document.querySelectorAll("[data-report-comment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openReportComment(button.dataset.reportComment);
-    });
+  bindReportCommentForms(document, {
+    submitReport, updateAdminUserBlock: updateAdminUserBlockState, updatePrompt: updateOwnPrompt, requestRevision: requestPromptRevision,
+    toggleComments: (id) => { state.expandedComments[id] = !state.expandedComments[id]; render(); },
+    showComments: (id) => { state.expandedComments[id] = true; render(); },
+    updateCommentHidden: updateAdminCommentHiddenState, openReportComment,
   });
 }
 function getShareTagSuggestions(query, selectedTags = []) {
@@ -1686,44 +1606,21 @@ function incrementPromptViews(promptId) {
   }
 }
 function getDisplayPromptAuthor(prompt) {
-  const author = normalizeDisplayAuthorName(prompt?.author || prompt?.authorNickname || prompt?.nickname || prompt?.raw?.author, WITHDRAWN_AUTHOR_LABEL);
-  const owner = normalizeDisplayAuthorName(prompt?.owner || prompt?.ownerNickname || prompt?.raw?.owner, WITHDRAWN_AUTHOR_LABEL);
-  const currentUser = String(state.currentUser || "").trim();
-  if (state.isLoggedIn && currentUser && (owner === currentUser || author === currentUser || author === "나")) {
-    return "나";
-  }
-  if (author && author !== "나") return author;
-  if (owner && owner !== "나") return owner;
-  return "익명 사용자";
+  return resolveDisplayPromptAuthor(prompt, { currentUser: state.currentUser, isLoggedIn: state.isLoggedIn, normalizeAuthor: normalizeDisplayAuthorName, withdrawnLabel: WITHDRAWN_AUTHOR_LABEL });
 }
 function isWithdrawnAuthorName(value) {
-  return String(value || "").trim() === WITHDRAWN_AUTHOR_LABEL;
+  return matchesWithdrawnAuthorName(value, WITHDRAWN_AUTHOR_LABEL);
 }
 function renderAuthorSearchControl(prompt, options = {}) {
   const author = getDisplayPromptAuthor(prompt);
-  const safeAuthor = escapeHtml(author);
-  const safeAuthorAttr = escapeAttr(author);
-  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
-  if (isWithdrawnAuthorName(author)) {
-    return `<span class="author-search-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
-  }
-  if (options.admin) {
-    return `<button class="author-search-button admin-author-lookup-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
-  }
-  return `<button class="author-search-button" type="button" data-search-author="${safeAuthorAttr}">${safeAuthor}</button>`;
+  return renderAuthorControl(prompt, { admin: options.admin, author, authorId: getPromptAuthorId(prompt), withdrawn: isWithdrawnAuthorName(author), escapeHtml, escapeAttr });
 }
 function renderAdminInlineAuthorControl(prompt) {
   const author = getDisplayPromptAuthor(prompt);
-  const safeAuthor = escapeHtml(author);
-  const safeAuthorAttr = escapeAttr(author);
-  const safeAuthorId = escapeAttr(getPromptAuthorId(prompt));
-  if (isWithdrawnAuthorName(author)) {
-    return `<span class="admin-inline-author-button disabled-author" aria-disabled="true">${safeAuthor}</span>`;
-  }
-  return `<button class="admin-inline-author-button" type="button" data-admin-user-author="${safeAuthorAttr}" data-admin-user-id="${safeAuthorId}">${safeAuthor}</button>`;
+  return renderAuthorControl(prompt, { inlineAdmin: true, author, authorId: getPromptAuthorId(prompt), withdrawn: isWithdrawnAuthorName(author), escapeHtml, escapeAttr });
 }
 function getPromptAuthorId(prompt) {
-  return String(prompt?.authorId || prompt?.author?.id || prompt?.raw?.author?.id || prompt?.raw?.authorId || prompt?.raw?.memberId || "");
+  return resolvePromptAuthorId(prompt);
 }
 function stampCurrentUserOwnedPrompts() {
   const currentUser = String(state.currentUser || "").trim();
@@ -1974,135 +1871,13 @@ function getKnownTags() {
   return [...tags.values()].sort((a, b) => a.localeCompare(b, "ko-KR"));
 }
 function getMyPrompts() {
-  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
-  if (state.myBackendStatus === "connected") {
-    const localMinePrompts = savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt));
-    return getUniquePrompts([...state.backendMyPrompts, ...localMinePrompts]);
-  }
-  return getUniquePrompts(savedPrompts.filter((prompt) => prompt.source === "mine" && !isHiddenDemoLibraryPrompt(prompt)));
+  return myPageDataModel.getPrompts();
 }
 function getMyComments() {
-  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
-  const localComments = getLocalMyCommentItems();
-  if (state.myBackendStatus === "connected") {
-    const backendComments = state.backendMyComments.map((comment) => ({
-      promptId: String(comment.promptId || ""),
-      prompt: comment.prompt || findPromptById(String(comment.promptId || "")) || {
-        id: String(comment.promptId || ""),
-        title: comment.promptTitle || "삭제된 프롬프트",
-        text: "",
-        author: "",
-      },
-      comment,
-    }));
-    return getUniqueMyCommentItems([...backendComments, ...localComments]);
-  }
-  return localComments;
-}
-function getLocalMyCommentItems() {
-  const owner = state.currentUser || "나";
-  const items = [];
-  Object.entries(commentsByPrompt).forEach(([promptId, comments]) => {
-    collectOwnedComments(items, promptId, comments, owner);
-  });
-  return items;
-}
-function getUniqueMyCommentItems(items) {
-  const seen = new Set();
-  return items.filter((item) => {
-    const comment = item.comment || {};
-    const key = String(comment.id || `${item.promptId}:${comment.text || ""}:${comment.createdAt || ""}`);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-function collectOwnedComments(items, promptId, comments, owner) {
-  (comments || []).forEach((comment) => {
-    if (!comment.deleted && (comment.owner === owner || comment.author === owner || comment.owner === "나" || comment.author === "나")) {
-      items.push({ promptId, prompt: findPromptById(promptId), comment });
-    }
-    collectOwnedComments(items, promptId, comment.replies || [], owner);
-  });
+  return myPageDataModel.getComments();
 }
 function getMyReports() {
-  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) return [];
-  const backendReports = state.backendMyReports.map((report) => ({
-    type: report.type,
-    title: report.type === "comment" ? "댓글 신고" : "프롬프트 신고",
-    id: report.targetId,
-    label: report.reason || report.raw?.targetPreview || report.raw?.promptTitle || "신고 내역",
-    reason: report.reason,
-    memo: report.memo || "",
-    reviewedAt: report.reviewedAt || 0,
-    status: mapBackendReportStatus(report.status),
-    requestedAt: report.createdAt,
-  }));
-  const localReports = getLocalMyReportItems();
-  const reports = state.myBackendStatus === "connected"
-    ? getUniqueMyReports([...backendReports, ...localReports])
-    : getUniqueMyReports([...localReports, ...backendReports]);
-  return reports.sort((a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0));
-}
-function getLocalMyReportItems() {
-  const promptReports = [...state.reportedPromptIds].map((promptId) => {
-    const prompt = findPromptById(promptId);
-    const record = getReportRecord(`prompt:${promptId}`);
-    return {
-      type: "prompt",
-      title: "프롬프트 신고",
-      id: promptId,
-      label: prompt?.title || "삭제된 프롬프트",
-      reason: record.reason || "",
-      memo: record.memo || "",
-      reviewedAt: record.reviewedAt || 0,
-      status: record.status,
-      requestedAt: record.createdAt,
-    };
-  });
-  const commentReports = [...state.reportedCommentIds].map((commentId) => {
-    const comment = findCommentById(commentId);
-    const record = getReportRecord(`comment:${commentId}`);
-    return {
-      type: "comment",
-      title: "댓글 신고",
-      id: commentId,
-      label: comment?.text || "삭제된 댓글",
-      reason: record.reason || "",
-      memo: record.memo || "",
-      reviewedAt: record.reviewedAt || 0,
-      status: record.status,
-      requestedAt: record.createdAt,
-    };
-  });
-  const revisionRequests = Object.entries(state.adminPromptRevisionRequests)
-    .map(([key, request]) => {
-      const target = getRevisionRequestTarget(key);
-      if (!target || !isRevisionTargetOwnedByCurrentUser(target)) return null;
-      return {
-        type: target.type,
-        title: `${target.type === "prompt" ? "프롬프트" : "댓글"} 수정 요청`,
-        id: target.id,
-        editPromptId: target.type === "prompt" ? target.id : "",
-        label: target.type === "comment" ? target.text : target.title,
-        reason: request.reason,
-        status: "revision-requested",
-        requestedAt: request.requestedAt,
-      };
-    })
-    .filter(Boolean);
-  return [...revisionRequests, ...promptReports, ...commentReports].sort(
-    (a, b) => Number(b.requestedAt || 0) - Number(a.requestedAt || 0),
-  );
-}
-function getUniqueMyReports(reports) {
-  const seen = new Set();
-  return reports.filter((report) => {
-    const key = `${report.title || report.status || "report"}:${report.type}:${report.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return myPageDataModel.getReports();
 }
 function sortPopularPrompts(prompts) {
   return sortPrompts(prompts, state.popularSort, getHomeSortMetrics());
@@ -2143,32 +1918,13 @@ function canShowReportedState() {
   return state.isLoggedIn || state.adminMode;
 }
 function getPopularTotalPages(count) {
-  return Math.max(1, Math.ceil(count / HOME_PAGE_SIZE));
+  return getTotalPages(count, HOME_PAGE_SIZE);
 }
 function getBackendHomeTotalPages() {
-  const totalPages = Number(state.backendHomePage?.totalPages);
-  return Number.isFinite(totalPages) && totalPages > 0 ? Math.floor(totalPages) : 1;
+  return getBackendTotalPages(state.backendHomePage);
 }
 function updateBackendHomePageMeta(payload = {}, fallbackPage = state.popularPage) {
-  const rawPage = Number(payload.page ?? payload.currentPage ?? payload.pageNumber ?? fallbackPage);
-  const rawSize = Number(payload.size ?? payload.pageSize ?? HOME_PAGE_SIZE);
-  const rawTotalPages = Number(payload.totalPages ?? payload.total_pages ?? payload.page?.totalPages ?? payload.page?.total_pages);
-  const rawTotalElements = Number(
-    payload.totalElements ??
-      payload.total_elements ??
-      payload.total ??
-      payload.totalCount ??
-      payload.page?.totalElements ??
-      payload.page?.total_elements,
-  );
-  const totalPages = Number.isFinite(rawTotalPages) && rawTotalPages > 0 ? Math.floor(rawTotalPages) : 1;
-  const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : fallbackPage;
-  state.backendHomePage = {
-    page: Math.min(page, totalPages),
-    size: Number.isFinite(rawSize) && rawSize > 0 ? Math.floor(rawSize) : HOME_PAGE_SIZE,
-    totalPages,
-    totalElements: Number.isFinite(rawTotalElements) && rawTotalElements >= 0 ? Math.floor(rawTotalElements) : popularPrompts.length,
-  };
+  state.backendHomePage = normalizeBackendPageMeta(payload, { fallbackPage, pageSize: HOME_PAGE_SIZE, itemCount: popularPrompts.length });
   state.popularPage = state.backendHomePage.page;
 }
 function polishPrompt(prompt) {

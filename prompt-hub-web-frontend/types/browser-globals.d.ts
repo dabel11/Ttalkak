@@ -115,7 +115,7 @@ interface TtalkakModuleRegistry {
   demo: { fallbackPopularTags?: string[]; promptOverrides?: Record<string, string>; commentOverrides?: Record<string, string> } | null;
   utils: TtalkakCallableModule;
   home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
-  saved: { createSavedLibraryController: Function };
+  saved: { createMyPageDataModel: Function; createSavedLibraryController: Function };
   discovery: { createDiscoveryController: Function };
   interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
   share: { loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule }> };
@@ -139,7 +139,7 @@ interface TtalkakModuleRegistry {
   };
   bootstrap: TtalkakCallableModule;
   components: TtalkakCallableModule;
-  events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule };
+  events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule; navigation: TtalkakCallableModule; reportCommentForms: TtalkakCallableModule };
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
