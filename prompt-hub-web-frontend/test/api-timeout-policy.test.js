@@ -43,12 +43,19 @@ async function loadCoreApi() {
 }
 
 test("an external abort remains a cancellation even when the timeout callback runs afterward", async () => {
+  const { clientErrorReporter } = await import("../src/observability/client-error-reporter.mjs");
+  const previousRecordCount = clientErrorReporter.recent().length;
   const { request, runTimeout } = await loadCoreApi();
   const external = new AbortController();
   const pending = request("/api/prompts/improve", { signal: external.signal });
   external.abort();
   runTimeout();
   await assert.rejects(pending, (error) => error.code === "REQUEST_ABORTED");
+  const cancellation = clientErrorReporter.recent()[previousRecordCount];
+  assert.deepEqual(
+    { code: cancellation.code, kind: cancellation.kind, outcome: cancellation.outcome, retryable: cancellation.retryable },
+    { code: "REQUEST_ABORTED", kind: "cancel", outcome: "cancel", retryable: false },
+  );
 });
 
 test("the internal deadline is classified as a retryable request timeout", async () => {

@@ -11,6 +11,15 @@ async function expectAccessible(page, label) {
   expect(violations, `${label} accessibility violations`).toEqual([]);
 }
 
+async function reachByTab(page, locator, { direction = "forward", maxTabs = 40 } = {}) {
+  const key = direction === "backward" ? "Shift+Tab" : "Tab";
+  for (let index = 0; index < maxTabs; index += 1) {
+    if (await locator.evaluate((element) => element === document.activeElement)) return;
+    await page.keyboard.press(key);
+  }
+  throw new Error(`Element was not reachable with ${key} after ${maxTabs} attempts`);
+}
+
 test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA automated rules", async ({ page }) => {
   test.setTimeout(60_000);
   await gotoApp(page);
@@ -41,7 +50,7 @@ test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA a
 test("keyboard operation opens and closes authentication and enters Make with focus preserved", async ({ page }) => {
   await gotoApp(page);
   const login = page.locator('[data-open-auth="login"]').first();
-  await login.evaluate((element) => element.focus());
+  await reachByTab(page, login);
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-auth-form]")).toBeVisible();
   await expect(page.locator("[data-close-auth]").first()).toBeFocused();
@@ -49,11 +58,11 @@ test("keyboard operation opens and closes authentication and enters Make with fo
   await expect(login).toBeFocused();
 
   const make = page.locator('[data-route="make"]').first();
-  await make.evaluate((element) => element.focus());
+  await reachByTab(page, make, { direction: "backward" });
   await page.keyboard.press("Enter");
   await expect(page.locator(".make-page")).toBeVisible({ timeout: 15_000 });
   const composer = page.locator('[data-composer] textarea[name="prompt"]');
-  await composer.evaluate((element) => element.focus());
+  await reachByTab(page, composer);
   await page.keyboard.type("키보드 접근성 확인");
   await expect(composer).toHaveValue("키보드 접근성 확인");
 });
