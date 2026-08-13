@@ -46,3 +46,56 @@ test("admin user controller owns search and block workflows", async () => {
   assert.deepEqual(mutations, [{ action: "blockAdminUser", args: ["42", { reason: "policy" }] }]);
   assert.match(notices.at(-1), /차단을 처리/);
 });
+
+function createAdminUserContext(overrides = {}) {
+  const state = { backendAdminPrompts: [], backendAdminUserActivities: {}, adminUserActivityNickname: "", ...overrides.state };
+  return {
+    api: {}, canUseDemoFallback: () => true, getAuthToken: () => "token", hasBackendAuthToken: () => true,
+    handleBackendAccessError: () => {}, render: () => {}, showNotice: () => {},
+    normalizeAdminSearchText: (value) => String(value || "").trim().toLowerCase(), getAdminUserActivity: () => ({}),
+    getUniquePrompts: (items) => items, popularPrompts: [], savedPrompts: [], getDisplayPromptAuthor: (prompt) => prompt.author || "",
+    getPromptAuthorId: (prompt) => prompt.authorId || "", getSortedPromptComments: () => [], getAdminReportRecords: () => [],
+    applyAdminUserActivityRefreshState: () => {}, applyAdminUserBlockActivityState: () => ({ displayNickname: "user", normalizedNickname: "user" }),
+    runAdminApiMutation: async () => ({ ok: true, value: {} }), getAdminApiAction: () => () => {}, reportWarning: () => {},
+    ...overrides,
+    state,
+  };
+}
+
+test("admin user activity fetch stores the resolved backend member", async () => {
+  const { createAdminUserController } = await load("admin-user-controller.mjs");
+  const ctx = createAdminUserContext({
+    api: {
+      searchAdminUsers: async () => [{ id: "7", nickname: "Alice" }],
+      getAdminUserActivity: async () => ({ nickname: "Alice", active: true, prompts: [] }),
+    },
+  });
+  await createAdminUserController(ctx).openActivity("ali");
+  assert.equal(ctx.state.adminUserActivityNickname, "Alice");
+  assert.equal(ctx.state.backendAdminUserActivities.alice.memberId, "7");
+});
+
+test("admin user search falls back to local candidates after an API failure", async () => {
+  const { createAdminUserController } = await load("admin-user-controller.mjs");
+  const warnings = [];
+  const ctx = createAdminUserContext({
+    api: { searchAdminUsers: async () => { throw new Error("offline"); } },
+    popularPrompts: [{ id: "p1", author: "Local User", authorId: "9" }],
+    reportWarning: (...args) => warnings.push(args),
+  });
+  await createAdminUserController(ctx).search("local");
+  assert.deepEqual(ctx.state.adminUserSearchResults.map(({ id, nickname }) => ({ id, nickname })), [{ id: "9", nickname: "Local User" }]);
+  assert.equal(warnings[0][1], "search-users");
+});
+
+test("admin user block reports a failed follow-up refresh without rolling back success", async () => {
+  const { createAdminUserController } = await load("admin-user-controller.mjs");
+  const warnings = [];
+  const ctx = createAdminUserContext({
+    api: { getAdminUserActivity: async () => { throw new Error("refresh failed"); } },
+    reportWarning: (...args) => warnings.push(args),
+  });
+  await createAdminUserController(ctx).updateBlockState("42", false, "user");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(warnings[0][1], "refresh-user-after-block");
+});

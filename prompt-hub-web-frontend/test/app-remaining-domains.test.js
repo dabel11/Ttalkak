@@ -19,6 +19,23 @@ test("My Page data model combines backend and local records without duplicates",
   assert.equal(model.getComments().length, 1);
 });
 
+test("My Page data model merges reports and owned revisions while respecting fallback policy", async () => {
+  const { createMyPageDataModel } = await load("saved/my-page-data-model.mjs");
+  const state = {
+    currentUser: "me", myBackendStatus: "connected", backendMyPrompts: [], backendMyComments: [],
+    backendMyReports: [{ type: "prompt", targetId: "p1", reason: "spam", status: "PENDING", createdAt: 20 }],
+    reportedPromptIds: new Set(["p1"]), reportedCommentIds: new Set(),
+    adminPromptRevisionRequests: { "prompt:p2": { reason: "revise", requestedAt: 30 } },
+  };
+  const model = createMyPageDataModel({ state, savedPrompts: [], commentsByPrompt: {}, canUseDemoFallback: () => false, isHiddenDemo: () => false, uniquePrompts: (items) => items, findPrompt: (id) => ({ id, title: id }), findComment: () => null, mapBackendReportStatus: () => "pending", getReportRecord: () => ({ status: "pending", reason: "spam", createdAt: 20 }), getRevisionTarget: () => ({ type: "prompt", id: "p2", title: "p2" }), isOwnedRevisionTarget: () => true });
+  const reports = model.getReports();
+  assert.deepEqual(reports.map((item) => item.id), ["p2", "p1"]);
+  state.myBackendStatus = "fallback";
+  assert.deepEqual(model.getReports(), []);
+  assert.deepEqual(model.getComments(), []);
+  assert.deepEqual(model.getPrompts(), []);
+});
+
 test("report and comment forms bind through one delegated event boundary", async () => {
   const { bindReportAndCommentFormEvents } = await load("events/report-comment-form-events.mjs");
   const formSelectors = [];
@@ -27,4 +44,26 @@ test("report and comment forms bind through one delegated event boundary", async
   bindReportAndCommentFormEvents(root, {});
   assert.equal(formSelectors.length, 4);
   assert.equal(listSelectors.length, 4);
+});
+
+test("report and comment event boundary forwards form and click actions", async () => {
+  const { bindReportAndCommentFormEvents } = await load("events/report-comment-form-events.mjs");
+  const calls = [];
+  const listeners = {};
+  const reportForm = { dataset: { reportType: "prompt", reportForm: "p1" }, addEventListener: (type, fn) => { listeners.report = fn; } };
+  const commentButton = { dataset: { reportComment: "c1" }, addEventListener: (_type, fn) => { listeners.comment = fn; } };
+  const root = {
+    querySelector: (selector) => selector === "[data-report-form]" ? reportForm : null,
+    querySelectorAll: (selector) => selector === "[data-report-comment]" ? [commentButton] : [],
+  };
+  const NativeFormData = global.FormData;
+  global.FormData = class { get(name) { return name === "reason" ? "spam" : null; } };
+  try {
+    bindReportAndCommentFormEvents(root, { submitReport: (...args) => calls.push(["report", ...args]), openReportComment: (...args) => calls.push(["comment", ...args]) });
+    listeners.report({ preventDefault() {} });
+    listeners.comment();
+  } finally {
+    global.FormData = NativeFormData;
+  }
+  assert.deepEqual(calls, [["report", "prompt", "p1", "spam"], ["comment", "c1"]]);
 });
