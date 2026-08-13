@@ -47,3 +47,22 @@ test("explicit warning reporter preserves domain context without replacing conso
   assert.equal(records[0].level, "warning");
   assert.equal(records[0].message, "Bearer [REDACTED]");
 });
+
+test("observability boundary excludes payload fields and redacts direct identifiers", async () => {
+  const { OBSERVABILITY_DATA_POLICY, createClientErrorReporter } = await reporterModule;
+  const delivered = [];
+  const reporter = createClientErrorReporter({ sink: (record) => delivered.push(record) });
+  reporter.report(new Error("contact user@example.com or 010-1234-5678"), {
+    area: "make",
+    action: "request",
+    prompt: "private prompt",
+    history: [{ content: "private conversation" }],
+    token: "private-token",
+  });
+  assert.equal(OBSERVABILITY_DATA_POLICY.externalCollectionEnabled, false);
+  assert.equal(delivered[0].message, "contact [REDACTED] or [REDACTED]");
+  assert.equal("prompt" in delivered[0], false);
+  assert.equal("history" in delivered[0], false);
+  assert.equal("token" in delivered[0], false);
+  assert.deepEqual(Object.keys(delivered[0]), OBSERVABILITY_DATA_POLICY.allowedRecordFields);
+});

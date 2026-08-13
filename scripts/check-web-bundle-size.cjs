@@ -4,6 +4,7 @@ const zlib = require("node:zlib");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
+const distRoot = path.join(webRoot, process.env.TTALKAK_WEB_OUTPUT_DIR || "dist");
 
 function collectAssetSizes(assetRoot) {
   const totals = { javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 0, rawBytes: 0, gzipBytes: 0 } };
@@ -42,9 +43,9 @@ function assertBundleBudgets(actual, budgets) {
 
 function main() {
   const budgets = JSON.parse(fs.readFileSync(path.join(webRoot, "bundle-budgets.json"), "utf8"));
-  const actual = collectAssetSizes(path.join(webRoot, "dist", "assets"));
-  const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, "dist", "build-manifest.json"), "utf8"));
-  actual.initialJavascript = collectFileSize(path.join(webRoot, "dist", manifest.bundle));
+  const actual = collectAssetSizes(path.join(distRoot, "assets"));
+  const manifest = JSON.parse(fs.readFileSync(path.join(distRoot, "build-manifest.json"), "utf8"));
+  actual.initialJavascript = collectFileSize(path.join(distRoot, manifest.bundle));
   assertBundleBudgets(actual, budgets);
   console.log(`Web bundle budgets passed: ${JSON.stringify(actual)}`);
 }

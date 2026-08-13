@@ -38,6 +38,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);
+  assert.match(build, /maxRetries:\s*5/);
   const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
   assert.match(packageJson.scripts.verify, /analyze:bundle/);
 });
@@ -60,6 +61,18 @@ test("production renderers share the Admin, Make, and Share runtime chunks", () 
   assert.match(runtimeSources.admin, /renderers\/admin-panels\.mjs/);
   assert.match(runtimeSources.make, /renderers\/pages\/make-page\.mjs/);
   assert.match(runtimeSources.share, /renderers\/pages\/share-page\.mjs/);
+});
+
+test("auth, prompt overlays, and Saved renderers stay outside the initial renderer entry", () => {
+  const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
+  const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
+  ["auth-modal.mjs", "modal-renderers.mjs", "prompt-modals.mjs", "pages/saved-page.mjs"].forEach((file) => {
+    assert.doesNotMatch(rendererEntry, new RegExp(file.replaceAll(".", "\\.")));
+  });
+  assert.match(loader, /overlays: \(\) => import\(["']\.\/overlay-runtime\.mjs["']\)/);
+  assert.match(loader, /saved: \(\) => import\(["']\.\/saved-runtime\.mjs["']\)/);
+  const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
+  assert.match(app, /event\.detail\?\.route === ["']overlays["']/);
 });
 
 test("Admin controller view and events load only through the Admin runtime chunk", () => {

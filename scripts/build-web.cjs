@@ -3,13 +3,15 @@ const path = require("node:path");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
-const outputRoot = path.join(webRoot, "dist");
+const outputDirectory = process.env.TTALKAK_WEB_OUTPUT_DIR || "dist";
+if (!/^dist(?:-[a-z0-9-]+)?$/i.test(outputDirectory)) throw new Error(`Invalid TTALKAK_WEB_OUTPUT_DIR: ${outputDirectory}`);
+const outputRoot = path.join(webRoot, outputDirectory);
 const production = process.argv.includes("--production");
 const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 
 function assertSafeOutputPath() {
-  if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== "dist") {
+  if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== outputDirectory) {
     throw new Error(`Unsafe web build output path: ${outputRoot}`);
   }
 }
@@ -37,7 +39,10 @@ function validateSources() {
 async function build() {
   assertSafeOutputPath();
   validateSources();
-  fs.rmSync(outputRoot, { recursive: true, force: true });
+  // Windows/OneDrive and recently stopped preview servers can hold a short-lived
+  // handle on dist. Node's bounded retry keeps builds deterministic without
+  // hiding persistent permission failures.
+  fs.rmSync(outputRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   fs.mkdirSync(outputRoot, { recursive: true });
   let html = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
   let bundle = "src/app-entry.js";

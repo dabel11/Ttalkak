@@ -79,6 +79,17 @@ Do not collect by default:
 
 If approved later, prefer content-free aggregates such as operation type, coarse status code, duration bucket, retry, or cancellation. Logs must use the central reporter and must not serialize request payloads.
 
+The runtime enforces this policy in `src/observability/client-error-reporter.mjs`:
+
+- external collection is disabled by default;
+- emitted records use a fixed metadata-only field allowlist;
+- prompt, history, token, document, page-content, and clipboard context is discarded;
+- bearer/query credentials, email addresses, and phone numbers are redacted;
+- error messages are length-bounded before reaching a sink;
+- a sink failure never interrupts the user workflow.
+
+Enabling a remote sink requires a separate reviewed change that records its owner, purpose, retention period, user disclosure, and deletion process. A deployment URL or vendor key alone is not authorization to enable collection.
+
 ## 6. Supported frontend scope
 
 | Surface | Supported scope |

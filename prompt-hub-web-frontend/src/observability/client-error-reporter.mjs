@@ -1,10 +1,20 @@
 const REDACTED = "[REDACTED]";
 const nativeConsoleWarn = console.warn.bind(console);
+const MAX_MESSAGE_LENGTH = 240;
+
+export const OBSERVABILITY_DATA_POLICY = Object.freeze({
+  externalCollectionEnabled: false,
+  allowedRecordFields: Object.freeze(["name", "message", "area", "action", "code", "level", "retryable", "timestamp"]),
+  prohibitedContent: Object.freeze(["prompt", "generatedPrompt", "history", "token", "documentBody", "pageContent", "clipboard"]),
+});
 
 function redact(value) {
-  return String(value ?? "Unknown client error")
+  const sanitized = String(value ?? "Unknown client error")
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, `Bearer ${REDACTED}`)
-    .replace(/([?&](?:token|access_token|refresh_token)=)[^&\s]+/gi, `$1${REDACTED}`);
+    .replace(/([?&](?:token|access_token|refresh_token|code)=)[^&\s]+/gi, `$1${REDACTED}`)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, REDACTED)
+    .replace(/(?:\+?82[-\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, REDACTED);
+  return sanitized.length <= MAX_MESSAGE_LENGTH ? sanitized : `${sanitized.slice(0, MAX_MESSAGE_LENGTH)}…`;
 }
 
 /** @param {unknown} error @param {Record<string, unknown>} context @param {() => number} now */

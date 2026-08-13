@@ -5,7 +5,7 @@ const { execFileSync } = require("node:child_process");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
-const distRoot = path.join(webRoot, "dist");
+const distRoot = path.join(webRoot, process.env.TTALKAK_WEB_OUTPUT_DIR || "dist");
 
 function gzipBytes(file) { return zlib.gzipSync(fs.readFileSync(file)).length; }
 function gitRevision(reference) { return execFileSync("git", ["rev-parse", "--short", reference], { cwd: repositoryRoot, encoding: "utf8" }).trim(); }

@@ -15,7 +15,7 @@ module.exports = defineConfig({
   use: { ...base.use, baseURL: productionBaseURL },
   webServer: {
     command: "node preview-server.cjs",
-    env: { ...process.env, TTALKAK_PREVIEW_ROOT: "dist", TTALKAK_PREVIEW_PORT: String(productionPort) },
+    env: { ...process.env, TTALKAK_PREVIEW_ROOT: process.env.TTALKAK_WEB_OUTPUT_DIR || "dist", TTALKAK_PREVIEW_PORT: String(productionPort) },
     url: productionBaseURL,
     reuseExistingServer: false,
     timeout: 30_000,
