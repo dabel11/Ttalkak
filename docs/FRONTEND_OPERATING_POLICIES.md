@@ -99,4 +99,9 @@ Review this document when an API contract changes, before a public release, when
 
 Use `ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md` for the disposable-account integration check. Never record test passwords, access tokens, database credentials, or production user data in the checklist or test output.
 
-Run `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1` for the complete local web, Extension, and backend verification. The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes.
+Use the local verification script at one of two levels:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1` runs the fast web, Extension, and backend checks.
+- `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1 -Full` additionally runs Chromium fixture E2E, Firefox smoke, and production-bundle E2E.
+
+The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes. Browser E2E uses an isolated fixture server on `127.0.0.1:4174` and a production server on `127.0.0.1:4175`; override them with `TTALKAK_E2E_PORT` and `TTALKAK_E2E_PROD_PORT` when those ports are unavailable. Existing servers are never reused, so a collision fails with an explicit diagnostic instead of testing a stale preview.

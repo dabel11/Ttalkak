@@ -21,7 +21,7 @@ import { clientErrorReporter, installGlobalErrorObservers } from "./observabilit
 import { runtimeConfig } from "./runtime/runtime-config.mjs";
 
 let demoCopy = null;
-if (runtimeConfig.demoFallbackEnabled) ({ demoCopy } = await import("./demo-data.mjs"));
+if (globalThis.TTALKAK_PRODUCTION_BUILD !== true && runtimeConfig.demoFallbackEnabled) ({ demoCopy } = await import("./demo-data.mjs"));
 
 installGlobalErrorObservers(window, clientErrorReporter);
 const modules = Object.freeze({ admin, api, apiContract, auth, bootstrap, components, demo: demoCopy, discovery: { createDiscoveryController }, effects, events, home, interactions, make, modal, observability: clientErrorReporter, renderers, routing, runtimeConfig, saved: { createSavedLibraryController }, share, state: { api: state, domains }, utils });

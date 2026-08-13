@@ -26,13 +26,15 @@ test("Playwright isolates local fixture and production servers", () => {
   assert.match(productionConfig, /reuseExistingServer:\s*false/);
 });
 
-test("production build splits optional demo data out of the initial bundle", () => {
+test("production build excludes optional demo data while development keeps lazy loading", () => {
   const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
   assert.match(entry, /runtimeConfig\.demoFallbackEnabled/);
   assert.match(entry, /await import\(["']\.\/demo-data\.mjs["']\)/);
   assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.mjs["'];?$/m);
   assert.match(build, /splitting:\s*true/);
+  assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
+  assert.match(build, /Production bundle must not contain the development-only demo data chunk/);
   assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);

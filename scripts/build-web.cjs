@@ -52,12 +52,16 @@ async function build() {
       charset: "utf8",
       sourcemap: false,
       target: ["es2023"],
+      define: { "globalThis.TTALKAK_PRODUCTION_BUILD": "true" },
       outdir: path.join(outputRoot, "assets"),
       entryNames: "app-[hash]",
       chunkNames: "chunks/[name]-[hash]",
       metafile: true,
     });
     bundleMetafile = result.metafile;
+    if (Object.values(result.metafile.outputs).some((metadata) => metadata.entryPoint?.endsWith("src/demo-data.mjs"))) {
+      throw new Error("Production bundle must not contain the development-only demo data chunk.");
+    }
     const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
