@@ -13,9 +13,10 @@ async function expectAccessible(page, label) {
 
 async function reachByTab(page, locator, { direction = "forward", maxTabs = 40 } = {}) {
   const key = direction === "backward" ? "Shift+Tab" : "Tab";
+  if (await locator.evaluate((element) => element === document.activeElement)) return;
   for (let index = 0; index < maxTabs; index += 1) {
-    if (await locator.evaluate((element) => element === document.activeElement)) return;
     await page.keyboard.press(key);
+    if (await locator.evaluate((element) => element === document.activeElement)) return;
   }
   throw new Error(`Element was not reachable with ${key} after ${maxTabs} attempts`);
 }
