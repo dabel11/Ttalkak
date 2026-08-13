@@ -1,7 +1,11 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$Full
+)
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $environmentPath = Join-Path $repositoryRoot ".env"
 
@@ -13,25 +17,25 @@ function Invoke-CheckedCommand {
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
 
-    Write-Host "[$Label] 시작"
+    Write-Host "[$Label] START"
     Push-Location $WorkingDirectory
     try {
         & $Executable @Arguments
         if ($LASTEXITCODE -ne 0) {
-            throw "$Label 검증이 종료 코드 $LASTEXITCODE`(으`)로 실패했습니다."
+            throw "$Label verification failed with exit code $LASTEXITCODE."
         }
     }
     finally {
         Pop-Location
     }
-    Write-Host "[$Label] 통과"
+    Write-Host "[$Label] PASS"
 }
 
 function Read-EnvironmentFile {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "로컬 검증에 필요한 .env 파일이 없습니다. .env.example을 참고해 저장소 루트에 생성하세요."
+        throw "The local .env file is required. Create it at the repository root using .env.example as a guide."
     }
 
     $values = @{}
@@ -45,7 +49,7 @@ function Read-EnvironmentFile {
 
 $settings = Read-EnvironmentFile -Path $environmentPath
 if (-not $settings.ContainsKey("MYSQL_ROOT_PASSWORD") -or [string]::IsNullOrWhiteSpace($settings["MYSQL_ROOT_PASSWORD"])) {
-    throw ".env에 MYSQL_ROOT_PASSWORD가 설정되어야 합니다. 값은 출력하거나 커밋하지 마세요."
+    throw "MYSQL_ROOT_PASSWORD must be configured in .env. Never print or commit its value."
 }
 
 $previousDatabaseEnvironment = @{
@@ -57,6 +61,11 @@ $previousDatabaseEnvironment = @{
 try {
     Invoke-CheckedCommand -Label "Web" -WorkingDirectory (Join-Path $repositoryRoot "prompt-hub-web-frontend") -Executable "npm" -Arguments @("run", "verify")
     Invoke-CheckedCommand -Label "Extension" -WorkingDirectory (Join-Path $repositoryRoot "extension") -Executable "npm" -Arguments @("run", "verify")
+    if ($Full) {
+        Invoke-CheckedCommand -Label "Web Chromium E2E" -WorkingDirectory (Join-Path $repositoryRoot "prompt-hub-web-frontend") -Executable "npm" -Arguments @("run", "test:e2e")
+        Invoke-CheckedCommand -Label "Web Firefox smoke" -WorkingDirectory (Join-Path $repositoryRoot "prompt-hub-web-frontend") -Executable "npm" -Arguments @("run", "test:e2e:firefox")
+        Invoke-CheckedCommand -Label "Web production E2E" -WorkingDirectory (Join-Path $repositoryRoot "prompt-hub-web-frontend") -Executable "npm" -Arguments @("run", "test:e2e:prod")
+    }
 
     $env:DB_URL = "jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true"
     $env:DB_USERNAME = "root"
@@ -69,4 +78,8 @@ finally {
     $env:DB_PASSWORD = $previousDatabaseEnvironment.DB_PASSWORD
 }
 
-Write-Host "로컬 전체 검증을 통과했습니다."
+if ($Full) {
+    Write-Host "Full local verification (including E2E) passed."
+} else {
+    Write-Host "Fast local verification passed. Use -Full to include E2E."
+}

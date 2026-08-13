@@ -56,6 +56,8 @@ docs/*
 !docs/FRONTEND_OPERATING_POLICIES.md
 !docs/WEB_STORE_RELEASE_CHECKLIST.md
 !docs/ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md
+!docs/smoke-results/
+!docs/smoke-results/*.md
 .gitignore
 
 extension/.env.production.local

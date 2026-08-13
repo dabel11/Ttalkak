@@ -39,12 +39,14 @@ Inspect only the disposable test record and avoid copying raw database rows into
 
 ## Result record
 
-- Environment: local
-- Date: 2026-08-13
-- Web result: pass
-- Extension result: pass (automated browser fixture and client policy verification)
-- Backend policy result: pass
-- Cleanup complete: yes
-- Non-sensitive notes: Two disposable accounts were withdrawn. The web UI confirmed sign-out, blocked re-login and ID reuse, allowed nickname reuse through a second signup, removed account-scoped authentication state, and retained the local Make conversation. Historical withdrawn-author and administrator-action presentation passed the browser fixture coverage without using administrator credentials.
+Copy the result template below into a dated file under `smoke-results/`. Do not overwrite this reusable checklist with a specific run.
+
+- Environment:
+- Date:
+- Web result:
+- Extension result:
+- Backend policy result:
+- Cleanup complete:
+- Non-sensitive notes:
 
 If any step fails, stop before using another account. File the failure with the affected step, HTTP status and public error code only; exclude credentials and request bodies.

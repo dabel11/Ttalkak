@@ -3,6 +3,9 @@ const { gotoApp } = require("./support/app-ready.js");
 const AxeBuilder = require("@axe-core/playwright").default;
 
 async function expectAccessible(page, label) {
+  await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
+  });
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const violations = result.violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map((node) => node.target.join(" ")) }));
   expect(violations, `${label} accessibility violations`).toEqual([]);

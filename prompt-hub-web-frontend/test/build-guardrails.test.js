@@ -11,6 +11,19 @@ const { assertLocalReference, isBundleInput } = require("../../scripts/create-we
 test("preview server serves ESM module files with a JavaScript MIME type", () => {
   const previewServer = fs.readFileSync(path.resolve(__dirname, "../preview-server.cjs"), "utf8");
   assert.match(previewServer, /["']\.mjs["']\s*:\s*["']text\/javascript; charset=utf-8["']/);
+  assert.match(previewServer, /EADDRINUSE/);
+  assert.match(previewServer, /TTALKAK_E2E_PORT/);
+});
+
+test("Playwright isolates local fixture and production servers", () => {
+  const fixtureConfig = fs.readFileSync(path.resolve(__dirname, "../playwright.config.js"), "utf8");
+  const productionConfig = fs.readFileSync(path.resolve(__dirname, "../playwright.production.config.js"), "utf8");
+  assert.match(fixtureConfig, /TTALKAK_E2E_PORT/);
+  assert.match(fixtureConfig, /4174/);
+  assert.match(fixtureConfig, /reuseExistingServer:\s*false/);
+  assert.match(productionConfig, /TTALKAK_E2E_PROD_PORT/);
+  assert.match(productionConfig, /4175/);
+  assert.match(productionConfig, /reuseExistingServer:\s*false/);
 });
 
 test("production build splits optional demo data out of the initial bundle", () => {
@@ -119,6 +132,10 @@ test("local verification reads secrets without printing them and restores databa
   assert.match(script, /\$env:DB_PASSWORD\s*=\s*\$previousDatabaseEnvironment\.DB_PASSWORD/);
   assert.doesNotMatch(script, /Write-(?:Host|Output)[^\r\n]*(?:MYSQL_ROOT_PASSWORD|DB_PASSWORD|\$settings)/i);
   assert.doesNotMatch(script, /ConvertTo-(?:Json|SecureString)/i);
+  assert.match(script, /\[switch\]\$Full/);
+  assert.match(script, /test:e2e:firefox/);
+  assert.match(script, /test:e2e:prod/);
+  assert.match(script, /Console\]::OutputEncoding\s*=\s*\[System\.Text\.UTF8Encoding\]::new\(\)/);
 });
 
 test("console warnings are owned only by the observability reporter", () => {
