@@ -1,129 +1,21 @@
 // @ts-check
-/** @param {{ demo?: { fallbackPopularTags?: string[] } | null, demoFallbackEnabled?: boolean }} [options] */
+/** @param {{ demo?: { fallbackPopularTags?: string[], promptOverrides?: Record<string, Partial<TtalkakPromptRecord>>, popularPromptMetrics?: Record<string, number[]>, savedPrompts?: TtalkakPromptRecord[], existingNicknames?: string[], existingUserIds?: string[], commentOverrides?: Record<string, TtalkakStateEntity[]> } | null, demoFallbackEnabled?: boolean }} [options] */
 export function createAppStaticData({ demo = null, demoFallbackEnabled = false } = {}) {
   const DEMO_FALLBACK_ENABLED = Boolean(demoFallbackEnabled);
-  const popularPrompts = [
-    {
-      id: "post-1",
-      title: "전문적인 인스타그램 캡션 작성",
-      text: "당신은 전문적인 콘텐츠 마케터입니다. 브랜드의 핵심 메시지를 살려 인스타그램 캡션을 작성해주세요. 해시태그도 5개 포함해주세요.",
-      tags: ["마케팅", "인스타그램", "콘텐츠"],
-      views: 150420,
-      comments: 1835,
-      saves: 62880,
-      author: "카피메이커",
-      source: "community",
-    },
-    {
-      id: "post-2",
-      title: "글쓰기 첨삭 프롬프트",
-      text: "더 매력적인 글쓰기를 위한 첨삭봇. 글의 흐름, 문법, 가독성을 모두 고려해서 개선안을 제안해주세요.",
-      tags: ["첨삭", "글쓰기", "편집"],
-      views: 89340,
-      comments: 3210,
-      saves: 44820,
-      author: "카피메이커",
-      source: "community",
-    },
-    {
-      id: "post-3",
-      title: "SEO 블로그 포스팅",
-      text: "검색엔진 상위 노출을 위한 키워드 중심의 블로그 글을 작성해주세요. 제목, 소제목, 본문을 구조화해주세요.",
-      tags: ["SEO", "블로그", "검색최적화"],
-      views: 72450,
-      comments: 1980,
-      saves: 35670,
-      author: "태그지니",
-      source: "community",
-    },
-    {
-      id: "post-4",
-      title: "소셜미디어 캠페인 전략",
-      text: "특정 제품이나 서비스를 위한 소셜미디어 마케팅 캠페인 전략을 수립해주세요. 플랫폼별 접근 방법을 포함해주세요.",
-      tags: ["소셜미디어", "캠페인", "전략"],
-      views: 68920,
-      comments: 2340,
-      saves: 33560,
-      author: "콘텐츠랩",
-      source: "community",
-    },
-    {
-      id: "post-5",
-      title: "클릭을 유도하는 제목 작성",
-      text: "특정 키워드를 중심으로 클릭을 유도할 수 있는 제목을 10개 만들어주세요. 숫자와 질문 형식을 활용해주세요.",
-      tags: ["제목", "클릭베이트", "SEO"],
-      views: 58720,
-      comments: 2140,
-      saves: 29450,
-      author: "콘텐츠랩",
-      source: "community",
-    },
-    {
-      id: "post-6",
-      title: "유튜브 영상 기획안",
-      text: "시청자의 관심을 끌 수 있는 유튜브 영상 기획안을 작성해주세요. 훅, 본문, 마무리 CTA를 포함해주세요.",
-      tags: ["유튜브", "영상", "기획"],
-      views: 54230,
-      comments: 1450,
-      saves: 27890,
-      author: "콘텐츠랩",
-      source: "community",
-    },
-    {
-      id: "post-7",
-      title: "브레인스토밍 도우미",
-      text: "새로운 아이디어나 프로젝트를 위한 창의적인 발상을 도와주세요. 다양한 관점에서 아이디어를 제시해주세요.",
-      tags: ["브레인스토밍", "아이디어", "창의성"],
-      views: 47560,
-      comments: 1120,
-      saves: 21340,
-      author: "태그지니",
-      source: "community",
-    },
-    {
-      id: "post-8",
-      title: "협찬 제안서 만들기",
-      text: "브랜드와 협업을 위한 전문적인 제안서를 작성해주세요. 나의 채널 특성과 타깃 오디언스를 강조해주세요.",
-      tags: ["협찬", "제안서", "비즈니스"],
-      views: 35680,
-      comments: 892,
-      saves: 18920,
-      author: "콘텐츠랩",
-      source: "community",
-    },
-  ];
-  const savedPrompts = [
-    ...popularPrompts.slice(0, 4),
-    {
-      id: "mine-1",
-      title: "딸깍 확장 프로그램 소개문",
-      text: "프롬프트 첨삭 Chrome Extension을 소개하는 짧은 랜딩 카피를 작성해주세요. 핵심 기능, 사용 이점, CTA를 포함해주세요.",
-      tags: ["내프롬프트", "카피", "확장프로그램"],
-      views: 0,
-      comments: 0,
-      saves: 128,
-      author: "나",
-      source: "mine",
-      isShared: false,
-    },
-    {
-      id: "mine-2",
-      title: "코딩 질문 개선",
-      text: "막연한 코딩 질문을 재현 단계, 기대 결과, 실제 결과, 에러 로그, 환경 정보가 들어간 질문으로 바꿔주세요.",
-      tags: ["내프롬프트", "코딩", "질문"],
-      views: 0,
-      comments: 0,
-      saves: 94,
-      author: "나",
-      source: "mine",
-      isShared: false,
-    },
-  ].sort((a, b) => b.saves - a.saves);
+  const DEMO_DATA_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && DEMO_FALLBACK_ENABLED;
+  /** @type {TtalkakPromptRecord[]} */
+  const popularPrompts = DEMO_DATA_ENABLED
+    ? Object.entries(demo?.promptOverrides || {}).map(([id, prompt]) => {
+      const [views = 0, comments = 0, saves = 0] = demo?.popularPromptMetrics?.[id] || [];
+      return { id, ...prompt, views, comments, saves, source: "community" };
+    })
+    : [];
+  /** @type {TtalkakPromptRecord[]} */
+  const savedPrompts = DEMO_DATA_ENABLED
+    ? [...popularPrompts.slice(0, 4), ...(demo?.savedPrompts || [])].sort((a, b) => Number(b.saves || 0) - Number(a.saves || 0))
+    : [];
   const DEMO_LIBRARY_PROMPT_IDS = new Set(savedPrompts.map((prompt) => prompt.id));
-  const fallbackPopularTags = demo?.fallbackPopularTags || ["SEO", "마케팅", "코딩", "이메일", "블로그", "콘텐츠", "첨삭", "기획"];
-  // Full demo copy is loaded from demo-data.mjs only when demo fallback is enabled.
-  const demoPromptTextOverrides = {};
-  const demoCommentTextOverrides = {};
+  const fallbackPopularTags = DEMO_DATA_ENABLED ? demo?.fallbackPopularTags || [] : [];
   const promptTemplates = [
     {
       id: "writing",
@@ -206,61 +98,9 @@ export function createAppStaticData({ demo = null, demoFallbackEnabled = false }
   const HOME_PAGE_SIZE = 16;
   const SEARCH_DEBOUNCE_MS = 320;
   const MAX_CUSTOM_MAKE_FOLDERS = 5;
-  const DEMO_EXISTING_NICKNAMES = ["Google닉네임", "태그지니", "콘텐츠랩", "카피메이커", "박민준", "김지수", "이서연", "나"];
-  const DEMO_EXISTING_USER_IDS = ["google", "demo", "admin", "user", "ttalkak", "jaewon7025"];
-  const commentsByPrompt = {
-    "post-1": [
-      { id: "comment-1", author: "태그지니", text: "해시태그까지 같이 요청하는 구성이 실무에서 쓰기 좋네요." },
-      { id: "comment-2", author: "콘텐츠랩", text: "브랜드 톤앤매너를 추가하면 더 정확한 결과가 나올 것 같아요." },
-    ],
-    "post-2": [
-      { id: "comment-3", author: "카피메이커", text: "문법, 흐름, 가독성을 나눠서 첨삭하는 방식이 마음에 듭니다." },
-    ],
-    "post-3": [
-      { id: "comment-4", author: "콘텐츠랩", text: "검색 키워드와 독자 페르소나도 함께 넣으면 더 좋겠어요." },
-    ],
-    "post-4": [
-      { id: "comment-5", author: "태그지니", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
-      { id: "comment-6", author: "카피메이커", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
-    ],
-    "post-5": [
-      { id: "comment-7", author: "콘텐츠랩", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
-      { id: "comment-8", author: "태그지니", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
-    ],
-    "post-6": [
-      { id: "comment-9", author: "카피메이커", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
-      { id: "comment-10", author: "콘텐츠랩", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
-    ],
-    "post-7": [
-      { id: "comment-11", author: "태그지니", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
-      { id: "comment-12", author: "카피메이커", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
-    ],
-    "post-8": [
-      { id: "comment-13", author: "콘텐츠랩", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
-      { id: "comment-14", author: "태그지니", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
-    ],
-  };
-  const demoCommentBackfill = {
-    "post-4": [
-      { id: "comment-5", author: "태그지니", text: "플랫폼별 접근 방식을 따로 요청하는 점이 실무에 잘 맞아요." },
-      { id: "comment-6", author: "카피메이커", text: "캠페인 목적과 예산 범위를 추가하면 더 구체적일 것 같습니다." },
-    ],
-    "post-5": [
-      { id: "comment-7", author: "콘텐츠랩", text: "숫자와 질문형 제목을 함께 요구해서 결과물이 다양하게 나와요." },
-      { id: "comment-8", author: "태그지니", text: "타깃 독자까지 넣으면 클릭률을 더 잘 겨냥할 수 있겠네요." },
-    ],
-    "post-6": [
-      { id: "comment-9", author: "카피메이커", text: "인트로, 본문, 마무리 CTA를 나누는 구성이 좋습니다." },
-      { id: "comment-10", author: "콘텐츠랩", text: "영상 길이와 톤을 같이 적으면 더 바로 쓰기 좋겠어요." },
-    ],
-    "post-7": [
-      { id: "comment-11", author: "태그지니", text: "브레인스토밍 단계에서 관점 전환을 요청하는 방식이 유용합니다." },
-      { id: "comment-12", author: "카피메이커", text: "아이디어 평가 기준까지 붙이면 회의용으로도 좋겠어요." },
-    ],
-    "post-8": [
-      { id: "comment-13", author: "콘텐츠랩", text: "브랜드와 타깃 오디언스를 함께 묻는 점이 제안서에 잘 맞습니다." },
-      { id: "comment-14", author: "태그지니", text: "목차와 핵심 메시지를 분리해달라고 하면 더 정돈될 것 같아요." },
-    ],
-  };
-  return Object.freeze({ DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, demoPromptTextOverrides, demoCommentTextOverrides, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill });
+  const DEMO_EXISTING_NICKNAMES = DEMO_DATA_ENABLED ? demo?.existingNicknames || [] : [];
+  const DEMO_EXISTING_USER_IDS = DEMO_DATA_ENABLED ? demo?.existingUserIds || [] : [];
+  const commentsByPrompt = DEMO_DATA_ENABLED ? structuredClone(demo?.commentOverrides || {}) : {};
+  const demoCommentBackfill = commentsByPrompt;
+  return Object.freeze({ DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill });
 }

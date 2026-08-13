@@ -1,5 +1,17 @@
 export const demoCopy = {
   fallbackPopularTags: ["SEO", "마케팅", "코딩", "이메일", "블로그", "콘텐츠", "첨삭", "기획"],
+  popularPromptMetrics: {
+    "post-1": [150420, 1835, 62880], "post-2": [89340, 3210, 44820],
+    "post-3": [72450, 1980, 35670], "post-4": [68920, 2340, 33560],
+    "post-5": [58720, 2140, 29450], "post-6": [54230, 1450, 27890],
+    "post-7": [47560, 1120, 21340], "post-8": [35680, 892, 18920],
+  },
+  savedPrompts: [
+    { id: "mine-1", title: "딸깍 확장 프로그램 소개문", text: "프롬프트 첨삭 Chrome Extension을 소개하는 짧은 랜딩 카피를 작성해주세요. 핵심 기능, 사용 이점, CTA를 포함해주세요.", tags: ["내프롬프트", "카피", "확장프로그램"], views: 0, comments: 0, saves: 128, author: "나", source: "mine", isShared: false },
+    { id: "mine-2", title: "코딩 질문 개선", text: "막연한 코딩 질문을 재현 단계, 기대 결과, 실제 결과, 에러 로그, 환경 정보가 들어간 질문으로 바꿔주세요.", tags: ["내프롬프트", "코딩", "질문"], views: 0, comments: 0, saves: 94, author: "나", source: "mine", isShared: false },
+  ],
+  existingNicknames: ["Google닉네임", "태그지니", "콘텐츠랩", "카피메이커", "박민준", "김지수", "이서연", "나"],
+  existingUserIds: ["google", "demo", "admin", "user", "ttalkak", "jaewon7025"],
   promptOverrides: {
     "post-1": {
       title: "전문적인 인스타그램 캡션 작성",

@@ -434,7 +434,7 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, demoPromptTextOverrides, demoCommentTextOverrides, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
@@ -2189,7 +2189,19 @@ function normalizeAssistantPromptOutputs() {
     });
   });
 }
-function ensureDemoComments() {
+function prepareDemoData() {
+  if (globalThis.TTALKAK_PRODUCTION_BUILD === true || !DEMO_FALLBACK_ENABLED) return;
+  const promptOverrides = modules.demo?.promptOverrides || {};
+  const commentOverrides = modules.demo?.commentOverrides || {};
+  for (const list of [popularPrompts, savedPrompts]) {
+    list.forEach((prompt) => {
+      const override = promptOverrides[prompt.id];
+      if (override) Object.assign(prompt, override);
+    });
+  }
+  Object.entries(commentOverrides).forEach(([promptId, comments]) => {
+    commentsByPrompt[promptId] = comments.map((comment) => ({ ...comment }));
+  });
   Object.entries(demoCommentBackfill).forEach(([promptId, comments]) => {
     const currentComments = commentsByPrompt[promptId] || [];
     const existingIds = new Set(currentComments.map((comment) => comment.id));
@@ -2197,20 +2209,6 @@ function ensureDemoComments() {
     if (currentComments.length === 0 || missingComments.length > 0) {
       commentsByPrompt[promptId] = [...currentComments, ...missingComments];
     }
-  });
-}
-function normalizeDemoCopy() {
-  const promptOverrides = modules.demo?.promptOverrides || demoPromptTextOverrides;
-  const commentOverrides = modules.demo?.commentOverrides || demoCommentTextOverrides;
-  for (const list of [popularPrompts, savedPrompts]) {
-    list.forEach((prompt) => {
-      const override = promptOverrides[prompt.id];
-      if (!override) return;
-      Object.assign(prompt, override);
-    });
-  }
-  Object.entries(commentOverrides).forEach(([promptId, comments]) => {
-    commentsByPrompt[promptId] = comments.map((comment) => ({ ...comment }));
   });
 }
 appBootstrap = createAppBootstrap({
@@ -2223,8 +2221,8 @@ appBootstrap = createAppBootstrap({
   isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,
   formatShortDate, getReportRecord, mapBackendReportStatus, hydrateBackendAdminData,
   reportWarning,
-  hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, normalizeDemoCopy,
-  normalizeAssistantPromptOutputs, ensureDemoComments,
+  hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, prepareDemoData,
+  normalizeAssistantPromptOutputs,
 });
 const bootstrapResult = appBootstrap.bootstrap();
 const needsAdminRuntime = state.adminMode || state.route === "admin";

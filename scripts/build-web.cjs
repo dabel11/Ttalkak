@@ -67,6 +67,13 @@ async function build() {
     if (Object.values(result.metafile.outputs).some((metadata) => metadata.entryPoint?.endsWith("src/demo-data.mjs"))) {
       throw new Error("Production bundle must not contain the development-only demo data chunk.");
     }
+    const productionJavaScript = Object.keys(result.metafile.outputs)
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => fs.readFileSync(path.resolve(file), "utf8"))
+      .join("\n");
+    if (productionJavaScript.includes("딸깍 확장 프로그램 소개문")) {
+      throw new Error("Production bundle must not contain development-only demo seed records.");
+    }
     const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");

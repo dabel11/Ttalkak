@@ -1,4 +1,5 @@
 type TtalkakId = string | number;
+declare var TTALKAK_PRODUCTION_BUILD: boolean | undefined;
 type TtalkakToken = string | undefined;
 type TtalkakPayload = Record<string, unknown>;
 type TtalkakCallableModule = Record<string, Function>;
@@ -10,6 +11,10 @@ type TtalkakStateModule = TtalkakCallableModule & {
 type TtalkakRecord = Record<string, unknown>;
 interface TtalkakPromptRecord {
   id: TtalkakId;
+  author?: string;
+  owner?: string;
+  tags?: string[];
+  likes?: number;
   source?: string;
   saves?: number;
   views?: number;
@@ -112,7 +117,15 @@ interface TtalkakApiContractModule {
   wrapApiResponses(api: TtalkakApi): TtalkakApi;
 }
 interface TtalkakModuleRegistry {
-  demo: { fallbackPopularTags?: string[]; promptOverrides?: Record<string, string>; commentOverrides?: Record<string, string> } | null;
+  demo: {
+    fallbackPopularTags?: string[];
+    promptOverrides?: Record<string, Partial<TtalkakPromptRecord>>;
+    popularPromptMetrics?: Record<string, number[]>;
+    savedPrompts?: TtalkakPromptRecord[];
+    existingNicknames?: string[];
+    existingUserIds?: string[];
+    commentOverrides?: Record<string, TtalkakStateEntity[]>;
+  } | null;
   utils: TtalkakCallableModule;
   home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
   saved: { createMyPageDataModel: Function; createSavedLibraryController: Function };

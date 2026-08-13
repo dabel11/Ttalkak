@@ -12,15 +12,14 @@ test("bootstrap runs persistence normalization render and home hydration in orde
   const bootstrap = createAppBootstrap({
     state: {},
     loadPersistedState: () => calls.push("load"),
-    normalizeDemoCopy: () => calls.push("demo"),
+    prepareDemoData: () => calls.push("demo"),
     normalizeAssistantPromptOutputs: () => calls.push("messages"),
     normalizeRecentThreads: () => calls.push("threads"),
-    ensureDemoComments: () => calls.push("comments"),
     render: () => calls.push("render"),
     hydrateBackendHomeDataEffect: () => calls.push("home"),
   });
   await bootstrap.bootstrap();
-  assert.deepEqual(calls, ["load", "demo", "messages", "threads", "comments", "render", "home"]);
+  assert.deepEqual(calls, ["load", "demo", "messages", "threads", "render", "home"]);
 });
 
 test("Make hydration is skipped while a request is thinking", async () => {

@@ -35,6 +35,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /splitting:\s*true/);
   assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
   assert.match(build, /Production bundle must not contain the development-only demo data chunk/);
+  assert.match(build, /Production bundle must not contain development-only demo seed records/);
   assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);

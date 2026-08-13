@@ -83,10 +83,9 @@
 
     function bootstrap() {
       ctx.loadPersistedState();
-      ctx.normalizeDemoCopy();
+      ctx.prepareDemoData();
       ctx.normalizeAssistantPromptOutputs();
       ctx.normalizeRecentThreads();
-      ctx.ensureDemoComments();
       ctx.render();
       return hydrateBackendHomeData();
     }
