@@ -12,6 +12,10 @@ const toWarningError = (...args) => {
   return error;
 };
 const reportWarning = (area, action, error) => modules.observability.reportWarning(area, action, error);
+let authFocusReturnView = "login";
+function restoreAuthFocus() {
+  window.requestAnimationFrame(() => document.querySelector(`[data-open-auth="${authFocusReturnView}"]`)?.focus());
+}
 const runtimeConfig = modules.runtimeConfig;
 const {
   normalizeSearchText,
@@ -1321,6 +1325,7 @@ function bindGlobalActionEvents() {
   });
   document.querySelectorAll("[data-open-auth]").forEach((button) => {
     button.addEventListener("click", () => {
+      authFocusReturnView = button.dataset.openAuth || "login";
       state.authView = button.dataset.openAuth;
       state.authUserIdWarning = "";
       state.authError = "";
@@ -1428,7 +1433,7 @@ function bindDiscoveryEvents() {
   });
 }
 function bindModalControlEvents() {
-  bindModalEvents(document, { ...modalController, render, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
+  bindModalEvents(document, { ...modalController, render, restoreAuthFocus, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
 }
 function bindPromptInteractionEvents() {
   document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {

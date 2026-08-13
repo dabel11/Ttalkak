@@ -83,12 +83,23 @@ The runtime enforces this policy in `src/observability/client-error-reporter.mjs
 
 - external collection is disabled by default;
 - emitted records use a fixed metadata-only field allowlist;
+- network, AI, and contract failures include only status, elapsed milliseconds, retryability, and failure/cancel outcome;
+- the browser emits a local `ttalkak:observability` integration event containing the smaller aggregate allowlist;
 - prompt, history, token, document, page-content, and clipboard context is discarded;
 - bearer/query credentials, email addresses, and phone numbers are redacted;
 - error messages are length-bounded before reaching a sink;
 - a sink failure never interrupts the user workflow.
 
 Enabling a remote sink requires a separate reviewed change that records its owner, purpose, retention period, user disclosure, and deletion process. A deployment URL or vendor key alone is not authorization to enable collection.
+
+### Current release decision (2026-08-14)
+
+- Owner: frontend team.
+- External collection: disabled.
+- Collection purpose: none until a separate product/privacy review approves one.
+- Remote retention: 0 days because no remote events are sent.
+- User disclosure: not required for disabled collection; it becomes mandatory before activation.
+- The local aggregate event is an integration boundary only and must not be forwarded by deployment code without that review.
 
 ## 6. Supported frontend scope
 

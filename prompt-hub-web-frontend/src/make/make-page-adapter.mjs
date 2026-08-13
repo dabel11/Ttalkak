@@ -124,6 +124,7 @@ export function createMakePageAdapter(ctx) {
         isCopied: ctx.state.copiedMessageId === message.id,
         isEditing: !isAssistant && ctx.state.editingMessageId === message.id,
         failureMessage: !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure?.message || "" : "",
+        failureKind: !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure?.kind || "" : "",
         failureRetryable: !isAssistant && ctx.requestState.failedMessageId === message.id && Boolean(ctx.requestState.failure?.retryable),
         isSaved: isAssistant && ctx.isPromptSaved(message.id),
         isThinking: ctx.isThinking() || ctx.requestState.inFlight,

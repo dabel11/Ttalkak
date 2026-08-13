@@ -66,3 +66,22 @@ test("observability boundary excludes payload fields and redacts direct identifi
   assert.equal("token" in delivered[0], false);
   assert.deepEqual(Object.keys(delivered[0]), OBSERVABILITY_DATA_POLICY.allowedRecordFields);
 });
+
+test("observability bridge exposes only aggregate metadata and isolates listeners", async () => {
+  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const target = new EventTarget();
+  const events = [];
+  target.addEventListener("ttalkak:observability", (event) => { events.push(event.detail); });
+  const reporter = createClientErrorReporter({ sink: createObservabilityEventSink(target), now: () => 77 });
+  assert.doesNotThrow(() => reporter.report(new Error("private@example.com prompt body"), {
+    area: "api", action: "request", kind: "contract", code: "AI_INVALID_RESPONSE", status: 503,
+    durationMs: 1250.4, outcome: "retry", retryable: true, prompt: "secret", token: "secret",
+  }));
+  assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
+  assert.deepEqual(events[0], {
+    area: "api", action: "request", kind: "contract", code: "AI_INVALID_RESPONSE", status: 503,
+    durationMs: 1250, outcome: "retry", level: "error", retryable: true, timestamp: 77,
+  });
+  assert.equal(JSON.stringify(events[0]).includes("private"), false);
+  assert.equal(JSON.stringify(events[0]).includes("secret"), false);
+});

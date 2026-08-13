@@ -1,4 +1,5 @@
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
+import { clientErrorReporter } from "../observability/client-error-reporter.mjs";
 const API_BASE_URL = runtimeConfig.apiBaseUrl;
 const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
 
@@ -9,6 +10,7 @@ const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
 
   /** @param {string} path @param {RequestInit & { token?: string, timeoutMs?: number }} [options] */
   async function request(path, options = {}) {
+    const startedAt = performance.now();
     const { token, headers, timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options;
     const requestTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : API_TIMEOUT_MS;
     const storedToken = (() => {
@@ -63,11 +65,17 @@ const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
     } catch (error) {
       if (error?.name === "AbortError" && abortCause === "timeout") {
         const timeoutError = Object.assign(new Error("백엔드 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."), { status: 0, code: "REQUEST_TIMEOUT", cause: error });
+        clientErrorReporter.report(timeoutError, { area: "api", action: "request", kind: "network", code: "REQUEST_TIMEOUT", status: 0, durationMs: performance.now() - startedAt, outcome: "failure", retryable: true });
         throw timeoutError;
       }
       if (error?.name === "AbortError") {
+        clientErrorReporter.report(error, { area: "api", action: "request", kind: "cancel", code: "REQUEST_ABORTED", status: 0, durationMs: performance.now() - startedAt, outcome: "cancel", retryable: true });
         throw Object.assign(new Error("요청이 취소되었습니다."), { status: 0, code: "REQUEST_ABORTED", cause: error });
       }
+      const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : 0;
+      const code = String(error?.payload?.code || error?.code || "API_REQUEST_FAILED");
+      const kind = code === "AI_INVALID_RESPONSE" ? "contract" : code.startsWith("AI_") ? "ai" : "network";
+      clientErrorReporter.report(error, { area: "api", action: "request", kind, code, status, durationMs: performance.now() - startedAt, outcome: "failure", retryable: status === 0 || status === 429 || status >= 500 });
       throw error;
     } finally {
       window.clearTimeout(timeoutId);

@@ -1,6 +1,6 @@
 function bindModalEvents(root, actions, state) {
   const bind = (selector, handler) => root.querySelectorAll(selector).forEach((node) => node.addEventListener("click", handler));
-  bind("[data-close-auth]", () => { state.authView = null; state.authError = ""; actions.render(); });
+  bind("[data-close-auth]", () => { state.authView = null; state.authError = ""; actions.render(); actions.restoreAuthFocus?.(); });
   bind("[data-close-admin-user-block]", () => { state.adminBlockTarget = null; actions.render(); });
   root.querySelectorAll(".modal-backdrop.visible").forEach((node) => node.addEventListener("mousedown", (event) => { if (event.target === node) actions.closeTop(); }));
   bind("[data-close-detail]", () => { state.detailPromptId = null; state.detailHighlightCommentId = null; actions.render(); });

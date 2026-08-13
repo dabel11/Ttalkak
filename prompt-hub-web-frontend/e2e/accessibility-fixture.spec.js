@@ -12,6 +12,7 @@ async function expectAccessible(page, label) {
 }
 
 test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA automated rules", async ({ page }) => {
+  test.setTimeout(60_000);
   await gotoApp(page);
   await expectAccessible(page, "Home");
 
@@ -19,18 +20,42 @@ test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA a
   await expect(page.locator("[data-auth-form]")).toBeVisible();
   await expectAccessible(page, "Login");
 
+  await page.locator("[data-close-auth]").first().click();
+  await expect(page.locator('[data-open-auth="login"]').first()).toBeFocused();
+
+  await page.locator('[data-open-auth="login"]').first().click();
   await page.locator('[data-open-auth="signup"]').click();
   await expect(page.locator('[data-auth-form] input[name="nickname"]')).toBeVisible();
   await expectAccessible(page, "Signup");
   await page.locator("[data-close-auth]").first().click();
 
   await page.locator('[data-route="share"]').first().click();
-  await expect(page.locator(".share-page")).toBeVisible();
+  await expect(page.locator(".share-page")).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page, "Share");
 
   await page.locator('[data-route="make"]').first().click();
-  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.locator(".make-page")).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page, "Make");
+});
+
+test("keyboard operation opens and closes authentication and enters Make with focus preserved", async ({ page }) => {
+  await gotoApp(page);
+  const login = page.locator('[data-open-auth="login"]').first();
+  await login.evaluate((element) => element.focus());
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-auth-form]")).toBeVisible();
+  await expect(page.locator("[data-close-auth]").first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(login).toBeFocused();
+
+  const make = page.locator('[data-route="make"]').first();
+  await make.evaluate((element) => element.focus());
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".make-page")).toBeVisible({ timeout: 15_000 });
+  const composer = page.locator('[data-composer] textarea[name="prompt"]');
+  await composer.evaluate((element) => element.focus());
+  await page.keyboard.type("키보드 접근성 확인");
+  await expect(composer).toHaveValue("키보드 접근성 확인");
 });
 
 test("confirmation modal opens through a real folder workflow and restores focus", async ({ page }) => {

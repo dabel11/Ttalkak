@@ -128,14 +128,14 @@ test("required answers are validated and a complete answer transitions to improv
   const form = page.locator("[data-ask-answer-form]");
   const requiredInput = form.locator('[name="purpose"]');
 
-  await form.locator('button[type="submit"]').click();
+  await form.locator('button[type="submit"]').press("Enter");
   await expect(requiredInput).toHaveAttribute("aria-invalid", "true");
   await expect(requiredInput).toBeFocused();
 
   await requiredInput.fill("Prepare a release announcement");
   await form.locator('[name="audience"]').fill("New users");
   const requestPromise = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/prompts/improve"));
-  await form.locator('button[type="submit"]').click();
+  await form.locator('button[type="submit"]').press("Enter");
   const request = await requestPromise;
   const payload = request.postDataJSON();
 
@@ -340,9 +340,10 @@ test("the explicit cancel button aborts the request, preserves the prompt, and i
   await started;
   const cancel = page.locator("[data-cancel-make-request]");
   await expect(cancel).toBeVisible();
-  await cancel.click();
+  await cancel.press("Enter");
 
   const failure = page.locator(".message-failure-status");
+  await expect(failure).toHaveAttribute("role", "status");
   await expect(failure).toContainText("취소");
   await expect(failure.locator("[data-retry-message]")).toHaveCount(0);
   await expect(page.getByText(prompt, { exact: true })).toBeVisible();
