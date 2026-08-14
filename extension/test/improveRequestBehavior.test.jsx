@@ -1,4 +1,4 @@
-import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createElement, Fragment } from "react";
 
@@ -25,16 +25,9 @@ import { useConversation } from "../src/hooks/useConversation";
 import { AssistantResponse } from "../src/components/AssistantResponse";
 import { Composer } from "../src/components/Composer";
 import { useAskAnswers } from "../src/hooks/useAskAnswers";
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
+import { ChatFeed } from "../src/components/ChatFeed";
+import { createDelayedImproveFixture } from "./fixtures/delayedImprove";
+import { createAssistantMessage } from "../src/conversation/conversationState";
 
 function createProps(overrides = {}) {
   return {
@@ -97,7 +90,7 @@ describe("Extension improve request behavior", () => {
   });
 
   test("initial and ask follow-up cancellation immediately restores input and ignores a late response", async () => {
-    const request = deferred();
+    const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     const props = createProps();
     const { result } = renderHook(() => useConversation(props));
@@ -127,7 +120,7 @@ describe("Extension improve request behavior", () => {
   });
 
   test("guest edited resend uses a signal and restores the edited prompt when cancelled", async () => {
-    const request = deferred();
+    const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     const { result } = renderHook(() => useConversation(createProps()));
     const userMessage = { id: "user-1", role: "user", content: "old" };
@@ -149,7 +142,7 @@ describe("Extension improve request behavior", () => {
   });
 
   test("logged-in edited resend uses the same cancellable lifecycle", async () => {
-    const request = deferred();
+    const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     api.getThreads.mockResolvedValue([]);
     const props = createProps({ authSession: { accessToken: "token" } });
@@ -177,7 +170,7 @@ describe("Extension improve request behavior", () => {
       status: 503,
       code: "AI_SERVICE_UNAVAILABLE",
     }));
-    const nextRequest = deferred();
+    const nextRequest = createDelayedImproveFixture();
     api.improve.mockReturnValueOnce(nextRequest.promise);
     const { result } = renderHook(() => useConversation(createProps()));
 
@@ -198,7 +191,7 @@ describe("Extension improve request behavior", () => {
   });
 
   test("closing the side panel aborts the active request and rejects its late response", async () => {
-    const request = deferred();
+    const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     const { result, unmount } = renderHook(() => useConversation(createProps()));
 
@@ -226,6 +219,67 @@ describe("Extension clarification UI", () => {
       composerRef: { current: { focus } },
     }));
     await waitFor(() => expect(focus).toHaveBeenCalledOnce());
+  });
+
+  test("a delayed fixture exposes cancellation and permits an immediate resend", async () => {
+    globalThis.HTMLElement.prototype.scrollTo = vi.fn();
+    const firstRequest = createDelayedImproveFixture();
+    api.improve
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockResolvedValueOnce(improveResponse("second response"));
+    const props = createProps();
+    const { result } = renderHook(() => useConversation(props));
+
+    act(() => result.current.setComposerValue("first prompt"));
+    let firstSubmission;
+    act(() => { firstSubmission = result.current.submitPrompt(); });
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+
+    render(createElement(ChatFeed, {
+      messages: result.current.messages,
+      isLoading: result.current.isLoading,
+      copiedId: null,
+      canEditUserMessages: true,
+      editingMessageId: null,
+      editingDraft: "",
+      onCopy() {}, onSave() {}, onExecute() {}, onStartEdit() {}, onChangeEditDraft() {},
+      onCancelEdit() {}, onSubmitEdit() {}, onCancelRequest: result.current.cancelImproveRequest,
+      onSelectExample() {},
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "요청 취소" }));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.composerValue).toBe("first prompt");
+
+    act(() => result.current.setComposerValue("second prompt"));
+    await act(async () => { await result.current.submitPrompt(); });
+    expect(api.improve).toHaveBeenCalledTimes(2);
+    expect(result.current.messages.some((message) => message.content === "second response")).toBe(true);
+
+    firstRequest.resolve(improveResponse("late first response"));
+    await act(async () => { await firstSubmission; });
+    expect(result.current.messages.some((message) => message.content === "late first response")).toBe(false);
+  });
+
+  test("an unchanged no-evidence result renders guidance without an empty action area", () => {
+    globalThis.HTMLElement.prototype.scrollTo = vi.fn();
+    const message = createAssistantMessage("same prompt", {
+      mode: "improve",
+      improvedPrompt: "same prompt",
+      ragStatus: "no_evidence",
+    });
+    const { container } = render(createElement(ChatFeed, {
+      messages: [message],
+      isLoading: false,
+      copiedId: null,
+      canEditUserMessages: true,
+      editingMessageId: null,
+      editingDraft: "",
+      onCopy() {}, onSave() {}, onExecute() {}, onStartEdit() {}, onChangeEditDraft() {},
+      onCancelEdit() {}, onSubmitEdit() {}, onCancelRequest() {}, onSelectExample() {},
+    }));
+
+    expect(screen.getByText("적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.")).toBeTruthy();
+    expect(container.querySelector(".card-actions")).toBeNull();
   });
 
   test("ask guidance labels required questions and points the composer at the answer", () => {

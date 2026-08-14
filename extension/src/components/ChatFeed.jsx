@@ -106,6 +106,7 @@ function MessageCard({
   const isAssistant = message.role === "assistant";
   const isAsk = message.mode === "ask";
   const actionVisibility = getMessageActionVisibility(message);
+  const hasActions = Object.values(actionVisibility).some(Boolean);
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;
@@ -170,7 +171,7 @@ function MessageCard({
             )}
           </div>
         )}
-        {isAssistant && !message.isError && !message.isCancelled && (
+        {isAssistant && !message.isError && !message.isCancelled && hasActions && (
           <div className="card-actions">
             {actionVisibility.copy && <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "\uBCF5\uC0AC\uB428" : "\uBCF5\uC0AC"} onClick={() => onCopy(message)} />}
             {actionVisibility.save && <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />}

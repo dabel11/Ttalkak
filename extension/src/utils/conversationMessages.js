@@ -20,6 +20,24 @@ export function buildAskMessage(data) {
   return data.answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다.";
 }
 
+export function normalizePromptForComparison(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isUnchangedNoEvidence(prompt, data) {
+  if (String(data?.ragStatus || "").toLowerCase() !== "no_evidence") return false;
+  const source = normalizePromptForComparison(prompt);
+  const result = normalizePromptForComparison(getExecutablePrompt(data) || data?.answer);
+  return Boolean(source && result && source === result);
+}
+
+export function buildUnchangedNoEvidenceMessage() {
+  return "적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.";
+}
+
 export function hasPromptPlaceholders(text) {
   return /\[[^\]\n]{1,80}\]/.test(String(text || ""));
 }

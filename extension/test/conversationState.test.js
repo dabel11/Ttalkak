@@ -18,12 +18,25 @@ test("conversation state preserves no-evidence status for assistant rendering", 
   const message = createAssistantMessage("draft", {
     mode: "improve",
     improvedPrompt: "fallback result",
-    ragStatus: "no_evidence",
+    ragStatus: "NO_EVIDENCE",
   });
 
   assert.equal(message.ragStatus, "no_evidence");
   assert.equal(message.content, "fallback result");
   assert.equal(message.executablePrompt, "fallback result");
+  assert.equal(message.excludeFromHistory, true);
+});
+
+test("unchanged no-evidence results explain the outcome and expose no actions", () => {
+  const message = createAssistantMessage("  신규 서비스 안내문  ", {
+    mode: "improve",
+    improvedPrompt: "신규   서비스 안내문",
+    ragStatus: "no_evidence",
+  });
+
+  assert.equal(message.isUnchanged, true);
+  assert.equal(message.executablePrompt, null);
+  assert.equal(message.content, "적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.");
   assert.equal(message.excludeFromHistory, true);
 });
 

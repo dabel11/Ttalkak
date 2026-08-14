@@ -1,5 +1,11 @@
 // @ts-check
-import { buildAskMessage, buildNoEvidenceMessage, getExecutablePrompt } from "../utils/conversationMessages.js";
+import {
+  buildAskMessage,
+  buildNoEvidenceMessage,
+  buildUnchangedNoEvidenceMessage,
+  getExecutablePrompt,
+  isUnchangedNoEvidence,
+} from "../utils/conversationMessages.js";
 import { isAskResponse } from "./askAnswers.js";
 
 export function createUserMessage(prompt, base = {}) {
@@ -8,14 +14,24 @@ export function createUserMessage(prompt, base = {}) {
 
 export function createAssistantMessage(prompt, data) {
   const isAsk = isAskResponse(data);
-  const noEvidence = data.ragStatus === "no_evidence";
+  const ragStatus = String(data.ragStatus || "").toLowerCase();
+  const noEvidence = ragStatus === "no_evidence";
+  const unchangedNoEvidence = !isAsk && isUnchangedNoEvidence(prompt, data);
+  const executablePrompt = isAsk || unchangedNoEvidence ? null : getExecutablePrompt(data);
   return {
     id: `assistant-${Date.now()}`, role: "assistant", mode: isAsk ? "ask" : data.mode || "improve",
-    content: isAsk ? buildAskMessage(data) : noEvidence ? buildNoEvidenceMessage(prompt, data) : data.improvedPrompt || data.answer,
+    content: isAsk
+      ? buildAskMessage(data)
+      : unchangedNoEvidence
+        ? buildUnchangedNoEvidenceMessage()
+        : noEvidence
+          ? buildNoEvidenceMessage(prompt, data)
+          : data.improvedPrompt || data.answer,
     answer: data.answer || "", questions: data.questions || [], changes: data.changes || [], fields: data.fields || [],
     techniques: data.techniques || data.techniquesApplied || [], summary: data.summary || "",
-    ragStatus: data.ragStatus || "",
-    executablePrompt: isAsk ? null : getExecutablePrompt(data), sourcePrompt: prompt, sources: data.sources || [], saved: false,
+    ragStatus,
+    executablePrompt, sourcePrompt: prompt, sources: data.sources || [], saved: false,
+    ...(unchangedNoEvidence ? { isUnchanged: true } : {}),
     ...(noEvidence ? { excludeFromHistory: true } : {}),
   };
 }
