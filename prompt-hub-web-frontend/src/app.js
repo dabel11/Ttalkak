@@ -539,7 +539,7 @@ const promptEngagementController = createPromptEngagementController({
   deleteCommentState,
   refreshAdmin: (options) => adminRuntime.call("controller", "refreshAdminAfterMutation", undefined, [options], { defer: true }),
 });
-const hydratePromptComments = (...args) => promptEngagementController.hydratePromptComments(...args);
+const hydratePromptComments = promptEngagementController.hydratePromptComments;
 const syncPromptCommentCount = commentRepository.syncCount;
 const findPromptIdByCommentId = commentRepository.findPromptId;
 const getPromptComments = commentRepository.getPromptComments;
@@ -583,7 +583,7 @@ const shareRuntime = createLazyRuntimeFacade({
     const controller = createShareController({
       state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
       escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
-      hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: (...args) => promptWorkflows.removePromptById(...args),
+      hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: promptWorkflows.removePromptById,
       handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
       applyShared: applySharedPromptState, notice: showNotice,
     });
@@ -634,7 +634,7 @@ const adminRuntime = createLazyRuntimeFacade({
       matchesAdminPromptFilter, matchesAdminPromptQuery, canUseDemoFallback, formatNumber, getReportStatusLabel,
       escapeHtml, escapeAttr, getAdminTagStatusLabel, getTagStats, getAdminPromptsByTag, PromptCard,
       normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, getSortedPromptComments,
-      normalizeAdminSearchText, getAdminUserActivity, getAdminKnownMemberId: (...args) => controller.getAdminKnownMemberId(...args),
+      normalizeAdminSearchText, getAdminUserActivity, getAdminKnownMemberId: controller.getAdminKnownMemberId,
       getIcons: () => icons, getRevisionRequestTarget, getAuthorRevisionStatusLabel,
       AdminRevisionRequestModalView, truncateText, AdminUserBlockDialog, formatShortDate,
       getAdminTagStatusClass, getPromptCommentCount, getPromptCreatedAt, getPromptLikes,
@@ -763,7 +763,7 @@ const promptWorkflows = createPromptWorkflows({
   findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId,
   hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext,
   getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState,
-  makeRevisionRequestKey: (...args) => makeRevisionRequestKey(...args), removePromptByIdState,
+  makeRevisionRequestKey, removePromptByIdState,
   refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag,
   parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState,
   applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE,

@@ -1,46 +1,31 @@
-  const REQUIRED_METHODS = Object.freeze([
-    "login", "signup", "googleLogin", "findId", "requestPasswordReset", "withdrawAccount", "checkUserId", "checkNickname",
-    "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "proposeTag", "viewPrompt", "improvePrompt",
-    "savePrompt", "unsavePrompt", "likePrompt", "unlikePrompt",
-    "getMakeThreads", "getMakeThread", "getMakeFolders", "createMakeThread",
-    "deleteMakeThread", "createMakeFolder", "updateMakeFolder", "deleteMakeFolder", "moveMakeThread",
-    "sharePrompt", "shareExistingPrompt", "updatePrompt", "deletePrompt", "unsharePrompt", "reportPrompt", "reportComment",
-    "getPromptComments", "addComment", "addReply", "updateComment", "deleteComment", "likeComment", "unlikeComment",
-    "getSavedPrompts", "getMyLibrary", "getMyPrompts", "getMyComments", "getMyReports", "getMyRevisionRequests", "requestPromptRevision",
-    "getAdminReports", "updateAdminReportStatus", "getAdminPrompts", "getAdminTags", "updateAdminTagStatus",
-    "searchAdminUsers", "getAdminUserActivity", "blockAdminUser", "unblockAdminUser",
-    "getAdminUserActivitySummary", "getAdminUserPrompts", "getAdminUserComments", "getAdminUserReplies",
-    "getAdminUserSubmittedReports", "getAdminUserReceivedReports",
-    "getAdminAuditLogs", "getAdminRevisionRequests", "requestAuthorRevision", "updateAuthorRevisionRequest",
-    "updateAdminRevisionRequestStatus", "hideAdminComment", "unhideAdminComment", "deleteAdminComment",
-    "hideAdminPrompt", "restoreAdminPrompt",
-  ]);
-
-  const RESPONSE_CONTRACTS = Object.freeze({
-    login: "auth", signup: "auth", googleLogin: "auth", findId: "record", requestPasswordReset: "record",
-    withdrawAccount: "optional-record", checkUserId: "record", checkNickname: "record",
-    getCommunityPosts: "collection", searchCommunityPosts: "collection", getPopularTags: "collection", searchTags: "collection",
-    proposeTag: "record", viewPrompt: "optional-record", improvePrompt: "record",
-    savePrompt: "optional-record", unsavePrompt: "optional-record", likePrompt: "optional-record", unlikePrompt: "optional-record",
-    getMakeThreads: "collection", getMakeFolders: "collection", getMakeThread: "record",
-    createMakeThread: "record", createMakeFolder: "record", updateMakeFolder: "optional-record", moveMakeThread: "optional-record",
-    sharePrompt: "record", shareExistingPrompt: "record", updatePrompt: "record",
-    unsharePrompt: "optional-record", reportPrompt: "optional-record", reportComment: "optional-record",
-    deletePrompt: "optional-record", deleteMakeThread: "optional-record", deleteMakeFolder: "optional-record",
-    getPromptComments: "collection", addComment: "record", addReply: "record", updateComment: "record",
-    deleteComment: "optional-record", likeComment: "optional-record", unlikeComment: "optional-record",
-    getSavedPrompts: "collection", getMyLibrary: "collection", getMyPrompts: "collection", getMyComments: "collection",
-    getMyReports: "collection", getMyRevisionRequests: "collection", requestPromptRevision: "record",
-    getAdminReports: "collection", getAdminPrompts: "collection", getAdminTags: "collection",
-    searchAdminUsers: "collection", getAdminAuditLogs: "collection", getAdminRevisionRequests: "collection",
-    getAdminUserActivitySummary: "record", getAdminUserPrompts: "collection", getAdminUserComments: "collection",
-    getAdminUserReplies: "collection", getAdminUserSubmittedReports: "collection", getAdminUserReceivedReports: "collection",
-    getAdminUserActivity: "record", blockAdminUser: "record", unblockAdminUser: "record",
-    updateAdminReportStatus: "record", updateAdminTagStatus: "record", requestAuthorRevision: "record",
-    updateAuthorRevisionRequest: "record", updateAdminRevisionRequestStatus: "record",
-    hideAdminComment: "record", unhideAdminComment: "record", hideAdminPrompt: "record", restoreAdminPrompt: "record",
-    deleteAdminComment: "optional-record",
+  const CONTRACT_METHODS = Object.freeze({
+    auth: ["login", "signup", "googleLogin"],
+    record: [
+      "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
+      "getMakeThread", "createMakeThread", "createMakeFolder", "sharePrompt", "shareExistingPrompt", "updatePrompt",
+      "addComment", "addReply", "updateComment", "requestPromptRevision", "getAdminUserActivitySummary",
+      "getAdminUserActivity", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
+      "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
+      "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
+    ],
+    collection: [
+      "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
+      "getPromptComments", "getSavedPrompts", "getMyLibrary", "getMyPrompts", "getMyComments", "getMyReports",
+      "getMyRevisionRequests", "getAdminReports", "getAdminPrompts", "getAdminTags", "searchAdminUsers",
+      "getAdminAuditLogs", "getAdminRevisionRequests", "getAdminUserPrompts", "getAdminUserComments", "getAdminUserReplies",
+      "getAdminUserSubmittedReports", "getAdminUserReceivedReports",
+    ],
+    "optional-record": [
+      "withdrawAccount", "viewPrompt", "savePrompt", "unsavePrompt", "likePrompt", "unlikePrompt", "updateMakeFolder",
+      "moveMakeThread", "unsharePrompt", "reportPrompt", "reportComment", "deletePrompt", "deleteMakeThread",
+      "deleteMakeFolder", "deleteComment", "likeComment", "unlikeComment", "deleteAdminComment",
+    ],
   });
+
+  const RESPONSE_CONTRACTS = Object.freeze(Object.fromEntries(
+    Object.entries(CONTRACT_METHODS).flatMap(([contract, methods]) => methods.map((method) => [method, contract])),
+  ));
+  const REQUIRED_METHODS = Object.freeze(Object.keys(RESPONSE_CONTRACTS));
 
   function assertApiContract(api) {
     if (!api || typeof api !== "object") throw new TypeError("TTALKAK_API must be an object.");
