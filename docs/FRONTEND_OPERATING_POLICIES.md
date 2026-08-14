@@ -19,6 +19,8 @@ Complete every `TBD` before a production release. Values containing credentials 
 | Extension production command | PowerShell: `$env:VITE_BACKEND_API_URL='https://...'; npm run build:prod`<br>POSIX: `VITE_BACKEND_API_URL=https://... npm run build:prod` | Extension | `dist-prod` policy check |
 | Post-release smoke | See `WEB_STORE_RELEASE_CHECKLIST.md` | Release owner | Signed checklist |
 
+Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks both public pages; and performs an exact-origin credentialed CORS preflight. Development IDs and placeholder hosts never count as release evidence.
+
 ## 2. API change procedure
 
 An AI/backend response change is ready for frontend implementation only after the following sequence is satisfied:
@@ -100,6 +102,7 @@ Enabling a remote sink requires a separate reviewed change that records its owne
 - Remote retention: 0 days because no remote events are sent.
 - User disclosure: not required for disabled collection; it becomes mandatory before activation.
 - The local aggregate event is an integration boundary only and must not be forwarded by deployment code without that review.
+- Web and Extension Make flows emit only content-free local outcome records for `IMPROVED`, `ASK`, `NO_EVIDENCE`, `UNCHANGED_NO_EVIDENCE`, cancellation, timeout, AI failure, and contract failure. These records contain classification, status, elapsed time, retryability, and timestamp only; they do not constitute remote collection.
 
 ## 6. Supported frontend scope
 

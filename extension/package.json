@@ -18,6 +18,8 @@
     "build": "npm run build:dev",
     "build:prod": "node scripts/build-extension.mjs prod",
     "build:verify": "node scripts/build-extension.mjs verify",
+    "release:check": "node scripts/check-release-readiness.mjs",
+    "release:prepare": "npm run verify && npm run build:prod && npm run release:check",
     "preview": "vite preview --mode development --host 127.0.0.1"
   },
   "dependencies": {

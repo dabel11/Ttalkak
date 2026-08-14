@@ -55,6 +55,7 @@ docs/*
 !docs/prompt-improve-contract.schema.json
 !docs/FRONTEND_OPERATING_POLICIES.md
 !docs/WEB_STORE_RELEASE_CHECKLIST.md
+!docs/WEB_STORE_RELEASE_RECORD_TEMPLATE.md
 !docs/ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md
 !docs/smoke-results/
 !docs/smoke-results/*.md
