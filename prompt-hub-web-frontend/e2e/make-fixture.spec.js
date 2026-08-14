@@ -145,6 +145,26 @@ test("required answers are validated and a complete answer transitions to improv
   await expect(page.locator("[data-execute-message]")).toHaveCount(1);
 });
 
+test("unchanged no-evidence response explains the outcome without result actions", async ({ page }) => {
+  const prompt = "Create a detailed product launch strategy";
+  await openMake(page, [], {}, async (route) => {
+    const payload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: payload.prompt, ragStatus: "no_evidence" }),
+    });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.getByText("적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.")).toBeVisible();
+  await expect(page.locator(".message-evidence-notice")).toBeVisible();
+  await expect(page.locator(".message-result-prompt")).toHaveCount(0);
+  await expect(page.locator(".message-actions")).toHaveCount(0);
+});
+
 test("legacy questions migrate, empty messages disappear, and restored data survives reload", async ({ page }) => {
   const legacyMessages = [
     { id: "legacy-question", role: "assistant", type: "question", answer: "Please clarify\n- **Audience**: Who is the audience?" },

@@ -133,6 +133,25 @@ test("shared response normalization covers fields changes techniques and executa
   assert.equal(model.isExecutableMessage(result), true);
 });
 
+test("shared no-evidence policy marks unchanged results as non-executable", () => {
+  const result = model.normalizeImproveResponse({
+    mode: "improve",
+    improvedPrompt: "신규   서비스 안내문",
+    ragStatus: "NO_EVIDENCE",
+  }, "  신규 서비스 안내문  ");
+
+  assert.equal(result.ragStatus, "no_evidence");
+  assert.equal(result.isUnchanged, true);
+  assert.equal(result.excludeFromHistory, true);
+  assert.equal(result.improvedPrompt, "");
+  assert.equal(result.text, model.UNCHANGED_NO_EVIDENCE_MESSAGE);
+  assert.equal(model.isExecutableMessage(result), false);
+  assert.deepEqual(model.buildImproveHistory([
+    { role: "user", content: "신규 서비스 안내문" },
+    { role: "assistant", ...result, content: result.text },
+  ]), [{ role: "user", content: "신규 서비스 안내문" }]);
+});
+
 test("shared compatibility fixtures normalize consistently in the web client", () => {
   for (const name of ["missingOptionalFields", "unknownAdditionalField", "emptyCollections", "noEvidence"]) {
     const result = model.normalizeImproveResponse(fixtures[name]);

@@ -16,7 +16,7 @@ export function createAssistantMessage(prompt, data) {
   const isAsk = isAskResponse(data);
   const ragStatus = String(data.ragStatus || "").toLowerCase();
   const noEvidence = ragStatus === "no_evidence";
-  const unchangedNoEvidence = !isAsk && isUnchangedNoEvidence(prompt, data);
+  const unchangedNoEvidence = !isAsk && Boolean(data.isUnchanged || isUnchangedNoEvidence(prompt, data));
   const executablePrompt = isAsk || unchangedNoEvidence ? null : getExecutablePrompt(data);
   return {
     id: `assistant-${Date.now()}`, role: "assistant", mode: isAsk ? "ask" : data.mode || "improve",

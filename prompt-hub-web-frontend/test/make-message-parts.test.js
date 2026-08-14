@@ -106,6 +106,23 @@ test("ask messages hide copy and execute actions", () => {
   assert.doesNotMatch(html, /data-execute-message/);
 });
 
+test("unchanged no-evidence results render guidance without result actions", () => {
+  const result = messageModel.normalizeImproveResponse({
+    mode: "improve",
+    improvedPrompt: "same prompt",
+    ragStatus: "no_evidence",
+  }, "same prompt");
+  const html = MessageBubbleView({
+    icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
+    escapeAttr,
+    escapeHtml,
+  }, { id: "assistant-unchanged", role: "assistant", ...result, content: result.text, hasExecutablePrompt: messageModel.isExecutableMessage(result) });
+
+  assert.match(html, new RegExp(messageModel.UNCHANGED_NO_EVIDENCE_MESSAGE));
+  assert.match(html, /evidence-notice/);
+  assert.doesNotMatch(html, /message-result-prompt|message-actions|data-execute-message/);
+});
+
 test("thinking messages expose an accessible request cancellation control", () => {
   const html = MakeFeedView({ icons: { make: "make", send: "send" } }, {
     hasMessages: true,

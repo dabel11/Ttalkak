@@ -1,5 +1,10 @@
 import { EXAMPLE_QUERIES } from "../constants.js";
-import { classifyMakeError, isExecutableMessage } from "../../../shared/make-message-model.js";
+import {
+  classifyMakeError,
+  isExecutableMessage,
+  isUnchangedNoEvidence,
+  UNCHANGED_NO_EVIDENCE_MESSAGE,
+} from "../../../shared/make-message-model.js";
 
 export function buildNoEvidenceMessage(prompt, data) {
   const executablePrompt = getExecutablePrompt(data);
@@ -20,22 +25,10 @@ export function buildAskMessage(data) {
   return data.answer || "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다.";
 }
 
-export function normalizePromptForComparison(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function isUnchangedNoEvidence(prompt, data) {
-  if (String(data?.ragStatus || "").toLowerCase() !== "no_evidence") return false;
-  const source = normalizePromptForComparison(prompt);
-  const result = normalizePromptForComparison(getExecutablePrompt(data) || data?.answer);
-  return Boolean(source && result && source === result);
-}
+export { isUnchangedNoEvidence };
 
 export function buildUnchangedNoEvidenceMessage() {
-  return "적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.";
+  return UNCHANGED_NO_EVIDENCE_MESSAGE;
 }
 
 export function hasPromptPlaceholders(text) {

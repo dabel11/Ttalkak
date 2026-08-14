@@ -75,7 +75,7 @@
     if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
-    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt });
+    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
     if (ctx.shouldSync()) { const refreshed = await ctx.refreshThread(threadId); if (!refreshed) ctx.render(); if (result.mode === "ask") ctx.focusAsk(); return; }
@@ -156,7 +156,7 @@
     if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
-    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue });
+    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
