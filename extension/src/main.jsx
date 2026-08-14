@@ -121,6 +121,16 @@ function App() {
     });
   }
 
+  function handleRefineUnchanged(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return;
+    setComposerValue(prompt);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
+    });
+  }
+
   return (
     <main className="extension-frame" aria-label="TTALKAK Chrome extension">
       <section className="extension-shell">
@@ -167,6 +177,7 @@ function App() {
               if (!cancelImproveRequest()) return;
               requestAnimationFrame(() => composerRef.current?.focus());
             }}
+            onRefineUnchanged={handleRefineUnchanged}
             onSelectExample={handleSelectExample}
           />
           <Composer

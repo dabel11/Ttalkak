@@ -2447,6 +2447,41 @@ h1 {
   outline-offset: 2px;
 }
 
+.unchanged-followup {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.unchanged-followup button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid rgba(18, 63, 52, 0.2);
+  border-radius: 999px;
+  background: var(--soft-green);
+  color: var(--brand-green);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.unchanged-followup button:hover {
+  border-color: rgba(18, 63, 52, 0.36);
+  background: #e4f0ea;
+}
+
+.unchanged-followup button:focus-visible {
+  outline: 2px solid rgba(18, 63, 52, 0.38);
+  outline-offset: 2px;
+}
+
+.unchanged-followup small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .message-question-section,
 .ask-answer-form {
   display: grid;

@@ -55,8 +55,8 @@ test("an external abort remains a cancellation even when the timeout callback ru
   assert.ok(cancellation, "the cancelled request must emit an observability record");
   assert.notEqual(cancellation, previousCancellation, "the current request must emit a new cancellation record");
   assert.deepEqual(
-    { code: cancellation.code, kind: cancellation.kind, outcome: cancellation.outcome, retryable: cancellation.retryable },
-    { code: "REQUEST_ABORTED", kind: "cancel", outcome: "cancel", retryable: false },
+    { code: cancellation.code, kind: cancellation.kind, outcome: cancellation.outcome, level: cancellation.level, retryable: cancellation.retryable },
+    { code: "REQUEST_ABORTED", kind: "cancel", outcome: "cancel", level: "info", retryable: false },
   );
 });
 

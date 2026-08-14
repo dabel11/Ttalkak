@@ -19,6 +19,7 @@ export function ChatFeed({
   onCancelEdit,
   onSubmitEdit,
   onCancelRequest,
+  onRefineUnchanged,
   onSelectExample,
 }) {
   const isEmpty = messages.length === 0 && !isLoading;
@@ -50,6 +51,7 @@ export function ChatFeed({
               onChangeEditDraft={onChangeEditDraft}
               onCancelEdit={onCancelEdit}
               onSubmitEdit={onSubmitEdit}
+              onRefineUnchanged={onRefineUnchanged}
               key={message.id}
             />
           ))}
@@ -102,6 +104,7 @@ function MessageCard({
   onChangeEditDraft,
   onCancelEdit,
   onSubmitEdit,
+  onRefineUnchanged,
 }) {
   const isAssistant = message.role === "assistant";
   const isAsk = message.mode === "ask";
@@ -176,6 +179,14 @@ function MessageCard({
             {actionVisibility.copy && <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "\uBCF5\uC0AC\uB428" : "\uBCF5\uC0AC"} onClick={() => onCopy(message)} />}
             {actionVisibility.save && <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />}
             {actionVisibility.execute && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
+          </div>
+        )}
+        {isAssistant && message.isUnchanged && (
+          <div className="unchanged-followup">
+            <button type="button" onClick={() => onRefineUnchanged(message)}>
+              내용을 구체화하기
+            </button>
+            <small>대상, 목적, 형식처럼 필요한 조건을 덧붙여 보세요.</small>
           </div>
         )}
         {canEdit && !isEditing && (

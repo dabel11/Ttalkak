@@ -1675,7 +1675,23 @@ function bindDelegatedMakeEvents() {
       setPendingScroll: (id) => { pendingMessageScrollId = id; },
       autosize: autosizeTextarea, submitComposer: submitMakeComposer, submitPrompt: submitMakePrompt,
       cancelRequest: cancelActiveMakeRequest,
+      refineUnchanged: (messageId) => {
+        const message = state.messages.find((item) => item.id === messageId && item.role === "assistant" && item.isUnchanged);
+        const prompt = String(message?.sourcePrompt || "").trim();
+        if (!prompt) return;
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        render();
+        window.setTimeout(() => {
+          const input = document.querySelector('[data-composer] textarea[name="prompt"]');
+          input?.focus();
+          input?.setSelectionRange?.(prompt.length, prompt.length);
+        }, 0);
+      },
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
+      reportRetry: () => modules.observability.report(new Error("User retried Make request"), {
+        area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
+        status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,
+      }),
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
       applyTemplate, toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
@@ -1743,6 +1759,17 @@ function getMakeControllerContext() {
     improve: improvePromptWithBackend,
     recover: (options) => recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), options),
     classifyError: makeMessageModel.classifyMakeError,
+    reportOutcome: (result, durationMs) => modules.observability.reportOutcome({
+      area: "make",
+      action: "improve",
+      kind: "result",
+      code: result?.isUnchanged
+        ? "UNCHANGED_NO_EVIDENCE"
+        : String(result?.ragStatus || "").toLowerCase() === "no_evidence"
+          ? "NO_EVIDENCE"
+          : result?.mode === "ask" ? "ASK" : "IMPROVED",
+      durationMs,
+    }),
     setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
     handleError: handleBackendAccessError,
     renderCancellation: () => {

@@ -41,6 +41,7 @@
     const userMessageId = `user-${now}`;
     const assistantMessageId = `make-${now}`;
     const history = ctx.buildHistory(ctx.state.messages);
+    const startedAt = Date.now();
     const signal = ctx.startRequest();
     ctx.setDraft("");
     ctx.appendUser(threadId, { id: userMessageId, role: "user", content: prompt });
@@ -75,6 +76,7 @@
     if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
+    ctx.reportOutcome?.(result, Date.now() - startedAt);
     ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
@@ -93,6 +95,7 @@
     const now = Date.now();
     const threadId = ctx.getActiveThreadId() || `thread-${now}`;
     const history = ctx.buildHistory(ctx.getMessages().slice(0, index));
+    const startedAt = Date.now();
     const signal = ctx.startRequest();
     if (ctx.shouldSync()) {
       if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
@@ -100,9 +103,10 @@
       ctx.queueScroll(messageId);
       ctx.render();
       try {
-        await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", signal });
+        const result = await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", signal });
         if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
         ctx.setThinking(false);
+        ctx.reportOutcome?.(result, Date.now() - startedAt);
         ctx.clearEditing();
         const refreshed = await ctx.refreshThread(threadId);
         if (!refreshed) ctx.render();
@@ -156,6 +160,7 @@
     if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
+    ctx.reportOutcome?.(result, Date.now() - startedAt);
     ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);

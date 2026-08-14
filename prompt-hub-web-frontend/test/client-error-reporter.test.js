@@ -85,3 +85,36 @@ test("observability bridge exposes only aggregate metadata and isolates listener
   assert.equal(JSON.stringify(events[0]).includes("private"), false);
   assert.equal(JSON.stringify(events[0]).includes("secret"), false);
 });
+
+test("successful Make outcomes expose content-free aggregate metadata", async () => {
+  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const target = new EventTarget();
+  const events = [];
+  target.addEventListener("ttalkak:observability", (event) => { events.push(event.detail); });
+  const reporter = createClientErrorReporter({ sink: createObservabilityEventSink(target), now: () => 88 });
+  const record = reporter.reportOutcome({
+    area: "make", action: "improve", kind: "result", code: "UNCHANGED_NO_EVIDENCE",
+    durationMs: 321.4, prompt: "must not escape", history: ["must not escape"], token: "must not escape",
+  });
+  assert.equal(record.outcome, "success");
+  assert.equal(record.level, "info");
+  assert.equal(record.retryable, false);
+  assert.equal(record.durationMs, 321);
+  assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
+  assert.equal(JSON.stringify(events[0]).includes("must not escape"), false);
+});
+
+test("actual retry interactions expose no prompt or conversation content", async () => {
+  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const target = new EventTarget();
+  const events = [];
+  target.addEventListener("ttalkak:observability", (event) => events.push(event.detail));
+  const reporter = createClientErrorReporter({ sink: createObservabilityEventSink(target), now: () => 99 });
+  reporter.report(new Error("User retried Make request"), {
+    area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
+    outcome: "retry", level: "info", retryable: false, prompt: "secret", history: ["secret"],
+  });
+  assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
+  assert.equal(events[0].outcome, "retry");
+  assert.equal(JSON.stringify(events[0]).includes("secret"), false);
+});

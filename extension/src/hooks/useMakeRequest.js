@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { requestPromptImprove } from "../api/prompts";
 import { createCancelledMessage, createImproveRequestCoordinator } from "../utils/improveRequestLifecycle";
+import { reportMakeFailure, reportMakeOutcome } from "../utils/makeOutcomeMetrics";
 
 export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, showNotice }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +19,7 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
   function begin(prompt, options = {}) {
     requestInFlight.current = true;
     const request = coordinator.start();
-    activeContext.current = { request, prompt, ...options };
+    activeContext.current = { request, prompt, startedAt: Date.now(), ...options };
     setIsLoading(true);
     setRagStatus("checking");
     return request;
@@ -46,6 +47,10 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
     const request = coordinator.cancel();
     if (!request) return false;
     const context = activeContext.current || {};
+    reportMakeFailure(
+      Object.assign(new Error("Request aborted"), { code: "REQUEST_ABORTED" }),
+      Date.now() - Number(context.startedAt || Date.now()),
+    );
     handleCancellation(request, context.prompt || "", context);
     finish(request);
     return true;
@@ -56,9 +61,11 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
     try {
       const data = await requestPromptImprove(ragConfig, payload, { signal: request.controller.signal });
       if (!coordinator.canAcceptResult(request)) return undefined;
+      reportMakeOutcome(prompt, data, Date.now() - Number(activeContext.current?.startedAt || Date.now()));
       return await onSuccess?.(data, request);
     } catch (error) {
       if (!coordinator.isCurrent(request)) return undefined;
+      reportMakeFailure(error, Date.now() - Number(activeContext.current?.startedAt || Date.now()));
       if (error?.code === "REQUEST_ABORTED") {
         handleCancellation(request, prompt, { restoreComposer });
         return undefined;

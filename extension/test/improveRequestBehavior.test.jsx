@@ -90,6 +90,9 @@ describe("Extension improve request behavior", () => {
   });
 
   test("initial and ask follow-up cancellation immediately restores input and ignores a late response", async () => {
+    const metrics = [];
+    const collectMetric = (event) => metrics.push(event.detail);
+    globalThis.window.addEventListener("ttalkak:observability", collectMetric);
     const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     const props = createProps();
@@ -102,6 +105,10 @@ describe("Extension improve request behavior", () => {
     expect(api.improve.mock.calls[0][2].signal).toBeInstanceOf(AbortSignal);
 
     act(() => expect(result.current.cancelImproveRequest()).toBe(true));
+    expect(metrics.filter((metric) => metric.code === "REQUEST_ABORTED")).toHaveLength(1);
+    expect(metrics.find((metric) => metric.code === "REQUEST_ABORTED")).toMatchObject({
+      outcome: "cancel", retryable: false,
+    });
     expect(result.current.isLoading).toBe(false);
     expect(result.current.composerValue).toBe("follow-up answer");
     expect(props.showNotice).toHaveBeenCalledWith(
@@ -117,9 +124,14 @@ describe("Extension improve request behavior", () => {
     request.resolve(improveResponse("late response"));
     await act(async () => { await submission; });
     expect(result.current.messages.some((message) => message.content === "late response")).toBe(false);
+    expect(metrics.filter((metric) => metric.code === "REQUEST_ABORTED")).toHaveLength(1);
+    globalThis.window.removeEventListener("ttalkak:observability", collectMetric);
   });
 
   test("guest edited resend uses a signal and restores the edited prompt when cancelled", async () => {
+    const metrics = [];
+    const collectMetric = (event) => metrics.push(event.detail);
+    globalThis.window.addEventListener("ttalkak:observability", collectMetric);
     const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
     const { result } = renderHook(() => useConversation(createProps()));
@@ -131,6 +143,7 @@ describe("Extension improve request behavior", () => {
     let submission;
     act(() => { submission = result.current.submitEditedMessage({ preventDefault() {} }, "user-1"); });
     await waitFor(() => expect(api.improve).toHaveBeenCalledOnce());
+    expect(metrics.filter((metric) => metric.code === "USER_RETRY")).toHaveLength(1);
     expect(api.improve.mock.calls[0][2].signal).toBeInstanceOf(AbortSignal);
 
     act(() => result.current.cancelImproveRequest());
@@ -139,6 +152,7 @@ describe("Extension improve request behavior", () => {
     request.resolve(improveResponse("late guest response"));
     await act(async () => { await submission; });
     expect(result.current.messages.some((message) => message.content === "late guest response")).toBe(false);
+    globalThis.window.removeEventListener("ttalkak:observability", collectMetric);
   });
 
   test("logged-in edited resend uses the same cancellable lifecycle", async () => {
@@ -267,6 +281,7 @@ describe("Extension clarification UI", () => {
       improvedPrompt: "same prompt",
       ragStatus: "no_evidence",
     });
+    const onRefineUnchanged = vi.fn();
     const { container } = render(createElement(ChatFeed, {
       messages: [message],
       isLoading: false,
@@ -276,10 +291,13 @@ describe("Extension clarification UI", () => {
       editingDraft: "",
       onCopy() {}, onSave() {}, onExecute() {}, onStartEdit() {}, onChangeEditDraft() {},
       onCancelEdit() {}, onSubmitEdit() {}, onCancelRequest() {}, onSelectExample() {},
+      onRefineUnchanged,
     }));
 
     expect(screen.getByText("적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.")).toBeTruthy();
     expect(container.querySelector(".card-actions")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "내용을 구체화하기" }));
+    expect(onRefineUnchanged).toHaveBeenCalledWith(message);
   });
 
   test("ask guidance labels required questions and points the composer at the answer", () => {

@@ -163,6 +163,9 @@ test("unchanged no-evidence response explains the outcome without result actions
   await expect(page.locator(".message-evidence-notice")).toBeVisible();
   await expect(page.locator(".message-result-prompt")).toHaveCount(0);
   await expect(page.locator(".message-actions")).toHaveCount(0);
+  await page.getByRole("button", { name: "내용을 구체화하기" }).click();
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue(prompt);
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
 });
 
 test("legacy questions migrate, empty messages disappear, and restored data survives reload", async ({ page }) => {

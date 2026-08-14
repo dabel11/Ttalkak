@@ -159,7 +159,7 @@ interface TtalkakModuleRegistry {
   runtimeConfig: { apiBaseUrl: string; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
-  observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
+  observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
   state: { api: TtalkakStateModule; domains: Readonly<Record<string, TtalkakCallableModule>> };
 }
 interface TtalkakSavedState {

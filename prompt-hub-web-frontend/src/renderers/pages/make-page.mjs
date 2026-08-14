@@ -288,7 +288,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, canSplit, changes, content, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -329,6 +329,7 @@ import { parts } from "./make-message-parts.mjs";
           <article class="message assistant">
             ${evidenceSection}
             ${leadText ? `<p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>` : ""}
+            ${isUnchanged ? `<div class="unchanged-followup"><button type="button" data-refine-unchanged="${safeMessageId}">내용을 구체화하기</button><small>대상, 목적, 형식처럼 필요한 조건을 덧붙여 보세요.</small></div>` : ""}
             ${resultPrompt ? `<section class="message-result-prompt" aria-label="개선된 프롬프트"><strong>개선된 프롬프트</strong><div>${renderPromptTextWithPlaceholders(resultPrompt, escapeHtml)}</div></section>` : ""}
             ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
             ${fieldSection}

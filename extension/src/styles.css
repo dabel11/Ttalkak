@@ -684,6 +684,36 @@ button:disabled {
   padding: 14px 16px;
 }
 
+.unchanged-followup {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.unchanged-followup button {
+  justify-self: start;
+  border: 1px solid #b8d2c8;
+  border-radius: 999px;
+  background: #edf5f1;
+  color: #0b5143;
+  padding: 8px 13px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.unchanged-followup button:hover,
+.unchanged-followup button:focus-visible {
+  background: #dfeee8;
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px rgba(11, 81, 67, 0.16);
+}
+
+.unchanged-followup small {
+  color: #63736d;
+  line-height: 1.45;
+}
+
 .typing-message .cancel-request-button {
   width: auto;
   height: 28px;

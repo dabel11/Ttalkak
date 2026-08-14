@@ -128,6 +128,7 @@ export function createMakePageAdapter(ctx) {
         failureRetryable: !isAssistant && ctx.requestState.failedMessageId === message.id && Boolean(ctx.requestState.failure?.retryable),
         isSaved: isAssistant && ctx.isPromptSaved(message.id),
         isThinking: ctx.isThinking() || ctx.requestState.inFlight,
+        isUnchanged: Boolean(message.isUnchanged),
         mode: message.mode || "improve",
         questions: message.questions || [],
         ragStatus: message.ragStatus || "",

@@ -106,10 +106,15 @@ test("edited-message retry orchestration lives in the Make controller", async ()
     completeRequest: () => calls.push("complete"), finishEdit: (message) => calls.push(message.improvedPrompt),
     updateThread: () => {}, applyPendingThread: () => {}, syncThread: () => calls.push("sync"),
     notice: () => {}, focusAsk: () => {}, stopInFlight: () => {}, failRequest: () => {},
+    reportOutcome: (_result, durationMs) => calls.push(["outcome", durationMs]),
     classifyError: (error) => error, setBackendFailure: () => {}, handleError: () => {},
   };
   await makeController.resendEdited(ctx, "user-1", "after");
-  assert.deepEqual(calls, ["start", "apply", "thinking:true", "thinking:false", "complete", "after", "sync"]);
+  assert.equal(calls[0], "start");
+  assert.deepEqual(calls.slice(1, 5), ["apply", "thinking:true", "thinking:false", "complete"]);
+  assert.equal(calls[5][0], "outcome");
+  assert.equal(Number.isFinite(calls[5][1]), true);
+  assert.deepEqual(calls.slice(6), ["after", "sync"]);
 });
 
 test("route cancellation leaves a classified non-retryable Make message state", async () => {
@@ -258,4 +263,15 @@ test("Make event routing delegates the explicit request cancellation control", (
   const button = { dataset: {}, matches: (selector) => selector === "[data-cancel-make-request]" };
   handlers.click({ target: { closest: (selector) => selector.includes("[data-cancel-make-request]") ? button : null } });
   assert.deepEqual(calls, [["cancelRequest"]]);
+});
+
+test("Make event routing records an actual retry before resending", () => {
+  const calls = [];
+  const handlers = makeEvents.createDelegatedMakeHandlers({
+    state: { messages: [{ id: "user-1", role: "user", content: "retry me" }] }, maxFolders: 5,
+    actions: new Proxy({}, { get: (_target, key) => key === "guard" ? () => false : (...args) => calls.push([key, ...args]) }),
+  });
+  const button = { dataset: { retryMessage: "user-1" }, matches: (selector) => selector === "[data-retry-message]" };
+  handlers.click({ target: { closest: (selector) => selector.includes("[data-retry-message]") ? button : null } });
+  assert.deepEqual(calls, [["reportRetry"], ["resend", "user-1", "retry me"]]);
 });

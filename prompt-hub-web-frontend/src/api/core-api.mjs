@@ -69,7 +69,7 @@ const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
         throw timeoutError;
       }
       if (error?.name === "AbortError") {
-        clientErrorReporter.report(error, { area: "api", action: "request", kind: "cancel", code: "REQUEST_ABORTED", status: 0, durationMs: performance.now() - startedAt, outcome: "cancel", retryable: false });
+        clientErrorReporter.report(error, { area: "api", action: "request", kind: "cancel", code: "REQUEST_ABORTED", status: 0, durationMs: performance.now() - startedAt, outcome: "cancel", level: "info", retryable: false });
         throw Object.assign(new Error("요청이 취소되었습니다."), { status: 0, code: "REQUEST_ABORTED", cause: error });
       }
       const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : 0;

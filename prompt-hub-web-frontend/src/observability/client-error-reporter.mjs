@@ -30,8 +30,8 @@ function normalizeClientError(error, context = {}, now = Date.now) {
     code: context.code == null ? null : String(context.code),
     status: Number.isFinite(Number(context.status)) ? Number(context.status) : null,
     durationMs: Number.isFinite(Number(context.durationMs)) ? Math.max(0, Math.round(Number(context.durationMs))) : null,
-    outcome: ["failure", "retry", "cancel"].includes(String(context.outcome)) ? String(context.outcome) : "failure",
-    level: context.level === "warning" ? "warning" : "error",
+    outcome: ["success", "failure", "retry", "cancel"].includes(String(context.outcome)) ? String(context.outcome) : "failure",
+    level: ["info", "warning"].includes(String(context.level)) ? String(context.level) : "error",
     retryable: Boolean(context.retryable),
     timestamp: now(),
   });
@@ -67,7 +67,9 @@ function createClientErrorReporter({ sink = () => {}, now = Date.now, limit = 50
   }
   /** @param {string} area @param {string} action @param {unknown} error */
   const reportWarning = (area, action, error) => report(error, { area, action, level: "warning" });
-  return Object.freeze({ report, reportWarning, recent: () => records.slice() });
+  /** @param {Record<string, unknown>} context */
+  const reportOutcome = (context = {}) => report(new Error("Client outcome"), { ...context, outcome: "success", level: "info", retryable: false });
+  return Object.freeze({ report, reportOutcome, reportWarning, recent: () => records.slice() });
 }
 
 /** @param {Window | EventTarget} target @param {ReturnType<typeof createClientErrorReporter>} reporter */
@@ -86,7 +88,7 @@ function installGlobalErrorObservers(target, reporter) {
 const browserEventSink = createObservabilityEventSink(globalThis.window);
 const clientErrorReporter = createClientErrorReporter({
   sink: (record) => {
-    nativeConsoleWarn("[TTALKAK client error]", record);
+    if (record.level !== "info") nativeConsoleWarn("[TTALKAK client error]", record);
     browserEventSink(record);
   },
 });

@@ -120,6 +120,8 @@ test("unchanged no-evidence results render guidance without result actions", () 
 
   assert.match(html, new RegExp(messageModel.UNCHANGED_NO_EVIDENCE_MESSAGE));
   assert.match(html, /evidence-notice/);
+  assert.match(html, /data-refine-unchanged="assistant-unchanged"/);
+  assert.match(html, /내용을 구체화하기/);
   assert.doesNotMatch(html, /message-result-prompt|message-actions|data-execute-message/);
 });
 

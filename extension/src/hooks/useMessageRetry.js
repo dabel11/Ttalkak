@@ -6,6 +6,7 @@ import { getOrCreateSessionUuid } from "../storage/extensionStorage.js";
 import { isAuthExpiredError } from "../utils/apiErrors.js";
 import { getServerEditErrorMessage } from "../utils/conversationMessages.js";
 import { makeTitle } from "../utils/promptUtils.js";
+import { reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -45,6 +46,7 @@ export function useMessageRetry({
       }
       setEditingMessageId("");
       setEditingDraft("");
+      reportMakeRetry();
       return sendImproveRequest({
         ragConfig,
         prompt,
@@ -76,6 +78,7 @@ export function useMessageRetry({
     setMessages([...baseMessages, editedUserMessage]);
     setEditingMessageId("");
     setEditingDraft("");
+    reportMakeRetry();
 
     return sendImproveRequest({
       ragConfig,
