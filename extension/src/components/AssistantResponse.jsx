@@ -15,19 +15,28 @@ export function AssistantResponse({ message, isAsk }) {
   const questions = mergeImproveQuestions(message.questions, parsed.questions);
   const changes = mergeLists(message.changes, parsed.changes);
   const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
+  const detailCount = [message.fields, changes, techniques].reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
 
   return (
     <>
       {!isAsk && <EvidenceNotice ragStatus={message.ragStatus} />}
       {content && (
-        <p style={{ whiteSpace: "pre-wrap" }}>
+        <p className="assistant-result-prompt" style={{ whiteSpace: "pre-wrap" }}>
           <PromptText text={content} />
         </p>
       )}
-      <FieldList fields={message.fields} />
-      <ChangeList changes={changes} />
-      <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
-      <TechniqueList techniques={techniques} />
+      {isAsk ? (
+        <div className="assistant-details ask-details">
+          <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
+        </div>
+      ) : detailCount > 0 ? (
+        <details className="assistant-details response-details">
+          <summary>세부 정보 <em>{detailCount}</em></summary>
+          <FieldList fields={message.fields} />
+          <ChangeList changes={changes} />
+          <TechniqueList techniques={techniques} />
+        </details>
+      ) : null}
     </>
   );
 }

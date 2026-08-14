@@ -1,4 +1,4 @@
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createElement, Fragment } from "react";
 
@@ -26,6 +26,7 @@ import { AssistantResponse } from "../src/components/AssistantResponse";
 import { Composer } from "../src/components/Composer";
 import { useAskAnswers } from "../src/hooks/useAskAnswers";
 import { ChatFeed } from "../src/components/ChatFeed";
+import { RecentList } from "../src/components/SavedList";
 import { createDelayedImproveFixture } from "./fixtures/delayedImprove";
 import { createAssistantMessage } from "../src/conversation/conversationState";
 
@@ -59,6 +60,8 @@ function improveResponse(answer = "improved") {
 }
 
 afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
   api.improve.mockReset();
   api.getThread.mockReset();
   api.getThreads.mockReset();
@@ -67,6 +70,31 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("opening and clearing a restored recent thread keeps the active selection in conversation state", () => {
+    const { result } = renderHook(() => useConversation(createProps()));
+    const restored = { id: "restored-thread", messages: [{ id: "user-restored", role: "user", content: "restored" }] };
+
+    act(() => result.current.openRecentThread(restored));
+    expect(result.current.activeRecentId).toBe(restored.id);
+    expect(result.current.messages).toEqual(restored.messages);
+
+    act(() => result.current.startNewChat());
+    expect(result.current.activeRecentId).toBe("");
+  });
+
+  test("deleting an active numeric local recent thread clears its normalized selection and restored messages", () => {
+    const { result } = renderHook(() => useConversation(createProps()));
+    const restored = { id: 12, messages: [{ id: "user-restored", role: "user", content: "restored" }] };
+    let confirmation;
+
+    act(() => result.current.openRecentThread(restored));
+    act(() => result.current.requestDeleteRecentThread(restored.id, (value) => { confirmation = value; }));
+    act(() => confirmation.onConfirm());
+
+    expect(result.current.activeRecentId).toBe("");
+    expect(result.current.messages).toEqual([]);
+  });
+
   test("the actual improve API applies 90 seconds and composes the caller signal", async () => {
     const { requestPromptImprove: requestPromptImproveActual } = await vi.importActual("../src/api/prompts.js");
     const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
@@ -155,6 +183,40 @@ describe("Extension improve request behavior", () => {
     globalThis.window.removeEventListener("ttalkak:observability", collectMetric);
   });
 
+  test("guest edited resend creates and selects its new recent thread through the shared setter", async () => {
+    api.improve.mockResolvedValue(improveResponse("edited response"));
+    const { result } = renderHook(() => useConversation(createProps()));
+    const userMessage = { id: "user-new-thread", role: "user", content: "old" };
+
+    act(() => result.current.openPrompt({ messages: [userMessage] }));
+    act(() => result.current.startEditMessage(userMessage));
+    act(() => result.current.setEditingDraft("edited into a new thread"));
+    await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, userMessage.id); });
+
+    expect(result.current.activeRecentId).toMatch(/^thread-/);
+    expect(result.current.messages.at(-1)?.content).toBe("edited response");
+  });
+
+  test("server refresh canonicalizes the selected recent thread through the shared setter", async () => {
+    api.improve.mockResolvedValue(improveResponse("server edited response"));
+    api.getThreads.mockResolvedValue([]);
+    api.getThread.mockResolvedValue({
+      id: "server-record",
+      serverId: "44",
+      messages: [{ id: "server-user", role: "user", content: "server edit" }],
+    });
+    const { result } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+    const userMessage = { id: "31", role: "user", content: "old server prompt" };
+
+    act(() => result.current.openRecentThread({ id: "12", messages: [userMessage] }));
+    act(() => result.current.startEditMessage(userMessage));
+    act(() => result.current.setEditingDraft("server edit"));
+    await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, userMessage.id); });
+
+    expect(result.current.activeRecentId).toBe("44");
+    expect(result.current.messages).toEqual([{ id: "server-user", role: "user", content: "server edit" }]);
+  });
+
   test("logged-in edited resend uses the same cancellable lifecycle", async () => {
     const request = createDelayedImproveFixture();
     api.improve.mockReturnValue(request.promise);
@@ -225,6 +287,61 @@ describe("Extension improve request behavior", () => {
 });
 
 describe("Extension clarification UI", () => {
+  test("recent conversations remain selected through either their client id or server id", () => {
+    render(createElement(RecentList, {
+      items: [{ id: "client-record", serverId: 44, title: "Server conversation", createdAt: Date.now(), time: "방금" }],
+      activeId: "44",
+      onOpenThread() {},
+      onDelete() {},
+    }));
+
+    expect(screen.getByRole("button", { name: /Server conversation/ }).getAttribute("aria-current")).toBe("true");
+  });
+
+  test("long-running progress exposes its changing stage and elapsed time to assistive technology", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-15T00:00:00Z"));
+    globalThis.HTMLElement.prototype.scrollTo = vi.fn();
+    render(createElement(ChatFeed, {
+      messages: [], isLoading: true, copiedId: null, canEditUserMessages: true,
+      editingMessageId: null, editingDraft: "", onCopy() {}, onSave() {}, onExecute() {},
+      onStartEdit() {}, onChangeEditDraft() {}, onCancelEdit() {}, onSubmitEdit() {},
+      onCancelRequest() {}, onSelectExample() {}, onResolveError() {},
+    }));
+    const status = screen.getByRole("status");
+    expect(status.hasAttribute("aria-label")).toBe(false);
+    expect(status.textContent).toContain("요청을 분석하고 있습니다0초");
+
+    act(() => {
+      vi.advanceTimersByTime(9_000);
+    });
+    expect(status.textContent).toContain("참고 자료를 확인하고 있습니다9초");
+  });
+
+  test.each([
+    [{ kind: "network", retryable: true }, "연결 확인 후 다시 시도"],
+    [{ kind: "auth", requiresLogin: true, retryable: false }, "로그인"],
+  ])("error actions render from the shared UX policy", (failure, label) => {
+    globalThis.HTMLElement.prototype.scrollTo = vi.fn();
+    const onResolveError = vi.fn();
+    const message = {
+      id: `error-${failure.kind}`,
+      role: "assistant",
+      content: "요청을 처리하지 못했습니다.",
+      isError: true,
+      failure,
+    };
+    render(createElement(ChatFeed, {
+      messages: [message], isLoading: false, copiedId: null, canEditUserMessages: true,
+      editingMessageId: null, editingDraft: "", onCopy() {}, onSave() {}, onExecute() {},
+      onStartEdit() {}, onChangeEditDraft() {}, onCancelEdit() {}, onSubmitEdit() {},
+      onCancelRequest() {}, onSelectExample() {}, onResolveError,
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(onResolveError).toHaveBeenCalledWith(message);
+  });
+
   test("ask answer state focuses the composer through its dedicated hook", async () => {
     const focus = vi.fn();
     renderHook(() => useAskAnswers({

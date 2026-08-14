@@ -444,6 +444,8 @@ let pendingMessageScrollId = null;
 let isMakeThinking = false;
 const makeRequestState = makeStateModule.createMakeRequestState();
 let activeMakeRequestController = null;
+let makeProgressStartedAt = 0;
+let makeProgressTimerId = null;
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
 let appBootstrap = null;
@@ -1692,6 +1694,7 @@ function bindDelegatedMakeEvents() {
         area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
         status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,
       }),
+      openLogin: () => { state.authView = "login"; render(); },
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
       applyTemplate, toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
@@ -1713,6 +1716,25 @@ function submitMakeComposer(composer) {
 async function submitMakePrompt(composer) {
   return makeControllerModule.submitPrompt(getMakeControllerContext(), composer);
 }
+function updateMakeProgressStatus() {
+  if (!makeProgressStartedAt) return;
+  const progress = makeMessageModel.getMakeProgressStatus(Date.now() - makeProgressStartedAt);
+  const label = document.querySelector("[data-make-progress-label]");
+  const elapsed = document.querySelector("[data-make-progress-elapsed]");
+  if (label) label.textContent = progress.label;
+  if (elapsed) elapsed.textContent = `${progress.elapsedSeconds}초`;
+}
+function startMakeProgressStatus() {
+  stopMakeProgressStatus();
+  makeProgressStartedAt = Date.now();
+  window.setTimeout(updateMakeProgressStatus, 0);
+  makeProgressTimerId = window.setInterval(updateMakeProgressStatus, 1000);
+}
+function stopMakeProgressStatus() {
+  if (makeProgressTimerId) window.clearInterval(makeProgressTimerId);
+  makeProgressTimerId = null;
+  makeProgressStartedAt = 0;
+}
 function cancelActiveMakeRequest() {
   if (!activeMakeRequestController) return false;
   activeMakeRequestController.abort();
@@ -1732,12 +1754,14 @@ function getMakeControllerContext() {
       activeMakeRequestController?.abort();
       activeMakeRequestController = new AbortController();
       makeStateModule.startMakeRequest(makeRequestState);
+      startMakeProgressStatus();
       return activeMakeRequestController.signal;
     },
     isCurrentRequest: (signal) => !signal || activeMakeRequestController?.signal === signal,
     completeRequest: (signal) => {
       if (signal && activeMakeRequestController?.signal !== signal) return false;
       activeMakeRequestController = null;
+      stopMakeProgressStatus();
       makeStateModule.completeMakeRequest(makeRequestState);
       return true;
     },
@@ -1745,6 +1769,7 @@ function getMakeControllerContext() {
     stopInFlight: (signal) => {
       if (signal && activeMakeRequestController?.signal !== signal) return false;
       activeMakeRequestController = null;
+      stopMakeProgressStatus();
       makeRequestState.inFlight = false;
       return true;
     },

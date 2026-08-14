@@ -1,5 +1,5 @@
 // @ts-check
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { deleteMakeThread } from "../api/make";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
@@ -28,6 +28,12 @@ export function useConversation({
   const [copiedId, setCopiedId] = useState("");
   const [ragStatus, setRagStatus] = useState("idle");
   const activeThreadId = useRef(null);
+  const [activeRecentId, setActiveRecentId] = useState("");
+  const setActiveThreadId = useCallback((value) => {
+    const normalized = value == null ? "" : String(value);
+    activeThreadId.current = normalized || null;
+    setActiveRecentId(normalized);
+  }, []);
   const { isLoggedIn, recentThreads, serverRecentThreads, setLocalRecentThreads, setServerRecentThreads } =
     useConversationHistory({ authSession, ragConfig, showNotice, onAuthExpired });
   const {
@@ -38,6 +44,7 @@ export function useConversation({
     activeThreadId,
     authSession,
     ragConfig,
+    setActiveThreadId,
     setMessages,
     setServerRecentThreads,
   });
@@ -55,28 +62,28 @@ export function useConversation({
     ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
     refreshServerThreads, requestInFlight: improveRequestInFlight, sendImproveRequest,
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
-    setRagStatus, setSessionUuid, showNotice,
+    setActiveThreadId, setRagStatus, setSessionUuid, showNotice,
   });
 
   function openPrompt(item) {
     if (item.messages?.length) {
-      activeThreadId.current = null;
+      setActiveThreadId(null);
       setMessages(item.messages);
       return;
     }
-    activeThreadId.current = null;
+    setActiveThreadId(null);
     setComposerValue(item.sourcePrompt || item.content || item.prompt || item.title);
     setMessages([]);
     showNotice("프롬프트가 입력창에 준비되었습니다.");
   }
 
   function openRecentThread(thread) {
-    activeThreadId.current = thread.id;
+    setActiveThreadId(thread.id);
     setMessages(thread.messages || []);
   }
 
   function startNewChat() {
-    activeThreadId.current = null;
+    setActiveThreadId(null);
     setMessages([]);
     setComposerValue("");
     cancelEditMessage();
@@ -200,17 +207,17 @@ export function useConversation({
       restoreComposer: true,
       onSuccess: async (data) => {
         setRagStatus("connected");
-        if (authSession?.accessToken && data.threadId) activeThreadId.current = String(data.threadId);
+        if (authSession?.accessToken && data.threadId) setActiveThreadId(data.threadId);
         const assistantMsg = createAssistantMessage(prompt, data);
         const nextMessages = [...messages, userMsg, assistantMsg];
         setMessages((prev) => [...prev, assistantMsg]);
         if (isLoggedIn) {
           await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
         } else {
-          if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+          if (!activeThreadId.current) setActiveThreadId(`thread-${Date.now()}`);
           const threadId = activeThreadId.current;
           setLocalRecentThreads((prev) => [
-            { id: threadId, title: makeTitle(prompt), time: "방금", messages: nextMessages },
+            { id: threadId, title: makeTitle(prompt), time: "방금", createdAt: Date.now(), messages: nextMessages },
             ...prev.filter((t) => t.id !== threadId),
           ].slice(0, 30));
         }
@@ -247,7 +254,13 @@ export function useConversation({
       title: "최근 대화 삭제",
       message: "이 최근 대화를 삭제할까요?",
       confirmLabel: "삭제",
-      onConfirm: () => setLocalRecentThreads((prev) => prev.filter((t) => t.id !== id)),
+      onConfirm: () => {
+        setLocalRecentThreads((prev) => prev.filter((t) => t.id !== id));
+        if (String(activeThreadId.current || "") === String(id || "")) {
+          setActiveThreadId(null);
+          setMessages([]);
+        }
+      },
     });
   }
 
@@ -273,8 +286,8 @@ export function useConversation({
         try {
           await deleteMakeThread(ragConfig, serverId, authSession.accessToken);
           setServerRecentThreads((prev) => prev.filter((item) => item.id !== id && item.serverId !== serverId));
-          if (activeThreadId.current === id || activeThreadId.current === serverId) {
-            activeThreadId.current = null;
+          if ([id, serverId].some((value) => String(value || "") === String(activeThreadId.current || ""))) {
+            setActiveThreadId(null);
             setMessages([]);
           }
           showNotice("최근 대화를 삭제했습니다.");
@@ -288,6 +301,10 @@ export function useConversation({
           if (Number(error?.status || 0) === 404) {
             showNotice("이미 삭제되었거나 접근할 수 없는 대화입니다.");
             setServerRecentThreads((prev) => prev.filter((item) => item.id !== id && item.serverId !== serverId));
+            if ([id, serverId].some((value) => String(value || "") === String(activeThreadId.current || ""))) {
+              setActiveThreadId(null);
+              setMessages([]);
+            }
             await refreshServerThreads().catch(() => {});
             return;
           }
@@ -309,6 +326,7 @@ export function useConversation({
     editingMessageId,
     editingDraft,
     recentThreads,
+    activeRecentId,
     openPrompt,
     openRecentThread,
     startNewChat,

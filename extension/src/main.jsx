@@ -69,6 +69,7 @@ function App() {
     editingMessageId,
     editingDraft,
     recentThreads,
+    activeRecentId,
     openPrompt,
     openRecentThread,
     startNewChat,
@@ -131,6 +132,20 @@ function App() {
     });
   }
 
+  function handleResolveError(message) {
+    if (message?.failure?.requiresLogin) {
+      setAuthMode("login");
+      return;
+    }
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return;
+    setComposerValue(prompt);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
+    });
+  }
+
   return (
     <main className="extension-frame" aria-label="TTALKAK Chrome extension">
       <section className="extension-shell">
@@ -144,6 +159,7 @@ function App() {
           searchItems={searchItems}
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
+          activeRecentId={activeRecentId}
           isSaved={isSaved}
           onOpenPrompt={openPrompt}
           onSavePrompt={saveLibraryPrompt}
@@ -178,6 +194,7 @@ function App() {
               requestAnimationFrame(() => composerRef.current?.focus());
             }}
             onRefineUnchanged={handleRefineUnchanged}
+            onResolveError={handleResolveError}
             onSelectExample={handleSelectExample}
           />
           <Composer

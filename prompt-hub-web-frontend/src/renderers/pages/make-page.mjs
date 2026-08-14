@@ -77,7 +77,8 @@ import { parts } from "./make-message-parts.mjs";
     return `
       <div class="message-group assistant-group make-thinking-indicator make-message-enter" data-make-thinking-indicator>
         <article class="message assistant thinking-message" aria-live="polite">
-          <span class="thinking-label">\uC0DD\uAC01 \uC911</span>
+          <span class="thinking-label" data-make-progress-label>요청을 분석하고 있습니다</span>
+          <small class="thinking-elapsed" data-make-progress-elapsed>0초</small>
           <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
           <button class="make-request-cancel" type="button" data-cancel-make-request aria-label="요청 취소">취소</button>
         </article>
@@ -165,10 +166,15 @@ import { parts } from "./make-message-parts.mjs";
           <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
           <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
         </div>
+        <label class="make-recent-search">
+          <span class="sr-only">최근 대화 검색</span>
+          <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
+        </label>
         ${
           visibleThreads.length
             ? `<div class="recent-thread-list">
-                ${visibleThreads.map((thread) => `
+                ${visibleThreads.map((thread, index) => `
+                  ${index === 0 || visibleThreads[index - 1]?.dateGroup !== thread.dateGroup ? `<h3 class="recent-thread-group">${escapeHtml(thread.dateGroup || "이전")}</h3>` : ""}
                   <article class="recent-thread ${activeThreadId === thread.id ? "active" : ""} ${openThreadMenuId === thread.id ? "menu-open" : ""}" data-thread-item="${escapeAttr(thread.id)}">
                     <button class="recent-thread-main" type="button" data-open-thread="${escapeAttr(thread.id)}">
                       <strong title="${escapeAttr(thread.title)}">${escapeHtml(formatMakeSidebarLabel(thread.title, "대화", 24))}</strong>
@@ -288,7 +294,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, canSplit, changes, content, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -343,7 +349,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${UserMessageView(ctx, { canSplit, content, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
+        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
       </div>
     `;
   }
@@ -361,10 +367,13 @@ import { parts } from "./make-message-parts.mjs";
 
   function UserMessageView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { canSplit, content, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    const { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
     if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
-    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">다시 시도</button>` : ""}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
+    const failureButton = failureAction?.id === "login"
+      ? `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
+      : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   const renderers = Object.freeze({

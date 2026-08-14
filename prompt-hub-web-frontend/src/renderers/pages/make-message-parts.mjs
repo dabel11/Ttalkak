@@ -43,14 +43,20 @@ import { normalizeQuestions, normalizeFields, normalizeTechniques, normalizeChan
     const { isAsk, isThinking, messageId, questions } = data;
     const title = isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요";
     const progressId = `ask-${messageId}-progress`;
+    const requiredQuestions = questions.filter((item) => item.importance === "required");
+    const optionalQuestions = questions.filter((item) => item.importance !== "required");
+    const renderItems = (items) => items
+      .map((item) => AskQuestionItemView(ctx, { index: questions.indexOf(item), isAsk, isThinking, item, messageId, progressId }))
+      .join("");
 
     return `
       <section class="message-question-section" aria-label="${escapeHtml(title)}" ${isAsk ? 'aria-live="polite"' : ""}>
         <strong>${escapeHtml(title)}</strong>
-        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" aria-busy="${isThinking ? "true" : "false"}" novalidate><div id="${escapeAttr(progressId)}" class="ask-answer-progress" data-ask-answer-progress role="status">${isThinking ? "답변을 전송하고 있습니다." : "필수 답변을 입력해주세요."}</div>` : ""}
+        ${isAsk ? `<form class="ask-answer-form" data-ask-answer-form="${escapeAttr(messageId)}" aria-busy="${isThinking ? "true" : "false"}" novalidate><div id="${escapeAttr(progressId)}" class="ask-answer-progress" data-ask-answer-progress role="status">${isThinking ? "답변을 전송하고 있습니다." : `필수 답변 0/${requiredQuestions.length}개 입력`}</div>` : ""}
         <ol>
-          ${questions.map((item, index) => AskQuestionItemView(ctx, { index, isAsk, isThinking, item, messageId, progressId })).join("")}
+          ${renderItems(requiredQuestions)}
         </ol>
+        ${optionalQuestions.length ? `<details class="ask-optional-questions"><summary>선택 질문 <em>${optionalQuestions.length}</em></summary><ol>${renderItems(optionalQuestions)}</ol></details>` : ""}
         ${isAsk ? `<button class="ask-answer-submit" type="submit" ${isThinking ? "disabled" : ""}>${isThinking ? "전송 중" : "답변 제출"}</button></form>` : ""}
       </section>
     `;

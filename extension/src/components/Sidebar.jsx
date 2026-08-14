@@ -11,6 +11,7 @@ export function Sidebar({
   searchItems,
   savedItems,
   recentItems,
+  activeRecentId,
   isSaved,
   onOpenPrompt,
   onSavePrompt,
@@ -66,7 +67,7 @@ export function Sidebar({
             onDelete={onDeleteSaved}
           />
         )}
-        {activeTab === "recents" && <RecentList items={recentItems} onOpenThread={onOpenRecentThread} onDelete={onDeleteRecent} />}
+        {activeTab === "recents" && <RecentList items={recentItems} activeId={activeRecentId} onOpenThread={onOpenRecentThread} onDelete={onDeleteRecent} />}
       </div>
     </aside>
   );

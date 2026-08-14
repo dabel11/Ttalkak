@@ -60,6 +60,7 @@ export function createMakePageAdapter(ctx) {
     const previewThreads = visibleThreads.map((/** @type {TtalkakStateEntity} */ thread) => ({
       ...thread,
       preview: ctx.makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
+      dateGroup: ctx.messageModel.getMakeRecentDateGroup(thread.createdAt),
     }));
 
     return ctx.MakeSidePanelView(
@@ -109,6 +110,7 @@ export function createMakePageAdapter(ctx) {
   function messageBubble(message) {
     const isAssistant = message.role === "assistant";
     const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
+    const failure = !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure : null;
     return ctx.MessageBubbleView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
       {
@@ -123,9 +125,10 @@ export function createMakePageAdapter(ctx) {
         improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
         isCopied: ctx.state.copiedMessageId === message.id,
         isEditing: !isAssistant && ctx.state.editingMessageId === message.id,
-        failureMessage: !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure?.message || "" : "",
-        failureKind: !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure?.kind || "" : "",
-        failureRetryable: !isAssistant && ctx.requestState.failedMessageId === message.id && Boolean(ctx.requestState.failure?.retryable),
+        failureMessage: failure?.message || "",
+        failureKind: failure?.kind || "",
+        failureRetryable: Boolean(failure?.retryable),
+        failureAction: failure ? ctx.messageModel.getMakeFailureAction(failure) : null,
         isSaved: isAssistant && ctx.isPromptSaved(message.id),
         isThinking: ctx.isThinking() || ctx.requestState.inFlight,
         isUnchanged: Boolean(message.isUnchanged),

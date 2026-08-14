@@ -684,6 +684,23 @@ button:disabled {
   padding: 14px 16px;
 }
 
+.recent-group { display: grid; gap: 7px; }
+.recent-group + .recent-group { margin-top: 14px; }
+.recent-group > h3 {
+  margin: 0 3px;
+  color: #71817c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.recent-item.active {
+  border-color: #9fc4b7;
+  background: #e7f2ed;
+  box-shadow: inset 3px 0 0 #155a49;
+}
+
+.recent-item.active strong { color: #104c3f; }
+
 .unchanged-followup {
   display: grid;
   gap: 6px;
@@ -730,6 +747,22 @@ button:disabled {
 .typing-message .cancel-request-button:focus-visible {
   color: var(--text);
   border-color: currentColor;
+}
+
+.typing-progress {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink, #173f35);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.typing-progress small {
+  color: #71817c;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .typing-message span {
@@ -1877,3 +1910,20 @@ button:disabled {
   margin-top: 12px;
   line-height: 1.55;
 }
+.error-followup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.error-followup button {
+  border: 1px solid #cda878;
+  border-radius: 999px;
+  background: #fffaf1;
+  padding: 7px 12px;
+  color: #82501f;
+  font-weight: 700;
+}
+
+.error-followup small { color: #7b756d; }

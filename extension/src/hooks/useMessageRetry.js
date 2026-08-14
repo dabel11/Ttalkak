@@ -12,7 +12,7 @@ export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
   ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
   refreshServerThreads, requestInFlight, sendImproveRequest, sessionUuid,
-  setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
+  setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
   setSessionUuid, showNotice,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
@@ -90,10 +90,10 @@ export function useMessageRetry({
         const assistantMessage = createAssistantMessage(prompt, data);
         const nextMessages = [...baseMessages, editedUserMessage, assistantMessage];
         setMessages(nextMessages);
-        if (!activeThreadId.current) activeThreadId.current = `thread-${Date.now()}`;
+        if (!activeThreadId.current) setActiveThreadId(`thread-${Date.now()}`);
         const threadId = activeThreadId.current;
         setLocalRecentThreads((threads) => [
-          { id: threadId, title: makeTitle(prompt), time: "방금", messages: nextMessages },
+          { id: threadId, title: makeTitle(prompt), time: "방금", createdAt: Date.now(), messages: nextMessages },
           ...threads.filter((thread) => thread.id !== threadId),
         ].slice(0, 30));
         showNotice("수정한 메시지를 다시 개선했습니다.");

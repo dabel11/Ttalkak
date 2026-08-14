@@ -3,6 +3,30 @@ export const SCHEMA_VERSION = 2;
 const text = (value) => String(value || "").trim();
 const key = (value) => text(value).replace(/\s+/g, " ").toLocaleLowerCase();
 export const UNCHANGED_NO_EVIDENCE_MESSAGE = "적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.";
+export const MAKE_PROGRESS_STAGES = Object.freeze([
+  Object.freeze({ afterMs: 0, label: "요청을 분석하고 있습니다" }),
+  Object.freeze({ afterMs: 8000, label: "참고 자료를 확인하고 있습니다" }),
+  Object.freeze({ afterMs: 25000, label: "평소보다 시간이 걸리고 있습니다" }),
+]);
+export function getMakeProgressStatus(elapsedMs = 0) {
+  const safeElapsed = Math.max(0, Number(elapsedMs) || 0);
+  const stage = [...MAKE_PROGRESS_STAGES].reverse().find((item) => safeElapsed >= item.afterMs) || MAKE_PROGRESS_STAGES[0];
+  return { ...stage, elapsedSeconds: Math.floor(safeElapsed / 1000) };
+}
+export function getMakeFailureAction(failure = {}) {
+  if (failure.requiresLogin || failure.kind === "auth") return { id: "login", label: "로그인" };
+  if (failure.retryable) return { id: "retry", label: failure.kind === "network" ? "연결 확인 후 다시 시도" : "잠시 후 다시 시도" };
+  return null;
+}
+export function getMakeRecentDateGroup(value, nowValue = Date.now()) {
+  const date = new Date(value);
+  const now = new Date(nowValue);
+  if (!Number.isFinite(date.getTime())) return "이전";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const difference = Math.round((today - target) / 86400000);
+  return difference <= 0 ? "오늘" : difference === 1 ? "어제" : "이전";
+}
 
 export function normalizePromptForComparison(value) {
   return String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -120,5 +144,5 @@ export function isExecutableMessage(message) { const value = migrateMakeMessage(
 export function composeAskAnswers(questions, values = {}) { const normalized = normalizeQuestions(questions); const missingFields = normalized.filter((item) => item.importance === "required" && !text(values[item.field])).map((item) => item.field); const lines = normalized.map((item) => text(values[item.field]) ? `- ${item.question}: ${text(values[item.field])}` : "").filter(Boolean); return { missingFields, message: lines.length ? `추가 정보:\n${lines.join("\n")}` : "" }; }
 export function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_ABORTED") return result("cancelled", "요청이 취소되었습니다.", false); if (code === "REQUEST_TIMEOUT") return result("timeout", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
 
-const MakeMessageModel = Object.freeze({ SCHEMA_VERSION, UNCHANGED_NO_EVIDENCE_MESSAGE, normalizePromptForComparison, isUnchangedNoEvidence, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
+const MakeMessageModel = Object.freeze({ SCHEMA_VERSION, UNCHANGED_NO_EVIDENCE_MESSAGE, MAKE_PROGRESS_STAGES, getMakeProgressStatus, getMakeFailureAction, getMakeRecentDateGroup, normalizePromptForComparison, isUnchangedNoEvidence, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
 export default MakeMessageModel;

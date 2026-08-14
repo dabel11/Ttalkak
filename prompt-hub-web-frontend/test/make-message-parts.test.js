@@ -30,6 +30,8 @@ test("ask questions render accessible required and optional inputs", () => {
   assert.match(html, />필수</);
   assert.match(html, />선택</);
   assert.match(html, /data-ask-answer-form="assistant-1"/);
+  assert.match(html, /필수 답변 0\/1개 입력/);
+  assert.match(html, /<details class="ask-optional-questions">/);
   assert.match(html, /type="submit"\s*>답변 제출/);
 });
 

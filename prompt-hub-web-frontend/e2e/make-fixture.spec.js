@@ -133,6 +133,7 @@ test("required answers are validated and a complete answer transitions to improv
   await expect(requiredInput).toBeFocused();
 
   await requiredInput.fill("Prepare a release announcement");
+  await form.locator(".ask-optional-questions summary").click();
   await form.locator('[name="audience"]').fill("New users");
   const requestPromise = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/prompts/improve"));
   await form.locator('button[type="submit"]').press("Enter");

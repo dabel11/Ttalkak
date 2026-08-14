@@ -52,7 +52,10 @@ test("ask and retry policies are pure and preserve prior history", () => {
 test("recent and error state transitions stay deterministic", () => {
   const recent = upsertRecentThread([{ id: "old" }], { id: "new", prompt: "draft", messages: [], makeTitle: (value) => value });
   assert.deepEqual(recent.map((item) => item.id), ["new", "old"]);
-  assert.equal(createImproveErrorMessage("draft", new TypeError("offline")).excludeFromHistory, true);
+  const failure = createImproveErrorMessage("draft", new TypeError("offline"));
+  assert.equal(failure.excludeFromHistory, true);
+  assert.equal(failure.failure.kind, "network");
+  assert.equal(failure.failure.retryable, true);
 });
 
 test("conversation orchestration keeps request ask and retry ownership in focused hooks", () => {
