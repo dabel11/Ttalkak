@@ -2673,3 +2673,7 @@ h1 {
   font-size: 0.72rem;
   font-style: normal;
 }
+.recent-thread[hidden],
+.recent-thread-group[hidden] {
+  display: none !important;
+}
