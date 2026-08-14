@@ -14,6 +14,19 @@ test("conversation state creates normalized ask and improve messages", () => {
   assert.equal(createUserMessage("draft").role, "user");
 });
 
+test("conversation state preserves no-evidence status for assistant rendering", () => {
+  const message = createAssistantMessage("draft", {
+    mode: "improve",
+    improvedPrompt: "fallback result",
+    ragStatus: "no_evidence",
+  });
+
+  assert.equal(message.ragStatus, "no_evidence");
+  assert.equal(message.content, "fallback result");
+  assert.equal(message.executablePrompt, "fallback result");
+  assert.equal(message.excludeFromHistory, true);
+});
+
 test("ask and retry policies are pure and preserve prior history", () => {
   const questions = [{ question: "Required", importance: "required" }, { question: "Optional" }];
   assert.equal(isAskResponse({ mode: "ask" }), true);

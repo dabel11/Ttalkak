@@ -14,6 +14,7 @@ export function createAssistantMessage(prompt, data) {
     content: isAsk ? buildAskMessage(data) : noEvidence ? buildNoEvidenceMessage(prompt, data) : data.improvedPrompt || data.answer,
     answer: data.answer || "", questions: data.questions || [], changes: data.changes || [], fields: data.fields || [],
     techniques: data.techniques || data.techniquesApplied || [], summary: data.summary || "",
+    ragStatus: data.ragStatus || "",
     executablePrompt: isAsk ? null : getExecutablePrompt(data), sourcePrompt: prompt, sources: data.sources || [], saved: false,
     ...(noEvidence ? { excludeFromHistory: true } : {}),
   };
