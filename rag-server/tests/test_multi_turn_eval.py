@@ -26,7 +26,97 @@ from eval.multi_turn_eval import (
     get_error_status_code,
     is_retryable_generation_error,
     run_with_retry,
+    build_judge_cache_key,
+    run_judge_evaluation,
+    select_generation_target,
+    build_retrieval_cache_key,
+    calculate_judge_delta,
+    classify_retrieval_effect,
+    estimate_tau,
+    calculate_retrieval_effect_rates,
+    calculate_retrieval_effect_rates_by_category,
+    calculate_utility_recovery,
+    calculate_distract_rescue_rates,
 )
+
+
+VALID_JUDGE_RESPONSE = {
+    "contextRetention": 5,
+    "instructionFollowing": 4,
+    "clarity": 4,
+    "hallucinationAvoidance": 5,
+    "reason": "이전 조건과 현재 요청을 모두 반영했습니다.",
+}
+
+
+class FakeJudgeRateLimitError(Exception):
+    status_code = 429
+
+
+def make_judge_call(responses=None):
+    """호출 인자를 기록하는 fake judge_call을 만든다."""
+    calls = []
+
+    def judge_call(prompt, model):
+        calls.append({"prompt": prompt, "model": model})
+
+        if responses is None:
+            return dict(VALID_JUDGE_RESPONSE)
+
+        return responses[len(calls) - 1]
+
+    return judge_call, calls
+
+
+def make_evaluation(average_score, mode="improve", valid=True):
+    """집계 함수 검증용 평가 결과를 만든다."""
+    return {
+        "generation": {"mode": mode},
+        "judge": {
+            "valid": valid,
+            "scores": {},
+            "averageScore": average_score if valid else None,
+            "reason": "",
+            "error": None if valid else "invalid_json",
+        },
+    }
+
+
+def make_evaluation_item_kwargs(generation_result, generation_calls=None):
+    """run_evaluation_item 호출에 필요한 공통 fake 의존성을 만든다."""
+
+    class FakeRetriever:
+        def search(self, **kwargs):
+            if kwargs["collection_name"] == "prompt_techniques":
+                return [
+                    {
+                        "document": "역할을 명확히 지정한다.",
+                        "metadata": {"technique": "역할 부여"},
+                    }
+                ]
+
+            return []
+
+    class FakeQueryTransform:
+        pass
+
+    def fake_run_generation(query, contexts, model, history):
+        if generation_calls is not None:
+            generation_calls.append({"contexts": contexts})
+
+        return dict(generation_result)
+
+    return {
+        "retriever": FakeRetriever(),
+        "query_transform_module": FakeQueryTransform,
+        "run_generation": fake_run_generation,
+        "extract_improved_prompt": lambda answer: "",
+        "cache": {},
+        "cache_path": None,
+        "model": "gemini-2.0-flash",
+        "temperature": "0.7",
+        "system_prompt": "system",
+    }
 
 
 def test_cache_key_changes_with_history() -> None:
@@ -719,6 +809,664 @@ def test_normalize_judge_result_rejects_invalid_response() -> None:
         "clarity",
     ]
 
+def test_judge_prompt_uses_production_generation_shape() -> None:
+    """운영 run_generation은 improved_prompt를 쓴다.
+
+    Judge가 camelCase만 읽으면 improve 모드에서 평가 대상이 빈 문자열이 된다.
+    """
+    item = {
+        "history": [{"role": "user", "content": "대학생 대상이야."}],
+        "query": "친근한 말투로 바꿔줘.",
+        "expected_mode": "improve",
+    }
+
+    production_generation = {
+        "mode": "improve",
+        "answer": "개선했습니다.",
+        "improved_prompt": "대학생을 대상으로 친근한 말투로 작성하라.",
+    }
+
+    assert select_generation_target(production_generation) == (
+        "대학생을 대상으로 친근한 말투로 작성하라."
+    )
+
+    prompt = build_judge_prompt(item, production_generation)
+    assert production_generation["improved_prompt"] in prompt
+
+    # ask 모드는 되물음 문장을 평가한다.
+    ask_generation = {
+        "mode": "ask",
+        "answer": "어떤 분량을 원하시나요?",
+        "improved_prompt": "",
+    }
+    assert select_generation_target(ask_generation) == "어떤 분량을 원하시나요?"
+
+
+def test_judge_cache_key_is_deterministic() -> None:
+    history = [{"role": "user", "content": "대학생 대상이야."}]
+    generation = {"mode": "improve", "improved_prompt": "개선안", "answer": "완료"}
+    reordered = {"answer": "완료", "improved_prompt": "개선안", "mode": "improve"}
+
+    first = build_judge_cache_key(
+        history=history,
+        current_request="5문단으로",
+        generation_result=generation,
+        judge_model="gemini-2.0-flash",
+    )
+    second = build_judge_cache_key(
+        history=history,
+        current_request="5문단으로",
+        generation_result=generation,
+        judge_model="gemini-2.0-flash",
+    )
+    key_order_changed = build_judge_cache_key(
+        history=history,
+        current_request="5문단으로",
+        generation_result=reordered,
+        judge_model="gemini-2.0-flash",
+    )
+
+    assert first == second
+    assert first == key_order_changed
+
+
+def test_judge_cache_key_changes_with_inputs() -> None:
+    base = {
+        "history": [{"role": "user", "content": "대학생 대상이야."}],
+        "current_request": "5문단으로",
+        "generation_result": {"mode": "improve", "improved_prompt": "개선안"},
+        "judge_model": "gemini-2.0-flash",
+    }
+    base_key = build_judge_cache_key(**base)
+
+    changed_history = dict(base)
+    changed_history["history"] = [{"role": "user", "content": "중학생 대상이야."}]
+
+    changed_request = dict(base)
+    changed_request["current_request"] = "3문단으로"
+
+    changed_generation = dict(base)
+    changed_generation["generation_result"] = {
+        "mode": "improve",
+        "improved_prompt": "다른 개선안",
+    }
+
+    changed_model = dict(base)
+    changed_model["judge_model"] = "llama-3.3-70b-versatile"
+
+    changed_version = dict(base)
+    changed_version["judge_prompt_version"] = "v2"
+
+    for changed in (
+        changed_history,
+        changed_request,
+        changed_generation,
+        changed_model,
+        changed_version,
+    ):
+        assert build_judge_cache_key(**changed) != base_key
+
+    # generation 캐시 키와 namespace가 달라 충돌하지 않는다.
+    generation_cache_key = build_cache_key(
+        query=base["current_request"],
+        history=base["history"],
+        technique_names=[],
+    )
+    assert base_key != generation_cache_key
+
+
+def test_judge_evaluation_calls_judge_on_cache_miss() -> None:
+    judge_call, calls = make_judge_call()
+    judge_cache = {}
+
+    item = {"history": [], "query": "표로 정리해줘", "expected_mode": "improve"}
+    generation = {"mode": "improve", "improved_prompt": "개선안", "answer": "완료"}
+
+    execution = run_judge_evaluation(
+        item=item,
+        generation=generation,
+        judge_call=judge_call,
+        judge_cache=judge_cache,
+        judge_cache_path=None,
+        judge_model="gemini-2.0-flash",
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["model"] == "gemini-2.0-flash"
+    assert "contextRetention" in calls[0]["prompt"]
+
+    assert execution["cacheHit"] is False
+    assert execution["result"]["valid"] is True
+    assert execution["result"]["averageScore"] == 4.5
+
+    # 캐시에는 raw 응답이 아니라 정규화된 결과가 저장된다.
+    cached = judge_cache[execution["cacheKey"]]
+    assert cached["valid"] is True
+    assert cached["scores"]["contextRetention"] == 5
+
+
+def test_judge_evaluation_reuses_cache_on_second_run() -> None:
+    judge_call, calls = make_judge_call()
+    judge_cache = {}
+
+    common = {
+        "item": {"history": [], "query": "표로 정리해줘"},
+        "generation": {"mode": "improve", "improved_prompt": "개선안"},
+        "judge_call": judge_call,
+        "judge_cache": judge_cache,
+        "judge_cache_path": None,
+        "judge_model": "gemini-2.0-flash",
+    }
+
+    first = run_judge_evaluation(**common)
+    second = run_judge_evaluation(**common)
+
+    assert len(calls) == 1
+    assert first["cacheHit"] is False
+    assert second["cacheHit"] is True
+    assert first["cacheKey"] == second["cacheKey"]
+    assert second["result"]["averageScore"] == first["result"]["averageScore"]
+
+
+def test_judge_evaluation_caches_invalid_response() -> None:
+    """호출은 성공했으나 응답이 무효인 경우에도 재호출하지 않는다."""
+    judge_call, calls = make_judge_call(responses=["JSON이 아닌 응답"])
+    judge_cache = {}
+
+    common = {
+        "item": {"history": [], "query": "표로 정리해줘"},
+        "generation": {"mode": "improve", "improved_prompt": "개선안"},
+        "judge_call": judge_call,
+        "judge_cache": judge_cache,
+        "judge_cache_path": None,
+        "judge_model": "gemini-2.0-flash",
+    }
+
+    first = run_judge_evaluation(**common)
+    second = run_judge_evaluation(**common)
+
+    assert first["result"]["valid"] is False
+    assert first["result"]["error"] == "invalid_json"
+    assert len(calls) == 1
+    assert second["cacheHit"] is True
+
+
+def test_judge_evaluation_saves_cache_file() -> None:
+    judge_call, _calls = make_judge_call()
+    judge_cache = {}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        judge_cache_path = str(Path(temp_dir) / "judge-cache.json")
+
+        execution = run_judge_evaluation(
+            item={"history": [], "query": "표로 정리해줘"},
+            generation={"mode": "improve", "improved_prompt": "개선안"},
+            judge_call=judge_call,
+            judge_cache=judge_cache,
+            judge_cache_path=judge_cache_path,
+            judge_model="gemini-2.0-flash",
+        )
+
+        saved = json.loads(Path(judge_cache_path).read_text(encoding="utf-8"))
+        assert execution["cacheKey"] in saved
+
+
+def test_judge_retry_waits_and_succeeds() -> None:
+    attempts = 0
+    delays = []
+
+    def judge_call(prompt, model):
+        nonlocal attempts
+        attempts += 1
+
+        if attempts < 3:
+            raise FakeJudgeRateLimitError("Too many requests")
+
+        return dict(VALID_JUDGE_RESPONSE)
+
+    execution = run_judge_evaluation(
+        item={"history": [], "query": "표로 정리해줘"},
+        generation={"mode": "improve", "improved_prompt": "개선안"},
+        judge_call=judge_call,
+        judge_cache={},
+        judge_cache_path=None,
+        judge_model="gemini-2.0-flash",
+        max_attempts=3,
+        base_delay_seconds=2.0,
+        sleep_fn=delays.append,
+    )
+
+    assert attempts == 3
+    assert delays == [2.0, 4.0]
+    assert execution["result"]["valid"] is True
+
+
+def test_judge_non_retryable_error_is_raised_immediately() -> None:
+    attempts = 0
+    delays = []
+    judge_cache = {}
+
+    def judge_call(prompt, model):
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("잘못된 Judge 입력")
+
+    try:
+        run_judge_evaluation(
+            item={"history": [], "query": "표로 정리해줘"},
+            generation={"mode": "improve", "improved_prompt": "개선안"},
+            judge_call=judge_call,
+            judge_cache=judge_cache,
+            judge_cache_path=None,
+            judge_model="gemini-2.0-flash",
+            sleep_fn=delays.append,
+        )
+    except ValueError as error:
+        assert str(error) == "잘못된 Judge 입력"
+    else:
+        raise AssertionError("ValueError가 호출자에게 전달되어야 합니다.")
+
+    assert attempts == 1
+    assert delays == []
+    assert judge_cache == {}
+
+
+def test_run_evaluation_item_attaches_judge_result() -> None:
+    judge_call, calls = make_judge_call()
+    item = {"query": "보고서를 작성해줘", "history": [], "expected_mode": "improve"}
+
+    result = run_evaluation_item(
+        item=item,
+        judge_call=judge_call,
+        judge_cache={},
+        judge_model="gemini-2.0-flash",
+        **make_evaluation_item_kwargs({
+            "mode": "improve",
+            "answer": "개선했습니다.",
+            "improved_prompt": "개선된 프롬프트",
+        }),
+    )
+
+    assert len(calls) == 1
+    assert "judge" in result
+    assert "judgeCacheKey" in result
+    assert "judgeCacheHit" in result
+    assert result["judge"]["valid"] is True
+    assert result["judgeCacheHit"] is False
+
+    # 운영 형식(snake_case)이 Judge 프롬프트에 실제로 들어간다.
+    assert "개선된 프롬프트" in calls[0]["prompt"]
+
+
+def test_run_evaluation_item_without_judge_keeps_original_shape() -> None:
+    result = run_evaluation_item(
+        item={"query": "보고서를 작성해줘", "history": []},
+        **make_evaluation_item_kwargs({
+            "mode": "improve",
+            "answer": "개선했습니다.",
+            "improved_prompt": "개선된 프롬프트",
+        }),
+    )
+
+    assert "judge" not in result
+    assert "judgeCacheKey" not in result
+    assert "judgeCacheHit" not in result
+    assert result["generation"]["improved_prompt"] == "개선된 프롬프트"
+
+
+def test_generation_cache_and_judge_cache_are_independent() -> None:
+    judge_call, judge_calls = make_judge_call()
+    generation_calls = []
+
+    kwargs = make_evaluation_item_kwargs(
+        {
+            "mode": "improve",
+            "answer": "개선했습니다.",
+            "improved_prompt": "개선된 프롬프트",
+        },
+        generation_calls=generation_calls,
+    )
+    shared_generation_cache = {}
+    kwargs["cache"] = shared_generation_cache
+
+    item = {"query": "보고서를 작성해줘", "history": []}
+
+    # generation 캐시만 적중해도 Judge 캐시가 비어 있으면 Judge는 호출된다.
+    first = run_evaluation_item(
+        item=item, judge_call=judge_call, judge_cache={},
+        judge_model="gemini-2.0-flash", **kwargs
+    )
+    second = run_evaluation_item(
+        item=item, judge_call=judge_call, judge_cache={},
+        judge_model="gemini-2.0-flash", **kwargs
+    )
+
+    assert first["cacheHit"] is False
+    assert second["cacheHit"] is True
+    assert len(generation_calls) == 1
+    assert len(judge_calls) == 2
+
+    # 두 캐시가 모두 적중하면 어느 쪽도 다시 호출되지 않는다.
+    shared_judge_cache = {}
+    third = run_evaluation_item(
+        item=item, judge_call=judge_call, judge_cache=shared_judge_cache,
+        judge_model="gemini-2.0-flash", **kwargs
+    )
+    fourth = run_evaluation_item(
+        item=item, judge_call=judge_call, judge_cache=shared_judge_cache,
+        judge_model="gemini-2.0-flash", **kwargs
+    )
+
+    assert third["judgeCacheHit"] is False
+    assert fourth["judgeCacheHit"] is True
+    assert fourth["cacheHit"] is True
+    assert len(generation_calls) == 1
+    assert len(judge_calls) == 3
+
+
+def test_retrieval_can_be_disabled_for_baseline() -> None:
+    generation_calls = []
+    kwargs = make_evaluation_item_kwargs(
+        {"mode": "improve", "answer": "완료", "improved_prompt": "개선안"},
+        generation_calls=generation_calls,
+    )
+
+    result = run_evaluation_item(
+        item={"query": "보고서를 작성해줘", "history": []},
+        use_retrieval=False,
+        **kwargs,
+    )
+
+    assert result["useRetrieval"] is False
+    assert result["retrieved"] == []
+    assert result["examples"] == []
+    assert result["techniqueNames"] == []
+    assert result["searchQuery"] == "보고서를 작성해줘"
+    assert generation_calls[0]["contexts"] == []
+
+
+def test_retrieval_cache_freezes_search_results() -> None:
+    search_calls = []
+
+    class CountingRetriever:
+        def search(self, **kwargs):
+            search_calls.append(kwargs["collection_name"])
+
+            if kwargs["collection_name"] == "prompt_techniques":
+                return [
+                    {
+                        "document": "역할을 명확히 지정한다.",
+                        "metadata": {"technique": "역할 부여"},
+                    }
+                ]
+
+            return []
+
+    kwargs = make_evaluation_item_kwargs(
+        {"mode": "improve", "answer": "완료", "improved_prompt": "개선안"}
+    )
+    kwargs["retriever"] = CountingRetriever()
+
+    retrieval_cache = {}
+    item = {"query": "보고서를 작성해줘", "history": []}
+
+    first = run_evaluation_item(
+        item=item, retrieval_cache=retrieval_cache, **kwargs
+    )
+    # 생성 캐시를 비워도 검색은 다시 돌지 않아야 한다.
+    kwargs["cache"] = {}
+    second = run_evaluation_item(
+        item=item, retrieval_cache=retrieval_cache, **kwargs
+    )
+
+    assert first["retrievalCacheHit"] is False
+    assert second["retrievalCacheHit"] is True
+    assert second["techniqueNames"] == ["역할 부여"]
+    assert len(search_calls) == 2
+
+    key = build_retrieval_cache_key(
+        "보고서를 작성해줘",
+        [],
+        {"use_query_transform": False, "use_hyde": False, "use_examples": True},
+    )
+    assert key in retrieval_cache
+
+
+def test_retrieval_effect_rates_classify_help_harm_neutral() -> None:
+    records = [
+        {"item": {}, "baseline": make_evaluation(3.0), "retrieval": make_evaluation(4.0)},
+        {"item": {}, "baseline": make_evaluation(4.0), "retrieval": make_evaluation(3.0)},
+        {"item": {}, "baseline": make_evaluation(4.0), "retrieval": make_evaluation(4.0)},
+        {
+            "item": {},
+            "baseline": make_evaluation(None, valid=False),
+            "retrieval": make_evaluation(4.0),
+        },
+    ]
+
+    assert calculate_judge_delta(records[0]["baseline"], records[0]["retrieval"]) == 1.0
+    assert classify_retrieval_effect(None, 0.5) == "invalid"
+
+    rates = calculate_retrieval_effect_rates(records, tau=0.5)
+
+    assert rates["total"] == 4
+    assert rates["retrievalHelpRate"] == 0.25
+    assert rates["retrievalHarmRate"] == 0.25
+    assert rates["retrievalNeutralRate"] == 0.25
+    assert rates["invalidRate"] == 0.25
+    assert rates["meanDelta"] == 0.0
+
+    empty = calculate_retrieval_effect_rates([], tau=0.5)
+    assert empty["total"] == 0
+    assert empty["retrievalHelpRate"] is None
+
+
+def test_retrieval_effect_rates_split_by_category() -> None:
+    """전체 평균은 상쇄되지만 category별로는 반대 방향이 드러난다."""
+    records = [
+        {
+            "item": {"category": "context_retention"},
+            "baseline": make_evaluation(3.0),
+            "retrieval": make_evaluation(4.0),
+        },
+        {
+            "item": {"category": "faithfulness"},
+            "baseline": make_evaluation(4.0),
+            "retrieval": make_evaluation(3.0),
+        },
+    ]
+
+    overall = calculate_retrieval_effect_rates(records, tau=0.5)
+    by_category = calculate_retrieval_effect_rates_by_category(records, tau=0.5)
+
+    assert overall["meanDelta"] == 0.0
+    assert by_category["context_retention"]["retrievalHelpRate"] == 1.0
+    assert by_category["context_retention"]["retrievalHarmRate"] == 0.0
+    assert by_category["faithfulness"]["retrievalHarmRate"] == 1.0
+    assert by_category["faithfulness"]["retrievalHelpRate"] == 0.0
+
+
+def test_estimate_tau_from_repeated_scores() -> None:
+    # 흔들림이 없으면 judge 점수의 최소 눈금이 하한이 된다.
+    assert estimate_tau([[4.0, 4.0, 4.0]]) == 0.25
+
+    # 흔들림이 크면 임계값이 그만큼 올라간다.
+    noisy = estimate_tau([[3.0, 4.0, 5.0]], sigma_multiplier=2.0)
+    assert noisy == 2.0
+
+    # 반복이 1회뿐이면 표준편차를 낼 수 없어 하한을 쓴다.
+    assert estimate_tau([[4.0]]) == 0.25
+    assert estimate_tau([]) == 0.25
+
+
+def test_utility_recovery_uses_evidence_sensitive_items() -> None:
+    records = [
+        {
+            # 오라클 +2.0 중 +1.0 회수 → 0.5
+            "baseline": make_evaluation(2.0),
+            "retrieval": make_evaluation(3.0),
+            "oracle": make_evaluation(4.0),
+        },
+        {
+            # 오라클이 이득을 주지 못하므로 집계에서 제외된다.
+            "baseline": make_evaluation(4.0),
+            "retrieval": make_evaluation(2.0),
+            "oracle": make_evaluation(4.0),
+        },
+    ]
+
+    recovery = calculate_utility_recovery(records)
+
+    assert recovery["total"] == 2
+    assert recovery["evidenceSensitiveCount"] == 1
+    assert abs(recovery["utilityRecovery"] - 0.5) < 1e-6
+
+    # 검색이 오히려 점수를 깎으면 회수율은 음수이고 −1로 잘린다.
+    harmful = calculate_utility_recovery([
+        {
+            "baseline": make_evaluation(3.0),
+            "retrieval": make_evaluation(0.0),
+            "oracle": make_evaluation(4.0),
+        }
+    ])
+    assert harmful["utilityRecovery"] == -1.0
+
+    assert calculate_utility_recovery([])["utilityRecovery"] is None
+
+
+def test_distract_rescue_rates() -> None:
+    records = [
+        {
+            # 검색이 맞던 mode 판정을 깨뜨림
+            "item": {"expected_mode": "improve"},
+            "baseline": make_evaluation(4.0, mode="improve"),
+            "retrieval": make_evaluation(4.0, mode="ask"),
+        },
+        {
+            # 검색이 틀린 판정을 살림
+            "item": {"expected_mode": "ask"},
+            "baseline": make_evaluation(4.0, mode="improve"),
+            "retrieval": make_evaluation(4.0, mode="ask"),
+        },
+        {
+            "item": {"expected_mode": "improve"},
+            "baseline": make_evaluation(4.0, mode="improve"),
+            "retrieval": make_evaluation(4.0, mode="improve"),
+        },
+        {
+            # expected_mode가 없으면 비교 대상에서 빠진다.
+            "item": {},
+            "baseline": make_evaluation(4.0, mode="improve"),
+            "retrieval": make_evaluation(4.0, mode="ask"),
+        },
+    ]
+
+    rates = calculate_distract_rescue_rates(records)
+
+    assert rates["comparable"] == 3
+    assert abs(rates["distractRate"] - 1 / 3) < 1e-6
+    assert abs(rates["rescueRate"] - 1 / 3) < 1e-6
+    assert abs(rates["netRescueIndex"]) < 1e-6
+
+    assert calculate_distract_rescue_rates([])["distractRate"] is None
+
+
+def test_override_contexts_injects_oracle_evidence() -> None:
+    """오라클 조건은 검색 대신 정답 근거를 그대로 주입한다."""
+    search_calls = []
+    generation_calls = []
+
+    class CountingRetriever:
+        def search(self, **kwargs):
+            search_calls.append(kwargs["collection_name"])
+            return []
+
+    kwargs = make_evaluation_item_kwargs(
+        {"mode": "improve", "answer": "완료", "improved_prompt": "개선안"},
+        generation_calls=generation_calls,
+    )
+    kwargs["retriever"] = CountingRetriever()
+
+    gold = [
+        {
+            "document": "대상 독자를 명시한다.",
+            "metadata": {"technique": "Audience Prompting"},
+        }
+    ]
+
+    result = run_evaluation_item(
+        item={"query": "보고서를 작성해줘", "history": []},
+        override_contexts=gold,
+        **kwargs,
+    )
+
+    assert search_calls == []
+    assert result["techniqueNames"] == ["Audience Prompting"]
+    assert generation_calls[0]["contexts"] == gold
+
+    # 주입한 리스트를 나중에 바꿔도 결과가 흔들리지 않는다.
+    gold[0]["document"] = "변경됨"
+    assert result["retrieved"][0]["document"] == "대상 독자를 명시한다."
+
+    try:
+        run_evaluation_item(
+            item={"query": "보고서를 작성해줘", "history": []},
+            override_contexts=gold,
+            use_retrieval=False,
+            **make_evaluation_item_kwargs({"mode": "improve", "answer": "완료"}),
+        )
+    except ValueError as error:
+        assert "override_contexts" in str(error)
+    else:
+        raise AssertionError("모순된 조건은 거부되어야 합니다.")
+
+
+def test_dataset_has_gold_techniques_for_oracle_condition() -> None:
+    dataset = load_dataset("eval/multi_turn_set.json")
+
+    for item in dataset["items"]:
+        gold = item.get("gold_techniques")
+        assert isinstance(gold, list) and gold, item["id"]
+        assert all(isinstance(name, str) and name for name in gold), item["id"]
+        assert len(set(gold)) == len(gold), item["id"]
+
+
+def test_generation_is_retried_on_transient_error() -> None:
+    """생성 호출도 일시적 오류에 재시도한다(Gemini 503 등)."""
+    attempts = 0
+    delays = []
+
+    class GeminiServerError(Exception):
+        # google-genai 예외는 status_code가 아니라 code를 쓴다.
+        code = 503
+
+    kwargs = make_evaluation_item_kwargs({"mode": "improve", "answer": "완료"})
+
+    def flaky_run_generation(query, contexts, model, history):
+        nonlocal attempts
+        attempts += 1
+
+        if attempts < 3:
+            raise GeminiServerError("high demand")
+
+        return {"mode": "improve", "answer": "완료", "improved_prompt": "개선안"}
+
+    kwargs["run_generation"] = flaky_run_generation
+
+    result = run_evaluation_item(
+        item={"query": "보고서를 작성해줘", "history": []},
+        generation_sleep_fn=delays.append,
+        **kwargs,
+    )
+
+    assert attempts == 3
+    assert delays == [2.0, 4.0]
+    assert result["generation"]["improved_prompt"] == "개선안"
+
+    assert get_error_status_code(GeminiServerError("high demand")) == 503
+    assert is_retryable_generation_error(GeminiServerError("high demand"))
+
+
 def run_tests() -> None:
     tests = [
         test_cache_key_changes_with_history,
@@ -745,6 +1493,28 @@ def run_tests() -> None:
         test_parse_judge_json_accepts_markdown_fence,
         test_normalize_judge_result_calculates_average,
         test_normalize_judge_result_rejects_invalid_response,
+        test_judge_prompt_uses_production_generation_shape,
+        test_judge_cache_key_is_deterministic,
+        test_judge_cache_key_changes_with_inputs,
+        test_judge_evaluation_calls_judge_on_cache_miss,
+        test_judge_evaluation_reuses_cache_on_second_run,
+        test_judge_evaluation_caches_invalid_response,
+        test_judge_evaluation_saves_cache_file,
+        test_judge_retry_waits_and_succeeds,
+        test_judge_non_retryable_error_is_raised_immediately,
+        test_run_evaluation_item_attaches_judge_result,
+        test_run_evaluation_item_without_judge_keeps_original_shape,
+        test_generation_cache_and_judge_cache_are_independent,
+        test_retrieval_can_be_disabled_for_baseline,
+        test_retrieval_cache_freezes_search_results,
+        test_retrieval_effect_rates_classify_help_harm_neutral,
+        test_retrieval_effect_rates_split_by_category,
+        test_estimate_tau_from_repeated_scores,
+        test_utility_recovery_uses_evidence_sensitive_items,
+        test_distract_rescue_rates,
+        test_override_contexts_injects_oracle_evidence,
+        test_dataset_has_gold_techniques_for_oracle_condition,
+        test_generation_is_retried_on_transient_error,
     ]
 
     for test in tests:

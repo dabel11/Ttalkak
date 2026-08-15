@@ -46,6 +46,8 @@ rag-server/data/
 rag-server/eval/.uplift_cache.json
 rag-server/eval/.gen_cache*.json
 rag-server/eval/.example_ab_cache*.json
+rag-server/eval/.multi_turn_*cache.json
+rag-server/eval/.multi_turn_result.json
 rag-server/eval/.temp_*.log
 
 # ── 계약 문서 (git 미포함 · 백엔드/프론트 담당에게 별도 공유) ──

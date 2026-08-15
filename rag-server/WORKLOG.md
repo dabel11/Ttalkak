@@ -1172,3 +1172,80 @@ eval/  run_eval.py(+__init__.py)
 **결정·근거**
 - 생성(70b)과 judge(70b)가 **같은 TPM 풀**을 공유해 한 번에 돌리면 서로 굶긴다(1차 시도: 완주 13/18·judge 대부분 429). **두 패스 분리를 표준 절차로** 삼는다.
 - 잔여 리스크: 환각 0.00 은 gen_set 18문항 기준이며, **다중 턴 drift**(여러 턴 뒤 정보가 섞여 창작이 끼어드는 경우)는 여전히 미측정(백로그).
+
+---
+
+## [2026-08-14] 다중 턴 평가기 — Judge 실행 연결 · RAG 도움/방해 분리 측정
+**목적**: 다중 턴 평가기가 Judge 프롬프트 생성·응답 정규화까지만 있고 **실제 호출 흐름이 끊겨 있어** 지표가 자동 산출되지 않던 것을 잇는다. 여기에 "RAG가 개선에 기여한 경우와 엉뚱한 근거로 방해한 경우"를 분리하는 지표를 추가한다.
+
+**🔴 먼저 발견한 버그 — Judge가 빈 문자열을 채점하고 있었다**
+- `build_judge_prompt`가 `generation.get("improvedPrompt")`(camelCase)를 읽는데, 운영 `run_generation`과 `normalize_generation_result`는 **`improved_prompt`(snake_case)**를 쓴다.
+- Before: 운영 형식 입력 시 improve 모드의 `evaluationTarget` = `""` (실측 확인). Judge를 붙였다면 **전 항목이 빈 문자열 채점**이 될 뻔했다.
+- After: `select_generation_target()`로 두 표기를 모두 읽고, 기존 `select_metric_text`를 재사용해 Judge와 문자열 보조지표가 같은 대상을 본다.
+- 기존 테스트가 못 잡은 이유: fake generation dict에 camelCase를 **직접** 넣어줘서 운영 경로 형식이 한 번도 통과하지 않았다. → 운영 형식 회귀 테스트 추가.
+
+**Before / After**
+| | Before | After |
+|---|---|---|
+| Judge 실행 | 프롬프트 생성·정규화만 존재, 호출 없음 | `run_judge_evaluation()` — 호출·재시도·캐시·정규화 |
+| Judge 캐시 | 없음 | `build_judge_cache_key()` (namespace `multi_turn_judge`, 정렬 직렬화) |
+| 검색 | `run_evaluation_item` 안에서 매번 재실행 | `retrieve_with_cache()`로 **고정(freeze)** + `use_retrieval=False` 기준선 |
+| RAG 효과 | 측정 불가 | help/harm/neutral · UR · distract/rescue |
+| 테스트 | 24개 | **43개** |
+
+**구현**
+1. **Judge 실행** — `run_judge_evaluation(item, generation, judge_call, ...)`. Groq·Gemini SDK를 import하지 않고 `judge_call(prompt=..., model=...)`로 **주입**받는다. 기존 `run_with_retry`를 그대로 재사용(429/5xx만 지수 백오프, 그 외는 즉시 전달).
+2. **Judge 전용 캐시** — 호출이 성공했다면 `valid=False`여도 저장한다. 같은 잘못된 응답을 받으려고 쿼터를 태울 이유가 없다. 캐시에는 raw가 아닌 **정규화 결과**를 넣는다.
+3. **하위 호환** — 새 인자는 전부 맨 뒤 기본값. `judge_call=None`이면 반환 구조에 judge 필드를 **추가하지 않는다**. 기존 테스트 24개 무수정 통과.
+4. **frozen retrieval cache** — RAG on/off 짝의 차이가 '검색 유무' 하나만 남아야 한다. 검색을 매번 다시 돌리면 그날 검색이 흔들린 정도가 점수 차이에 섞이고, 검색 측 실패인지 생성 측 실패인지도 귀속되지 않는다. 생성 캐시와 **별도 파일**.
+5. **효과 지표** — `retrieval_help_rate` / `harm_rate` / `neutral_rate`, 오라클 정규화 `utility_recovery`(UR), mode 판정 전환 `distract/rescue`.
+
+**설계 결정·근거**
+- **tau를 눈대중으로 정하지 않는다.** judge 점수는 4항목 정수 평균이라 최소 눈금이 0.25. `estimate_tau()`가 같은 조건 반복 실행의 표준편차×2를 쓰고 0.25를 하한으로 둔다. 2026-07-30 기록의 "temp 0.7 단일 실행은 방향 신호이지 확정 아님(반복측정 필요)" 백로그를 여기서 흡수.
+- **category별 집계를 기본으로 한다.** 전체 평균만 내면 검색이 도움 되는 category와 방해되는 category가 **상쇄되어 둘 다 사라진다**. (Deka & Singh 2026, arXiv 2608.01409 — 전체 UR −0.110이지만 PubMedQA +0.676 / PUBHEALTH −0.378) 딸깍의 대응 층위는 `multi_turn_set.json`의 5개 category.
+- **UR이 help_rate의 해석 기준선이다.** help_rate 40%가 좋은 값인지 나쁜 값인지는 "이상적 근거였다면 얼마나 올랐을까"를 모르면 판단할 수 없다. `U* = oracle − baseline`으로 나누고 `U* > 0`인 근거 민감 항목만 집계.
+- **무효 판정을 분모에서 빼지 않는다.** judge invalid는 `invalidRate`로 따로 보고. 실패를 지우면 성숙도가 과대평가된다(같은 논문의 manifest 정책).
+- LLM judge 단독 판정의 관대함은 **여전히 미해결**이다. 위 논문은 judge-인간 일치도 κ가 0.107~0.653으로 요동해 LLM 판정을 1차 지표에서 뺐다. 딸깍은 judge를 계속 1차로 쓰되 tau(반복측정 기반)와 UR(오라클 정규화)로 방어선을 둔다.
+
+**CLI 러너 신설** — `eval/run_multi_turn_eval.py`. 평가기 본체의 **운영 무의존을 지키기 위해** `app.main`·LLM SDK·DB 접근은 전부 러너에만 둔다. 세 조건(`rag_off`/`rag_on`/`oracle`)을 같은 항목에 돌리고, 오라클은 `gold_techniques`를 코퍼스에서 이름으로 직접 꺼내 주입한다(검색 미경유).
+
+**오라클 라벨 신설** — `multi_turn_set.json` 10항목에 `gold_techniques` 추가(22종, 전부 코퍼스 실재 확인). 데이터셋 라벨 검증 테스트 포함.
+
+**라이브 측정 중 추가로 잡은 것 2건**
+1. **생성 호출에 재시도가 없었다.** Judge만 `run_with_retry`로 감싸여 있고 `run_item_generation`은 맨몸이라, Gemini 503 한 번에 측정 전체가 죽었다. → 생성도 재시도 적용(`generation_max_attempts`).
+2. **google-genai 예외를 재시도 판정이 통과시키고 있었다.** `get_error_status_code`가 `.status_code`/`.response.status_code`만 보는데, google-genai는 HTTP 상태를 **`.code`**에 담는다. → 503/429가 "재시도 불가"로 분류돼 즉시 전파되던 문제. `.code` 조회 추가.
+
+**변경 파일**: `eval/multi_turn_eval.py`, `eval/run_multi_turn_eval.py`(신규), `eval/multi_turn_set.json`, `tests/test_multi_turn_eval.py`, `.gitignore`
+
+**검증**: `python3 -m pytest tests/test_multi_turn_eval.py -q` → **46 passed**. 기존 비pytest 모듈 3종(`test_postprocess` 43 / `test_token_budget` 13 / `test_generator_guards` 16) 전부 통과.
+
+**🔴 라이브 측정 — 3/10 항목만 완주 (무료 티어 예산 부족)**
+
+파이프라인은 **end-to-end 동작을 확인**했다(오라클 주입 포함 3조건 완주). 그러나 10항목 전량은 이틀에 걸쳐 시도했음에도 완주하지 못했다.
+
+**측정된 3항목 (생성·채점 모두 llama-3.3-70b-versatile)**
+| 항목 | rag_off | rag_on | oracle | Δ(on−off) | 판정 |
+|---|---|---|---|---|---|
+| context_retention_01 | 5.00 | 5.00 | 5.00 | 0.00 | 천장 |
+| context_retention_02 | 5.00 | 5.00 | 5.00 | 0.00 | 천장 |
+| **latest_override_01** | 4.50 | **3.25** | 4.75 | **−1.25** | **harm** |
+
+- ⭐ **`latest_override_01`이 이 평가기를 만든 이유 그 자체다.** 실제 검색은 점수를 1.25 떨어뜨렸는데(**방해**) 이상적 근거는 0.25 올렸다(**도움**). 검색이라는 행위가 무용한 게 아니라 **가져온 카드가 틀렸다**는 뜻이다. UR로 치면 −1.25/0.25 → 하한 클립 **−1.0**. 지금까지 딸깍의 어떤 지표도 이 구분을 낼 수 없었다.
+- 🔴 **judge 포화가 실재한다.** context_retention 2항목은 rag_off·rag_on·oracle **세 조건 모두 5.00 만점**이다. 근거를 아예 빼도 만점이면 그 항목은 검색 효과를 측정할 수 없다. n=3에서 이미 2건이 천장이므로, **전량 측정 전에 채점 기준부터 손봐야 한다.**
+
+**쿼터 구조 — 무료 티어로는 하루에 완주가 불가능하다**
+| 제약 | 실측 |
+|---|---|
+| Gemini `gemini-flash-latest`(=`gemini-3.7-flash`) | **하루 20요청** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue 20) |
+| Gemini `gemini-2.0-flash` | **모델 퇴역(404)** — `uplift_eval._BACKEND_DEFAULT_MODEL`에 아직 남아 있음 |
+| Groq 70b | TPD 100k. 생성 9 + 채점 9에 소진(98,857/100,000) → 이후 "약 3,000초 후 재시도" |
+| 생성기 라우팅 | 컨텍스트가 붙으면 Groq TPM 예산 부족 판정 → **Gemini 강제**(`generator.py:597`). Gemini 키를 빼면 Groq에서 429 |
+
+- 10항목 × 3조건 = 생성 30 + 채점 30 ≈ **일일 예산의 3배**. 조건을 2개로 줄여도(생성 20 + 채점 20) 하루에 안 들어간다.
+- 진행분은 캐시에 남아 있어(`.multi_turn_*cache.json`) **재실행은 잔여분만 호출**한다. 여러 날에 걸쳐 누적 완주가 가능하다.
+
+**후속(백로그)**
+- ⚠️ **judge 포화 해소가 선행 과제.** 만점이 몰리면 tau도 help/harm도 무의미하다. 채점 기준 강화(감점 조건 명시)나 척도 확장 없이 전량 측정을 돌리면 예산만 태운다.
+- 전량 측정은 **여러 날 누적**으로. 캐시가 있으므로 하루 3~4항목씩 진행하면 3일이면 끝난다. 또는 유료 티어.
+- WORKLOG 2026-07-31의 **두 패스 분리**(생성만 → 채점만)를 러너에 반영할 것. 현재 러너는 항목마다 생성·채점을 번갈아 해서 같은 TPM 풀을 서로 굶긴다. `--no-judge` 플래그 필요.
+- `uplift_eval._BACKEND_DEFAULT_MODEL`의 `gemini-2.0-flash` 퇴역 — 이번 범위 밖이라 두었으나 `uplift_eval`·`example_ab_eval` 실행 시 같은 404가 난다. 별도 수정 필요.

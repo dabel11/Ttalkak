@@ -8,6 +8,7 @@
 import copy
 import hashlib
 import json
+import statistics
 import time
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,25 @@ def select_metric_text(
     if normalize_mode(mode) == "ask":
         return str(answer or "")
     return str(improved_prompt or "")
+
+
+def select_generation_target(generation: dict[str, Any]) -> str:
+    """생성 결과에서 평가 대상 텍스트를 고른다.
+
+    run_generation과 normalize_generation_result는 improved_prompt를 쓰지만
+    일부 호출부는 improvedPrompt를 넘긴다. 두 표기를 모두 읽어야
+    improve 모드에서 평가 대상이 빈 문자열이 되지 않는다.
+    """
+    improved_prompt = (
+        generation.get("improved_prompt")
+        or generation.get("improvedPrompt")
+        or ""
+    )
+    return select_metric_text(
+        generation.get("mode"),
+        improved_prompt,
+        generation.get("answer"),
+    )
 
 
 def calculate_must_include_rate(
@@ -340,6 +360,86 @@ def retrieve_evaluation_contexts(
 
     return retrieved, examples, search_query
 
+
+RETRIEVAL_CACHE_NAMESPACE = "multi_turn_retrieval"
+
+
+def build_retrieval_cache_key(
+    query: str,
+    history: list[dict[str, str]],
+    retrieval_settings: dict[str, Any],
+) -> str:
+    """검색 결과를 얼려두기 위한 캐시 키를 만든다."""
+    payload = {
+        "namespace": RETRIEVAL_CACHE_NAMESPACE,
+        "query": query,
+        "history": serialize_history(history),
+        "retrieval_settings": retrieval_settings,
+    }
+    serialized = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:20]
+
+
+def retrieve_with_cache(
+    query: str,
+    history: list[dict[str, str]],
+    retriever,
+    query_transform_module,
+    retrieval_cache: dict[str, Any] | None = None,
+    retrieval_cache_path: str | None = None,
+    **retrieval_settings,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str, bool]:
+    """검색 결과를 캐시에 고정해 재사용한다.
+
+    같은 항목을 RAG on/off로 반복 실행할 때 두 조건의 차이가 '검색 유무'만
+    남아야 한다. 검색을 매번 다시 돌리면 그날 검색이 흔들린 정도가 점수 차이에
+    섞여 들어가, 검색 측 실패인지 생성 측 실패인지도 구분할 수 없게 된다.
+    """
+    if retrieval_cache is None:
+        retrieved, examples, search_query = retrieve_evaluation_contexts(
+            query=query,
+            history=history,
+            retriever=retriever,
+            query_transform_module=query_transform_module,
+            **retrieval_settings,
+        )
+        return retrieved, examples, search_query, False
+
+    cache_key = build_retrieval_cache_key(query, history, retrieval_settings)
+    cached = retrieval_cache.get(cache_key)
+
+    if isinstance(cached, dict):
+        return (
+            copy.deepcopy(cached.get("retrieved") or []),
+            copy.deepcopy(cached.get("examples") or []),
+            str(cached.get("searchQuery") or query),
+            True,
+        )
+
+    retrieved, examples, search_query = retrieve_evaluation_contexts(
+        query=query,
+        history=history,
+        retriever=retriever,
+        query_transform_module=query_transform_module,
+        **retrieval_settings,
+    )
+
+    retrieval_cache[cache_key] = copy.deepcopy({
+        "retrieved": retrieved,
+        "examples": examples,
+        "searchQuery": search_query,
+    })
+    save_cache(retrieval_cache, retrieval_cache_path)
+
+    return retrieved, examples, search_query, False
+
+
 def run_evaluation_item(
     item: dict[str, Any],
     retriever,
@@ -357,23 +457,57 @@ def run_evaluation_item(
     use_query_transform: bool = False,
     use_hyde: bool = False,
     use_examples: bool = True,
+    judge_call=None,
+    judge_cache: dict[str, Any] | None = None,
+    judge_cache_path: str | None = None,
+    judge_model: str = "",
+    judge_prompt_version: str = "v1",
+    judge_max_attempts: int = 3,
+    judge_base_delay_seconds: float = 2.0,
+    judge_sleep_fn=time.sleep,
+    use_retrieval: bool = True,
+    retrieval_cache: dict[str, Any] | None = None,
+    retrieval_cache_path: str | None = None,
+    override_contexts: list[dict[str, Any]] | None = None,
+    generation_max_attempts: int = 3,
+    generation_base_delay_seconds: float = 2.0,
+    generation_sleep_fn=time.sleep,
 ) -> dict[str, Any]:
-    """한 평가 항목의 검색·캐시·생성을 실행한다."""
+    """한 평가 항목의 검색·캐시·생성·Judge 평가를 실행한다."""
     query = str(item["query"])
     history = item.get("history", [])
 
     if not isinstance(history, list):
         raise ValueError("item.history는 리스트여야 합니다.")
 
-    retrieved, examples, search_query = retrieve_evaluation_contexts(
-        query=query,
-        history=history,
-        retriever=retriever,
-        query_transform_module=query_transform_module,
-        use_query_transform=use_query_transform,
-        use_hyde=use_hyde,
-        use_examples=use_examples,
-    )
+    if override_contexts is not None and not use_retrieval:
+        raise ValueError(
+            "override_contexts와 use_retrieval=False는 함께 쓸 수 없습니다."
+        )
+
+    if override_contexts is not None:
+        # 오라클 조건. 검색 대신 정답 근거를 그대로 주입해
+        # '이상적 근거였다면 얼마나 올랐을까'의 상한을 만든다.
+        retrieved = copy.deepcopy(override_contexts)
+        examples = []
+        search_query = query
+        retrieval_cache_hit = False
+    elif use_retrieval:
+        retrieved, examples, search_query, retrieval_cache_hit = retrieve_with_cache(
+            query=query,
+            history=history,
+            retriever=retriever,
+            query_transform_module=query_transform_module,
+            retrieval_cache=retrieval_cache,
+            retrieval_cache_path=retrieval_cache_path,
+            use_query_transform=use_query_transform,
+            use_hyde=use_hyde,
+            use_examples=use_examples,
+        )
+    else:
+        # RAG off 기준선. 검색 컨텍스트 없이 같은 생성 경로를 태워
+        # '검색 유무' 하나만 다른 짝을 만든다.
+        retrieved, examples, search_query, retrieval_cache_hit = [], [], query, False
 
     contexts = retrieved + examples
     technique_names = extract_technique_names(retrieved)
@@ -398,19 +532,24 @@ def run_evaluation_item(
         generation = copy.deepcopy(cached)
         cache_hit = True
     else:
-        generation = run_item_generation(
-            item=item,
-            retrieved=contexts,
-            model=model,
-            run_generation=run_generation,
-            extract_improved_prompt=extract_improved_prompt,
+        generation = run_with_retry(
+            lambda: run_item_generation(
+                item=item,
+                retrieved=contexts,
+                model=model,
+                run_generation=run_generation,
+                extract_improved_prompt=extract_improved_prompt,
+            ),
+            max_attempts=generation_max_attempts,
+            base_delay_seconds=generation_base_delay_seconds,
+            sleep_fn=generation_sleep_fn,
         )
 
         cache[cache_key] = copy.deepcopy(generation)
         save_cache(cache, cache_path)
         cache_hit = False
 
-    return {
+    result = {
         "generation": generation,
         "retrieved": retrieved,
         "examples": examples,
@@ -418,7 +557,29 @@ def run_evaluation_item(
         "searchQuery": search_query,
         "cacheKey": cache_key,
         "cacheHit": cache_hit,
+        "useRetrieval": use_retrieval,
+        "retrievalCacheHit": retrieval_cache_hit,
     }
+
+    if judge_call is not None:
+        judge_execution = run_judge_evaluation(
+            item=item,
+            generation=generation,
+            judge_call=judge_call,
+            judge_cache=judge_cache if judge_cache is not None else {},
+            judge_cache_path=judge_cache_path,
+            judge_model=judge_model,
+            judge_prompt_version=judge_prompt_version,
+            max_attempts=judge_max_attempts,
+            base_delay_seconds=judge_base_delay_seconds,
+            sleep_fn=judge_sleep_fn,
+        )
+
+        result["judge"] = judge_execution["result"]
+        result["judgeCacheKey"] = judge_execution["cacheKey"]
+        result["judgeCacheHit"] = judge_execution["cacheHit"]
+
+    return result
 
 def get_error_status_code(error: Exception) -> int | None:
     """예외 자체 또는 response 객체에서 HTTP 상태 코드를 추출한다."""
@@ -427,6 +588,10 @@ def get_error_status_code(error: Exception) -> int | None:
     if status_code is None:
         response = getattr(error, "response", None)
         status_code = getattr(response, "status_code", None)
+
+    if status_code is None:
+        # google-genai 예외는 status_code가 아니라 code에 HTTP 상태를 담는다.
+        status_code = getattr(error, "code", None)
 
     try:
         return int(status_code) if status_code is not None else None
@@ -491,11 +656,7 @@ def build_judge_prompt(
     """다중 턴 프롬프트 개선 결과를 평가할 Judge 입력을 만든다."""
     mode = normalize_mode(generation.get("mode"))
 
-    evaluation_target = (
-        generation.get("improvedPrompt", "")
-        if mode == "improve"
-        else generation.get("answer", "")
-    )
+    evaluation_target = select_generation_target(generation)
 
     judge_input = {
         "history": item.get("history", []),
@@ -641,4 +802,358 @@ def normalize_judge_result(raw_result: Any) -> dict[str, Any]:
         "averageScore": average_score,
         "reason": str(parsed.get("reason") or "").strip(),
         "error": None,
+    }
+
+
+JUDGE_CACHE_NAMESPACE = "multi_turn_judge"
+
+
+def build_judge_cache_key(
+    history: list[dict[str, str]],
+    current_request: str,
+    generation_result: Any,
+    judge_model: str,
+    judge_prompt_version: str = "v1",
+) -> str:
+    """Judge 호출 결과를 재사용하기 위한 캐시 키를 만든다.
+
+    namespace를 넣어 generation 캐시 키와 충돌하지 않게 하고, 정렬 직렬화로
+    generation_result의 키 순서가 달라도 같은 키가 나오게 한다.
+    """
+    payload = {
+        "namespace": JUDGE_CACHE_NAMESPACE,
+        "history": history,
+        "current_request": current_request,
+        "generation_result": generation_result,
+        "judge_model": str(judge_model),
+        "judge_prompt_version": str(judge_prompt_version),
+    }
+    serialized = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:20]
+
+
+def run_judge_evaluation(
+    item: dict[str, Any],
+    generation: dict[str, Any],
+    judge_call,
+    judge_cache: dict[str, Any],
+    judge_cache_path: str | None,
+    judge_model: str,
+    judge_prompt_version: str = "v1",
+    max_attempts: int = 3,
+    base_delay_seconds: float = 2.0,
+    sleep_fn=time.sleep,
+) -> dict[str, Any]:
+    """Judge를 호출해 정규화된 평가 결과를 돌려준다.
+
+    Judge SDK는 직접 import하지 않고 judge_call로 주입받는다.
+    호출 형식은 judge_call(prompt=..., model=...)로 고정한다.
+    """
+    judge_prompt = build_judge_prompt(item, generation)
+
+    judge_cache_key = build_judge_cache_key(
+        history=item.get("history", []),
+        current_request=str(item.get("query", "")),
+        generation_result=generation,
+        judge_model=judge_model,
+        judge_prompt_version=judge_prompt_version,
+    )
+
+    cached = judge_cache.get(judge_cache_key)
+
+    if isinstance(cached, dict):
+        return {
+            "result": copy.deepcopy(cached),
+            "cacheKey": judge_cache_key,
+            "cacheHit": True,
+        }
+
+    raw_result = run_with_retry(
+        lambda: judge_call(prompt=judge_prompt, model=judge_model),
+        max_attempts=max_attempts,
+        base_delay_seconds=base_delay_seconds,
+        sleep_fn=sleep_fn,
+    )
+
+    # 호출 자체가 성공했다면 valid=False여도 캐시한다.
+    # 같은 잘못된 응답을 받으려고 API를 다시 호출할 이유가 없다.
+    normalized = normalize_judge_result(raw_result)
+
+    judge_cache[judge_cache_key] = copy.deepcopy(normalized)
+    save_cache(judge_cache, judge_cache_path)
+
+    return {
+        "result": normalized,
+        "cacheKey": judge_cache_key,
+        "cacheHit": False,
+    }
+
+
+RETRIEVAL_EFFECT_HELP = "help"
+RETRIEVAL_EFFECT_HARM = "harm"
+RETRIEVAL_EFFECT_NEUTRAL = "neutral"
+RETRIEVAL_EFFECT_INVALID = "invalid"
+
+# judge 점수는 4항목 정수의 평균이라 최소 눈금이 0.25다.
+# 그보다 작은 차이는 판정에 쓸 수 없다.
+DEFAULT_MINIMUM_TAU = 0.25
+
+
+def get_judge_average_score(evaluation: Any) -> float | None:
+    """평가 결과에서 유효한 judge 평균 점수만 꺼낸다."""
+    if not isinstance(evaluation, dict):
+        return None
+
+    judge = evaluation.get("judge")
+
+    if not isinstance(judge, dict) or not judge.get("valid"):
+        return None
+
+    score = judge.get("averageScore")
+
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return None
+
+    return float(score)
+
+
+def calculate_judge_delta(baseline: Any, retrieval: Any) -> float | None:
+    """RAG off 대비 RAG on의 judge 점수 변화량을 계산한다."""
+    baseline_score = get_judge_average_score(baseline)
+    retrieval_score = get_judge_average_score(retrieval)
+
+    if baseline_score is None or retrieval_score is None:
+        return None
+
+    return retrieval_score - baseline_score
+
+
+def classify_retrieval_effect(delta: float | None, tau: float) -> str:
+    """점수 변화량을 도움·방해·중립으로 판정한다."""
+    if delta is None:
+        return RETRIEVAL_EFFECT_INVALID
+
+    if delta >= tau:
+        return RETRIEVAL_EFFECT_HELP
+
+    if delta <= -tau:
+        return RETRIEVAL_EFFECT_HARM
+
+    return RETRIEVAL_EFFECT_NEUTRAL
+
+
+def estimate_tau(
+    repeated_scores: list[list[Any]],
+    minimum_tau: float = DEFAULT_MINIMUM_TAU,
+    sigma_multiplier: float = 2.0,
+) -> float:
+    """같은 조건 반복 실행의 점수 흔들림에서 판정 임계값을 유도한다.
+
+    tau를 눈대중으로 정하면 help·harm 비율이 임계값 선택에 좌우된다.
+    항목별 표준편차의 평균에 sigma_multiplier를 곱하고, judge 점수의
+    최소 눈금을 하한으로 둔다.
+    """
+    deviations: list[float] = []
+
+    for scores in repeated_scores:
+        numeric_scores = [
+            float(score)
+            for score in scores
+            if isinstance(score, (int, float)) and not isinstance(score, bool)
+        ]
+
+        if len(numeric_scores) >= 2:
+            deviations.append(statistics.stdev(numeric_scores))
+
+    if not deviations:
+        return minimum_tau
+
+    mean_deviation = sum(deviations) / len(deviations)
+    return max(minimum_tau, sigma_multiplier * mean_deviation)
+
+
+def calculate_retrieval_effect_rates(
+    records: list[dict[str, Any]],
+    tau: float = DEFAULT_MINIMUM_TAU,
+) -> dict[str, Any]:
+    """RAG on/off 짝에서 도움·방해·중립 비율을 계산한다.
+
+    각 record는 item·baseline(RAG off)·retrieval(RAG on)을 담는다.
+    judge가 무효인 항목은 분모에서 빼지 않고 invalid로 따로 센다.
+    실패를 지우면 성숙도가 과대평가되기 때문이다.
+    """
+    counts = {
+        RETRIEVAL_EFFECT_HELP: 0,
+        RETRIEVAL_EFFECT_HARM: 0,
+        RETRIEVAL_EFFECT_NEUTRAL: 0,
+        RETRIEVAL_EFFECT_INVALID: 0,
+    }
+    deltas: list[float | None] = []
+
+    for record in records:
+        delta = calculate_judge_delta(
+            record.get("baseline"),
+            record.get("retrieval"),
+        )
+        deltas.append(delta)
+        counts[classify_retrieval_effect(delta, tau)] += 1
+
+    total = len(records)
+
+    if not total:
+        return {
+            "total": 0,
+            "tau": tau,
+            "counts": counts,
+            "retrievalHelpRate": None,
+            "retrievalHarmRate": None,
+            "retrievalNeutralRate": None,
+            "invalidRate": None,
+            "meanDelta": None,
+        }
+
+    return {
+        "total": total,
+        "tau": tau,
+        "counts": counts,
+        "retrievalHelpRate": counts[RETRIEVAL_EFFECT_HELP] / total,
+        "retrievalHarmRate": counts[RETRIEVAL_EFFECT_HARM] / total,
+        "retrievalNeutralRate": counts[RETRIEVAL_EFFECT_NEUTRAL] / total,
+        "invalidRate": counts[RETRIEVAL_EFFECT_INVALID] / total,
+        "meanDelta": average_non_null(deltas),
+    }
+
+
+def calculate_retrieval_effect_rates_by_category(
+    records: list[dict[str, Any]],
+    tau: float = DEFAULT_MINIMUM_TAU,
+) -> dict[str, dict[str, Any]]:
+    """category별로 나눠 집계한다.
+
+    전체 평균만 내면 검색이 도움이 되는 category와 방해가 되는 category가
+    상쇄되어, 둘 다 보이지 않게 된다.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for record in records:
+        item = record.get("item")
+        item = item if isinstance(item, dict) else {}
+        category = str(item.get("category") or "unknown")
+        grouped.setdefault(category, []).append(record)
+
+    return {
+        category: calculate_retrieval_effect_rates(category_records, tau)
+        for category, category_records in sorted(grouped.items())
+    }
+
+
+def calculate_utility_recovery(
+    records: list[dict[str, Any]],
+    epsilon: float = 1e-9,
+) -> dict[str, Any]:
+    """오라클 대비 검색의 결정 이득 회수율(UR)을 계산한다.
+
+    U*  = oracle − baseline  (이상적 근거가 줄 수 있었던 이득)
+    U^R = retrieval − baseline  (실제 검색이 준 이득)
+
+    U* > 0 인 근거 민감 항목만 집계한다. 이상적 근거를 줘도 나아지지 않는
+    항목은 검색 탓을 물을 수 없다. help 비율만으로는 그 수치가 좋은 값인지
+    알 수 없으므로, 회수율이 해석의 기준선이 된다.
+    """
+    ratios: list[float] = []
+    evidence_sensitive = 0
+
+    for record in records:
+        baseline_score = get_judge_average_score(record.get("baseline"))
+        retrieval_score = get_judge_average_score(record.get("retrieval"))
+        oracle_score = get_judge_average_score(record.get("oracle"))
+
+        if None in (baseline_score, retrieval_score, oracle_score):
+            continue
+
+        oracle_utility = oracle_score - baseline_score
+
+        if oracle_utility <= 0:
+            continue
+
+        evidence_sensitive += 1
+        ratio = (retrieval_score - baseline_score) / (oracle_utility + epsilon)
+        ratios.append(max(-1.0, min(1.0, ratio)))
+
+    return {
+        "total": len(records),
+        "evidenceSensitiveCount": evidence_sensitive,
+        "utilityRecovery": (sum(ratios) / len(ratios)) if ratios else None,
+    }
+
+
+def is_mode_correct(item: dict[str, Any], evaluation: Any) -> bool | None:
+    """expected_mode와 실제 mode가 일치하는지 판정한다."""
+    expected_mode = normalize_mode(item.get("expected_mode"))
+
+    if expected_mode not in {"improve", "ask"}:
+        return None
+
+    if not isinstance(evaluation, dict):
+        return None
+
+    generation = evaluation.get("generation")
+
+    if not isinstance(generation, dict):
+        return None
+
+    return normalize_mode(generation.get("mode")) == expected_mode
+
+
+def calculate_distract_rescue_rates(
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """검색이 맞던 판정을 깨뜨린 비율과 틀린 판정을 살린 비율을 계산한다.
+
+    점수가 아니라 mode 판정 전환을 세는 보조 지표다.
+    distract가 rescue보다 크면 검색이 구조를 깨는 쪽으로 더 많이 작용한다.
+    """
+    distract = 0
+    rescue = 0
+    comparable = 0
+
+    for record in records:
+        item = record.get("item")
+        item = item if isinstance(item, dict) else {}
+
+        baseline_correct = is_mode_correct(item, record.get("baseline"))
+        retrieval_correct = is_mode_correct(item, record.get("retrieval"))
+
+        if baseline_correct is None or retrieval_correct is None:
+            continue
+
+        comparable += 1
+
+        if baseline_correct and not retrieval_correct:
+            distract += 1
+        elif not baseline_correct and retrieval_correct:
+            rescue += 1
+
+    if not comparable:
+        return {
+            "comparable": 0,
+            "distractRate": None,
+            "rescueRate": None,
+            "netRescueIndex": None,
+        }
+
+    distract_rate = distract / comparable
+    rescue_rate = rescue / comparable
+
+    return {
+        "comparable": comparable,
+        "distractRate": distract_rate,
+        "rescueRate": rescue_rate,
+        "netRescueIndex": rescue_rate - distract_rate,
     }
