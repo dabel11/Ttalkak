@@ -37,12 +37,15 @@ from eval.multi_turn_eval import (
     calculate_retrieval_effect_rates_by_category,
     calculate_utility_recovery,
     calculate_distract_rescue_rates,
+    JUDGE_SCORE_KEYS,
+    JUDGE_PROMPT_VERSION,
 )
 
 
 VALID_JUDGE_RESPONSE = {
     "contextRetention": 5,
     "instructionFollowing": 4,
+    "techniqueGrounding": 4,
     "clarity": 4,
     "hallucinationAvoidance": 5,
     "reason": "이전 조건과 현재 요청을 모두 반영했습니다.",
@@ -770,6 +773,7 @@ def test_normalize_judge_result_calculates_average() -> None:
     result = normalize_judge_result({
         "contextRetention": 5,
         "instructionFollowing": "4",
+        "techniqueGrounding": 4,
         "clarity": 3.0,
         "hallucinationAvoidance": 4,
         "reason": "전반적으로 조건을 충실히 반영했습니다.",
@@ -779,6 +783,7 @@ def test_normalize_judge_result_calculates_average() -> None:
     assert result["scores"] == {
         "contextRetention": 5,
         "instructionFollowing": 4,
+        "techniqueGrounding": 4,
         "clarity": 3,
         "hallucinationAvoidance": 4,
     }
@@ -796,6 +801,7 @@ def test_normalize_judge_result_rejects_invalid_response() -> None:
     invalid_scores = normalize_judge_result({
         "contextRetention": 6,
         "instructionFollowing": 4,
+        "techniqueGrounding": 4,
         "clarity": 0,
         "hallucinationAvoidance": 5,
         "reason": "점수 범위가 잘못되었습니다.",
@@ -895,7 +901,7 @@ def test_judge_cache_key_changes_with_inputs() -> None:
     changed_model["judge_model"] = "llama-3.3-70b-versatile"
 
     changed_version = dict(base)
-    changed_version["judge_prompt_version"] = "v2"
+    changed_version["judge_prompt_version"] = "v99"
 
     for changed in (
         changed_history,
@@ -937,7 +943,7 @@ def test_judge_evaluation_calls_judge_on_cache_miss() -> None:
 
     assert execution["cacheHit"] is False
     assert execution["result"]["valid"] is True
-    assert execution["result"]["averageScore"] == 4.5
+    assert execution["result"]["averageScore"] == 4.4
 
     # 캐시에는 raw 응답이 아니라 정규화된 결과가 저장된다.
     cached = judge_cache[execution["cacheKey"]]
@@ -1467,6 +1473,58 @@ def test_generation_is_retried_on_transient_error() -> None:
     assert is_retryable_generation_error(GeminiServerError("high demand"))
 
 
+def test_judge_rubric_scores_technique_grounding() -> None:
+    """검색이 움직일 수 있는 축이 루브릭에 있어야 한다.
+
+    v1의 4개 기준(문맥 유지·지시 준수·명확성·사실 충실도)은 기법 카드 없이도
+    만족할 수 있어서, 검색을 껐을 때와 켰을 때가 구조적으로 같은 점수가 나왔다.
+    """
+    assert "techniqueGrounding" in JUDGE_SCORE_KEYS
+
+    prompt = build_judge_prompt(
+        {"history": [], "query": "표로 정리해줘", "expected_mode": "improve"},
+        {"mode": "improve", "improved_prompt": "개선안", "answer": ""},
+    )
+
+    assert "techniqueGrounding" in prompt
+    # 만점을 기본값으로 주지 않도록 명시한다.
+    assert "5점은 기본값이 아닙니다" in prompt
+    # 필수/금지 문자열이 감점으로 연결되어야 한다.
+    assert "mustInclude" in prompt and "mustNotInclude" in prompt
+
+
+def test_rubric_change_invalidates_judge_cache() -> None:
+    """루브릭이 바뀌면 예전 점수를 재사용하면 안 된다."""
+    assert JUDGE_PROMPT_VERSION == "v2"
+
+    arguments = {
+        "history": [],
+        "current_request": "표로 정리해줘",
+        "generation_result": {"mode": "improve", "improved_prompt": "개선안"},
+        "judge_model": "llama-3.3-70b-versatile",
+    }
+
+    assert (
+        build_judge_cache_key(**arguments, judge_prompt_version="v1")
+        != build_judge_cache_key(**arguments)
+    )
+
+
+def test_judge_rejects_response_missing_new_criterion() -> None:
+    """v1 형식 응답(4개 기준)은 무효로 처리돼 조용히 섞이지 않는다."""
+    result = normalize_judge_result({
+        "contextRetention": 5,
+        "instructionFollowing": 5,
+        "clarity": 5,
+        "hallucinationAvoidance": 5,
+        "reason": "v1 형식",
+    })
+
+    assert result["valid"] is False
+    assert result["error"] == "invalid_scores"
+    assert result["invalidScoreKeys"] == ["techniqueGrounding"]
+
+
 def run_tests() -> None:
     tests = [
         test_cache_key_changes_with_history,
@@ -1515,6 +1573,9 @@ def run_tests() -> None:
         test_override_contexts_injects_oracle_evidence,
         test_dataset_has_gold_techniques_for_oracle_condition,
         test_generation_is_retried_on_transient_error,
+        test_judge_rubric_scores_technique_grounding,
+        test_rubric_change_invalidates_judge_cache,
+        test_judge_rejects_response_missing_new_criterion,
     ]
 
     for test in tests:

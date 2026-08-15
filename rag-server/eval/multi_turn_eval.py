@@ -22,6 +22,11 @@ REQUIRED_CATEGORIES = {
     "faithfulness",
 }
 
+# 루브릭이 바뀌면 예전 점수를 재사용하면 안 된다.
+# 이 값이 Judge 캐시 키에 들어가므로, 채점 기준을 고칠 때마다 함께 올린다.
+#   v1 → v2: techniqueGrounding 추가 + 점수 앵커·감점 규칙 명시
+JUDGE_PROMPT_VERSION = "v2"
+
 
 def serialize_history(history: list[dict[str, str]]) -> str:
     """대화 이력을 캐시 키에 사용할 결정론적 JSON 문자열로 직렬화한다."""
@@ -461,7 +466,7 @@ def run_evaluation_item(
     judge_cache: dict[str, Any] | None = None,
     judge_cache_path: str | None = None,
     judge_model: str = "",
-    judge_prompt_version: str = "v1",
+    judge_prompt_version: str = JUDGE_PROMPT_VERSION,
     judge_max_attempts: int = 3,
     judge_base_delay_seconds: float = 2.0,
     judge_sleep_fn=time.sleep,
@@ -641,12 +646,17 @@ def run_with_retry(
 
     raise RuntimeError("도달할 수 없는 재시도 상태입니다.")
 
+# techniqueGrounding 은 v2 에서 추가됐다. 기존 4개 기준은 기법 카드 없이도
+# 만족할 수 있어(문맥 유지·지시 준수는 검색과 무관), 검색을 껐을 때와 켰을 때가
+# 구조적으로 같은 점수가 나왔다 — 검색 효과를 잴 수 있는 축이 하나도 없었다.
 JUDGE_SCORE_KEYS = (
     "contextRetention",
     "instructionFollowing",
+    "techniqueGrounding",
     "clarity",
     "hallucinationAvoidance",
 )
+
 
 
 def build_judge_prompt(
@@ -669,36 +679,60 @@ def build_judge_prompt(
     }
 
     return f"""
-당신은 다중 턴 프롬프트 개선 시스템의 평가자입니다.
-아래 입력만 근거로 결과를 평가하세요.
+당신은 다중 턴 프롬프트 개선 시스템의 **엄격한** 평가자입니다.
+아래 입력만 근거로 평가하세요.
 
-평가 기준:
-1. contextRetention
-   - 이전 대화에서 확정된 주제, 대상, 조건, 형식을 보존했는가
-   - 최신 요청이 이전 조건을 변경했다면 최신 조건을 우선했는가
+■ 채점 방법 (반드시 이 순서로)
+1) 각 기준마다 **결함을 먼저 찾습니다.** 결함 목록을 만든 뒤 점수를 정합니다.
+2) **5점은 기본값이 아닙니다.** 흠을 찾으려 해도 없을 때만 5점입니다.
+   "무난하다", "문제없어 보인다"는 5점이 아니라 4점입니다.
+3) 근거(reason)에는 **감점한 결함을 구체적으로** 적습니다. 감점이 없으면
+   왜 흠이 없는지 적습니다. "전반적으로 좋음" 같은 서술은 금지합니다.
 
-2. instructionFollowing
-   - 현재 요청과 명시적인 필수 조건을 정확히 반영했는가
-   - 사용자가 금지하거나 변경한 조건을 다시 포함하지 않았는가
+■ 점수 기준 (모든 항목 공통)
+5 = 결함 없음. 해당 기준에서 모범적.
+4 = 사소한 흠 1개. 실사용에 지장 없음.
+3 = 눈에 띄는 결함 1개, 또는 사소한 흠 2개 이상.
+2 = 기준을 절반 정도만 만족. 수정 없이 쓰기 어려움.
+1 = 기준을 사실상 만족하지 못함.
 
-3. clarity
-   - 결과가 구체적이고 실행 가능하며 모호하지 않은가
-   - 불필요한 반복이나 서로 충돌하는 지시가 없는가
+■ 평가 기준
 
-4. hallucinationAvoidance
-   - 대화에 없던 중요한 사실이나 조건을 임의로 만들지 않았는가
-   - 정보가 부족한 경우 추측하지 않고 적절하게 질문했는가
+1. contextRetention — 대화 맥락 보존
+   - 이전 턴에서 확정된 주제·대상·조건·형식이 결과에 남아 있는가
+   - 최신 요청이 이전 조건을 바꿨다면 최신 것을 우선했는가
+   - 감점: 확정 조건이 빠질 때마다 1점. 폐기된 조건이 남아 있으면 최대 2점.
 
-각 항목을 1점부터 5점까지의 정수로 평가하세요.
-5점은 기준을 매우 충실히 만족함을 의미합니다.
+2. instructionFollowing — 지시 준수
+   - 현재 요청과 필수 조건을 정확히 반영했는가
+   - **mustInclude 항목이 누락되면 1건당 1점 감점**
+   - **mustNotInclude 항목이 하나라도 등장하면 최대 2점**
 
+3. techniqueGrounding — 프롬프트 기법 적용
+   - 개선안이 프롬프트 엔지니어링 기법을 **실제 지시문으로** 구현했는가
+     (역할 지정, 출력 형식·구조 명시, 제약 조건, 단계 분해, 예시 제시 등)
+   - 기법 이름만 언급하고 지시문에 반영되지 않았으면 최대 2점
+   - 원 요청을 문장만 다듬고 기법 적용이 없으면 최대 2점
+   - 이 항목은 "요청을 옮겨 적었는가"가 아니라 "프롬프트로서 설계됐는가"를 봅니다.
+
+4. clarity — 명확성·실행 가능성
+   - 지시가 구체적이고 모호하지 않은가. 실행자가 되물을 여지가 없는가
+   - 감점: 해석이 갈리는 표현, 중복 지시, 서로 충돌하는 지시 각각 1점.
+
+5. hallucinationAvoidance — 사실 충실도
+   - 대화에 없던 구체 사실(수치·날짜·고유명사·가격·사양)을 지어내지 않았는가
+   - 정보가 부족하면 추측 대신 질문하거나 빈칸으로 남겼는가
+   - 감점: 창작된 구체 사실 1건당 2점. 대상·톤 같은 일반적 가정은 감점 아님.
+
+■ 출력
 반드시 다음 JSON 형식으로만 응답하세요:
 {{
   "contextRetention": 1,
   "instructionFollowing": 1,
+  "techniqueGrounding": 1,
   "clarity": 1,
   "hallucinationAvoidance": 1,
-  "reason": "판정 근거를 간결하게 작성"
+  "reason": "항목별 감점 사유를 구체적으로. 감점이 없으면 그 이유를."
 }}
 
 평가 입력:
@@ -813,7 +847,7 @@ def build_judge_cache_key(
     current_request: str,
     generation_result: Any,
     judge_model: str,
-    judge_prompt_version: str = "v1",
+    judge_prompt_version: str = JUDGE_PROMPT_VERSION,
 ) -> str:
     """Judge 호출 결과를 재사용하기 위한 캐시 키를 만든다.
 
@@ -845,7 +879,7 @@ def run_judge_evaluation(
     judge_cache: dict[str, Any],
     judge_cache_path: str | None,
     judge_model: str,
-    judge_prompt_version: str = "v1",
+    judge_prompt_version: str = JUDGE_PROMPT_VERSION,
     max_attempts: int = 3,
     base_delay_seconds: float = 2.0,
     sleep_fn=time.sleep,
