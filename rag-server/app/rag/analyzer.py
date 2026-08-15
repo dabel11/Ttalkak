@@ -21,6 +21,10 @@ MAKE 파이프라인 1단계 — 요청 분석기.
 import json
 import os
 
+from app.rag.axes import (
+    MAX_AXES_PER_REQUEST, build_axis_catalog, normalize_axes,
+)
+
 _MODEL = "llama-3.1-8b-instant"   # 형식 판단이라 8b로 충분. TPM 6000 주의.
 _TEMPERATURE = 0.2                 # 결정성 우선 — 같은 입력 → 같은 필드/mode
 
@@ -75,8 +79,15 @@ _SYSTEM = """너는 프롬프트 요청 '분석기'다. 사용자 요청을 읽�
    위 [status 판정] 기준을 그대로 따른다(요청에 단서가 있으면 filled).
 7. 요청에 값이 있으면 status=filled 이고 value 에 그 값을 적는다. 없으면 empty, value=null.
 
+[기법 축 — 이 요청에 어떤 종류의 지시문이 필요한가]
+아래 목록에서만 고른다. 최대 {max_axes}개. 애매하면 적게 골라라.
+목록에 없는 이름을 지어내지 마라. 해당 없으면 빈 배열.
+{axis_catalog}
+
 [출력 — JSON 하나만]
-{"taskType":"작업유형","fields":[{"name":"필드명","role":"required|fact|framing","status":"filled|empty","value":"값 또는 null"}]}"""
+{"taskType":"작업유형","fields":[{"name":"필드명","role":"required|fact|framing","status":"filled|empty","value":"값 또는 null"}],"techniqueAxes":["축이름"]}"""
+_SYSTEM = _SYSTEM.replace("{max_axes}", str(MAX_AXES_PER_REQUEST))
+_SYSTEM = _SYSTEM.replace("{axis_catalog}", build_axis_catalog("request"))
 
 _client = None
 _init_failed = False
@@ -182,7 +193,12 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
     fields = _sanitize(data.get("fields") or [])
     if not fields:
         return None
-    return {"taskType": str(data.get("taskType") or ""), "fields": fields}
+    return {
+        "taskType": str(data.get("taskType") or ""),
+        "fields": fields,
+        # 통제 어휘 밖의 값은 버린다. 비면 호출자가 기존 유사도 경로로 폴백한다.
+        "techniqueAxes": normalize_axes(data.get("techniqueAxes")),
+    }
 
 
 def derive_mode(fields: list[dict]) -> str:

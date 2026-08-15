@@ -1405,3 +1405,50 @@ gold 를 보지 않는 고정 템플릿으로 질의 형태만 카드 쪽에 정
 **후속(백로그)**
 - 로컬 `develop-integrated`의 **멀티표현 인덱싱**(`app/rag/views.py`, `0deb13f`)은 이 브랜치에 없어 측정하지 못했다. 병합 후 **같은 잣대(gold Recall@5)로 재볼 것** — 효과가 처음으로 검증된다.
 - `gold_techniques` 라벨 팀 검토. 현재 모든 수치의 기준선이다.
+
+---
+
+## [2026-08-15] 기법 축 라우팅 — 테스트 모델 구축 + 태깅 파일럿
+**목적**: 「검색 구조 정밀 진단」의 결론(유사도 → 판단 기반 조회)을 실제로 돌려보는 최소 구현.
+
+**★ 축 선정 기준 — 카드의 `Prompt Template`**
+카드에 `constraints` 같은 항목은 없다. 대신 모든 카드에 그 기법이 개선 프롬프트에 **실제로 추가하는 지시문**이 있다. 축은 그 지시문의 '종류'다.
+| 카드 | Prompt Template | 축 |
+|---|---|---|
+| Constraint Prompting | `다음 조건을 반드시 지켜라: [조건 목록]` | constraints |
+| Explicit Output Length Control | `답변은 {글자수} 내외로 작성하세요` | length_control |
+| Abstention Prompting | `근거가 부족하면 "자료 부족"이라고 말하라` | uncertainty |
+
+`Definition`은 추상적이고 `Use When`은 상황이지만 **`Prompt Template`은 결과물이라 판정이 흔들리지 않는다.** analyzer 쪽도 같은 언어("이 요청은 어떤 종류의 지시문이 필요한가")를 쓴다 — 양쪽이 **지시문 종류**로 만나는 것이 이 설계의 연결점이다.
+
+**구현**
+- `app/rag/axes.py` — 축 어휘 12개(`AXES_VERSION=v1`). 축마다 **요청 쪽/카드 쪽 설명을 분리** 보관. `normalize_axes`(통제 어휘 강제·상한), `filter_cards_by_axes`(겹침 수 정렬, 같으면 임베딩 순서 유지), `summarize_axis_coverage`(굶는 축 탐지)
+- `ingestion/tag_axes.py` — 태깅 배치. 태거 주입식(테스트는 fake), 429 지수 백오프, `--only`/`--dry-run`/`--report`
+- `app/rag/analyzer.py` — 출력에 `techniqueAxes` **추가만**(하위 호환). 어휘 밖 값은 버리고, 비면 호출자가 기존 유사도 경로로 폴백
+- `tests/test_axes.py` — 12개. LLM·DB 없이 돈다
+
+**⭐ 태깅 파일럿 (gold 22종, llama-3.3-70b, temp 0)** — **통과분 16/16 성공**
+임베딩이 틀렸던 카드가 **전부 교정됐다**:
+| 카드 | 임베딩 배정 | LLM 태깅 |
+|---|---|---|
+| Uncertainty Prompting | context_isolation ❌ | **uncertainty** ✅ |
+| Abstention Prompting | grounding ❌ | **uncertainty** ✅ |
+| Grounded Refusal Prompting | constraints ❌ | **uncertainty + grounding** ✅ |
+
+- 근거도 정확히 `Prompt Template`을 인용한다 — *"'[금지 사항]은 하지 말고' 부분을 보고 constraints 축을 골랐다"*
+- 나머지 6장은 **429 rate limit**(태깅 실패 아님). 재시도를 붙였다.
+- **→ "임베딩으로는 태깅 못 한다"가 실증됐고, LLM 태깅은 작동한다.**
+
+**🔴 축 어휘에서 드러난 경계 문제 (합의 필요)**
+- `Variable Slot Prompting` → LLM은 **output_format**, 내 gold 라벨은 **빈칸(uncertainty) 용도**로 썼다
+- `Template Filling Prompting` → LLM은 **output_format + constraints**, gold는 빈칸 용도
+- 즉 **"빈칸"이 구조(output_format)인가 유보(uncertainty)인가**가 갈린다. 딸깍의 `[항목명 입력]` 메커니즘이 정확히 이 지점이므로 반드시 정해야 한다.
+- `Task Framing Prompting` → role_assignment (임베딩은 decomposition). LLM 판정이 더 타당해 보인다.
+
+**검증**: `python3 -m pytest tests/ -q` → **61 passed**. 비pytest 3종 전부 통과.
+
+**후속(백로그)**
+- 축 어휘 확정(특히 빈칸 경계) → 카드 170장 전량 태깅 → 사람 검토
+- 조회 경로를 `run_generation` 앞단에 연결(현재 `axes.py`는 순수 함수만, 아직 배선 전)
+- gold 대비 Recall@5 재측정. 목표 0.215 → 0.50
+- 8b로도 태깅이 되는지 확인(현재 70b 기준). TPD 예산상 중요
