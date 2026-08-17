@@ -255,6 +255,31 @@ def test_tagging_does_not_retry_non_rate_limit_errors() -> None:
     assert tagged[0]["axes"] == [] and tagged[0]["error"]
 
 
+def test_blank_slot_boundary_is_explicit() -> None:
+    """'빈칸'은 구조와 유보로 분리한다 (2026-08-17 결정).
+
+    딸깍의 [항목명 입력] 메커니즘이 정확히 이 경계에 걸리므로,
+    태깅하는 쪽이 읽는 설명에 구분이 드러나야 한다.
+    """
+    output_card = TECHNIQUE_AXES["output_format"]["card"]
+    uncertainty_card = TECHNIQUE_AXES["uncertainty"]["card"]
+
+    # 슬롯을 '두는' 쪽은 구조
+    assert "슬롯" in output_card or "템플릿" in output_card
+    # 유보 쪽은 '지어내지 않는 태도'임을 명시해 슬롯과 섞이지 않게 한다
+    assert "유보" in uncertainty_card or "되묻" in uncertainty_card
+    assert "지어내지" in uncertainty_card
+
+    # 두 축이 같은 문구를 공유하면 태거가 구분하지 못한다
+    assert output_card != uncertainty_card
+
+    # 둘 다 고를 수 있어야 한다 — 빈칸 요청은 구조와 유보가 함께 필요할 수 있다
+    assert MAX_AXES_PER_REQUEST >= 2
+    assert normalize_axes(["output_format", "uncertainty"]) == [
+        "output_format", "uncertainty"
+    ]
+
+
 def run_tests() -> None:
     tests = [
         test_axis_vocabulary_is_wellformed,
@@ -269,6 +294,7 @@ def run_tests() -> None:
         test_tag_cards_keeps_failures_instead_of_dropping,
         test_tagging_retries_on_rate_limit,
         test_tagging_does_not_retry_non_rate_limit_errors,
+        test_blank_slot_boundary_is_explicit,
     ]
     for test in tests:
         test()
