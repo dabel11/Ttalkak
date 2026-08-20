@@ -1,8 +1,8 @@
 // @ts-check
-import "./auth-session.js";
-import "./auth-validation.js";
-import "./auth-controller.js";
-import "./auth-events.js";
-import "./auth-view.js";
+import * as session from "./auth-session.mjs";
+import * as validation from "./auth-validation.mjs";
+import * as controller from "./auth-controller.mjs";
+import * as events from "./auth-events.mjs";
+import * as view from "./auth-view.mjs";
 
-export const auth = Object.freeze({ session: window.TtalkakAuthSession, validation: window.TtalkakAuthValidation, controller: window.TtalkakAuthController, events: window.TtalkakAuthEvents, view: window.TtalkakAuthView });
+export const auth = Object.freeze({ session, validation, controller, events, view });

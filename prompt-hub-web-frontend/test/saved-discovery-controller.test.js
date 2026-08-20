@@ -1,8 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createSavedLibraryController } = require("../src/saved/saved-library-controller.js");
-const { createDiscoveryController } = require("../src/discovery/discovery-controller.js");
+let createSavedLibraryController;
+let createDiscoveryController;
+test.before(async () => {
+  ({ createSavedLibraryController } = await import("../src/saved/saved-library-controller.mjs"));
+  ({ createDiscoveryController } = await import("../src/discovery/discovery-controller.mjs"));
+});
 
 test("saved library controller owns merging filtering and sorting", () => {
   const state = {

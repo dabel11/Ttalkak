@@ -1,7 +1,9 @@
 const routeImports = Object.freeze({
-  admin: () => import("./routes/admin.js"),
-  make: () => import("./routes/make.js"),
-  share: () => import("./routes/share.js"),
+  admin: () => import("../admin/admin-runtime.mjs"),
+  make: () => import("../make/make-runtime.mjs"),
+  overlays: () => import("./overlay-runtime.mjs"),
+  saved: () => import("./saved-runtime.mjs"),
+  share: () => import("../share/share-runtime.mjs"),
 });
 
 const routeState = new Map();
@@ -20,7 +22,8 @@ function ensureRouteRenderers(route) {
 
   const state = { status: "loading", error: null, promise: null };
   state.promise = load()
-    .then(() => {
+    .then((module) => {
+      Object.assign(loadedRenderers, module.renderers || {});
       state.status = "loaded";
       document.dispatchEvent(new CustomEvent("ttalkak:route-renderers-changed", { detail: { route, status: "loaded" } }));
     })
@@ -52,6 +55,12 @@ function createLazyRenderer(route, name) {
 }
 
 export const lazyRouteRenderers = Object.freeze({
+  AuthModalView: createLazyRenderer("overlays", "AuthModalView"),
+  ExecuteModalView: createLazyRenderer("overlays", "ExecuteModalView"),
+  PromptDetailModalView: createLazyRenderer("overlays", "PromptDetailModalView"),
+  PromptEditModalView: createLazyRenderer("overlays", "PromptEditModalView"),
+  ReportModalView: createLazyRenderer("overlays", "ReportModalView"),
+  AdminRevisionRequestModalView: createLazyRenderer("admin", "AdminRevisionRequestModalView"),
   AdminAuditPanelView: createLazyRenderer("admin", "AdminAuditPanelView"),
   AdminPromptsPanelView: createLazyRenderer("admin", "AdminPromptsPanelView"),
   AdminReportsPanelView: createLazyRenderer("admin", "AdminReportsPanelView"),
@@ -65,6 +74,11 @@ export const lazyRouteRenderers = Object.freeze({
   MakeSidePanelView: createLazyRenderer("make", "MakeSidePanelView"),
   MakeTemplateBarView: createLazyRenderer("make", "MakeTemplateBarView"),
   MessageBubbleView: createLazyRenderer("make", "MessageBubbleView"),
+  SavedLibraryPanelView: createLazyRenderer("saved", "SavedLibraryPanelView"),
+  SavedPageView: createLazyRenderer("saved", "SavedPageView"),
+  MyCommentsPanelView: createLazyRenderer("saved", "MyCommentsPanelView"),
+  MyPromptsPanelView: createLazyRenderer("saved", "MyPromptsPanelView"),
+  MyReportsPanelView: createLazyRenderer("saved", "MyReportsPanelView"),
   SharePageView: createLazyRenderer("share", "SharePageView"),
 });
 

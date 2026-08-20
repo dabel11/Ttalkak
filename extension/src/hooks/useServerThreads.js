@@ -1,9 +1,10 @@
 import { requestMakeThread, requestMakeThreads } from "../api/make";
 
-export function createServerThreadSync({
+export function useServerThreadSync({
   activeThreadId,
   authSession,
   ragConfig,
+  setActiveThreadId,
   setMessages,
   setServerRecentThreads,
 }) {
@@ -20,7 +21,7 @@ export function createServerThreadSync({
       try {
         const activeThread = await requestMakeThread(ragConfig, targetId, authSession.accessToken);
         if (activeThread) {
-          activeThreadId.current = String(activeThread.serverId || activeThread.id);
+          setActiveThreadId(activeThread.serverId || activeThread.id);
           setServerRecentThreads((prev) => [
             activeThread,
             ...prev.filter((thread) => {
@@ -46,7 +47,7 @@ export function createServerThreadSync({
       return Boolean(targetId) && (serverId === targetId || id === targetId);
     });
     if (activeThread) {
-      activeThreadId.current = String(activeThread.serverId || activeThread.id);
+      setActiveThreadId(activeThread.serverId || activeThread.id);
       setMessages(activeThread.messages || []);
     }
     return activeThread;

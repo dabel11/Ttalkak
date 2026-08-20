@@ -9,9 +9,8 @@ global.window = {
     removeItem: (key) => storageValues.delete(key),
   },
 };
-["persistence", "core", "interaction", "prompt", "admin", "make"].forEach((domain) => require(`../src/state/state-${domain}.js`));
-require("../src/state/app-state.js");
-const stateApi = global.window.TtalkakState;
+let stateApi;
+test.before(async () => { ({ state: stateApi } = await import("../src/state/app-state.mjs")); });
 
 test("core state domain owns initial home modal and session transitions", () => {
   const state = stateApi.createInitialState({ homePageSize: 8 });
@@ -31,6 +30,31 @@ test("core state domain owns initial home modal and session transitions", () => 
   assert.equal(state.isLoggedIn, false);
   stateApi.resetHomeViewState(state);
   assert.equal(state.searchScope, "all");
+});
+
+test("session cleanup removes every account-bound administrator cache", () => {
+  const state = stateApi.createInitialState();
+  Object.assign(state, {
+    backendAdminReports: [{ id: 1 }],
+    backendAdminTags: [{ id: 2 }],
+    backendAdminPrompts: [{ id: 3 }],
+    backendAdminRevisionRequests: [{ id: 4 }],
+    backendAdminUserActivities: { member: { memberId: 5 } },
+    backendAdminAuditLogs: [{ id: 6 }],
+    adminAuditSyncMessage: "loaded",
+    adminUserSearchResults: [{ id: 7 }],
+    adminUserSearchMessage: "loaded",
+  });
+  stateApi.clearSessionBackendDataState(state);
+  assert.deepEqual(state.backendAdminReports, []);
+  assert.deepEqual(state.backendAdminTags, []);
+  assert.deepEqual(state.backendAdminPrompts, []);
+  assert.deepEqual(state.backendAdminRevisionRequests, []);
+  assert.deepEqual(state.backendAdminUserActivities, {});
+  assert.deepEqual(state.backendAdminAuditLogs, []);
+  assert.equal(state.adminAuditSyncMessage, "");
+  assert.deepEqual(state.adminUserSearchResults, []);
+  assert.equal(state.adminUserSearchMessage, "");
 });
 
 test("persistence state domain safely reads writes and clears payloads", () => {

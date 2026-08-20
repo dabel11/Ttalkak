@@ -2,7 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { bindAdminEvents } = require("../src/admin/admin-events.js");
+let bindAdminEvents;
+test.before(async () => { ({ bindAdminEvents } = await import("../src/admin/admin-events.mjs")); });
 
 function control(dataset = {}) {
   const listeners = {};

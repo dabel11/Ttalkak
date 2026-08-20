@@ -128,14 +128,15 @@ test("required answers are validated and a complete answer transitions to improv
   const form = page.locator("[data-ask-answer-form]");
   const requiredInput = form.locator('[name="purpose"]');
 
-  await form.locator('button[type="submit"]').click();
+  await form.locator('button[type="submit"]').press("Enter");
   await expect(requiredInput).toHaveAttribute("aria-invalid", "true");
   await expect(requiredInput).toBeFocused();
 
   await requiredInput.fill("Prepare a release announcement");
+  await form.locator(".ask-optional-questions summary").click();
   await form.locator('[name="audience"]').fill("New users");
   const requestPromise = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/prompts/improve"));
-  await form.locator('button[type="submit"]').click();
+  await form.locator('button[type="submit"]').press("Enter");
   const request = await requestPromise;
   const payload = request.postDataJSON();
 
@@ -143,6 +144,29 @@ test("required answers are validated and a complete answer transitions to improv
   expect(payload.prompt).toContain("New users");
   await expect(page.locator("[data-copy-message]")).toHaveCount(1);
   await expect(page.locator("[data-execute-message]")).toHaveCount(1);
+});
+
+test("unchanged no-evidence response explains the outcome without result actions", async ({ page }) => {
+  const prompt = "Create a detailed product launch strategy";
+  await openMake(page, [], {}, async (route) => {
+    const payload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: payload.prompt, ragStatus: "no_evidence" }),
+    });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.getByText("적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.")).toBeVisible();
+  await expect(page.locator(".message-evidence-notice")).toBeVisible();
+  await expect(page.locator(".message-result-prompt")).toHaveCount(0);
+  await expect(page.locator(".message-actions")).toHaveCount(0);
+  await page.getByRole("button", { name: "내용을 구체화하기" }).click();
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue(prompt);
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
 });
 
 test("legacy questions migrate, empty messages disappear, and restored data survives reload", async ({ page }) => {
@@ -197,6 +221,47 @@ test("compact Make sidebar removes duplicate previews and exposes consistent cre
   await expect(recent.locator("small")).toContainText("오늘");
   await expect(recent).toHaveClass(/active/);
   await expect(page.locator(".make-side-title").first().locator("small")).toHaveText("2");
+});
+
+test("recent conversation search hides unmatched threads and empty date groups", async ({ page }) => {
+  const now = Date.now();
+  const threads = [
+    { id: "today-thread", title: "Needle conversation", preview: "Today", folderId: "uncategorized", createdAt: now, messages: [] },
+    { id: "yesterday-thread", title: "Yesterday conversation", preview: "Yesterday", folderId: "uncategorized", createdAt: now - 86_400_000, messages: [] },
+    { id: "previous-thread", title: "Previous conversation", preview: "Previous", folderId: "uncategorized", createdAt: now - 172_800_000, messages: [] },
+  ];
+  await openMake(page, [], { recentThreads: threads, activeThreadId: null });
+
+  await expect(page.locator(".recent-thread-group")).toHaveCount(3);
+  await page.locator("[data-recent-thread-search]").fill("Needle");
+  await expect(page.locator('[data-thread-item="today-thread"]')).toBeVisible();
+  await expect(page.locator('[data-thread-item="yesterday-thread"]')).toBeHidden();
+  await expect(page.locator('[data-thread-item="previous-thread"]')).toBeHidden();
+  await expect(page.locator(".recent-thread-group:visible")).toHaveCount(1);
+  await expect(page.locator(".recent-thread-group:visible")).toHaveText("오늘");
+});
+
+test("long-running request status advances while the cancel action remains available", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-08-15T00:00:00Z") });
+  let requestStarted;
+  let releaseResponse;
+  const started = new Promise((resolve) => { requestStarted = resolve; });
+  const release = new Promise((resolve) => { releaseResponse = resolve; });
+  await openMake(page, [], {}, async (route) => {
+    requestStarted();
+    await release;
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ mode: "improve", improvedPrompt: "Completed" }) });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill("Wait for staged status");
+  await page.locator('[data-composer] button[type="submit"]').click();
+  await started;
+  await expect(page.locator("[data-make-progress-label]")).toHaveText("요청을 분석하고 있습니다");
+  await page.clock.fastForward(9_000);
+  await expect(page.locator("[data-make-progress-label]")).toHaveText("참고 자료를 확인하고 있습니다");
+  await expect(page.locator("[data-make-progress-elapsed]")).toHaveText("9초");
+  await expect(page.locator("[data-cancel-make-request]")).toBeVisible();
+  releaseResponse();
 });
 
 test("template categories collapse immediately without a layout-animation state", async ({ page }) => {
@@ -340,9 +405,10 @@ test("the explicit cancel button aborts the request, preserves the prompt, and i
   await started;
   const cancel = page.locator("[data-cancel-make-request]");
   await expect(cancel).toBeVisible();
-  await cancel.click();
+  await cancel.press("Enter");
 
   const failure = page.locator(".message-failure-status");
+  await expect(failure).toHaveAttribute("role", "status");
   await expect(failure).toContainText("취소");
   await expect(failure.locator("[data-retry-message]")).toHaveCount(0);
   await expect(page.getByText(prompt, { exact: true })).toBeVisible();
@@ -428,10 +494,10 @@ test("a signed-in server-thread edit exposes cancellation and preserves its draf
 });
 
 const errorCases = [
-  { name: "network", expected: "백엔드에 연결할 수 없습니다", reply: (route) => route.abort("failed") },
-  { name: "AI service", expected: "AI 서비스가 일시적으로 응답하지 않습니다", status: 503, code: "AI_SERVICE_UNAVAILABLE" },
-  { name: "contract", expected: "AI 응답 형식을 처리하지 못했습니다", status: 500, code: "AI_INVALID_RESPONSE" },
-  { name: "authentication", expected: "로그인이 만료되었습니다", status: 401, code: "AUTH_EXPIRED", retryable: false },
+  { name: "network", expected: "백엔드에 연결할 수 없습니다", action: "연결 확인 후 다시 시도", reply: (route) => route.abort("failed") },
+  { name: "AI service", expected: "AI 서비스가 일시적으로 응답하지 않습니다", action: "잠시 후 다시 시도", status: 503, code: "AI_SERVICE_UNAVAILABLE" },
+  { name: "contract", expected: "AI 응답 형식을 처리하지 못했습니다", action: "잠시 후 다시 시도", status: 500, code: "AI_INVALID_RESPONSE" },
+  { name: "authentication", expected: "로그인이 만료되었습니다", action: "로그인", status: 401, code: "AUTH_EXPIRED" },
 ];
 
 for (const scenario of errorCases) {
@@ -448,7 +514,18 @@ for (const scenario of errorCases) {
 
     const failure = page.locator(".message-failure-status");
     await expect(failure).toContainText(scenario.expected);
-    await expect(failure.locator("[data-retry-message]")).toHaveCount(scenario.retryable === false ? 0 : 1);
+    const action = failure.getByRole("button", { name: scenario.action });
+    await expect(action).toBeVisible();
+    if (scenario.name === "authentication") {
+      await action.click();
+      await expect(page.locator("[data-auth-form]")).toBeVisible();
+    } else {
+      await expect(failure.locator("[data-retry-message]")).toHaveCount(1);
+      const retryRequest = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/prompts/improve"));
+      await action.click();
+      const payload = (await retryRequest).postDataJSON();
+      expect(payload.prompt).toBe("Improve this fixture prompt");
+    }
   });
 }
 

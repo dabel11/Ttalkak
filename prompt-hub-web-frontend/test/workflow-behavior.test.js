@@ -1,13 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-require("../src/make/make-sync-workflows.js");
-require("../src/make/make-folder-workflows.js");
-require("../src/make/make-execution-workflows.js");
-require("../src/make/make-recent-workflows.js");
-const { createMakeWorkflows } = require("../src/make/make-workflows.js");
-const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
+let createPromptWorkflows;
 let threadPolicy;
-test.before(async () => { threadPolicy = await import("../src/make/make-thread-policy.mjs"); });
+let createMakeWorkflows;
+test.before(async () => {
+  ({ createPromptWorkflows } = await import("../src/interactions/prompt-workflows.mjs"));
+  threadPolicy = await import("../src/make/make-thread-policy.mjs");
+  ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
+});
 
 function makeContext(overrides = {}) {
   const notices = [];
@@ -166,8 +166,7 @@ function promptContext(overrides = {}) {
 
 test("prompt reporting validates content and does not mutate after API failure", async () => {
   let applied = 0;
-  global.window = { TTALKAK_API: { reportPrompt: async () => { throw new Error("offline"); } } };
-  const ctx = promptContext({ applyPromptReportedState: () => { applied += 1; } });
+  const ctx = promptContext({ api: { reportPrompt: async () => { throw new Error("offline"); } }, applyPromptReportedState: () => { applied += 1; } });
   const workflows = createPromptWorkflows(ctx);
   await workflows.reportPrompt("7", "   ");
   assert.match(ctx.notices.at(-1), /사유/);

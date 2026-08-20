@@ -1,9 +1,9 @@
 // @ts-check
-import "../utils/make-preview.js";
-import "../utils/make-message-model.js";
-import "./make-state.js";
-import "./make-focus.js";
-import "./make-persistence.js";
+import { makePreviewUtils as preview } from "../utils/make-preview.mjs";
+import messageModel from "../utils/make-message-model.mjs";
+import { makeState } from "./make-state.mjs";
+import * as focus from "./make-focus.mjs";
+import * as persistence from "./make-persistence.mjs";
 import { makeThreadPolicy } from "./make-thread-policy.mjs";
 
 /** @type {Promise<void> | undefined} */
@@ -31,18 +31,14 @@ function loadMakeStyles() {
 
 let runtimePromise;
 export function loadMakeRuntime() {
-  runtimePromise ||= Promise.all([loadMakeStyles(),
-    // @ts-expect-error Legacy global script is intentionally loaded for its side effect.
-    import("./make-controller.js"),
-    // @ts-expect-error Legacy global script is intentionally loaded for its side effect.
-    import("./make-events.js"),
-    import("./make-sync-workflows.js"),
-    import("./make-folder-workflows.js"),
-    import("./make-execution-workflows.js"),
-    import("./make-recent-workflows.js"),
-  ]).then(() => import("./make-workflows.js"))
-    .then(() => Object.freeze({ controller: window.TtalkakMakeController, events: window.TtalkakMakeEvents, workflows: window.TtalkakMakeWorkflows }));
+  runtimePromise ||= Promise.all([loadMakeStyles(), import("./make-runtime.mjs")])
+    .then(([, runtime]) => Object.freeze({
+      controller: runtime.controller,
+      events: runtime.events,
+      workflows: runtime.workflows,
+      pageAdapter: runtime.pageAdapter,
+    }));
   return runtimePromise;
 }
 
-export const make = Object.freeze({ preview: window.TtalkakMakePreview, messageModel: window.TtalkakMakeMessageModel, state: window.TtalkakMakeState, focus: window.TtalkakMakeFocus, persistence: window.TtalkakMakePersistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });
+export const make = Object.freeze({ preview, messageModel, state: makeState, focus, persistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });

@@ -1,35 +1,7 @@
 {
-  "maximumFiles": 86,
-  "maximumReferences": 167,
-  "maximumAssignments": 67,
-  "maximumReferencesByFile": {
-    "admin/admin-controller.js": 1, "admin/admin-events.js": 1, "admin/admin-selectors.js": 1, "admin/admin-view.js": 1, "admin/index.js": 4,
-    "api/api-contract.js": 1, "api/index.js": 1, "api/normalizers.js": 2,
-    "auth/auth-controller.js": 1, "auth/auth-events.js": 1, "auth/auth-session.js": 1, "auth/auth-validation.js": 1, "auth/auth-view.js": 1, "auth/index.js": 5,
-    "bootstrap/app-bootstrap.js": 1, "bootstrap/index.js": 1, "components.js": 3, "discovery/index.js": 1,
-    "effects/admin-effects.js": 2, "effects/backend-effects.js": 10, "effects/error-effects.js": 3, "effects/index.js": 5, "effects/make-failure-recovery-effects.js": 1, "effects/make-server-sync-effects.js": 6,
-    "events/app-events.js": 2, "events/index.js": 2, "events/make-scroll-events.js": 1,
-    "home/home-controller.js": 1, "home/home-events.js": 1, "home/home-search-model.js": 1, "home/index.js": 3,
-    "interactions/comment-model.js": 1, "interactions/comment-view.js": 1, "interactions/index.js": 5, "interactions/prompt-engagement-controller.js": 1, "interactions/prompt-engagement-events.js": 1, "interactions/prompt-workflows.js": 1,
-    "make/index.js": 8, "make/make-controller.js": 1, "make/make-events.js": 1, "make/make-execution-workflows.js": 3, "make/make-focus.js": 1, "make/make-folder-workflows.js": 1, "make/make-persistence.js": 1, "make/make-recent-workflows.js": 1, "make/make-state.js": 1, "make/make-sync-workflows.js": 1, "make/make-workflows.js": 1,
-    "modal/index.js": 3, "modal/modal-controller.js": 1, "modal/modal-events.js": 1, "modal/modal-view.js": 1,
-    "renderers/admin-panels.js": 2, "renderers/admin-revision-modal.js": 2, "renderers/app-shell.js": 2, "renderers/auth-modal.js": 2, "renderers/index.js": 1, "renderers/modal-renderers.js": 2, "renderers/pages/admin-page.js": 2, "renderers/pages/home-page.js": 2, "renderers/pages/make-message-parts.js": 6, "renderers/pages/make-page.js": 3, "renderers/pages/saved-page.js": 2, "renderers/pages/share-page.js": 2, "renderers/prompt-card.js": 2, "renderers/prompt-modals.js": 2, "renderers/shell-navigation.js": 2,
-    "routing/index.js": 1, "routing/page-router.js": 2, "saved/index.js": 1,
-    "share/index.js": 2, "share/share-controller.js": 1, "share/share-events.js": 1,
-    "state/app-state.js": 3, "state/index.js": 2, "state/state-admin.js": 2, "state/state-core.js": 2, "state/state-interaction.js": 2, "state/state-make.js": 2, "state/state-persistence.js": 2, "state/state-prompt.js": 3,
-    "ui/index.js": 1, "utils/index.js": 1, "utils/make-message-model.js": 1, "utils/make-preview.js": 1, "utils.js": 1
-  },
-  "allowedIdentifiers": [
-    "TtalkakAdminController", "TtalkakAdminEffects", "TtalkakAdminEvents", "TtalkakAdminSelectors", "TtalkakAdminView",
-    "TtalkakApiContract", "TtalkakAppBootstrap", "TtalkakAuthController", "TtalkakAuthEvents", "TtalkakAuthSession",
-    "TtalkakAuthValidation", "TtalkakAuthView", "TtalkakBackendEffects", "TtalkakCommentModel", "TtalkakCommentView",
-    "TtalkakComponents", "TtalkakDiscoveryController", "TtalkakErrorEffects", "TtalkakEvents", "TtalkakHomeController",
-    "TtalkakHomeEvents", "TtalkakHomeSearchModel", "TtalkakMakeController", "TtalkakMakeEvents", "TtalkakMakeExecutionWorkflows",
-    "TtalkakMakeFailureRecoveryEffects", "TtalkakMakeFocus", "TtalkakMakeFolderWorkflows", "TtalkakMakeMessageModel", "TtalkakMakeMessageParts",
-    "TtalkakMakePersistence", "TtalkakMakePreview", "TtalkakMakeRecentWorkflows", "TtalkakMakeScrollEvents", "TtalkakMakeServerSyncEffects",
-    "TtalkakMakeState", "TtalkakMakeSyncWorkflows", "TtalkakMakeWorkflows", "TtalkakModalController", "TtalkakModalEvents",
-    "TtalkakModalView", "TtalkakPromptEngagementController", "TtalkakPromptEngagementEvents", "TtalkakPromptWorkflows", "TtalkakRenderers",
-    "TtalkakRouting", "TtalkakSavedLibraryController", "TtalkakShareController", "TtalkakShareEvents", "TtalkakState",
-    "TtalkakStateDomains", "TtalkakUtils"
-  ]
+  "maximumFiles": 0,
+  "maximumReferences": 0,
+  "maximumAssignments": 0,
+  "maximumReferencesByFile": {},
+  "allowedIdentifiers": []
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -8,6 +8,7 @@ import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
+import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import "./styles.css";
@@ -68,6 +69,7 @@ function App() {
     editingMessageId,
     editingDraft,
     recentThreads,
+    activeRecentId,
     openPrompt,
     openRecentThread,
     startNewChat,
@@ -98,13 +100,7 @@ function App() {
     return recentThreads.filter((thread) => promptMatches({ ...thread, content: thread.title }, query));
   }, [query, recentThreads, activeTab]);
 
-  const latestMessage = messages.at(-1);
-  const answeringQuestions = !isLoading && latestMessage?.role === "assistant" && latestMessage?.mode === "ask";
-
-  useEffect(() => {
-    if (!answeringQuestions) return;
-    requestAnimationFrame(() => composerRef.current?.focus());
-  }, [answeringQuestions, latestMessage?.id]);
+  const { answeringQuestions } = useAskAnswers({ messages, isLoading, composerRef });
 
   function showNotice(message) {
     setNotice(message);
@@ -126,6 +122,30 @@ function App() {
     });
   }
 
+  function handleRefineUnchanged(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return;
+    setComposerValue(prompt);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
+    });
+  }
+
+  function handleResolveError(message) {
+    if (message?.failure?.requiresLogin) {
+      setAuthMode("login");
+      return;
+    }
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return;
+    setComposerValue(prompt);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
+    });
+  }
+
   return (
     <main className="extension-frame" aria-label="TTALKAK Chrome extension">
       <section className="extension-shell">
@@ -139,6 +159,7 @@ function App() {
           searchItems={searchItems}
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
+          activeRecentId={activeRecentId}
           isSaved={isSaved}
           onOpenPrompt={openPrompt}
           onSavePrompt={saveLibraryPrompt}
@@ -172,6 +193,8 @@ function App() {
               if (!cancelImproveRequest()) return;
               requestAnimationFrame(() => composerRef.current?.focus());
             }}
+            onRefineUnchanged={handleRefineUnchanged}
+            onResolveError={handleResolveError}
             onSelectExample={handleSelectExample}
           />
           <Composer

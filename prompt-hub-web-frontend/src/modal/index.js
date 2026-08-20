@@ -1,6 +1,6 @@
 // @ts-check
-import "./modal-controller.js";
-import "./modal-events.js";
-import "./modal-view.js";
+import * as controller from "./modal-controller.mjs";
+import * as events from "./modal-events.mjs";
+import * as view from "./modal-view.mjs";
 
-export const modal = Object.freeze({ controller: window.TtalkakModalController, events: window.TtalkakModalEvents, view: window.TtalkakModalView });
+export const modal = Object.freeze({ controller, events, view });

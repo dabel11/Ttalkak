@@ -17,6 +17,15 @@ function loadCanonicalSharedModel() {
   return context.__model;
 }
 
+test("shared UX policy keeps progress, failure actions, and recent groups identical", () => {
+  assert.equal(model.getMakeProgressStatus(0).label, "요청을 분석하고 있습니다");
+  assert.equal(model.getMakeProgressStatus(9000).label, "참고 자료를 확인하고 있습니다");
+  assert.equal(model.getMakeProgressStatus(30000).label, "평소보다 시간이 걸리고 있습니다");
+  assert.deepEqual(model.getMakeFailureAction({ kind: "auth", requiresLogin: true }), { id: "login", label: "로그인" });
+  assert.deepEqual(model.getMakeFailureAction({ kind: "network", retryable: true }), { id: "retry", label: "연결 확인 후 다시 시도" });
+  assert.equal(model.getMakeRecentDateGroup("2026-08-15T09:00:00+09:00", new Date("2026-08-15T12:00:00+09:00").getTime()), "오늘");
+});
+
 test("question aliases migrate to ask and disable executable prompt", () => {
   const message = model.migrateMakeMessage({ type: "question", improvedPrompt: "실행 금지", questions: ["목적은 무엇인가요?"] });
   assert.equal(message.mode, "ask");
@@ -131,6 +140,25 @@ test("shared response normalization covers fields changes techniques and executa
   assert.deepEqual(result.changes, ["구체화"]);
   assert.equal(result.techniques[0].name, "역할 부여");
   assert.equal(model.isExecutableMessage(result), true);
+});
+
+test("shared no-evidence policy marks unchanged results as non-executable", () => {
+  const result = model.normalizeImproveResponse({
+    mode: "improve",
+    improvedPrompt: "신규   서비스 안내문",
+    ragStatus: "NO_EVIDENCE",
+  }, "  신규 서비스 안내문  ");
+
+  assert.equal(result.ragStatus, "no_evidence");
+  assert.equal(result.isUnchanged, true);
+  assert.equal(result.excludeFromHistory, true);
+  assert.equal(result.improvedPrompt, "");
+  assert.equal(result.text, model.UNCHANGED_NO_EVIDENCE_MESSAGE);
+  assert.equal(model.isExecutableMessage(result), false);
+  assert.deepEqual(model.buildImproveHistory([
+    { role: "user", content: "신규 서비스 안내문" },
+    { role: "assistant", ...result, content: result.text },
+  ]), [{ role: "user", content: "신규 서비스 안내문" }]);
 });
 
 test("shared compatibility fixtures normalize consistently in the web client", () => {

@@ -19,8 +19,7 @@ const types = {
   ".svg": "image/svg+xml",
 };
 
-http
-  .createServer((request, response) => {
+const server = http.createServer((request, response) => {
     const url = new URL(request.url, `http://${host}:${port}`);
     const requestedPath = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
     const normalizedPath = requestedPath === "/" || requestedPath === "\\" ? "index.html" : requestedPath.replace(/^[/\\]/, "");
@@ -39,7 +38,17 @@ http
       });
       response.end(content);
     });
-  })
-  .listen(port, host, () => {
-    console.log(`Preview server running at http://${host}:${port}/`);
   });
+
+server.on("error", (error) => {
+  if (error && error.code === "EADDRINUSE") {
+    console.error(`Preview server could not start: ${host}:${port} is already in use. Stop the process using the port or set TTALKAK_E2E_PORT to a free port.`);
+    process.exitCode = 1;
+    return;
+  }
+  throw error;
+});
+
+server.listen(port, host, () => {
+  console.log(`Preview server running at http://${host}:${port}/`);
+});

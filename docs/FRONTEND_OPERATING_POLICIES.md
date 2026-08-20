@@ -19,6 +19,8 @@ Complete every `TBD` before a production release. Values containing credentials 
 | Extension production command | PowerShell: `$env:VITE_BACKEND_API_URL='https://...'; npm run build:prod`<br>POSIX: `VITE_BACKEND_API_URL=https://... npm run build:prod` | Extension | `dist-prod` policy check |
 | Post-release smoke | See `WEB_STORE_RELEASE_CHECKLIST.md` | Release owner | Signed checklist |
 
+Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks both public pages; and performs an exact-origin credentialed CORS preflight. Development IDs and placeholder hosts never count as release evidence.
+
 ## 2. API change procedure
 
 An AI/backend response change is ready for frontend implementation only after the following sequence is satisfied:
@@ -79,6 +81,29 @@ Do not collect by default:
 
 If approved later, prefer content-free aggregates such as operation type, coarse status code, duration bucket, retry, or cancellation. Logs must use the central reporter and must not serialize request payloads.
 
+The runtime enforces this policy in `src/observability/client-error-reporter.mjs`:
+
+- external collection is disabled by default;
+- emitted records use a fixed metadata-only field allowlist;
+- network, AI, and contract failures include only status, elapsed milliseconds, retryability, and failure/cancel outcome;
+- the browser emits a local `ttalkak:observability` integration event containing the smaller aggregate allowlist;
+- prompt, history, token, document, page-content, and clipboard context is discarded;
+- bearer/query credentials, email addresses, and phone numbers are redacted;
+- error messages are length-bounded before reaching a sink;
+- a sink failure never interrupts the user workflow.
+
+Enabling a remote sink requires a separate reviewed change that records its owner, purpose, retention period, user disclosure, and deletion process. A deployment URL or vendor key alone is not authorization to enable collection.
+
+### Current release decision (2026-08-14)
+
+- Owner: frontend team.
+- External collection: disabled.
+- Collection purpose: none until a separate product/privacy review approves one.
+- Remote retention: 0 days because no remote events are sent.
+- User disclosure: not required for disabled collection; it becomes mandatory before activation.
+- The local aggregate event is an integration boundary only and must not be forwarded by deployment code without that review.
+- Web and Extension Make flows emit only content-free local outcome records for `IMPROVED`, `ASK`, `NO_EVIDENCE`, `UNCHANGED_NO_EVIDENCE`, cancellation, timeout, AI failure, and contract failure. These records contain classification, status, elapsed time, retryability, and timestamp only; they do not constitute remote collection.
+
 ## 6. Supported frontend scope
 
 | Surface | Supported scope |
@@ -94,3 +119,14 @@ Accessibility checks such as keyboard operation, 200% zoom, focus management, re
 ## 7. Review cadence
 
 Review this document when an API contract changes, before a public release, when a new browser becomes supported, or when telemetry is proposed. Avoid speculative implementation before one of those triggers occurs.
+
+## 8. Account withdrawal integration smoke
+
+Use `ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md` for the disposable-account integration check. Never record test passwords, access tokens, database credentials, or production user data in the checklist or test output.
+
+Use the local verification script at one of two levels:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1` runs the fast web, Extension, and backend checks.
+- `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1 -Full` additionally runs Chromium fixture E2E, Firefox smoke, and production-bundle E2E.
+
+The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes. Browser E2E uses an isolated fixture server on `127.0.0.1:4174` and a production server on `127.0.0.1:4175`; override them with `TTALKAK_E2E_PORT` and `TTALKAK_E2E_PROD_PORT` when those ports are unavailable. Existing servers are never reused, so a collision fails with an explicit diagnostic instead of testing a stale preview.

@@ -3,6 +3,7 @@ import { Bookmark, BookmarkCheck, Check, Copy, Edit3, Play, Plus, X } from "luci
 import { EXAMPLE_QUERIES, TIPS } from "../constants";
 import { AssistantResponse, PromptText } from "./AssistantResponse";
 import { getMessageActionVisibility } from "../utils/messageActions";
+import { getMakeFailureAction, getMakeProgressStatus } from "../../../shared/make-message-model.js";
 
 export function ChatFeed({
   messages,
@@ -19,6 +20,8 @@ export function ChatFeed({
   onCancelEdit,
   onSubmitEdit,
   onCancelRequest,
+  onRefineUnchanged,
+  onResolveError,
   onSelectExample,
 }) {
   const isEmpty = messages.length === 0 && !isLoading;
@@ -50,6 +53,8 @@ export function ChatFeed({
               onChangeEditDraft={onChangeEditDraft}
               onCancelEdit={onCancelEdit}
               onSubmitEdit={onSubmitEdit}
+              onRefineUnchanged={onRefineUnchanged}
+              onResolveError={onResolveError}
               key={message.id}
             />
           ))}
@@ -102,10 +107,14 @@ function MessageCard({
   onChangeEditDraft,
   onCancelEdit,
   onSubmitEdit,
+  onRefineUnchanged,
+  onResolveError,
 }) {
   const isAssistant = message.role === "assistant";
   const isAsk = message.mode === "ask";
+  const failureAction = message.failure ? getMakeFailureAction(message.failure) : null;
   const actionVisibility = getMessageActionVisibility(message);
+  const hasActions = Object.values(actionVisibility).some(Boolean);
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;
@@ -170,11 +179,27 @@ function MessageCard({
             )}
           </div>
         )}
-        {isAssistant && !message.isError && !message.isCancelled && (
+        {isAssistant && !message.isError && !message.isCancelled && hasActions && (
           <div className="card-actions">
             {actionVisibility.copy && <ActionButton icon={copied ? <Check size={14} /> : <Copy size={14} />} label={copied ? "\uBCF5\uC0AC\uB428" : "\uBCF5\uC0AC"} onClick={() => onCopy(message)} />}
             {actionVisibility.save && <ActionButton icon={message.saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />} label={message.saved ? "보관됨" : "보관"} onClick={() => onSave(message.id)} />}
             {actionVisibility.execute && <ActionButton icon={<Play size={14} />} label="실행" onClick={() => onExecute(message)} />}
+          </div>
+        )}
+        {isAssistant && message.isUnchanged && (
+          <div className="unchanged-followup">
+            <button type="button" onClick={() => onRefineUnchanged(message)}>
+              내용을 구체화하기
+            </button>
+            <small>대상, 목적, 형식처럼 필요한 조건을 덧붙여 보세요.</small>
+          </div>
+        )}
+        {isAssistant && message.isError && failureAction && (
+          <div className="error-followup">
+            <button type="button" onClick={() => onResolveError(message)}>
+              {failureAction.label}
+            </button>
+            <small>입력한 내용은 유지됩니다.</small>
           </div>
         )}
         {canEdit && !isEditing && (
@@ -197,10 +222,18 @@ function ActionButton({ icon, label, onClick }) {
 }
 
 function TypingIndicator({ onCancel }) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = globalThis.setInterval(() => setElapsedMs(Date.now() - startedAt), 1000);
+    return () => globalThis.clearInterval(timer);
+  }, []);
+  const progress = getMakeProgressStatus(elapsedMs);
   return (
     <div className="message-row assistant">
-      <div className="typing-message" role="status" aria-live="polite" aria-label="프롬프트 개선 중">
+      <div className="typing-message" role="status" aria-live="polite" aria-atomic="true">
         <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+        <span className="typing-progress">{progress.label}<small>{progress.elapsedSeconds}초</small></span>
         <button className="cancel-request-button" type="button" onClick={onCancel} aria-label="요청 취소">취소</button>
       </div>
     </div>

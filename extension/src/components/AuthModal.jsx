@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, Plus, X } from "lucide-react";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "../constants";
+import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
 
 const INITIAL_FORM = {
   nickname: "",
@@ -89,7 +90,7 @@ export function AuthModal({
       : isFindPassword
         ? "아이디와 이메일로 비밀번호 재설정을 요청합니다."
         : isWithdraw
-          ? "탈퇴 후 현재 토큰으로 다시 사용할 수 없습니다. 본인 확인을 위해 비밀번호를 입력해주세요."
+          ? ACCOUNT_WITHDRAWAL_NOTICE
           : "Spring Boot 계정으로 로그인해 웹과 동일한 회원 정보를 사용합니다.";
 
   function updateField(field, value) {

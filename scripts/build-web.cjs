@@ -3,13 +3,15 @@ const path = require("node:path");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
-const outputRoot = path.join(webRoot, "dist");
+const outputDirectory = process.env.TTALKAK_WEB_OUTPUT_DIR || "dist";
+if (!/^dist(?:-[a-z0-9-]+)?$/i.test(outputDirectory)) throw new Error(`Invalid TTALKAK_WEB_OUTPUT_DIR: ${outputDirectory}`);
+const outputRoot = path.join(webRoot, outputDirectory);
 const production = process.argv.includes("--production");
 const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 
 function assertSafeOutputPath() {
-  if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== "dist") {
+  if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== outputDirectory) {
     throw new Error(`Unsafe web build output path: ${outputRoot}`);
   }
 }
@@ -37,10 +39,14 @@ function validateSources() {
 async function build() {
   assertSafeOutputPath();
   validateSources();
-  fs.rmSync(outputRoot, { recursive: true, force: true });
+  // Windows/OneDrive and recently stopped preview servers can hold a short-lived
+  // handle on dist. Node's bounded retry keeps builds deterministic without
+  // hiding persistent permission failures.
+  fs.rmSync(outputRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   fs.mkdirSync(outputRoot, { recursive: true });
   let html = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
   let bundle = "src/app-entry.js";
+  let bundleMetafile = null;
   if (production) {
     const result = await esbuild.build({
       entryPoints: [path.join(webRoot, "src", "app-entry.js")],
@@ -48,13 +54,26 @@ async function build() {
       format: "esm",
       splitting: true,
       minify: true,
+      charset: "utf8",
       sourcemap: false,
       target: ["es2023"],
+      define: { "globalThis.TTALKAK_PRODUCTION_BUILD": "true" },
       outdir: path.join(outputRoot, "assets"),
       entryNames: "app-[hash]",
       chunkNames: "chunks/[name]-[hash]",
       metafile: true,
     });
+    bundleMetafile = result.metafile;
+    if (Object.values(result.metafile.outputs).some((metadata) => metadata.entryPoint?.endsWith("src/demo-data.mjs"))) {
+      throw new Error("Production bundle must not contain the development-only demo data chunk.");
+    }
+    const productionJavaScript = Object.keys(result.metafile.outputs)
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => fs.readFileSync(path.resolve(file), "utf8"))
+      .join("\n");
+    if (productionJavaScript.includes("딸깍 확장 프로그램 소개문")) {
+      throw new Error("Production bundle must not contain development-only demo seed records.");
+    }
     const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
@@ -67,6 +86,7 @@ async function build() {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });
   }
   fs.writeFileSync(path.join(outputRoot, "index.html"), html, "utf8");
+  if (bundleMetafile) fs.writeFileSync(path.join(outputRoot, "bundle-metafile.json"), `${JSON.stringify(bundleMetafile, null, 2)}\n`, "utf8");
   fs.writeFileSync(
     path.join(outputRoot, "build-manifest.json"),
     `${JSON.stringify({

@@ -2,6 +2,8 @@
 
 Use this checklist for the production Extension only. The unpacked `dist-dev` Extension and its fixed development ID are not production release evidence.
 
+The release is blocked while any production value is `TBD`. Set `VITE_BACKEND_API_URL`, `TTALKAK_PRODUCTION_EXTENSION_ID`, `TTALKAK_PRIVACY_POLICY_URL`, `TTALKAK_SUPPORT_URL`, and `TTALKAK_RELEASE_OWNER`, then run `npm run release:prepare` in `extension`. The command builds the production artifact and fails unless its manifest, live CORS preflight, privacy policy, and support page match the supplied values.
+
 ## Configuration
 
 - [ ] Production HTTPS Spring Boot API URL is confirmed.
@@ -57,6 +59,8 @@ Current permissions and their release rationale:
 - [ ] Closing the side panel aborts an active request.
 
 ## Release record
+
+Copy `WEB_STORE_RELEASE_RECORD_TEMPLATE.md` to a dated file under `docs/release-results/`; never overwrite the reusable template.
 
 - [ ] Commit SHA recorded.
 - [ ] CI URL and successful jobs recorded.

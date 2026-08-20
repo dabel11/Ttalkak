@@ -1,4 +1,3 @@
 // @ts-check
-import "./saved-library-controller.js";
-
-export const createSavedLibraryController = window.TtalkakSavedLibraryController.createSavedLibraryController;
+export { createSavedLibraryController } from "./saved-library-controller.mjs";
+export { createMyPageDataModel } from "./my-page-data-model.mjs";

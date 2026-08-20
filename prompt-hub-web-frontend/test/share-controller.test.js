@@ -1,5 +1,6 @@
 const test = require("node:test"); const assert = require("node:assert/strict"); const fs = require("node:fs"); const path = require("node:path");
-const { createShareController, getShareTagSuggestions } = require("../src/share/share-controller.js");
+let createShareController; let getShareTagSuggestions;
+test.before(async () => { ({ createShareController, getShareTagSuggestions } = await import("../src/share/share-controller.mjs")); });
 const normalize = (value) => String(value || "").toLowerCase();
 test("share tag suggestions exclude selected tags and honor query", () => { assert.deepEqual(getShareTagSuggestions("mar", ["email"], ["Marketing", "Email", "SEO"], normalize), ["Marketing"]); });
 test("share controller validates required content", async () => { const state = { isLoggedIn: true, shareDraft: {} }; let rendered = 0; const controller = createShareController({ state, guard: () => false, parseTags: () => [], render: () => rendered++, root: { querySelector: () => null }, savedPrompts: [], popularPrompts: [] }); await controller.submit(new Map([["title", ""], ["prompt", ""]])); assert.match(state.shareError, /제목/); assert.equal(rendered, 1); });

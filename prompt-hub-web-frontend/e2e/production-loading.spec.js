@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const { gotoApp } = require("./support/app-ready.js");
 
 function routeChunkRequested(requests, route) {
-  return requests.some((url) => new RegExp(`/assets/chunks/${route}-[A-Z0-9]+\\.js$`).test(new URL(url).pathname));
+  return requests.some((url) => new RegExp(`/assets/chunks/${route}-runtime-[A-Z0-9]+\\.js$`).test(new URL(url).pathname));
 }
 
 test("Home defers Share and Make chunks until their routes are opened", async ({ page }) => {
@@ -50,7 +50,7 @@ test("an administrator session loads the Admin chunk on demand", async ({ page }
 });
 
 test("a route chunk failure renders an actionable status instead of a blank page", async ({ page }) => {
-  await page.route(/\/assets\/chunks\/make-[A-Z0-9]+\.js$/, (route) => route.abort("failed"));
+  await page.route(/\/assets\/chunks\/make-runtime-[A-Z0-9]+\.js$/, (route) => route.abort("failed"));
   await gotoApp(page);
   await page.locator('[data-route="make"]').first().click();
   const failure = page.locator('[data-route-module-error="make"]');

@@ -2,14 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fixtures = require("./fixtures/make-responses.js");
 const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
+const messageModel = require("../src/utils/make-message-model.js");
 
-global.window = {};
-global.window.TtalkakMakeMessageModel = require("../src/utils/make-message-model.js");
-require("../src/renderers/pages/make-message-parts.js");
-require("../src/renderers/pages/make-page.js");
-
-const { MessageQuestionsView } = global.window.TtalkakMakeMessageParts;
-const { MakeFeedView, MessageBubbleView } = global.window.TtalkakRenderers;
+let MessageQuestionsView; let MakeFeedView; let MessageBubbleView;
+test.before(async () => {
+  const { parts } = await import("../src/renderers/pages/make-message-parts.mjs");
+  const { renderers } = await import("../src/renderers/pages/make-page.mjs");
+  ({ MessageQuestionsView } = parts);
+  ({ MakeFeedView, MessageBubbleView } = renderers);
+});
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
 
@@ -29,6 +30,8 @@ test("ask questions render accessible required and optional inputs", () => {
   assert.match(html, />필수</);
   assert.match(html, />선택</);
   assert.match(html, /data-ask-answer-form="assistant-1"/);
+  assert.match(html, /필수 답변 0\/1개 입력/);
+  assert.match(html, /<details class="ask-optional-questions">/);
   assert.match(html, /type="submit"\s*>답변 제출/);
 });
 
@@ -105,6 +108,25 @@ test("ask messages hide copy and execute actions", () => {
   assert.doesNotMatch(html, /data-execute-message/);
 });
 
+test("unchanged no-evidence results render guidance without result actions", () => {
+  const result = messageModel.normalizeImproveResponse({
+    mode: "improve",
+    improvedPrompt: "same prompt",
+    ragStatus: "no_evidence",
+  }, "same prompt");
+  const html = MessageBubbleView({
+    icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
+    escapeAttr,
+    escapeHtml,
+  }, { id: "assistant-unchanged", role: "assistant", ...result, content: result.text, hasExecutablePrompt: messageModel.isExecutableMessage(result) });
+
+  assert.match(html, new RegExp(messageModel.UNCHANGED_NO_EVIDENCE_MESSAGE));
+  assert.match(html, /evidence-notice/);
+  assert.match(html, /data-refine-unchanged="assistant-unchanged"/);
+  assert.match(html, /내용을 구체화하기/);
+  assert.doesNotMatch(html, /message-result-prompt|message-actions|data-execute-message/);
+});
+
 test("thinking messages expose an accessible request cancellation control", () => {
   const html = MakeFeedView({ icons: { make: "make", send: "send" } }, {
     hasMessages: true,
@@ -119,7 +141,7 @@ test("thinking messages expose an accessible request cancellation control", () =
 });
 
 test("real response regressions keep ask inputs and executable results distinct", () => {
-  const ask = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
+  const ask = messageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
   const askHtml = MessageBubbleView({
     icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
     escapeAttr,
@@ -129,7 +151,7 @@ test("real response regressions keep ask inputs and executable results distinct"
   assert.match(ask.questions[0].question, /예: 여행, 음식, 제품/);
   assert.match(askHtml, /data-ask-answer-input/);
 
-  const improve = global.window.TtalkakMakeMessageModel.normalizeImproveResponse(fixtureMatrix.regressions.improveWithNonActionableQuestions);
+  const improve = messageModel.normalizeImproveResponse(fixtureMatrix.regressions.improveWithNonActionableQuestions);
   const improveHtml = MessageBubbleView({
     icons: { check: "check", copy: "copy", bookmark: "save", share: "share", play: "play", edit: "edit" },
     escapeAttr,
@@ -142,7 +164,7 @@ test("real response regressions keep ask inputs and executable results distinct"
 
 test("markdown descriptions in improve responses are not parsed as questions", () => {
   const regression = fixtureMatrix.regressions.markdownDescription;
-  const parsed = global.window.TtalkakMakeMessageModel.parseLegacyQuestions(regression.answer);
+  const parsed = messageModel.parseLegacyQuestions(regression.answer);
   assert.equal(parsed.questions.length, 0);
   assert.equal(fixtures.improve.mode, "improve");
 });

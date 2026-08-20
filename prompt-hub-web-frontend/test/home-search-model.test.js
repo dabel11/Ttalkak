@@ -2,9 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const model = require("../src/home/home-search-model.js");
-const { createHomeController } = require("../src/home/home-controller.js");
-const { bindHomeEvents } = require("../src/home/home-events.js");
+let model;
+let createHomeController;
+let bindHomeEvents;
+test.before(async () => {
+  ({ HomeSearchModel: model } = await import("../src/home/home-search-model.mjs"));
+  ({ createHomeController } = await import("../src/home/home-controller.mjs"));
+  ({ bindHomeEvents } = await import("../src/home/home-events.mjs"));
+});
 
 const normalize = (value) => String(value || "").replace(/^#+/, "").trim().toLowerCase();
 const prompts = [
@@ -66,7 +71,7 @@ test("browser loads the Home model and app delegates extracted search logic", ()
   const appSource = fs.readFileSync(path.join(frontendRoot, "src", "app.js"), "utf8");
 
   assert.match(entry, /home\/index\.js/);
-  assert.match(homeEntry, /home-search-model\.js/);
+  assert.match(homeEntry, /home-search-model\.mjs/);
   assert.match(homeEntry, /export const home/);
   assert.match(appSource, /modules\.home\.model/);
   assert.doesNotMatch(appSource, /window\.TtalkakHomeSearchModel/);

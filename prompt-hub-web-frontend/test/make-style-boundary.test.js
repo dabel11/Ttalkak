@@ -20,3 +20,11 @@ test("Make feature overrides remain owned by the Make stylesheet", () => {
     assert.doesNotMatch(globalStyles, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 });
+
+test("shared styles contain no Make route selectors", () => {
+  const makeOnlySelector = /^\s*\.(?:make-|chat-feed|composer|message(?:\b|-)|assistant-group|user-group|recent-thread|template-|thinking-|send-button|newchat-button|user-message|thread-folder|cancel-edit-message)/m;
+  assert.doesNotMatch(globalStyles, makeOnlySelector);
+  assert.match(makeStyles, /\.make-page/);
+  assert.match(makeStyles, /\.composer/);
+  assert.match(makeStyles, /\.recent-thread/);
+});

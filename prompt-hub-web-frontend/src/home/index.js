@@ -1,6 +1,6 @@
 // @ts-check
-import "./home-search-model.js";
-import "./home-controller.js";
-import "./home-events.js";
+import { HomeSearchModel as model } from "./home-search-model.mjs";
+import * as controller from "./home-controller.mjs";
+import * as events from "./home-events.mjs";
 
-export const home = Object.freeze({ model: window.TtalkakHomeSearchModel, controller: window.TtalkakHomeController, events: window.TtalkakHomeEvents });
+export const home = Object.freeze({ model, controller, events });
