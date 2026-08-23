@@ -2,6 +2,14 @@
 
 This document records frontend decisions that remain valid regardless of which AI or RAG design is selected. Research papers and experiments may motivate a proposal, but they do not change the frontend contract until the AI, backend, and frontend owners agree on an API example and rollout plan.
 
+## Dependency update automation
+
+- `.github/dependabot.yml` creates separate weekly update PRs for the web frontend, Chrome Extension, and GitHub Actions.
+- Version-update PRs target `develop-integrated`; the configuration must also be present on the repository default branch (`main`) for Dependabot to activate it.
+- Patch and minor updates are grouped per frontend surface. Major updates are intentionally excluded and require a separately planned compatibility review.
+- Dependabot PRs must pass the same CI jobs as human-authored changes and are not auto-merged by this policy.
+- Repository-level Dependabot security updates remain governed by GitHub settings and are not disabled by the version-update grouping policy.
+
 ## 1. Production configuration register
 
 Complete every `TBD` before a production release. Values containing credentials or private keys must live in the deployment secret store, not in this repository.
