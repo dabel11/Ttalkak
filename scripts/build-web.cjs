@@ -9,6 +9,26 @@ const outputRoot = path.join(webRoot, outputDirectory);
 const production = process.argv.includes("--production");
 const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
+const terser = require(path.join(webRoot, "node_modules", "terser"));
+const terserVersion = require(path.join(webRoot, "node_modules", "terser", "package.json")).version;
+const productionCompressionPolicy = `ttalkak-terser-${terserVersion}-passes-2`;
+
+async function compressProductionJavaScript(metafile) {
+  const outputs = Object.keys(metafile.outputs).filter((file) => file.endsWith(".js"));
+  for (const output of outputs) {
+    const source = fs.readFileSync(path.resolve(output), "utf8");
+    const result = await terser.minify(source, {
+      module: true,
+      compress: { passes: 2 },
+      mangle: true,
+      format: { comments: /^!/ },
+    });
+    if (!result.code) throw new Error(`Terser produced no output for ${output}`);
+    const compressed = `${result.code}\n`;
+    fs.writeFileSync(path.resolve(output), compressed, "utf8");
+    metafile.outputs[output].bytes = Buffer.byteLength(compressed);
+  }
+}
 
 function assertSafeOutputPath() {
   if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== outputDirectory) {
@@ -58,12 +78,14 @@ async function build() {
       sourcemap: false,
       target: ["es2023"],
       define: { "globalThis.TTALKAK_PRODUCTION_BUILD": "true" },
+      banner: { js: `/*! ${productionCompressionPolicy} */` },
       outdir: path.join(outputRoot, "assets"),
       entryNames: "app-[hash]",
       chunkNames: "chunks/[name]-[hash]",
       metafile: true,
     });
     bundleMetafile = result.metafile;
+    await compressProductionJavaScript(result.metafile);
     if (Object.values(result.metafile.outputs).some((metadata) => metadata.entryPoint?.endsWith("src/demo-data.mjs"))) {
       throw new Error("Production bundle must not contain the development-only demo data chunk.");
     }

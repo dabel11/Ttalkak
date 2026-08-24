@@ -36,6 +36,7 @@
     "esbuild": "0.28.2",
     "eslint": "10.8.0",
     "globals": "17.7.0",
+    "terser": "5.50.0",
     "typescript": "7.0.2"
   }
 }
