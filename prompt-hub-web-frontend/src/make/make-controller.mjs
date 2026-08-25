@@ -8,8 +8,20 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
     if (!refreshed) {
+      const messageId = `concurrency-refresh-${Date.now()}`;
+      ctx.appendUser(threadId, {
+        id: messageId, role: "user", content: prompt, requestId, excludeFromHistory: true,
+        retryMode: retryMessageId ? "edit" : "follow-up", retryMessageId,
+      });
+      ctx.failRequest(messageId, {
+        ...failure,
+        kind: "concurrency_refresh",
+        message: "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 대화를 다시 불러와 주세요.",
+      });
+      ctx.updateThread(threadId);
       ctx.notice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
       ctx.render();
+      ctx.scrollLatest();
       return true;
     }
     const messageId = `concurrency-${Date.now()}`;

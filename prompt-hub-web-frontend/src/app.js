@@ -1709,6 +1709,37 @@ function bindDelegatedMakeEvents() {
           if (composer) submitMakePrompt(composer);
         }, 0);
       },
+      refreshConcurrent: async (message) => {
+        const prompt = String(message?.content || "").trim();
+        const threadId = String(state.activeThreadId || "");
+        if (!prompt || !threadId) return;
+        const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
+        modules.observability.report(new Error("Make concurrency refresh"), {
+          area: "make", action: "refresh-thread", kind: "concurrency",
+          code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+          status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+          level: refreshed ? "info" : "error", retryable: false, client: "web",
+          requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
+        });
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        if (!refreshed) {
+          showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+          render();
+          return;
+        }
+        const messageId = `concurrency-${Date.now()}`;
+        appendMakeUserMessageState(state, threadId, {
+          id: messageId, role: "user", content: prompt, requestId: message.requestId,
+          excludeFromHistory: true, retryMode: message.retryMode || "follow-up",
+          retryMessageId: message.retryMessageId || "",
+        });
+        makeStateModule.failMakeRequest(makeRequestState, messageId, makeMessageModel.classifyMakeError({
+          status: 409, code: "THREAD_CONCURRENTLY_UPDATED",
+        }));
+        updateRecentThread(threadId);
+        render();
+        scheduleMakeLatestScroll({ behavior: "auto" });
+      },
       reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
         area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
         status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,

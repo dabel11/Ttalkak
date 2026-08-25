@@ -84,6 +84,7 @@ function App() {
     submitEditedMessage,
     requestDeleteRecentThread,
     retryFailedMessage,
+    refreshFailedConcurrency,
   } = useConversation({
     authSession,
     executeTarget,
@@ -136,6 +137,10 @@ function App() {
   function handleResolveError(message) {
     if (message?.failure?.requiresLogin) {
       setAuthMode("login");
+      return;
+    }
+    if (message?.failure?.kind === "concurrency_refresh") {
+      void refreshFailedConcurrency(message);
       return;
     }
     void retryFailedMessage(message);

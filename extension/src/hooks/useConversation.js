@@ -13,6 +13,7 @@ import { useConversationHistory } from "./useConversationHistory";
 import { useMessageRetry } from "./useMessageRetry";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { classifyMakeError } from "../../../shared/make-message-model.js";
 
 export function useConversation({
   authSession,
@@ -282,6 +283,14 @@ export function useConversation({
             setMessages((current) => [...current, createImproveErrorMessage(prompt, err, { requestId })]);
             showNotice("최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다.");
           } else {
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, {
+              requestId,
+              failure: {
+                ...classifyMakeError(err),
+                kind: "concurrency_refresh",
+                message: "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 대화를 다시 불러와 주세요.",
+              },
+            })]);
             showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
           }
           return;
@@ -305,6 +314,28 @@ export function useConversation({
     } else {
       await submitPrompt(prompt);
     }
+    return true;
+  }
+
+  async function refreshFailedConcurrency(message) {
+    const requestId = String(message?.requestId || "");
+    const refreshed = await refreshActiveServerThread(String(activeThreadId.current || "")).catch(() => null);
+    reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+    if (!refreshed) {
+      showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+      return false;
+    }
+    setMessages((current) => [...current, createImproveErrorMessage(message.sourcePrompt, {
+      status: 409,
+      code: "THREAD_CONCURRENTLY_UPDATED",
+      message: "최신 대화를 반영했습니다. 다시 시도해 주세요.",
+    }, {
+      requestId,
+      retryMode: message.retryMode,
+      retryMessageId: message.retryMessageId,
+    })]);
+    setComposerValue(String(message.sourcePrompt || ""));
+    showNotice("최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다.");
     return true;
   }
 
@@ -411,5 +442,6 @@ export function useConversation({
     requestDeleteRecentThread,
     prepareFailedRetry,
     retryFailedMessage,
+    refreshFailedConcurrency,
   };
 }

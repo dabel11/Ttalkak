@@ -42,4 +42,8 @@ test("shared response and error models preserve replay metadata and reject reque
     requiresLogin: false,
   });
   assert.deepEqual(model.getMakeFailureAction(concurrency), { id: "retry-after-refresh", label: "다시 시도" });
+  assert.deepEqual(model.getMakeFailureAction({ kind: "concurrency_refresh" }), {
+    id: "reload-thread",
+    label: "대화 다시 불러오기",
+  });
 });

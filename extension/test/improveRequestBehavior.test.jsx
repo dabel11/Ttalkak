@@ -195,6 +195,32 @@ describe("Extension improve request behavior", () => {
     });
   });
 
+  test("a failed concurrency refresh requires an explicit reload before retry", async () => {
+    const conflict = Object.assign(new Error("concurrent"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockRejectedValueOnce(conflict).mockResolvedValueOnce(improveResponse("retry after reload"));
+    api.getThread.mockRejectedValueOnce(Object.assign(new Error("offline"), { status: 503 }));
+    const canonical = { id: "canonical", role: "assistant", content: "latest" };
+    const props = createProps({ authSession: { accessToken: "token" } });
+    const { result } = renderHook(() => useConversation(props));
+    act(() => result.current.openRecentThread({ id: "42", messages: [] }));
+    act(() => result.current.setComposerValue("prompt survives failed reload"));
+
+    await act(async () => { await result.current.submitPrompt(); });
+    const reloadMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency_refresh");
+    expect(reloadMessage?.sourcePrompt).toBe("prompt survives failed reload");
+    expect(api.improve).toHaveBeenCalledTimes(1);
+
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [canonical] });
+    await act(async () => { expect(await result.current.refreshFailedConcurrency(reloadMessage)).toBe(true); });
+    const retryMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency");
+    expect(retryMessage).toBeTruthy();
+    expect(api.improve).toHaveBeenCalledTimes(1);
+
+    await act(async () => { expect(await result.current.retryFailedMessage(retryMessage)).toBe(true); });
+    expect(api.improve).toHaveBeenCalledTimes(2);
+  });
+
   test("opening and clearing a restored recent thread keeps the active selection in conversation state", () => {
     const { result } = renderHook(() => useConversation(createProps()));
     const restored = { id: "restored-thread", messages: [{ id: "user-restored", role: "user", content: "restored" }] };
@@ -451,6 +477,7 @@ describe("Extension clarification UI", () => {
     [{ kind: "network", retryable: true }, "연결 확인 후 다시 시도"],
     [{ kind: "auth", requiresLogin: true, retryable: false }, "로그인"],
     [{ kind: "concurrency", retryable: false }, "다시 시도"],
+    [{ kind: "concurrency_refresh", retryable: false }, "대화 다시 불러오기"],
   ])("error actions render from the shared UX policy", (failure, label) => {
     globalThis.HTMLElement.prototype.scrollTo = vi.fn();
     const onResolveError = vi.fn();

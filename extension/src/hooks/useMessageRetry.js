@@ -8,6 +8,7 @@ import { getServerEditErrorMessage } from "../utils/conversationMessages.js";
 import { makeTitle } from "../utils/promptUtils.js";
 import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { classifyMakeError } from "../../../shared/make-message-model.js";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -83,9 +84,18 @@ export function useMessageRetry({
           if (isThreadConcurrencyError(error)) {
             const refreshed = await refreshActiveServerThread(String(threadId)).catch(() => null);
             reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
-            setMessages((current) => refreshed
-              ? [...current, createImproveErrorMessage(prompt, error, { requestId, retryMode: "edit", retryMessageId: messageId })]
-              : current);
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, error, refreshed
+              ? { requestId, retryMode: "edit", retryMessageId: messageId }
+              : {
+                  requestId,
+                  retryMode: "edit",
+                  retryMessageId: messageId,
+                  failure: {
+                    ...classifyMakeError(error),
+                    kind: "concurrency_refresh",
+                    message: "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 대화를 다시 불러와 주세요.",
+                  },
+                })]);
             showNotice(refreshed
               ? "최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다."
               : "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");

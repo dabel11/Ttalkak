@@ -372,6 +372,8 @@ import { parts } from "./make-message-parts.mjs";
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
     const failureButton = failureAction?.id === "login"
       ? `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
+      : failureAction?.id === "reload-thread"
+        ? `<button type="button" data-refresh-concurrent="${safeMessageId}">${escapeHtml(failureAction.label)}</button>`
       : failureAction?.id === "retry-after-refresh"
         ? `<button type="button" data-retry-concurrent="${safeMessageId}">${escapeHtml(failureAction.label)}</button>`
       : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";

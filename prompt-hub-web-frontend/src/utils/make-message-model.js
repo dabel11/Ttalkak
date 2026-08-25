@@ -16,6 +16,7 @@ function getMakeProgressStatus(elapsedMs = 0) {
 }
 function getMakeFailureAction(failure = {}) {
   if (failure.requiresLogin || failure.kind === "auth") return { id: "login", label: "로그인" };
+  if (failure.kind === "concurrency_refresh") return { id: "reload-thread", label: "대화 다시 불러오기" };
   if (failure.kind === "concurrency") return { id: "retry-after-refresh", label: "다시 시도" };
   if (failure.retryable) return { id: "retry", label: failure.kind === "network" ? "연결 확인 후 다시 시도" : "잠시 후 다시 시도" };
   return null;

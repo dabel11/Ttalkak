@@ -79,13 +79,14 @@
         const closeThreadMenu = state.openThreadMenuId && !event.target.closest?.("[data-thread-item]");
         if (closeFolderMenu) state.openFolderMenuId = null;
         if (closeThreadMenu) { state.openThreadMenuId = null; state.creatingThreadFolderId = null; }
-        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-refine-unchanged], [data-retry-concurrent], [data-retry-message], [data-make-login], [data-copy-message], [data-edit-message], [data-split-thread-from], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
+        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-refine-unchanged], [data-refresh-concurrent], [data-retry-concurrent], [data-retry-message], [data-make-login], [data-copy-message], [data-edit-message], [data-split-thread-from], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
         if (!target) { if (closeFolderMenu || closeThreadMenu) actions.render(); return; }
         if (closeFolderMenu || closeThreadMenu) actions.render();
         if (target.matches("[data-template]")) actions.applyTemplate(target.dataset.template);
         else if (target.matches("[data-toggle-templates]")) actions.toggleTemplates(target);
         else if (target.matches("[data-cancel-make-request]")) actions.cancelRequest();
         else if (target.matches("[data-refine-unchanged]")) actions.refineUnchanged(target.dataset.refineUnchanged);
+        else if (target.matches("[data-refresh-concurrent]")) { const message = state.messages.find((item) => item.id === target.dataset.refreshConcurrent && item.role === "user"); if (message) actions.refreshConcurrent?.(message); }
         else if (target.matches("[data-retry-concurrent]")) { const message = state.messages.find((item) => item.id === target.dataset.retryConcurrent && item.role === "user"); if (message) { actions.reportRetry?.(message); actions.retryConcurrent?.(message); } }
         else if (target.matches("[data-retry-message]")) { const message = state.messages.find((item) => item.id === target.dataset.retryMessage && item.role === "user"); if (message) { actions.reportRetry?.(message); actions.resend(message.id, message.content); } }
         else if (target.matches("[data-make-login]")) actions.openLogin();

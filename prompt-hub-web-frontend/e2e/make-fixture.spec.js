@@ -98,6 +98,10 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
     }
     const threadMatch = pathname.match(/^\/api\/make\/threads\/(\d+)$/);
     if (threadMatch && request.method() === "GET" && fixtures.threads) {
+      if (fixtures.threadHandler) {
+        await fixtures.threadHandler(route, threadMatch[1]);
+        return;
+      }
       const thread = fixtures.threads.find((item) => String(item.serverId || item.id) === threadMatch[1]);
       await route.fulfill({ status: thread ? 200 : 404, headers: CORS_HEADERS, body: JSON.stringify(thread || { code: "NOT_FOUND" }) });
       return;
@@ -112,7 +116,7 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
 
 async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
-  await mockBackend(page, improveHandler, { threads: extra.backendThreads });
+  await mockBackend(page, improveHandler, { threads: extra.backendThreads, threadHandler: extra.threadHandler });
   await gotoApp(page);
   await page.locator('[data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
@@ -678,6 +682,103 @@ test("thread concurrency reloads canonical messages before an explicit preserved
   await page.locator("[data-retry-concurrent]").click();
   await expect.poll(() => requests.length).toBe(2);
   await expect(page.getByText("Concurrent retry result", { exact: true })).toHaveCount(1);
+});
+
+test("thread concurrency preserves the server edit route after an explicit retry", async ({ page }) => {
+  const initialMessages = [
+    { id: "server-user-edit-conflict", role: "user", content: "Original edit prompt", requestId: "request-before-edit" },
+    { id: "server-assistant-edit-conflict", role: "assistant", mode: "improve", content: "Original edit result", improvedPrompt: "Original edit result" },
+  ];
+  const thread = serverThreadFixture(initialMessages);
+  const requests = [];
+  await openMake(page, initialMessages, signedInThreadState(thread), async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    if (requests.length === 1) {
+      thread.messages = initialMessages;
+      await route.fulfill({ status: 409, headers: CORS_HEADERS, body: JSON.stringify({
+        code: "THREAD_CONCURRENTLY_UPDATED",
+        message: "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.",
+      }) });
+      return;
+    }
+    thread.messages = [
+      { ...initialMessages[0], content: payload.prompt, requestId: payload.requestId },
+      { id: "server-assistant-edit-retry", role: "assistant", mode: "improve", content: "Edited retry result", improvedPrompt: "Edited retry result", requestId: payload.requestId },
+    ];
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({
+      mode: "improve", improvedPrompt: "Edited retry result", threadId: 77,
+      requestId: payload.requestId, replayed: false,
+    }) });
+  });
+
+  await page.locator('[data-edit-message="server-user-edit-conflict"]').click();
+  const editForm = page.locator('[data-edit-message-form="server-user-edit-conflict"]');
+  await editForm.locator('textarea[name="message"]').fill("Edited concurrent prompt");
+  await editForm.locator('button[type="submit"]').click();
+
+  await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ messageId: "server-user-edit-conflict", prompt: "Edited concurrent prompt" });
+
+  await page.locator("[data-retry-concurrent]").click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({ messageId: "server-user-edit-conflict", prompt: "Edited concurrent prompt" });
+  await expect(page.getByText("Edited retry result", { exact: true })).toHaveCount(1);
+});
+
+test("failed concurrency refresh offers reload before any request retry", async ({ page }) => {
+  const initialMessages = [
+    { id: "server-user-refresh", role: "user", content: "Initial prompt" },
+    { id: "server-assistant-refresh", role: "assistant", mode: "improve", content: "Initial result", improvedPrompt: "Initial result" },
+  ];
+  const thread = serverThreadFixture(initialMessages);
+  const requests = [];
+  let conflictReturned = false;
+  let refreshAttempts = 0;
+  const state = signedInThreadState(thread);
+  state.threadHandler = async (route) => {
+    if (conflictReturned) refreshAttempts += 1;
+    if (conflictReturned && refreshAttempts === 1) {
+      await route.fulfill({ status: 503, headers: CORS_HEADERS, body: JSON.stringify({ code: "SERVER_UNAVAILABLE" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify(thread) });
+  };
+  await openMake(page, initialMessages, state, async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    if (requests.length === 1) {
+      conflictReturned = true;
+      await route.fulfill({ status: 409, headers: CORS_HEADERS, body: JSON.stringify({ code: "THREAD_CONCURRENTLY_UPDATED" }) });
+      return;
+    }
+    thread.messages = [
+      ...initialMessages,
+      { id: "server-user-reloaded-retry", role: "user", content: payload.prompt, requestId: payload.requestId },
+      { id: "server-assistant-reloaded-retry", role: "assistant", mode: "improve", content: "Reloaded retry result", improvedPrompt: "Reloaded retry result", requestId: payload.requestId },
+    ];
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({
+      mode: "improve", improvedPrompt: "Reloaded retry result", threadId: 77,
+      requestId: payload.requestId, replayed: false,
+    }) });
+  });
+
+  const prompt = "Preserve prompt across reload failure";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.locator("[data-refresh-concurrent]")).toBeVisible();
+  await expect(page.locator("[data-retry-concurrent]")).toHaveCount(0);
+  expect(requests).toHaveLength(1);
+
+  await page.locator("[data-refresh-concurrent]").click();
+  await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  expect(requests).toHaveLength(1);
+
+  await page.locator("[data-retry-concurrent]").click();
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(page.getByText("Reloaded retry result", { exact: true })).toHaveCount(1);
 });
 
 const errorCases = [
