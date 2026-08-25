@@ -9,6 +9,40 @@
     const progress = form.querySelector("[data-ask-answer-progress]");
     if (progress) progress.textContent = required.length ? `필수 답변 ${completed}/${required.length}개 입력` : "답변을 입력해주세요.";
   }
+  function updateRecentThreadSearch(input) {
+    const query = String(input?.value || "").trim().toLocaleLowerCase();
+    const panel = input?.closest?.(".make-side-panel");
+    if (!panel) return 0;
+    const threads = [...panel.querySelectorAll(".recent-thread")];
+    let visibleCount = 0;
+    threads.forEach((thread) => {
+      thread.hidden = Boolean(query) && !String(thread.textContent || "").toLocaleLowerCase().includes(query);
+      if (!thread.hidden) visibleCount += 1;
+    });
+    panel.querySelectorAll(".recent-thread-group").forEach((heading) => {
+      let next = heading.nextElementSibling;
+      let hasVisible = false;
+      while (next && !next.classList.contains("recent-thread-group")) {
+        if (next.classList.contains("recent-thread") && !next.hidden) hasVisible = true;
+        next = next.nextElementSibling;
+      }
+      heading.hidden = !hasVisible;
+    });
+    panel.querySelectorAll("[data-clear-recent-thread-search]").forEach((button) => { button.hidden = !query; });
+    const status = panel.querySelector("[data-recent-thread-search-status]");
+    if (status) status.textContent = query ? `검색 결과 ${visibleCount}개` : `전체 ${threads.length}개`;
+    const empty = panel.querySelector("[data-recent-thread-search-empty]");
+    if (empty) empty.hidden = !query || visibleCount > 0;
+    return visibleCount;
+  }
+  function clearRecentThreadSearch(target) {
+    const panel = target?.closest?.(".make-side-panel");
+    const input = panel?.querySelector?.("[data-recent-thread-search]");
+    if (!input) return;
+    input.value = "";
+    updateRecentThreadSearch(input);
+    input.focus();
+  }
   function bindDelegatedMakeEvents(root, handlers) {
     if (!root || boundRoots.has(root)) return;
     boundRoots.add(root);
@@ -28,20 +62,7 @@
       input(event) {
         const recentSearch = event.target.closest?.("[data-recent-thread-search]");
         if (recentSearch) {
-          const query = String(recentSearch.value || "").trim().toLocaleLowerCase();
-          const panel = recentSearch.closest(".make-side-panel");
-          panel?.querySelectorAll(".recent-thread").forEach((thread) => {
-            thread.hidden = Boolean(query) && !String(thread.textContent || "").toLocaleLowerCase().includes(query);
-          });
-          panel?.querySelectorAll(".recent-thread-group").forEach((heading) => {
-            let next = heading.nextElementSibling;
-            let hasVisible = false;
-            while (next && !next.classList.contains("recent-thread-group")) {
-              if (next.classList.contains("recent-thread") && !next.hidden) hasVisible = true;
-              next = next.nextElementSibling;
-            }
-            heading.hidden = !hasVisible;
-          });
+          updateRecentThreadSearch(recentSearch);
           return;
         }
         const textarea = event.target.closest?.("[data-autosize-textarea]");
@@ -50,6 +71,12 @@
         actions.autosize(textarea);
       },
       keydown(event) {
+        const recentSearch = event.target.closest?.("[data-recent-thread-search]");
+        if (recentSearch && event.key === "Escape" && recentSearch.value) {
+          event.preventDefault();
+          clearRecentThreadSearch(recentSearch);
+          return;
+        }
         if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
         const form = event.target.closest?.("[data-composer], [data-edit-message-form]");
         if (!form) return;
@@ -79,7 +106,7 @@
         const closeThreadMenu = state.openThreadMenuId && !event.target.closest?.("[data-thread-item]");
         if (closeFolderMenu) state.openFolderMenuId = null;
         if (closeThreadMenu) { state.openThreadMenuId = null; state.creatingThreadFolderId = null; }
-        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-refine-unchanged], [data-refresh-concurrent], [data-retry-concurrent], [data-concurrency-new-chat], [data-retry-message], [data-make-login], [data-copy-message], [data-edit-message], [data-split-thread-from], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
+        const target = event.target.closest?.("[data-template], [data-toggle-templates], [data-cancel-make-request], [data-refine-unchanged], [data-refresh-concurrent], [data-retry-concurrent], [data-concurrency-new-chat], [data-clear-recent-thread-search], [data-retry-message], [data-make-login], [data-copy-message], [data-edit-message], [data-split-thread-from], [data-cancel-message-edit], [data-save-message], [data-share-message], [data-execute-message], [data-new-chat], [data-thread-menu], [data-open-thread], [data-delete-thread], [data-show-folder-form], [data-cancel-folder-create], [data-open-folder], [data-folder-menu], [data-edit-folder], [data-cancel-folder-edit], [data-delete-folder], [data-start-thread-folder-create], [data-cancel-thread-folder-create]");
         if (!target) { if (closeFolderMenu || closeThreadMenu) actions.render(); return; }
         if (closeFolderMenu || closeThreadMenu) actions.render();
         if (target.matches("[data-template]")) actions.applyTemplate(target.dataset.template);
@@ -89,6 +116,7 @@
         else if (target.matches("[data-refresh-concurrent]")) { const message = state.messages.find((item) => item.id === target.dataset.refreshConcurrent && item.role === "user"); if (message) actions.refreshConcurrent?.(message); }
         else if (target.matches("[data-retry-concurrent]")) { const message = state.messages.find((item) => item.id === target.dataset.retryConcurrent && item.role === "user"); if (message) { actions.reportRetry?.(message); actions.retryConcurrent?.(message); } }
         else if (target.matches("[data-concurrency-new-chat]")) { const message = state.messages.find((item) => item.id === target.dataset.concurrencyNewChat && item.role === "user"); if (message) actions.newChatFromConflict?.(message); }
+        else if (target.matches("[data-clear-recent-thread-search]")) clearRecentThreadSearch(target);
         else if (target.matches("[data-retry-message]")) { const message = state.messages.find((item) => item.id === target.dataset.retryMessage && item.role === "user"); if (message) { actions.reportRetry?.(message); actions.resend(message.id, message.content); } }
         else if (target.matches("[data-make-login]")) actions.openLogin();
         else if (target.matches("[data-copy-message]")) actions.copy(target.dataset.copyMessage);
@@ -114,4 +142,4 @@
       },
     };
   }
-export { bindDelegatedMakeEvents, createDelegatedMakeHandlers, updateAskProgress };
+export { bindDelegatedMakeEvents, clearRecentThreadSearch, createDelegatedMakeHandlers, updateAskProgress, updateRecentThreadSearch };

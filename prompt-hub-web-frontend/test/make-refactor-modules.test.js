@@ -9,6 +9,7 @@ let makeEvents;
 let errorEffects;
 let normalizeAndPersistMakeState;
 let makeServerSyncEffects;
+let makePageRenderers;
 test.before(async () => {
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
   makeStateApi = await import("../src/make/make-state.mjs");
@@ -17,6 +18,7 @@ test.before(async () => {
   ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
   ({ normalizeAndPersistMakeState } = await import("../src/make/make-persistence.mjs"));
   ({ makeServerSyncEffects } = await import("../src/effects/make-server-sync-effects.mjs"));
+  ({ renderers: makePageRenderers } = await import("../src/renderers/pages/make-page.mjs"));
 });
 
 test("Make request state transitions are centralized", () => {
@@ -25,9 +27,13 @@ test("Make request state transitions are centralized", () => {
   api.startMakeRequest(request);
   assert.equal(request.inFlight, true);
   api.failMakeRequest(request, "user-1", { message: "failed", retryable: true });
-  assert.deepEqual(request, { inFlight: false, failedMessageId: "user-1", failure: { message: "failed", retryable: true } });
+  assert.deepEqual(request, { inFlight: false, failedMessageId: "user-1", failure: { message: "failed", retryable: true }, recoveryMessageId: "", recoveryAction: "" });
+  assert.equal(api.startMakeRecovery(request, "user-1", "refresh"), true);
+  assert.equal(api.startMakeRecovery(request, "user-1", "refresh"), false);
+  assert.equal(request.recoveryAction, "refresh");
+  api.finishMakeRecovery(request);
   api.completeMakeRequest(request);
-  assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null });
+  assert.deepEqual(request, { inFlight: false, failedMessageId: "", failure: null, recoveryMessageId: "", recoveryAction: "" });
 });
 test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
 test("Make workflow composition bundles its four focused submodules behind one lazy boundary", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.mjs"), "utf8"); ["make-folder-workflows.mjs", "make-execution-workflows.mjs", "make-sync-workflows.mjs", "make-recent-workflows.mjs"].forEach((file) => assert.match(composite, new RegExp(`(?:from\\s+)?["']\\./${file.replaceAll(".", "\\.")}["']`))); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
@@ -196,6 +202,19 @@ test("server-synced edited-message cancellation exposes thinking and preserves t
     "update", "thinking:true", "queue-scroll", "render", "thinking:false", ["user-1", "cancelled"],
     "draft:server edited prompt", "clear-editing", "update", "render-cancellation", "stopped",
   ]);
+});
+test("repeated concurrency recovery explains the safe new-chat choice", () => {
+  const html = makePageRenderers.UserMessageView(
+    { icons: { edit: "edit" }, escapeAttr: String, escapeHtml: String },
+    {
+      canSplit: false, content: "preserved prompt", failureAction: { id: "retry-after-refresh", label: "다시 보내기" },
+      failureKind: "concurrency", failureMessage: "입력한 내용은 유지됩니다.", failureRepeated: true,
+      failureRetryable: false, failureTitle: "최신 대화를 불러왔습니다", failureTone: "recovered", isEditing: false,
+      recoveryAction: "", retryMode: "follow-up", retryTargetContent: "", role: "user", safeContent: "preserved prompt", safeMessageId: "conflict-1",
+    },
+  );
+  assert.match(html, /새 대화에서 계속하기/);
+  assert.match(html, /현재 입력을 새 대화로 옮기며 기존 대화는 유지됩니다/);
 });
 test("successful Make requests reset repeated concurrency guidance per thread", async () => {
   const repeatedValues = [];

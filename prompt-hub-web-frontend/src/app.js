@@ -599,9 +599,7 @@ const ensureShareRuntime = shareRuntime.ensure;
 const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
 const authSession = createAuthSession({ state, applyIdentity: applyAuthenticatedIdentityState, resetBackend: resetSessionBackendStateValue, clearState: clearAuthenticatedSessionState, normalizeLikes: normalizePersistedLikeCounts, writeToken: (token) => writeStorageItem(AUTH_TOKEN_KEY, token), removeToken: () => removeStorageItem(AUTH_TOKEN_KEY) });
 const getCurrentAccountScopeKey = authSession.key;
-const snapshotCurrentAccountScope = authSession.snapshot;
 const saveCurrentAccountScope = authSession.saveScope;
-const applyAccountScope = authSession.applyScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
@@ -1695,20 +1693,22 @@ function bindDelegatedMakeEvents() {
       retryConcurrent: (message) => {
         const prompt = String(message?.content || "").trim();
         const retryMessageId = message?.retryMode === "edit" ? String(message.retryMessageId || "") : "";
-        if (!prompt) return;
-        state.messages = state.messages.filter((item) => item.id !== message.id);
-        makeStateModule.completeMakeRequest(makeRequestState);
-        makeStateModule.setMakeComposerDraft(state, prompt);
-        updateRecentThread(state.activeThreadId);
-        render();
+        if (!prompt || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "retry")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
         window.setTimeout(() => {
+          state.messages = state.messages.filter((item) => item.id !== message.id);
+          makeStateModule.completeMakeRequest(makeRequestState);
+          makeStateModule.setMakeComposerDraft(state, prompt);
+          updateRecentThread(state.activeThreadId);
+          renderPreservingMakeScroll();
           if (retryMessageId) {
             resendEditedMessage(retryMessageId, prompt);
             return;
           }
           const composer = document.querySelector("[data-composer]");
           if (composer) submitMakePrompt(composer);
-        }, 0);
+        }, 80);
       },
       newChatFromConflict: (message) => {
         const prompt = String(message?.content || "").trim();
@@ -1720,8 +1720,10 @@ function bindDelegatedMakeEvents() {
       refreshConcurrent: async (message) => {
         const prompt = String(message?.content || "").trim();
         const threadId = String(state.activeThreadId || "");
-        if (!prompt || !threadId) return;
-        const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
+        if (!prompt || !threadId || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "refresh")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
+        const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true });
         modules.observability.report(new Error("Make concurrency refresh"), {
           area: "make", action: "refresh-thread", kind: "concurrency",
           code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
@@ -1731,24 +1733,31 @@ function bindDelegatedMakeEvents() {
         });
         makeStateModule.setMakeComposerDraft(state, prompt);
         if (!refreshed) {
+          makeStateModule.finishMakeRecovery(makeRequestState);
           showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
-          render();
+          pendingMessageScrollId = message.id;
+          renderPreservingMakeScroll();
           return;
         }
+        const retryMessageId = String(message.retryMessageId || "");
+        const retryTargetContent = retryMessageId
+          ? String(state.messages.find((item) => String(item.id || "") === retryMessageId)?.content || "")
+          : "";
         const messageId = String(message.id || `concurrency-${Date.now()}`);
         appendMakeUserMessageState(state, threadId, {
           id: messageId, role: "user", content: prompt, requestId: message.requestId,
           excludeFromHistory: true, retryMode: message.retryMode || "follow-up",
-          retryMessageId: message.retryMessageId || "", concurrencyRepeated: Boolean(message?.concurrencyRepeated),
+          retryMessageId, retryTargetContent, concurrencyRepeated: Boolean(message?.concurrencyRepeated),
         });
+        makeStateModule.finishMakeRecovery(makeRequestState);
         makeStateModule.failMakeRequest(makeRequestState, messageId, {
           ...makeMessageModel.classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
           retryMode: message.retryMode || "follow-up", repeated: Boolean(message?.concurrencyRepeated),
         });
         updateRecentThread(threadId);
-        render();
+        pendingMessageScrollId = messageId;
+        renderPreservingMakeScroll();
         focusRestoredMakeComposer(prompt);
-        scheduleMakeLatestScroll({ behavior: "auto" });
       },
       reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
         area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
@@ -1886,7 +1895,7 @@ function getMakeControllerContext() {
     },
     applyPendingThread: applyPendingImproveThreadId,
     shouldSync: shouldUseImproveThreadSync,
-    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true }),
+    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true }),
     syncThread: syncMakeThreadWithBackend,
     focusAsk: focusLatestAskAnswer,
     findEditableMessage: (messageId) => state.messages.findIndex((message) => message.id === messageId && message.role === "user"),
@@ -1932,32 +1941,15 @@ function makePromptTitle(text) {
   if (!clean) return "Make에서 저장한 프롬프트";
   return clean.length > 26 ? `${clean.slice(0, 26)}...` : clean;
 }
-const normalizeSavedPage = () => normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
 const restoreSearchFocus = () => homeController.restoreSearchFocus();
 const getSavedPagePrompts = () => savedLibraryController.getPagePrompts();
-const getLocalSavedPagePrompts = () => savedLibraryController.getLocalPrompts();
-function hasUserLibraryContent() {
-  return getSavedPagePrompts().length > 0;
-}
 const matchesSavedFilter = (prompt) => savedLibraryController.matchesFilter(prompt);
 const getSavedSorter = () => savedLibraryController.getSorter();
 function scheduleAdminPromptSearchCommit(value) {
   discoveryController.scheduleAdminPromptSearch(value);
 }
-function commitAdminPromptSearchQuery(value) {
-  discoveryController.commitAdminPromptSearch(value);
-}
-function restoreAdminPromptSearchFocus() {
-  discoveryController.restoreAdminPromptFocus();
-}
 function scheduleAdminTagSearchCommit(value) {
   discoveryController.scheduleAdminTagSearch(value);
-}
-function commitAdminTagSearchQuery(value) {
-  discoveryController.commitAdminTagSearch(value);
-}
-function restoreAdminTagSearchFocus() {
-  discoveryController.restoreAdminTagFocus();
 }
 function searchByTag(tag) {
   discoveryController.searchByTag(tag);
@@ -2211,7 +2203,7 @@ function focusRestoredMakeComposer(prompt) {
     const input = document.querySelector('[data-composer] textarea[name="prompt"]');
     const composer = input?.closest?.("[data-composer]");
     if (!input || !composer) return;
-    input.focus();
+    input.focus({ preventScroll: true });
     input.setSelectionRange?.(prompt.length, prompt.length);
     composer.classList.add("is-restored");
     const status = composer.querySelector("[data-composer-restore-status]");

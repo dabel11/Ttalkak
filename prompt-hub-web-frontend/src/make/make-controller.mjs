@@ -33,20 +33,27 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       });
       ctx.updateThread(threadId);
       ctx.notice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
+      ctx.queueScroll?.(messageId);
       ctx.render();
-      ctx.scrollLatest();
       return true;
     }
+    const latestMessages = Array.isArray(refreshed?.messages) ? refreshed.messages : (ctx.getMessages?.() || ctx.state?.messages || []);
+    const rawMessages = Array.isArray(refreshed?.raw?.messages) ? refreshed.raw.messages : [];
+    const matchesRetryTarget = (message) => [message?.id, message?.messageId, message?.raw?.id, message?.raw?.messageId]
+      .some((value) => String(value || "") === String(retryMessageId));
+    const retryTargetContent = retryMessageId
+      ? String([...latestMessages, ...rawMessages].find(matchesRetryTarget)?.content || "")
+      : "";
     const messageId = `concurrency-${Date.now()}`;
     ctx.appendUser(threadId, {
       id: messageId, role: "user", content: prompt, requestId, excludeFromHistory: true,
-      retryMode, retryMessageId, concurrencyRepeated: repeated,
+      retryMode, retryMessageId, retryTargetContent, concurrencyRepeated: repeated,
     });
     ctx.failRequest(messageId, { ...failure, retryMode, repeated });
     ctx.updateThread(threadId);
+    ctx.queueScroll?.(messageId);
     ctx.render();
     ctx.focusRestored?.(prompt);
-    ctx.scrollLatest();
     return true;
   }
   function collectAskAnswerPayload(form, model) {

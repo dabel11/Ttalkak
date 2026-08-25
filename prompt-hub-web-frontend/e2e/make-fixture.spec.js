@@ -249,6 +249,19 @@ test("recent conversation search hides unmatched threads and empty date groups",
   await expect(page.locator('[data-thread-item="previous-thread"]')).toBeHidden();
   await expect(page.locator(".recent-thread-group:visible")).toHaveCount(1);
   await expect(page.locator(".recent-thread-group:visible")).toHaveText("오늘");
+  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("검색 결과 1개");
+  await expect(page.locator("[data-clear-recent-thread-search]").first()).toBeVisible();
+  await page.locator("[data-clear-recent-thread-search]").first().click();
+  await expect(page.locator("[data-recent-thread-search]")).toHaveValue("");
+  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("전체 3개");
+
+  await page.locator("[data-recent-thread-search]").fill("not found");
+  await expect(page.locator("[data-recent-thread-search-empty]")).toBeVisible();
+  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("검색 결과 0개");
+  await page.locator("[data-recent-thread-search]").press("Escape");
+  await expect(page.locator("[data-recent-thread-search]")).toHaveValue("");
+  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("전체 3개");
+  await expect(page.locator(".recent-thread")).toHaveCount(3);
 });
 
 test("long-running request status advances while the cancel action remains available", async ({ page }) => {
@@ -723,11 +736,20 @@ test("thread concurrency preserves the server edit route after an explicit retry
 
   await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
   await expect(page.locator("[data-retry-concurrent]")).toHaveText("수정한 내용 다시 보내기");
-  await expect(page.locator(".concurrency-edit-preview")).toContainText("Edited concurrent prompt");
+  const comparison = page.locator(".concurrency-compare");
+  await expect(comparison).toContainText("수정한 내용");
+  await expect(comparison).toContainText("Edited concurrent prompt");
+  await expect(comparison).toContainText("서버 최신 내용");
+  await expect(comparison).toContainText("Original edit prompt");
+  await expect(comparison).toContainText("두 내용이 다릅니다");
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+  await expect(page.locator('[data-message-id^="concurrency-"]')).toBeInViewport();
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({ messageId: "server-user-edit-conflict", prompt: "Edited concurrent prompt" });
 
   await page.locator("[data-retry-concurrent]").click();
+  await expect(page.locator("[data-retry-concurrent]")).toBeDisabled();
+  await expect(page.locator("[data-retry-concurrent]")).toHaveText("보내는 중…");
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toMatchObject({ messageId: "server-user-edit-conflict", prompt: "Edited concurrent prompt" });
   await expect(page.getByText("Edited retry result", { exact: true })).toHaveCount(1);
@@ -749,6 +771,7 @@ test("failed concurrency refresh offers reload before any request retry", async 
       await route.fulfill({ status: 503, headers: CORS_HEADERS, body: JSON.stringify({ code: "SERVER_UNAVAILABLE" }) });
       return;
     }
+    if (conflictReturned && refreshAttempts === 2) await new Promise((resolve) => setTimeout(resolve, 150));
     await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify(thread) });
   };
   await openMake(page, initialMessages, state, async (route) => {
@@ -783,6 +806,8 @@ test("failed concurrency refresh offers reload before any request retry", async 
   expect(requests).toHaveLength(1);
 
   await page.locator("[data-refresh-concurrent]").click();
+  await expect(page.locator("[data-refresh-concurrent]")).toBeDisabled();
+  await expect(page.locator("[data-refresh-concurrent]")).toHaveText("불러오는 중…");
   await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
   await expect(recoveryCard).toHaveCount(1);
   expect(requests).toHaveLength(1);
