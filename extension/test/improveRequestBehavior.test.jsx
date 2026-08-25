@@ -70,6 +70,79 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("logged-in follow-up retries reuse one request id without duplicating the user turn", async () => {
+    api.getThreads.mockResolvedValue([]);
+    const unavailable = Object.assign(new Error("unavailable"), { status: 503, code: "AI_SERVICE_UNAVAILABLE" });
+    api.improve.mockRejectedValueOnce(unavailable).mockResolvedValueOnce({
+      ...improveResponse("stored response"), requestId: "server-echo", replayed: true, threadId: "42",
+    });
+    api.getThread.mockRejectedValueOnce(unavailable).mockResolvedValue({
+      id: "42", serverId: "42", messages: [
+        { id: "user-original", role: "user", content: "original" },
+        { id: "user-follow-up", role: "user", content: "follow up" },
+        { id: "assistant-follow-up", role: "assistant", content: "stored response" },
+      ],
+    });
+    const { result } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+    act(() => result.current.openRecentThread({ id: "42", messages: [{ id: "user-original", role: "user", content: "original" }] }));
+    act(() => result.current.setComposerValue("follow up"));
+    await act(async () => { await result.current.submitPrompt(); });
+    const errorMessage = result.current.messages.find((message) => message.isError);
+    expect(errorMessage?.requestId).toBeTruthy();
+
+    act(() => expect(result.current.prepareFailedRetry(errorMessage)).toBe(true));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(api.improve.mock.calls[0][1].requestId).toBe(errorMessage.requestId);
+    expect(api.improve.mock.calls[1][1].requestId).toBe(errorMessage.requestId);
+    expect(result.current.messages.filter((message) => message.role === "user" && message.content === "follow up")).toHaveLength(1);
+  });
+
+  test("ask follow-up requests on a server thread receive a bounded request id", async () => {
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockResolvedValue({ ...improveResponse("answer result"), threadId: "42" });
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [] });
+    const { result } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+    act(() => result.current.openRecentThread({ id: "42", messages: [{ id: "ask-1", role: "assistant", mode: "ask", content: "질문" }] }));
+    act(() => result.current.setComposerValue("추가 정보 답변"));
+    await act(async () => { await result.current.submitPrompt(); });
+    expect(api.improve.mock.calls[0][1]).toMatchObject({ threadId: 42, prompt: "추가 정보 답변" });
+    expect(api.improve.mock.calls[0][1].requestId.length).toBeLessThanOrEqual(128);
+  });
+
+  test("server edit retries preserve the id for identical content and rotate it after another edit", async () => {
+    const unavailable = Object.assign(new Error("unavailable"), { status: 503, code: "AI_SERVICE_UNAVAILABLE" });
+    api.improve.mockRejectedValueOnce(unavailable).mockRejectedValueOnce(unavailable).mockResolvedValueOnce(improveResponse("done"));
+    api.getThread.mockRejectedValue(unavailable);
+    const { result } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+    const user = { id: "31", role: "user", content: "old" };
+    act(() => result.current.openRecentThread({ id: "42", messages: [user] }));
+
+    for (const value of ["edited", "edited", "edited again"]) {
+      act(() => result.current.startEditMessage(user));
+      act(() => result.current.setEditingDraft(value));
+      await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, user.id); });
+    }
+
+    const ids = api.improve.mock.calls.map((call) => call[1].requestId);
+    expect(ids[0]).toBe(ids[1]);
+    expect(ids[2]).not.toBe(ids[1]);
+  });
+
+  test("request-id conflicts refresh the server conversation and do not add retryable errors", async () => {
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockRejectedValue(Object.assign(new Error("conflict"), { status: 409, code: "REQUEST_ID_REUSED" }));
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [{ id: "server-user", role: "user", content: "canonical" }] });
+    const props = createProps({ authSession: { accessToken: "token" } });
+    const { result } = renderHook(() => useConversation(props));
+    act(() => result.current.openRecentThread({ id: "42", messages: [] }));
+    act(() => result.current.setComposerValue("conflicting prompt"));
+    await act(async () => { await result.current.submitPrompt(); });
+    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token");
+    expect(result.current.messages.some((message) => message.isError)).toBe(false);
+    expect(props.showNotice).toHaveBeenCalledWith(expect.stringMatching(/새로고침/));
+  });
+
   test("opening and clearing a restored recent thread keeps the active selection in conversation state", () => {
     const { result } = renderHook(() => useConversation(createProps()));
     const restored = { id: "restored-thread", messages: [{ id: "user-restored", role: "user", content: "restored" }] };
@@ -106,7 +179,7 @@ describe("Extension improve request behavior", () => {
 
     await requestPromptImproveActual(
       { backendApiUrl: "https://api.example.test" },
-      { prompt: "draft" },
+      { prompt: "draft", requestId: "request-api-boundary" },
       { signal: external.signal },
     );
 
@@ -115,6 +188,10 @@ describe("Extension improve request behavior", () => {
       "https://api.example.test/api/prompts/improve",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body)).toMatchObject({
+      prompt: "draft",
+      requestId: "request-api-boundary",
+    });
   });
 
   test("initial and ask follow-up cancellation immediately restores input and ignores a late response", async () => {

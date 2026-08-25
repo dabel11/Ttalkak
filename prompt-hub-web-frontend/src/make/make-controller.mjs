@@ -1,3 +1,5 @@
+import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-request-id.mjs";
+
 "use strict";
   function collectAskAnswerPayload(form, model) {
     const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
@@ -41,10 +43,13 @@
     const userMessageId = `user-${now}`;
     const assistantMessageId = `make-${now}`;
     const history = ctx.buildHistory(ctx.state.messages);
+    const requestId = ctx.shouldSync() && ctx.getBackendThreadId(threadId)
+      ? resolveMakeRequestId({ prompt })
+      : "";
     const startedAt = Date.now();
     const signal = ctx.startRequest();
     ctx.setDraft("");
-    ctx.appendUser(threadId, { id: userMessageId, role: "user", content: prompt });
+    ctx.appendUser(threadId, { id: userMessageId, role: "user", content: prompt, ...(requestId ? { requestId } : {}) });
     ctx.setThinking(true);
     ctx.updateThread(threadId);
     ctx.render();
@@ -52,7 +57,7 @@
     let result;
     try {
       await ctx.waitForPaint();
-      result = await ctx.improve(prompt, { history, threadId, signal });
+      result = await ctx.improve(prompt, { history, threadId, requestId, signal });
     } catch (error) {
       if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
       ctx.setThinking(false);
@@ -77,7 +82,7 @@
     ctx.setThinking(false);
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
-    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
     if (ctx.shouldSync()) { const refreshed = await ctx.refreshThread(threadId); if (!refreshed) ctx.render(); if (result.mode === "ask") ctx.focusAsk(); return; }
@@ -94,16 +99,23 @@
     if (ctx.isBusy()) { ctx.notice(ctx.messages.busy); return; }
     const now = Date.now();
     const threadId = ctx.getActiveThreadId() || `thread-${now}`;
+    const existingMessage = ctx.getMessages()[index];
+    const requestId = ctx.shouldSync() && ctx.getBackendThreadId(threadId)
+      ? resolveMakeRequestId({ previousRequestId: existingMessage?.requestId, previousPrompt: existingMessage?.requestPrompt || existingMessage?.content, prompt: cleanValue })
+      : "";
     const history = ctx.buildHistory(ctx.getMessages().slice(0, index));
     const startedAt = Date.now();
     const signal = ctx.startRequest();
     if (ctx.shouldSync()) {
       if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
+      existingMessage.requestId = requestId;
+      existingMessage.requestPrompt = cleanValue;
+      ctx.updateThread(threadId);
       ctx.setThinking(true);
       ctx.queueScroll(messageId);
       ctx.render();
       try {
-        const result = await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", signal });
+        const result = await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", requestId, signal });
         if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
         ctx.setThinking(false);
         ctx.reportOutcome?.(result, Date.now() - startedAt);
@@ -124,6 +136,11 @@
         }
         ctx.setBackendFailure();
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
+        else if (isRequestIdReusedError(error)) {
+          await ctx.refreshThread(threadId);
+          ctx.notice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
+          return;
+        }
         else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot: [...ctx.getMessages()] }).catch(() => null);
         ctx.handleError(error, ctx.messages.editFailed);
         ctx.render();
@@ -138,7 +155,7 @@
     let result;
     try {
       await ctx.waitForPaint();
-      result = await ctx.improve(cleanValue, { history, threadId, signal });
+      result = await ctx.improve(cleanValue, { history, threadId, requestId, signal });
     } catch (error) {
       if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
       ctx.setThinking(false);
@@ -161,7 +178,7 @@
     ctx.setThinking(false);
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
-    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);

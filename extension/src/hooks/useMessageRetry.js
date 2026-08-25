@@ -1,5 +1,5 @@
 // @ts-check
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createAssistantMessage, createImproveErrorMessage } from "../conversation/conversationState.js";
 import { createGuestRetryContext } from "../conversation/messageRetry.js";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage.js";
@@ -7,6 +7,7 @@ import { isAuthExpiredError } from "../utils/apiErrors.js";
 import { getServerEditErrorMessage } from "../utils/conversationMessages.js";
 import { makeTitle } from "../utils/promptUtils.js";
 import { reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { isRequestIdReusedError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -17,6 +18,7 @@ export function useMessageRetry({
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
+  const serverEditRequests = useRef(new Map());
 
   function startEditMessage(message) {
     if (!message || message.role !== "user" || isLoading) return;
@@ -44,6 +46,14 @@ export function useMessageRetry({
         showNotice("서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.");
         return;
       }
+      const originalMessage = messages.find((message) => message.id === messageId && message.role === "user");
+      const previous = serverEditRequests.current.get(String(messageId));
+      const requestId = resolveMakeRequestId({
+        previousRequestId: previous?.requestId || originalMessage?.requestId,
+        previousPrompt: previous?.prompt || originalMessage?.content,
+        prompt,
+      });
+      serverEditRequests.current.set(String(messageId), { prompt, requestId });
       setEditingMessageId("");
       setEditingDraft("");
       reportMakeRetry();
@@ -51,8 +61,9 @@ export function useMessageRetry({
         ragConfig,
         prompt,
         restoreComposer: true,
-        payload: { accessToken: authSession.accessToken, threadId, messageId, prompt, category: "prompt_techniques" },
+        payload: { accessToken: authSession.accessToken, threadId, messageId, requestId, prompt, category: "prompt_techniques" },
         onSuccess: async () => {
+          serverEditRequests.current.delete(String(messageId));
           setRagStatus("connected");
           await refreshActiveServerThread(String(threadId));
           showNotice("수정한 메시지로 다시 개선했습니다.");
@@ -61,6 +72,12 @@ export function useMessageRetry({
           setRagStatus("error");
           if (isAuthExpiredError(error)) {
             await onAuthExpired?.();
+            return;
+          }
+          if (isRequestIdReusedError(error)) {
+            serverEditRequests.current.delete(String(messageId));
+            await refreshActiveServerThread(String(threadId)).catch(() => false);
+            showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
             return;
           }
           if (Number(error?.status || 0) === 404) await refreshServerThreads().catch(() => {});

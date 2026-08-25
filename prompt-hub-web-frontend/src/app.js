@@ -2113,15 +2113,16 @@ function applyPendingImproveThreadId(threadId) {
 function shouldUseImproveThreadSync() {
   return getMakeServerSyncEffects().shouldUseImproveThreadSync();
 }
-/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, signal?: AbortSignal }} [options] */
+/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, requestId?: string, signal?: AbortSignal }} [options] */
 async function improvePromptWithBackend(prompt, {
   history = buildMakeImproveHistory(),
   threadId = state.activeThreadId,
   messageId = "",
   category = "",
+  requestId = "",
   signal,
 } = {}) {
-  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, signal });
+  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, requestId, signal });
 }
 function queueLatestMakeThreadScroll(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;

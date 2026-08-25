@@ -11,6 +11,7 @@ import { useServerThreadSync } from "./useServerThreads";
 import { useMakeRequest } from "./useMakeRequest";
 import { useConversationHistory } from "./useConversationHistory";
 import { useMessageRetry } from "./useMessageRetry";
+import { isRequestIdReusedError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 
 export function useConversation({
   authSession,
@@ -28,6 +29,7 @@ export function useConversation({
   const [copiedId, setCopiedId] = useState("");
   const [ragStatus, setRagStatus] = useState("idle");
   const activeThreadId = useRef(null);
+  const pendingRetry = useRef(null);
   const [activeRecentId, setActiveRecentId] = useState("");
   const setActiveThreadId = useCallback((value) => {
     const normalized = value == null ? "" : String(value);
@@ -83,10 +85,24 @@ export function useConversation({
   }
 
   function startNewChat() {
+    pendingRetry.current = null;
     setActiveThreadId(null);
     setMessages([]);
     setComposerValue("");
     cancelEditMessage();
+  }
+
+  function prepareFailedRetry(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return false;
+    pendingRetry.current = {
+      errorMessageId: String(message.id || ""),
+      prompt,
+      requestId: String(message.requestId || ""),
+      threadId: String(activeThreadId.current || ""),
+    };
+    setComposerValue(prompt);
+    return true;
   }
 
   async function copyMessage(message) {
@@ -186,19 +202,38 @@ export function useConversation({
     }
     const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
-    const userMsg = createUserMessage(prompt);
     const history = buildImproveHistory(messages);
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
+    const retry = pendingRetry.current;
+    const retryMatches = Boolean(
+      retry && authSession?.accessToken && activeServerThreadId
+      && retry.prompt === prompt && retry.threadId === String(activeServerThreadId)
+    );
+    const requestId = authSession?.accessToken && activeServerThreadId
+      ? resolveMakeRequestId({
+          previousRequestId: retryMatches ? retry.requestId : "",
+          previousPrompt: retryMatches ? retry.prompt : "",
+          prompt,
+        })
+      : "";
+    const baseMessages = retryMatches
+      ? messages.filter((message) => message.id !== retry.errorMessageId)
+      : messages;
+    const existingUserMessage = retryMatches
+      ? [...baseMessages].reverse().find((message) => message.role === "user" && message.requestId === requestId)
+      : null;
+    const requestUserMessage = existingUserMessage || createUserMessage(prompt, requestId ? { requestId } : {});
     const improvePayload = {
       prompt,
       category: "prompt_techniques",
       accessToken: authSession?.accessToken || "",
       sessionUuid: guestSessionUuid,
       ...(authSession?.accessToken && activeServerThreadId ? { threadId: activeServerThreadId } : {}),
+      ...(requestId ? { requestId } : {}),
       ...(!authSession?.accessToken ? { history } : {}),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages(retryMatches ? baseMessages : [...baseMessages, requestUserMessage]);
     setComposerValue("");
     return sendImproveRequest({
       ragConfig,
@@ -206,10 +241,11 @@ export function useConversation({
       payload: improvePayload,
       restoreComposer: true,
       onSuccess: async (data) => {
+        pendingRetry.current = null;
         setRagStatus("connected");
         if (authSession?.accessToken && data.threadId) setActiveThreadId(data.threadId);
         const assistantMsg = createAssistantMessage(prompt, data);
-        const nextMessages = [...messages, userMsg, assistantMsg];
+        const nextMessages = [...baseMessages, ...(existingUserMessage ? [] : [requestUserMessage]), assistantMsg];
         setMessages((prev) => [...prev, assistantMsg]);
         if (isLoggedIn) {
           await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
@@ -229,12 +265,19 @@ export function useConversation({
           return;
         }
         if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+        if (isRequestIdReusedError(err)) {
+          pendingRetry.current = null;
+          await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => false);
+          showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
+          return;
+        }
         const recovered = await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
         if (recovered) {
+          pendingRetry.current = null;
           showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
           return;
         }
-        setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err)]);
+        setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err, { requestId })]);
       },
     });
   }
@@ -340,5 +383,6 @@ export function useConversation({
     cancelEditMessage,
     submitEditedMessage,
     requestDeleteRecentThread,
+    prepareFailedRetry,
   };
 }

@@ -83,6 +83,7 @@ function App() {
     cancelEditMessage,
     submitEditedMessage,
     requestDeleteRecentThread,
+    prepareFailedRetry,
   } = useConversation({
     authSession,
     executeTarget,
@@ -137,9 +138,8 @@ function App() {
       setAuthMode("login");
       return;
     }
+    if (!prepareFailedRetry(message)) return;
     const prompt = String(message?.sourcePrompt || "").trim();
-    if (!prompt) return;
-    setComposerValue(prompt);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
       composerRef.current?.setSelectionRange(prompt.length, prompt.length);

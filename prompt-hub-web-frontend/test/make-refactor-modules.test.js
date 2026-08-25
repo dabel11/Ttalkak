@@ -8,6 +8,7 @@ let makeController;
 let makeEvents;
 let errorEffects;
 let normalizeAndPersistMakeState;
+let makeServerSyncEffects;
 test.before(async () => {
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
   makeStateApi = await import("../src/make/make-state.mjs");
@@ -15,6 +16,7 @@ test.before(async () => {
   makeEvents = await import("../src/make/make-events.mjs");
   ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
   ({ normalizeAndPersistMakeState } = await import("../src/make/make-persistence.mjs"));
+  ({ makeServerSyncEffects } = await import("../src/effects/make-server-sync-effects.mjs"));
 });
 
 test("Make request state transitions are centralized", () => {
@@ -191,9 +193,106 @@ test("server-synced edited-message cancellation exposes thinking and preserves t
   await makeController.resendEdited(ctx, "user-1", "server edited prompt");
 
   assert.deepEqual(calls, [
-    "thinking:true", "queue-scroll", "render", "thinking:false", ["user-1", "cancelled"],
+    "update", "thinking:true", "queue-scroll", "render", "thinking:false", ["user-1", "cancelled"],
     "draft:server edited prompt", "clear-editing", "update", "render-cancellation", "stopped",
   ]);
+});
+
+test("web API boundary forwards request ids only with a canonical server thread", async () => {
+  const payloads = [];
+  const state = { isLoggedIn: true, activeThreadId: "local-1", recentThreads: [{ id: "local-1", serverId: "42" }] };
+  const effects = makeServerSyncEffects.createMakeServerSyncEffects({
+    state,
+    getMakeApi: () => ({ improvePrompt: async (payload) => { payloads.push(payload); return { improvedPrompt: "done", threadId: 42, requestId: payload.requestId, replayed: false }; } }),
+    getMakeApiToken: () => "token", hasBackendAuthToken: () => true,
+    isBackendNumericId: (value) => /^\d+$/.test(String(value || "")),
+    makeState: { setMakeBackendState() {} }, polishPrompt: (value) => value,
+    buildMakeImproveHistory: () => [], canUseDemoFallback: () => false,
+  });
+  const result = await effects.improvePromptWithBackend("prompt", { threadId: "local-1", requestId: "request-web" });
+  assert.deepEqual(payloads[0], { prompt: "prompt", category: "prompt_techniques", threadId: 42, requestId: "request-web" });
+  assert.equal(result.requestId, "request-web");
+  assert.equal(result.replayed, false);
+});
+
+test("logged-in server follow-ups attach one request id and preserve replay metadata", async () => {
+  const OriginalFormData = global.FormData;
+  global.FormData = class { get() { return "ask follow-up answer"; } };
+  const state = { isLoggedIn: true, activeThreadId: "42", messages: [] };
+  let requestOptions;
+  let assistant;
+  try {
+    await makeController.submitPrompt({
+      state, freeLimit: 3, guard: () => false, isBusy: () => false, notice: () => {},
+      bumpInteraction: () => {}, buildHistory: () => [], startRequest: () => new AbortController().signal,
+      setDraft: () => {}, appendUser: (_threadId, message) => state.messages.push(message),
+      setThinking: () => {}, updateThread: () => {}, render: () => {}, scrollLatest: () => {}, waitForPaint: async () => {},
+      shouldSync: () => true, getBackendThreadId: () => "42",
+      improve: async (_prompt, options) => {
+        requestOptions = options;
+        return { mode: "improve", improvedPrompt: "stored", requestId: options.requestId, replayed: true };
+      },
+      isCurrentRequest: () => true, completeRequest: () => {}, reportOutcome: () => {},
+      appendAssistant: (message) => { assistant = message; }, applyPendingThread: () => {},
+      refreshThread: async () => true, syncThread: () => {}, focusAsk: () => {},
+      recover: async () => false, stopInFlight: () => {}, failRequest: () => {}, classifyError: (error) => error,
+      setBackendFailure: () => {}, handleError: () => {},
+    }, {});
+  } finally {
+    global.FormData = OriginalFormData;
+  }
+  assert.equal(requestOptions.threadId, "42");
+  assert.ok(requestOptions.requestId);
+  assert.equal(state.messages[0].requestId, requestOptions.requestId);
+  assert.equal(assistant.requestId, requestOptions.requestId);
+  assert.equal(assistant.replayed, true);
+});
+
+test("server retries reuse a request id while edited content receives a new id", async () => {
+  const seen = [];
+  const messages = [{ id: "user-1", role: "user", content: "same prompt", requestId: "request-existing" }];
+  const ctx = {
+    findEditableMessage: () => 0, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "42", getMessages: () => messages,
+    buildHistory: () => [], startRequest: () => new AbortController().signal, shouldSync: () => true,
+    getBackendThreadId: () => "42", setThinking: () => {}, queueScroll: () => {}, render: () => {},
+    improve: async (_prompt, options) => { seen.push(options.requestId); return { mode: "improve", improvedPrompt: "done" }; },
+    reportOutcome: () => {}, clearEditing: () => {}, refreshThread: async () => true,
+    notice: () => {}, stopInFlight: () => {}, updateThread: () => {},
+    failRequest: () => {}, classifyError: (error) => error, setBackendFailure: () => {},
+    refreshThreads: async () => {}, recover: async () => null, handleError: () => {},
+    messages: { missingThread: "missing", edited: "edited", editFailed: "failed" },
+  };
+
+  await makeController.resendEdited(ctx, "user-1", "same prompt");
+  assert.equal(seen[0], "request-existing");
+
+  messages[0].requestId = "request-existing";
+  messages[0].requestPrompt = "same prompt";
+  await makeController.resendEdited(ctx, "user-1", "changed prompt");
+  assert.notEqual(seen[1], "request-existing");
+  assert.ok(seen[1].length <= 128);
+});
+
+test("request-id conflicts refresh the server thread instead of entering a retry loop", async () => {
+  const calls = [];
+  const messages = [{ id: "user-1", role: "user", content: "same prompt", requestId: "request-existing" }];
+  await makeController.resendEdited({
+    findEditableMessage: () => 0, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "42", getMessages: () => messages,
+    buildHistory: () => [], startRequest: () => new AbortController().signal, shouldSync: () => true,
+    getBackendThreadId: () => "42", setThinking: () => {}, queueScroll: () => {}, render: () => {},
+    improve: async () => { throw Object.assign(new Error("conflict"), { status: 409, code: "REQUEST_ID_REUSED" }); },
+    clearEditing: () => {}, refreshThread: async () => { calls.push("refresh"); return true; },
+    notice: (message) => calls.push(message), stopInFlight: () => {}, updateThread: () => {},
+    failRequest: () => {}, classifyError: (error) => error, setBackendFailure: () => {},
+    refreshThreads: async () => {}, recover: async () => { calls.push("recover"); }, handleError: () => {},
+    messages: { missingThread: "missing", edited: "edited", editFailed: "failed" },
+  }, "user-1", "same prompt");
+
+  assert.equal(calls[0], "refresh");
+  assert.match(calls[1], /새로고침/);
+  assert.equal(calls.includes("recover"), false);
 });
 
 test("a stale cancelled request cannot clear a newer Make request", async () => {

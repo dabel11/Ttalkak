@@ -1,4 +1,5 @@
 import { classifyMakeError } from "../utils/make-message-model.mjs";
+import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
 
   "use strict";
 
@@ -58,6 +59,7 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
             ragStatus: message.ragStatus || "",
             ragMessage: message.ragMessage || "",
             sourcePrompt: message.sourcePrompt || "",
+            requestId: normalizeMakeRequestId(message.requestId),
           })),
         };
         const result = await api.createMakeThread(
@@ -137,12 +139,14 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       return state.isLoggedIn && hasBackendAuthToken();
     }
 
-    function buildMakeImprovePayload(prompt, history, threadId, { messageId = "", category = "" } = {}) {
+    function buildMakeImprovePayload(prompt, history, threadId, { messageId = "", category = "", requestId = "" } = {}) {
       const payload = { prompt, category: category || "prompt_techniques" };
       if (shouldUseImproveThreadSync()) {
         const backendThreadId = getMakeBackendThreadId(threadId);
         if (backendThreadId) payload.threadId = Number(backendThreadId);
         if (messageId) payload.messageId = String(messageId);
+        const normalizedRequestId = normalizeMakeRequestId(requestId);
+        if (backendThreadId && normalizedRequestId) payload.requestId = normalizedRequestId;
         if (category) payload.category = String(category);
         return payload;
       }
@@ -151,12 +155,13 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       return payload;
     }
 
-    /** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, signal?: AbortSignal }} [options] */
+    /** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, requestId?: string, signal?: AbortSignal }} [options] */
     async function improvePromptWithBackend(prompt, {
       history = buildMakeImproveHistory(),
       threadId = state.activeThreadId,
       messageId = "",
       category = "",
+      requestId = "",
       signal,
     } = {}) {
       const api = getMakeApi();
@@ -171,7 +176,7 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
 
       try {
         const improved = await api.improvePrompt(
-          buildMakeImprovePayload(prompt, history, threadId, { messageId, category }),
+          buildMakeImprovePayload(prompt, history, threadId, { messageId, category, requestId }),
           getMakeApiToken(),
           { signal },
         );

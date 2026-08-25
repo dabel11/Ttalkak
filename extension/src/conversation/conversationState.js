@@ -32,17 +32,18 @@ export function createAssistantMessage(prompt, data) {
     techniques: data.techniques || data.techniquesApplied || [], summary: data.summary || "",
     ragStatus,
     executablePrompt, sourcePrompt: prompt, sources: data.sources || [], saved: false,
+    requestId: data.requestId || "", replayed: data.replayed === true,
     ...(unchangedNoEvidence ? { isUnchanged: true } : {}),
     ...(noEvidence ? { excludeFromHistory: true } : {}),
   };
 }
 
-export function createImproveErrorMessage(prompt, error) {
+export function createImproveErrorMessage(prompt, error, base = {}) {
   const failure = classifyMakeError(error);
   const content = error instanceof TypeError
     ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
     : `오류가 발생했습니다.\n\n${error?.message || "알 수 없는 오류"}`;
-  return { id: `assistant-${Date.now()}`, role: "assistant", content, executablePrompt: null, sourcePrompt: prompt, sources: [], saved: false, isError: true, failure, excludeFromHistory: true };
+  return { id: `assistant-${Date.now()}`, role: "assistant", content, executablePrompt: null, sourcePrompt: prompt, sources: [], saved: false, isError: true, failure, excludeFromHistory: true, ...base };
 }
 
 export function upsertRecentThread(threads, { id, prompt, messages, makeTitle }) {

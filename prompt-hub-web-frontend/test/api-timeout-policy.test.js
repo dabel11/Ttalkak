@@ -24,7 +24,7 @@ test("Make improvement forwards cancellation from route lifecycle to fetch", () 
   assert.match(app, /state\.route === "make" && route !== "make"/);
   assert.match(app, /activeMakeRequestController\.abort\(\)/);
   assert.match(app, /activeMakeRequestController\?\.signal === signal/);
-  assert.match(app, /improvePromptWithBackend\(prompt, \{ history, threadId, messageId, category, signal \}\)/);
+  assert.match(app, /improvePromptWithBackend\(prompt, \{ history, threadId, messageId, category, requestId, signal \}\)/);
   assert.match(globals, /improvePrompt\(payload: TtalkakPayload, token: TtalkakToken, options\?: \{ signal\?: AbortSignal \}\)/);
 });
 

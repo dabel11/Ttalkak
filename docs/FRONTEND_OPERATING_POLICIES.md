@@ -138,3 +138,13 @@ Use the local verification script at one of two levels:
 - `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1 -Full` additionally runs Chromium fixture E2E, Firefox smoke, and production-bundle E2E.
 
 The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes. Browser E2E uses an isolated fixture server on `127.0.0.1:4174` and a production server on `127.0.0.1:4175`; override them with `TTALKAK_E2E_PORT` and `TTALKAK_E2E_PROD_PORT` when those ports are unavailable. Existing servers are never reused, so a collision fails with an explicit diagnostic instead of testing a stale preview.
+
+## 9. Make request idempotency boundary
+
+- Web and Extension generate a new `requestId` for each logged-in server-thread request.
+- A retry of the same prompt on the same thread reuses that ID; editing the prompt creates a new ID.
+- Failed-message state retains the ID so a response saved by the backend but lost in transit can be replayed without appending another turn.
+- `replayed: true` is treated as an ordinary successful response and must not create a duplicate local user or assistant message.
+- `409 / REQUEST_ID_REUSED` is non-retryable with the stale ID. Refresh the canonical server thread and require the next changed request to use a new ID.
+- Anonymous requests and a new conversation before it has a server `threadId` keep the existing non-idempotent behavior.
+- This contract deduplicates requests only after a turn has been saved. It does not guarantee serialization of two requests that reach the backend concurrently before either save completes; that remains a backend concurrency-policy responsibility. Frontend in-flight guards remain required but are not a server-side concurrency guarantee.
