@@ -1914,6 +1914,7 @@ button:disabled {
 }
 .error-followup {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 10px;
@@ -1931,6 +1932,8 @@ button:disabled {
 .error-followup small { color: #7b756d; }
 .error-followup .conflict-edit-preview { display: block; flex-basis: 100%; color: #305f52; }
 .error-followup button.secondary { background: transparent; color: #174f40; border: 1px solid #8db7aa; }
+.error-followup button:disabled { cursor: wait; opacity: .68; transform: none; }
+.error-followup .concurrency-new-chat-help { flex-basis: 100%; color: #48685f; }
 .message-row.error .message-card:has(.error-followup button:first-of-type) { border-color: #d4b77f; }
 .message-row.error .message-card:has(.error-followup button:not(:only-child)) { border-color: #9fc9ba; background: #f3faf7; }
 .composer.is-restored textarea { animation: extension-composer-restored 1.4s ease-out; }

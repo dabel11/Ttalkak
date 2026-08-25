@@ -1,5 +1,5 @@
 // @ts-check
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteMakeThread } from "../api/make";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
@@ -32,6 +32,11 @@ export function useConversation({
   const [ragStatus, setRagStatus] = useState("idle");
   const activeThreadId = useRef(null);
   const pendingRetry = useRef(null);
+  const lifecycleActive = useRef(true);
+  useEffect(() => {
+    lifecycleActive.current = true;
+    return () => { lifecycleActive.current = false; };
+  }, []);
   const concurrencyCounts = useRef(new Map());
   const recordConcurrency = useCallback((threadId) => {
     const key = String(threadId || "local");
@@ -81,6 +86,7 @@ export function useConversation({
     refreshServerThreads, requestInFlight: improveRequestInFlight, sendImproveRequest,
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
     setActiveThreadId, setRagStatus, setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
+    isLifecycleActive: () => lifecycleActive.current,
   });
 
   function openPrompt(item) {
@@ -294,6 +300,7 @@ export function useConversation({
           pendingRetry.current = null;
           const repeated = recordConcurrency(activeServerThreadId) >= 2;
           const refreshed = await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => null);
+          if (!lifecycleActive.current) return;
           reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
           setComposerValue(prompt);
           if (refreshed) {
@@ -337,6 +344,7 @@ export function useConversation({
   async function refreshFailedConcurrency(message) {
     const requestId = String(message?.requestId || "");
     const refreshed = await refreshActiveServerThread(String(activeThreadId.current || "")).catch(() => null);
+    if (!lifecycleActive.current) return false;
     reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
     if (!refreshed) {
       showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");

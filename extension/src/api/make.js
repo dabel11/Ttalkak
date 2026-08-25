@@ -45,19 +45,21 @@ async function parseResponse(res) {
   return responseBody;
 }
 
-export async function requestMakeThreads(config, accessToken) {
+export async function requestMakeThreads(config, accessToken, options = {}) {
   if (!accessToken) return [];
   const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: options.signal,
   });
   const responseBody = await parseResponse(res);
   return unwrapItems(responseBody).map(normalizeMakeThread);
 }
 
-export async function requestMakeThread(config, threadId, accessToken) {
+export async function requestMakeThread(config, threadId, accessToken, options = {}) {
   if (!accessToken || !threadId) return null;
   const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads/${threadId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: options.signal,
   });
   const responseBody = await parseResponse(res);
   return normalizeMakeThread(responseBody?.data || responseBody);

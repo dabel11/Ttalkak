@@ -12,6 +12,7 @@ import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
+import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
 import "./styles.css";
 import "./styles/response.css";
 
@@ -25,6 +26,13 @@ function App() {
   const [ragConfig] = useState(loadBackendConfig);
   const composerRef = useRef(null);
   const noticeTimerRef = useRef(null);
+  const [recoveryState, setRecoveryState] = useState({ messageId: "", action: "" });
+  const [recoveryCoordinator] = useState(() => createRecoveryActionCoordinator(setRecoveryState));
+
+  useEffect(() => {
+    recoveryCoordinator.activate();
+    return () => recoveryCoordinator.dispose();
+  }, [recoveryCoordinator]);
 
   const {
     authMode,
@@ -162,15 +170,23 @@ function App() {
   }
 
   async function handleResolveError(message) {
+    if (recoveryCoordinator.isActive()) return;
     if (message?.failure?.requiresLogin) {
       setAuthMode("login");
       return;
     }
-    if (message?.failure?.kind === "concurrency_refresh") {
-      if (await refreshFailedConcurrency(message)) focusRestoredComposer(String(message.sourcePrompt || ""));
-      return;
+    const action = message?.failure?.kind === "concurrency_refresh" ? "refresh" : "retry";
+    const recovery = recoveryCoordinator.start(message?.id, action);
+    if (!recovery) return;
+    try {
+      if (action === "refresh") {
+        if (await refreshFailedConcurrency(message)) focusRestoredComposer(String(message.sourcePrompt || ""));
+        return;
+      }
+      await retryFailedMessage(message);
+    } finally {
+      recoveryCoordinator.finish(recovery);
     }
-    await retryFailedMessage(message);
   }
 
   function handleContinueConflictInNewChat(message) {
@@ -230,6 +246,7 @@ function App() {
             onRefineUnchanged={handleRefineUnchanged}
             onResolveError={handleResolveError}
             onContinueConflictInNewChat={handleContinueConflictInNewChat}
+            recoveryState={recoveryState}
             onSelectExample={handleSelectExample}
           />
           <Composer

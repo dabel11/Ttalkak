@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, StrictMode } from "react";
 
 const api = vi.hoisted(() => ({
   improve: vi.fn(),
@@ -139,7 +139,7 @@ describe("Extension improve request behavior", () => {
     act(() => result.current.openRecentThread({ id: "42", messages: [] }));
     act(() => result.current.setComposerValue("conflicting prompt"));
     await act(async () => { await result.current.submitPrompt(); });
-    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token");
+    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token", { signal: expect.any(AbortSignal) });
     expect(result.current.messages.some((message) => message.isError)).toBe(false);
     expect(props.showNotice).toHaveBeenCalledWith(expect.stringMatching(/새로고침/));
   });
@@ -157,7 +157,7 @@ describe("Extension improve request behavior", () => {
     await act(async () => { await result.current.submitPrompt(); });
 
     expect(api.improve).toHaveBeenCalledTimes(1);
-    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token");
+    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token", { signal: expect.any(AbortSignal) });
     expect(result.current.composerValue).toBe("preserved concurrent prompt");
     const conflictMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency");
     expect(conflictMessage?.sourcePrompt).toBe("preserved concurrent prompt");
@@ -460,6 +460,46 @@ describe("Extension improve request behavior", () => {
     request.resolve(improveResponse("response after close"));
     await act(async () => { await submission; });
   });
+
+  test("closing the side panel aborts an in-progress concurrency refresh and ignores its late result", async () => {
+    const conflict = Object.assign(new Error("conflict"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    let resolveRefresh;
+    const refresh = new Promise((resolve) => { resolveRefresh = resolve; });
+    api.improve.mockRejectedValueOnce(conflict);
+    api.getThread.mockReturnValueOnce(refresh);
+    const { result, unmount } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+
+    act(() => result.current.openRecentThread({ id: "42", messages: [{ id: "user-1", role: "user", content: "before" }] }));
+    act(() => result.current.setComposerValue("conflicting prompt"));
+    let submission;
+    act(() => { submission = result.current.submitPrompt(); });
+    await waitFor(() => expect(api.getThread).toHaveBeenCalledOnce());
+    const signal = api.getThread.mock.calls[0][3].signal;
+    expect(signal.aborted).toBe(false);
+
+    unmount();
+    expect(signal.aborted).toBe(true);
+    resolveRefresh({ id: "42", serverId: "42", messages: [] });
+    await act(async () => { await submission; });
+  });
+
+  test("Strict Mode effect replay keeps concurrency recovery active", async () => {
+    const conflict = Object.assign(new Error("conflict"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    api.improve.mockRejectedValueOnce(conflict);
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [{ id: "latest", role: "assistant", content: "latest" }] });
+    const wrapper = ({ children }) => createElement(StrictMode, null, children);
+    const { result } = renderHook(
+      () => useConversation(createProps({ authSession: { accessToken: "token" } })),
+      { wrapper },
+    );
+
+    act(() => result.current.openRecentThread({ id: "42", messages: [] }));
+    act(() => result.current.setComposerValue("strict conflict"));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(result.current.messages.some((message) => message.failure?.kind === "concurrency")).toBe(true);
+    expect(result.current.composerValue).toBe("strict conflict");
+  });
 });
 
 describe("Extension clarification UI", () => {
@@ -480,6 +520,30 @@ describe("Extension clarification UI", () => {
     }));
     expect(screen.getByText("서버 최신 내용: 서버 최신 내용")).toBeTruthy();
     expect(screen.getByText(/서버 최신 내용과 수정한 내용이 다릅니다/)).toBeTruthy();
+  });
+
+  test("concurrency recovery disables duplicate actions and explains the repeated-conflict escape", () => {
+    const conflict = {
+      id: "conflict-busy", role: "assistant", isError: true, sourcePrompt: "보존할 입력",
+      concurrencyRepeated: true, failure: { kind: "concurrency" },
+    };
+    const onResolveError = vi.fn();
+    render(createElement(ChatFeed, {
+      messages: [conflict], isLoading: false, copiedId: "", canEditUserMessages: false,
+      editingMessageId: "", editingDraft: "", onCopy() {}, onSave() {}, onExecute() {},
+      onStartEdit() {}, onChangeEditDraft() {}, onCancelEdit() {}, onSubmitEdit() {},
+      onCancelRequest() {}, onRefineUnchanged() {}, onResolveError,
+      onContinueConflictInNewChat() {}, onSelectExample() {},
+      recoveryState: { messageId: "conflict-busy", action: "retry" },
+    }));
+
+    const retry = screen.getByRole("button", { name: "보내는 중…" });
+    expect(retry.disabled).toBe(true);
+    expect(retry.getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByRole("button", { name: "새 대화에서 계속하기" }).disabled).toBe(true);
+    expect(screen.getByText("현재 입력을 새 대화로 옮기며 기존 대화는 유지됩니다.")).toBeTruthy();
+    fireEvent.click(retry);
+    expect(onResolveError).not.toHaveBeenCalled();
   });
 
   test("restored-input notices are temporary and replace the previous timer", () => {

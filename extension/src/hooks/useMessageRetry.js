@@ -16,6 +16,7 @@ export function useMessageRetry({
   refreshServerThreads, requestInFlight, sendImproveRequest, sessionUuid,
   setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
   setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
+  isLifecycleActive = () => true,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
@@ -85,6 +86,7 @@ export function useMessageRetry({
           if (isThreadConcurrencyError(error)) {
             const repeated = (recordConcurrency?.(threadId) || 1) >= 2;
             const refreshed = await refreshActiveServerThread(String(threadId)).catch(() => null);
+            if (!isLifecycleActive()) return;
             reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
             setMessages((current) => [...current, createImproveErrorMessage(prompt, error, refreshed
               ? { requestId, retryMode: "edit", retryMessageId: messageId, concurrencyRepeated: repeated, failure: { ...classifyMakeError(error), retryMode: "edit", repeated } }
