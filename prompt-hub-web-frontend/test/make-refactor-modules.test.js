@@ -197,6 +197,21 @@ test("server-synced edited-message cancellation exposes thinking and preserves t
     "draft:server edited prompt", "clear-editing", "update", "render-cancellation", "stopped",
   ]);
 });
+test("successful Make requests reset repeated concurrency guidance per thread", async () => {
+  const repeatedValues = [];
+  const ctx = {
+    classifyError: () => ({ kind: "concurrency" }), refreshThread: async () => true,
+    reportConcurrencyRefresh: () => {}, setDraft: () => {},
+    appendUser: (_threadId, message) => repeatedValues.push(message.concurrencyRepeated),
+    failRequest: () => {}, updateThread: () => {}, render: () => {}, focusRestored: () => {}, scrollLatest: () => {},
+  };
+  const error = { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" };
+  await makeController.handleThreadConcurrency(ctx, { error, prompt: "one", requestId: "r1", threadId: "42" });
+  await makeController.handleThreadConcurrency(ctx, { error, prompt: "two", requestId: "r2", threadId: "42" });
+  makeController.resetConcurrency("42");
+  await makeController.handleThreadConcurrency(ctx, { error, prompt: "three", requestId: "r3", threadId: "42" });
+  assert.deepEqual(repeatedValues, [false, true, false]);
+});
 
 test("web API boundary forwards request ids only with a canonical server thread", async () => {
   const payloads = [];

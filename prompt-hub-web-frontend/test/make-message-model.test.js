@@ -23,6 +23,10 @@ test("shared UX policy keeps progress, failure actions, and recent groups identi
   assert.equal(model.getMakeProgressStatus(30000).label, "평소보다 시간이 걸리고 있습니다");
   assert.deepEqual(model.getMakeFailureAction({ kind: "auth", requiresLogin: true }), { id: "login", label: "로그인" });
   assert.deepEqual(model.getMakeFailureAction({ kind: "network", retryable: true }), { id: "retry", label: "연결 확인 후 다시 시도" });
+  assert.deepEqual(model.getMakeFailureAction({ kind: "concurrency", retryMode: "edit" }), { id: "retry-after-refresh", label: "수정한 내용 다시 보내기" });
+  assert.equal(model.getMakeFailurePresentation({ kind: "concurrency_refresh" }).title, "다른 곳에서 대화가 업데이트됐습니다");
+  assert.match(model.getMakeFailurePresentation({ kind: "concurrency_refresh", repeated: true }).description, /새 대화/);
+  assert.equal(model.getMakeFailurePresentation({ kind: "concurrency", retryMode: "edit" }).tone, "recovered");
   assert.equal(model.getMakeRecentDateGroup("2026-08-15T09:00:00+09:00", new Date("2026-08-15T12:00:00+09:00").getTime()), "오늘");
 });
 

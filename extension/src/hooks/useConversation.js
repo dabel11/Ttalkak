@@ -32,6 +32,20 @@ export function useConversation({
   const [ragStatus, setRagStatus] = useState("idle");
   const activeThreadId = useRef(null);
   const pendingRetry = useRef(null);
+  const concurrencyCounts = useRef(new Map());
+  const recordConcurrency = useCallback((threadId) => {
+    const key = String(threadId || "local");
+    const count = (concurrencyCounts.current.get(key) || 0) + 1;
+    concurrencyCounts.current.set(key, count);
+    return count;
+  }, []);
+  const resetConcurrency = useCallback((threadId) => {
+    if (threadId == null || threadId === "") {
+      concurrencyCounts.current.clear();
+      return;
+    }
+    concurrencyCounts.current.delete(String(threadId));
+  }, []);
   const [activeRecentId, setActiveRecentId] = useState("");
   const setActiveThreadId = useCallback((value) => {
     const normalized = value == null ? "" : String(value);
@@ -66,7 +80,7 @@ export function useConversation({
     ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
     refreshServerThreads, requestInFlight: improveRequestInFlight, sendImproveRequest,
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
-    setActiveThreadId, setRagStatus, setSessionUuid, showNotice,
+    setActiveThreadId, setRagStatus, setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
   });
 
   function openPrompt(item) {
@@ -88,6 +102,7 @@ export function useConversation({
 
   function startNewChat() {
     pendingRetry.current = null;
+    resetConcurrency();
     setActiveThreadId(null);
     setMessages([]);
     setComposerValue("");
@@ -245,6 +260,7 @@ export function useConversation({
       restoreComposer: true,
       onSuccess: async (data) => {
         pendingRetry.current = null;
+        resetConcurrency(data.threadId || activeServerThreadId);
         setRagStatus("connected");
         if (authSession?.accessToken && data.threadId) setActiveThreadId(data.threadId);
         const assistantMsg = createAssistantMessage(prompt, data);
@@ -276,22 +292,23 @@ export function useConversation({
         }
         if (isThreadConcurrencyError(err)) {
           pendingRetry.current = null;
+          const repeated = recordConcurrency(activeServerThreadId) >= 2;
           const refreshed = await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => null);
           reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
           setComposerValue(prompt);
           if (refreshed) {
-            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, { requestId })]);
-            showNotice("최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다.");
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, { requestId, concurrencyRepeated: repeated, failure: { ...classifyMakeError(err), repeated } })]);
+            showNotice("최신 대화를 불러왔습니다. 입력한 내용은 유지되어 있습니다.");
           } else {
             setMessages((current) => [...current, createImproveErrorMessage(prompt, err, {
               requestId,
               failure: {
                 ...classifyMakeError(err),
                 kind: "concurrency_refresh",
-                message: "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 대화를 다시 불러와 주세요.",
+                repeated,
               },
             })]);
-            showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
+            showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
           }
           return;
         }
@@ -325,17 +342,25 @@ export function useConversation({
       showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
       return false;
     }
-    setMessages((current) => [...current, createImproveErrorMessage(message.sourcePrompt, {
+    const recoveredMessage = createImproveErrorMessage(message.sourcePrompt, {
       status: 409,
       code: "THREAD_CONCURRENTLY_UPDATED",
       message: "최신 대화를 반영했습니다. 다시 시도해 주세요.",
     }, {
+      id: message.id,
       requestId,
       retryMode: message.retryMode,
       retryMessageId: message.retryMessageId,
-    })]);
+      concurrencyRepeated: message.concurrencyRepeated,
+      failure: { ...classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }), retryMode: message.retryMode, repeated: message.concurrencyRepeated },
+    });
+    setMessages((current) => {
+      const index = current.findIndex((item) => item.id === message.id);
+      if (index < 0) return [...current, recoveredMessage];
+      return current.map((item, itemIndex) => itemIndex === index ? recoveredMessage : item);
+    });
     setComposerValue(String(message.sourcePrompt || ""));
-    showNotice("최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다.");
+    showNotice("최신 대화를 불러왔습니다. 입력한 내용은 유지되어 있습니다.");
     return true;
   }
 

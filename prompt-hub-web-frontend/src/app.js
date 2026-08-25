@@ -1709,6 +1709,13 @@ function bindDelegatedMakeEvents() {
           if (composer) submitMakePrompt(composer);
         }, 0);
       },
+      newChatFromConflict: (message) => {
+        const prompt = String(message?.content || "").trim();
+        startNewChat();
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        render();
+        focusRestoredMakeComposer(prompt);
+      },
       refreshConcurrent: async (message) => {
         const prompt = String(message?.content || "").trim();
         const threadId = String(state.activeThreadId || "");
@@ -1723,21 +1730,23 @@ function bindDelegatedMakeEvents() {
         });
         makeStateModule.setMakeComposerDraft(state, prompt);
         if (!refreshed) {
-          showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+          showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
           render();
           return;
         }
-        const messageId = `concurrency-${Date.now()}`;
+        const messageId = String(message.id || `concurrency-${Date.now()}`);
         appendMakeUserMessageState(state, threadId, {
           id: messageId, role: "user", content: prompt, requestId: message.requestId,
           excludeFromHistory: true, retryMode: message.retryMode || "follow-up",
-          retryMessageId: message.retryMessageId || "",
+          retryMessageId: message.retryMessageId || "", concurrencyRepeated: Boolean(message?.concurrencyRepeated),
         });
-        makeStateModule.failMakeRequest(makeRequestState, messageId, makeMessageModel.classifyMakeError({
-          status: 409, code: "THREAD_CONCURRENTLY_UPDATED",
-        }));
+        makeStateModule.failMakeRequest(makeRequestState, messageId, {
+          ...makeMessageModel.classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
+          retryMode: message.retryMode || "follow-up", repeated: Boolean(message?.concurrencyRepeated),
+        });
         updateRecentThread(threadId);
         render();
+        focusRestoredMakeComposer(prompt);
         scheduleMakeLatestScroll({ behavior: "auto" });
       },
       reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
@@ -1830,6 +1839,7 @@ function getMakeControllerContext() {
     setThinking: (value) => { isMakeThinking = value; },
     updateThread: updateRecentThread,
     render,
+    focusRestored: focusRestoredMakeComposer,
     scrollLatest: () => scheduleMakeLatestScroll({ behavior: "auto" }),
     waitForPaint: waitForThinkingIndicatorPaint,
     improve: improvePromptWithBackend,
@@ -2194,6 +2204,19 @@ async function improvePromptWithBackend(prompt, {
   signal,
 } = {}) {
   return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, requestId, signal });
+}
+function focusRestoredMakeComposer(prompt) {
+  window.setTimeout(() => {
+    const input = document.querySelector('[data-composer] textarea[name="prompt"]');
+    const composer = input?.closest?.("[data-composer]");
+    if (!input || !composer) return;
+    input.focus();
+    input.setSelectionRange?.(prompt.length, prompt.length);
+    composer.classList.add("is-restored");
+    const status = composer.querySelector("[data-composer-restore-status]");
+    if (status) status.textContent = "입력 내용이 복원되었습니다.";
+    window.setTimeout(() => composer.classList.remove("is-restored"), 1400);
+  }, 0);
 }
 function queueLatestMakeThreadScroll(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;

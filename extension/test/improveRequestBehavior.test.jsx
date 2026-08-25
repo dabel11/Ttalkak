@@ -25,7 +25,8 @@ import { useConversation } from "../src/hooks/useConversation";
 import { AssistantResponse } from "../src/components/AssistantResponse";
 import { Composer } from "../src/components/Composer";
 import { useAskAnswers } from "../src/hooks/useAskAnswers";
-import { ChatFeed } from "../src/components/ChatFeed";
+import { ChatFeed, orderConversationMessages } from "../src/components/ChatFeed";
+import { showTransientNotice } from "../src/utils/transientNotice";
 import { RecentList } from "../src/components/SavedList";
 import { createDelayedImproveFixture } from "./fixtures/delayedImprove";
 import { createAssistantMessage } from "../src/conversation/conversationState";
@@ -215,10 +216,30 @@ describe("Extension improve request behavior", () => {
     await act(async () => { expect(await result.current.refreshFailedConcurrency(reloadMessage)).toBe(true); });
     const retryMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency");
     expect(retryMessage).toBeTruthy();
+    expect(retryMessage.id).toBe(reloadMessage.id);
+    expect(result.current.messages.filter((message) => message.failure?.kind === "concurrency" || message.failure?.kind === "concurrency_refresh")).toHaveLength(1);
     expect(api.improve).toHaveBeenCalledTimes(1);
 
     await act(async () => { expect(await result.current.retryFailedMessage(retryMessage)).toBe(true); });
     expect(api.improve).toHaveBeenCalledTimes(2);
+  });
+
+  test("a successful retry resets the repeated-conflict guidance for the server thread", async () => {
+    const conflict = Object.assign(new Error("concurrent"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockRejectedValueOnce(conflict).mockResolvedValueOnce(improveResponse("recovered")).mockRejectedValueOnce(conflict);
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [{ id: "canonical", role: "assistant", content: "latest" }] });
+    const props = createProps({ authSession: { accessToken: "token" } });
+    const { result } = renderHook(() => useConversation(props));
+    act(() => result.current.openRecentThread({ id: "42", messages: [] }));
+    act(() => result.current.setComposerValue("first conflict"));
+    await act(async () => { await result.current.submitPrompt(); });
+    const firstConflict = result.current.messages.find((message) => message.failure?.kind === "concurrency");
+    await act(async () => { await result.current.retryFailedMessage(firstConflict); });
+    act(() => result.current.setComposerValue("later isolated conflict"));
+    await act(async () => { await result.current.submitPrompt(); });
+    const latestConflict = [...result.current.messages].reverse().find((message) => message.failure?.kind === "concurrency");
+    expect(latestConflict?.concurrencyRepeated).toBe(false);
   });
 
   test("opening and clearing a restored recent thread keeps the active selection in conversation state", () => {
@@ -442,6 +463,42 @@ describe("Extension improve request behavior", () => {
 });
 
 describe("Extension clarification UI", () => {
+  test("edited concurrency recovery stays adjacent to its target and exposes the server comparison", () => {
+    const target = { id: "user-1", role: "user", content: "서버 최신 내용" };
+    const unrelated = { id: "assistant-1", role: "assistant", content: "다른 응답" };
+    const conflict = {
+      id: "conflict-1", role: "assistant", isError: true, sourcePrompt: "수정한 내용",
+      retryMode: "edit", retryMessageId: "user-1", failure: { kind: "concurrency" },
+    };
+    expect(orderConversationMessages([target, unrelated, conflict])).toEqual([target, conflict, unrelated]);
+    render(createElement(ChatFeed, {
+      messages: [target, unrelated, conflict], isLoading: false, copiedId: "", canEditUserMessages: false,
+      editingMessageId: "", editingDraft: "", onCopy() {}, onSave() {}, onExecute() {},
+      onStartEdit() {}, onChangeEditDraft() {}, onCancelEdit() {}, onSubmitEdit() {},
+      onCancelRequest() {}, onRefineUnchanged() {}, onResolveError() {},
+      onContinueConflictInNewChat() {}, onSelectExample() {},
+    }));
+    expect(screen.getByText("서버 최신 내용: 서버 최신 내용")).toBeTruthy();
+    expect(screen.getByText(/서버 최신 내용과 수정한 내용이 다릅니다/)).toBeTruthy();
+  });
+
+  test("restored-input notices are temporary and replace the previous timer", () => {
+    const notices = [];
+    const callbacks = new Map();
+    let nextId = 0;
+    const cleared = [];
+    const host = {
+      setTimeout(callback) { nextId += 1; callbacks.set(nextId, callback); return nextId; },
+      clearTimeout(id) { cleared.push(id); callbacks.delete(id); },
+    };
+    const timerRef = { current: null };
+    showTransientNotice({ setNotice: (value) => notices.push(value), timerRef, message: "첫 안내", host });
+    showTransientNotice({ setNotice: (value) => notices.push(value), timerRef, message: "입력 내용이 입력란에 복원되었습니다.", host });
+    expect(cleared).toEqual([1]);
+    callbacks.get(2)();
+    expect(notices).toEqual(["첫 안내", "입력 내용이 입력란에 복원되었습니다.", ""]);
+    expect(timerRef.current).toBeNull();
+  });
   test("recent conversations remain selected through either their client id or server id", () => {
     render(createElement(RecentList, {
       items: [{ id: "client-record", serverId: 44, title: "Server conversation", createdAt: Date.now(), time: "방금" }],
@@ -476,8 +533,8 @@ describe("Extension clarification UI", () => {
   test.each([
     [{ kind: "network", retryable: true }, "연결 확인 후 다시 시도"],
     [{ kind: "auth", requiresLogin: true, retryable: false }, "로그인"],
-    [{ kind: "concurrency", retryable: false }, "다시 시도"],
-    [{ kind: "concurrency_refresh", retryable: false }, "대화 다시 불러오기"],
+    [{ kind: "concurrency", retryable: false }, "다시 보내기"],
+    [{ kind: "concurrency_refresh", retryable: false }, "최신 대화 불러오기"],
   ])("error actions render from the shared UX policy", (failure, label) => {
     globalThis.HTMLElement.prototype.scrollTo = vi.fn();
     const onResolveError = vi.fn();

@@ -675,7 +675,11 @@ test("thread concurrency reloads canonical messages before an explicit preserved
   await expect(page.locator(".message.assistant").getByText("Latest canonical result", { exact: true })).toBeVisible();
   await expect(page.locator(".message.user").getByText(prompt, { exact: true })).toHaveCount(1);
   await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue(prompt);
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+  await expect(page.getByText("최신 대화를 불러왔습니다", { exact: true })).toBeVisible();
+  await expect(page.getByText("입력한 내용은 입력란에 복원되어 있습니다.", { exact: true })).toBeVisible();
   await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  await expect(page.locator(".message-failure-status")).toHaveCount(1);
   expect(requests).toHaveLength(1);
   await expect(page.getByText("Concurrent retry result", { exact: true })).toHaveCount(0);
 
@@ -718,6 +722,8 @@ test("thread concurrency preserves the server edit route after an explicit retry
   await editForm.locator('button[type="submit"]').click();
 
   await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  await expect(page.locator("[data-retry-concurrent]")).toHaveText("수정한 내용 다시 보내기");
+  await expect(page.locator(".concurrency-edit-preview")).toContainText("Edited concurrent prompt");
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({ messageId: "server-user-edit-conflict", prompt: "Edited concurrent prompt" });
 
@@ -769,11 +775,16 @@ test("failed concurrency refresh offers reload before any request retry", async 
   await page.locator('[data-composer] button[type="submit"]').click();
 
   await expect(page.locator("[data-refresh-concurrent]")).toBeVisible();
+  await expect(page.locator("[data-refresh-concurrent]")).toHaveText("최신 대화 불러오기");
+  await expect(page.getByText("다른 곳에서 대화가 업데이트됐습니다", { exact: true })).toBeVisible();
+  const recoveryCard = page.locator(".message-failure-status");
+  await expect(recoveryCard).toHaveCount(1);
   await expect(page.locator("[data-retry-concurrent]")).toHaveCount(0);
   expect(requests).toHaveLength(1);
 
   await page.locator("[data-refresh-concurrent]").click();
   await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  await expect(recoveryCard).toHaveCount(1);
   expect(requests).toHaveLength(1);
 
   await page.locator("[data-retry-concurrent]").click();

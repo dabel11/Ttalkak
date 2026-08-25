@@ -110,6 +110,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
+        <span class="sr-only" role="status" aria-live="polite" data-composer-restore-status></span>
         <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
         <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
@@ -294,7 +295,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, retryMode, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -349,7 +350,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
+        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, retryMode, role, safeContent, safeMessageId })}
       </div>
     `;
   }
@@ -367,7 +368,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function UserMessageView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    const { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, retryMode, role, safeContent, safeMessageId } = data;
     if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
     const failureButton = failureAction?.id === "login"
@@ -377,7 +378,13 @@ import { parts } from "./make-message-parts.mjs";
       : failureAction?.id === "retry-after-refresh"
         ? `<button type="button" data-retry-concurrent="${safeMessageId}">${escapeHtml(failureAction.label)}</button>`
       : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";
-    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
+    const editPreview = failureMessage && retryMode === "edit" ? `<small class="concurrency-edit-preview">수정 내용: ${escapeHtml(String(content || "").slice(0, 80))}</small>` : "";
+    const newChatButton = failureRepeated ? `<button type="button" class="secondary" data-concurrency-new-chat="${safeMessageId}">새 대화에서 계속하기</button>` : "";
+    const concurrencyFailure = failureKind === "concurrency" || failureKind === "concurrency_refresh";
+    const failureStatus = !failureMessage ? "" : concurrencyFailure
+      ? `<div class="message-failure-status ${escapeAttr(failureTone)}" role="${failureRole}"><strong>${escapeHtml(failureTitle)}</strong><span>${escapeHtml(failureMessage)}</span>${editPreview}<div class="message-failure-actions">${failureButton}${newChatButton}</div></div>`
+      : `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>`;
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureStatus}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   const renderers = Object.freeze({

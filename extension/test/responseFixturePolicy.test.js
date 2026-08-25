@@ -19,7 +19,7 @@ test("thread concurrency fixture stays distinct and requires an explicit post-re
   const failure = classifyMakeError(fixtures.errors.threadConcurrentlyUpdated);
   assert.equal(failure.kind, "concurrency");
   assert.equal(failure.retryable, false);
-  assert.deepEqual(getMakeFailureAction(failure), { id: "retry-after-refresh", label: "다시 시도" });
+  assert.deepEqual(getMakeFailureAction(failure), { id: "retry-after-refresh", label: "다시 보내기" });
 });
 
 test("optional, unknown, empty, and no-evidence fixtures remain normalizable", () => {

@@ -15,7 +15,7 @@ export function useMessageRetry({
   ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
   refreshServerThreads, requestInFlight, sendImproveRequest, sessionUuid,
   setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
-  setSessionUuid, showNotice,
+  setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
@@ -65,6 +65,7 @@ export function useMessageRetry({
         payload: { accessToken: authSession.accessToken, threadId, messageId, requestId, prompt, category: "prompt_techniques" },
         onSuccess: async () => {
           serverEditRequests.current.delete(String(messageId));
+          resetConcurrency?.(threadId);
           setRagStatus("connected");
           await refreshActiveServerThread(String(threadId));
           showNotice("수정한 메시지로 다시 개선했습니다.");
@@ -82,23 +83,26 @@ export function useMessageRetry({
             return;
           }
           if (isThreadConcurrencyError(error)) {
+            const repeated = (recordConcurrency?.(threadId) || 1) >= 2;
             const refreshed = await refreshActiveServerThread(String(threadId)).catch(() => null);
             reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
             setMessages((current) => [...current, createImproveErrorMessage(prompt, error, refreshed
-              ? { requestId, retryMode: "edit", retryMessageId: messageId }
+              ? { requestId, retryMode: "edit", retryMessageId: messageId, concurrencyRepeated: repeated, failure: { ...classifyMakeError(error), retryMode: "edit", repeated } }
               : {
                   requestId,
                   retryMode: "edit",
                   retryMessageId: messageId,
+                  concurrencyRepeated: repeated,
                   failure: {
                     ...classifyMakeError(error),
                     kind: "concurrency_refresh",
-                    message: "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 대화를 다시 불러와 주세요.",
+                    retryMode: "edit",
+                    repeated,
                   },
                 })]);
             showNotice(refreshed
-              ? "최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다."
-              : "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
+              ? "최신 대화를 불러왔습니다. 수정한 내용은 입력란에 유지되어 있습니다."
+              : "연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
             return;
           }
           if (Number(error?.status || 0) === 404) await refreshServerThreads().catch(() => {});

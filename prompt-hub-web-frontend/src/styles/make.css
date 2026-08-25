@@ -1666,6 +1666,22 @@ h1 {
   font-weight: 700;
   line-height: 1.35;
 }
+.message-failure-status.refresh { background: #fff8ed; border-color: #edc98e; color: #71450d; }
+.message-failure-status.recovered { background: #eef7f3; border-color: #a9cfc0; color: #154f40; }
+.message-failure-status.refresh strong,
+.message-failure-status.refresh span,
+.message-failure-status.refresh small,
+.message-failure-status.recovered strong,
+.message-failure-status.recovered span,
+.message-failure-status.recovered small { display: block; }
+.message-failure-status.refresh span,
+.message-failure-status.recovered span { margin-top: 4px; }
+.concurrency-edit-preview { margin-top: 8px; color: inherit; opacity: .82; }
+.message-failure-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.message-failure-actions .secondary { background: transparent; color: inherit; border: 1px solid currentColor; }
+.composer.is-restored textarea { animation: make-composer-restored 1.4s ease-out; }
+@keyframes make-composer-restored { 0% { box-shadow: 0 0 0 0 rgba(16, 91, 72, .38); } 45% { box-shadow: 0 0 0 5px rgba(16, 91, 72, .16); } 100% { box-shadow: 0 0 0 0 rgba(16, 91, 72, 0); } }
+@media (prefers-reduced-motion: reduce) { .composer.is-restored textarea { animation: none; outline: 2px solid #75a99a; } }
 
 .prompt-placeholder-chip {
   display: inline-block;
