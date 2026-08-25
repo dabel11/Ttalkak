@@ -38,6 +38,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /booleans_as_integers:\s*true/);
   assert.match(build, /passes:\s*3/);
   assert.match(build, /pure_getters:\s*true/);
+  assert.match(build, /unsafe:\s*true/);
   assert.match(build, /unsafe_arrows:\s*true/);
   assert.match(build, /comments:\s*isEntry\s*\?\s*\/\^!\//);
   assert.match(build, /banner:\s*\{\s*js:\s*`\/\*! \$\{productionCompressionPolicy\} \*\/`\s*\}/);

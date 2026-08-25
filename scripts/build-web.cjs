@@ -24,6 +24,7 @@ async function compressProductionJavaScript(metafile) {
         booleans_as_integers: true,
         passes: 3,
         pure_getters: true,
+        unsafe: true,
         unsafe_arrows: true,
         unsafe_methods: true,
         unsafe_proto: true,
