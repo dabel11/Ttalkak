@@ -45,6 +45,34 @@ An AI/backend response change is ready for frontend implementation only after th
 
 Unknown optional fields must be ignored safely. A paper, prototype, or backend-only experiment does not by itself authorize a frontend contract change.
 
+### 2.1 Make thread concurrency conflict
+
+`MakeThread` uses optimistic locking. If another request updates the same thread after the client request has read it, the stale request must not overwrite the newer messages.
+
+The backend returns:
+
+```json
+{
+  "timestamp": "2026-08-25T00:00:00Z",
+  "status": 409,
+  "error": "Conflict",
+  "code": "THREAD_CONCURRENTLY_UPDATED",
+  "message": "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.",
+  "path": "/api/prompts/improve"
+}
+```
+
+Frontend handling requirements:
+
+- Do not append the stale response to local conversation state.
+- Reload the latest thread through `GET /api/make/threads/{threadId}`.
+- Replace the local server-backed thread state with the reloaded messages.
+- Preserve the user's attempted prompt so it can be retried after refresh.
+- Show the backend message and an explicit retry action.
+- Do not retry automatically before refreshing because the conversation history has changed.
+- Treat `THREAD_CONCURRENTLY_UPDATED` separately from authentication, network, AI-service, timeout, and generic `409` failures.
+- Add this failure state to the shared fixture matrix before implementing client-specific behavior.
+
 ## 3. Shared AI response fixture policy
 
 The canonical cross-client fixture is `fixtures/prompt-improve-responses.json`. New AI response states must add or update a case there before client-specific fixtures are added.
