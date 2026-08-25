@@ -406,6 +406,7 @@ Extension notes and remaining checks:
 
 - Backend CORS/security settings were verified to allow requests from the configured `chrome-extension://...` origin.
 - AI/RAG response policies are confirmed: no-evidence returns a successful fallback response, timeout and unavailable return `503 / AI_SERVICE_UNAVAILABLE`, and rate-limit returns `AI_RATE_LIMIT_EXCEEDED`.
+- Logged-in follow-up requests may include a client-generated `requestId` of up to 128 characters. When the same `threadId`, `requestId`, and prompt are sent again after the turn has been saved, the backend returns the stored response with `replayed: true` instead of calling RAG again or appending a duplicate turn. Reusing the same `requestId` with different prompt content returns `409 / REQUEST_ID_REUSED`. Requests without `requestId` retain the existing behavior.
 - Saved prompts and recent items are currently extension-local unless a later server sync scope is defined.
 
 #### Run
