@@ -35,7 +35,11 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /splitting:\s*true/);
   assert.match(build, /compressProductionJavaScript/);
   assert.match(build, /terser\.minify/);
-  assert.match(build, /compress:\s*\{\s*passes:\s*2\s*\}/);
+  assert.match(build, /booleans_as_integers:\s*true/);
+  assert.match(build, /passes:\s*3/);
+  assert.match(build, /pure_getters:\s*true/);
+  assert.match(build, /unsafe_arrows:\s*true/);
+  assert.match(build, /comments:\s*isEntry\s*\?\s*\/\^!\//);
   assert.match(build, /banner:\s*\{\s*js:\s*`\/\*! \$\{productionCompressionPolicy\} \*\/`\s*\}/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
   assert.match(build, /metafile\.outputs\[output\]\.bytes\s*=\s*Buffer\.byteLength\(compressed\)/);

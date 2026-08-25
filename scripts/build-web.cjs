@@ -11,17 +11,26 @@ const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 const terser = require(path.join(webRoot, "node_modules", "terser"));
 const terserVersion = require(path.join(webRoot, "node_modules", "terser", "package.json")).version;
-const productionCompressionPolicy = `ttalkak-terser-${terserVersion}-passes-2`;
+const productionCompressionPolicy = `ttalkak-terser-${terserVersion}-passes-3-modern`;
 
 async function compressProductionJavaScript(metafile) {
   const outputs = Object.keys(metafile.outputs).filter((file) => file.endsWith(".js"));
   for (const output of outputs) {
     const source = fs.readFileSync(path.resolve(output), "utf8");
+    const isEntry = Boolean(metafile.outputs[output]?.entryPoint);
     const result = await terser.minify(source, {
       module: true,
-      compress: { passes: 2 },
+      compress: {
+        booleans_as_integers: true,
+        passes: 3,
+        pure_getters: true,
+        unsafe_arrows: true,
+        unsafe_methods: true,
+        unsafe_proto: true,
+        unsafe_undefined: true,
+      },
       mangle: true,
-      format: { comments: /^!/ },
+      format: { comments: isEntry ? /^!/ : false, semicolons: false },
     });
     if (!result.code) throw new Error(`Terser produced no output for ${output}`);
     const compressed = `${result.code}\n`;
