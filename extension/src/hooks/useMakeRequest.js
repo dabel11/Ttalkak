@@ -50,6 +50,8 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
     reportMakeFailure(
       Object.assign(new Error("Request aborted"), { code: "REQUEST_ABORTED" }),
       Date.now() - Number(context.startedAt || Date.now()),
+      globalThis.window,
+      context.requestId || "",
     );
     handleCancellation(request, context.prompt || "", context);
     finish(request);
@@ -57,7 +59,7 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
   }
 
   async function send({ ragConfig, prompt, payload, restoreComposer = true, onSuccess, onError }) {
-    const request = begin(prompt, { restoreComposer });
+    const request = begin(prompt, { restoreComposer, requestId: payload?.requestId || "" });
     try {
       const data = await requestPromptImprove(ragConfig, payload, { signal: request.controller.signal });
       if (!coordinator.canAcceptResult(request)) return undefined;
@@ -65,7 +67,7 @@ export function useMakeRequest({ setComposerValue, setMessages, setRagStatus, sh
       return await onSuccess?.(data, request);
     } catch (error) {
       if (!coordinator.isCurrent(request)) return undefined;
-      reportMakeFailure(error, Date.now() - Number(activeContext.current?.startedAt || Date.now()));
+      reportMakeFailure(error, Date.now() - Number(activeContext.current?.startedAt || Date.now()), globalThis.window, payload?.requestId || "");
       if (error?.code === "REQUEST_ABORTED") {
         handleCancellation(request, prompt, { restoreComposer });
         return undefined;

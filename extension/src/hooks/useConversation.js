@@ -11,7 +11,8 @@ import { useServerThreadSync } from "./useServerThreads";
 import { useMakeRequest } from "./useMakeRequest";
 import { useConversationHistory } from "./useConversationHistory";
 import { useMessageRetry } from "./useMessageRetry";
-import { isRequestIdReusedError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 
 export function useConversation({
   authSession,
@@ -101,6 +102,7 @@ export function useConversation({
       requestId: String(message.requestId || ""),
       threadId: String(activeThreadId.current || ""),
     };
+    reportMakeRetry(message.requestId || "");
     setComposerValue(prompt);
     return true;
   }
@@ -194,8 +196,8 @@ export function useConversation({
     showNotice("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 복사한 프롬프트를 붙여넣어 주세요.");
   }
 
-  async function submitPrompt() {
-    const prompt = composerValue.trim();
+  async function submitPrompt(promptOverride = "") {
+    const prompt = String(promptOverride || composerValue).trim();
     if (!prompt || isLoading || improveRequestInFlight.current) {
       if (prompt && improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
       return;
@@ -271,6 +273,19 @@ export function useConversation({
           showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
           return;
         }
+        if (isThreadConcurrencyError(err)) {
+          pendingRetry.current = null;
+          const refreshed = await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => null);
+          reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+          setComposerValue(prompt);
+          if (refreshed) {
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, { requestId })]);
+            showNotice("최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다.");
+          } else {
+            showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
+          }
+          return;
+        }
         const recovered = await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
         if (recovered) {
           pendingRetry.current = null;
@@ -280,6 +295,17 @@ export function useConversation({
         setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err, { requestId })]);
       },
     });
+  }
+
+  async function retryFailedMessage(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt || !prepareFailedRetry(message)) return false;
+    if (message?.retryMode === "edit" && message?.retryMessageId) {
+      await submitEditedMessage(null, message.retryMessageId, prompt);
+    } else {
+      await submitPrompt(prompt);
+    }
+    return true;
   }
 
   function requestDeleteRecentThreadLocal(id, setConfirmAction) {
@@ -384,5 +410,6 @@ export function useConversation({
     submitEditedMessage,
     requestDeleteRecentThread,
     prepareFailedRetry,
+    retryFailedMessage,
   };
 }

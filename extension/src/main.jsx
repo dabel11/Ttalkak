@@ -83,7 +83,7 @@ function App() {
     cancelEditMessage,
     submitEditedMessage,
     requestDeleteRecentThread,
-    prepareFailedRetry,
+    retryFailedMessage,
   } = useConversation({
     authSession,
     executeTarget,
@@ -138,12 +138,7 @@ function App() {
       setAuthMode("login");
       return;
     }
-    if (!prepareFailedRetry(message)) return;
-    const prompt = String(message?.sourcePrompt || "").trim();
-    requestAnimationFrame(() => {
-      composerRef.current?.focus();
-      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
-    });
+    void retryFailedMessage(message);
   }
 
   return (

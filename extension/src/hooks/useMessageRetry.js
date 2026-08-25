@@ -6,8 +6,8 @@ import { getOrCreateSessionUuid } from "../storage/extensionStorage.js";
 import { isAuthExpiredError } from "../utils/apiErrors.js";
 import { getServerEditErrorMessage } from "../utils/conversationMessages.js";
 import { makeTitle } from "../utils/promptUtils.js";
-import { reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
-import { isRequestIdReusedError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -31,13 +31,13 @@ export function useMessageRetry({
     setEditingDraft("");
   }
 
-  async function submitEditedMessage(event, messageId) {
+  async function submitEditedMessage(event, messageId, promptOverride = "") {
     event?.preventDefault?.();
     if (isLoading || requestInFlight.current) {
       if (requestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
       return;
     }
-    const prompt = editingDraft.trim();
+    const prompt = String(promptOverride || editingDraft).trim();
     if (!prompt) return;
 
     if (isLoggedIn) {
@@ -56,7 +56,7 @@ export function useMessageRetry({
       serverEditRequests.current.set(String(messageId), { prompt, requestId });
       setEditingMessageId("");
       setEditingDraft("");
-      reportMakeRetry();
+      reportMakeRetry(requestId);
       return sendImproveRequest({
         ragConfig,
         prompt,
@@ -78,6 +78,17 @@ export function useMessageRetry({
             serverEditRequests.current.delete(String(messageId));
             await refreshActiveServerThread(String(threadId)).catch(() => false);
             showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
+            return;
+          }
+          if (isThreadConcurrencyError(error)) {
+            const refreshed = await refreshActiveServerThread(String(threadId)).catch(() => null);
+            reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+            setMessages((current) => refreshed
+              ? [...current, createImproveErrorMessage(prompt, error, { requestId, retryMode: "edit", retryMessageId: messageId })]
+              : current);
+            showNotice(refreshed
+              ? "최신 대화를 반영했습니다. 다시 시도 버튼으로 요청을 재전송할 수 있습니다."
+              : "최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
             return;
           }
           if (Number(error?.status || 0) === 404) await refreshServerThreads().catch(() => {});

@@ -4,9 +4,9 @@ const MAX_MESSAGE_LENGTH = 240;
 
 export const OBSERVABILITY_DATA_POLICY = Object.freeze({
   externalCollectionEnabled: false,
-  allowedRecordFields: Object.freeze(["name", "message", "area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "timestamp"]),
-  aggregateEventFields: Object.freeze(["area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "timestamp"]),
-  prohibitedContent: Object.freeze(["prompt", "generatedPrompt", "history", "token", "documentBody", "pageContent", "clipboard"]),
+  allowedRecordFields: Object.freeze(["name", "message", "area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "client", "requestCorrelation", "timestamp"]),
+  aggregateEventFields: Object.freeze(["area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "client", "requestCorrelation", "timestamp"]),
+  prohibitedContent: Object.freeze(["prompt", "generatedPrompt", "history", "token", "requestId", "documentBody", "pageContent", "clipboard"]),
 });
 
 function redact(value) {
@@ -33,6 +33,8 @@ function normalizeClientError(error, context = {}, now = Date.now) {
     outcome: ["success", "failure", "retry", "cancel"].includes(String(context.outcome)) ? String(context.outcome) : "failure",
     level: ["info", "warning"].includes(String(context.level)) ? String(context.level) : "error",
     retryable: Boolean(context.retryable),
+    client: String(context.client || "web"),
+    requestCorrelation: String(context.requestCorrelation || ""),
     timestamp: now(),
   });
 }

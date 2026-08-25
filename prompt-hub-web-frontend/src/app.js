@@ -86,6 +86,7 @@ let makeControllerModule = null;
 let makeEventsModule = null;
 const makeFocusModule = modules.make.focus;
 const makeMessageModel = modules.make.messageModel;
+const makeRequestIdModule = modules.make.requestId;
 const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
 const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
@@ -1690,9 +1691,28 @@ function bindDelegatedMakeEvents() {
         }, 0);
       },
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
-      reportRetry: () => modules.observability.report(new Error("User retried Make request"), {
+      retryConcurrent: (message) => {
+        const prompt = String(message?.content || "").trim();
+        const retryMessageId = message?.retryMode === "edit" ? String(message.retryMessageId || "") : "";
+        if (!prompt) return;
+        state.messages = state.messages.filter((item) => item.id !== message.id);
+        makeStateModule.completeMakeRequest(makeRequestState);
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        updateRecentThread(state.activeThreadId);
+        render();
+        window.setTimeout(() => {
+          if (retryMessageId) {
+            resendEditedMessage(retryMessageId, prompt);
+            return;
+          }
+          const composer = document.querySelector("[data-composer]");
+          if (composer) submitMakePrompt(composer);
+        }, 0);
+      },
+      reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
         area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
         status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
       }),
       openLogin: () => { state.authView = "login"; render(); },
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
@@ -1788,12 +1808,32 @@ function getMakeControllerContext() {
       area: "make",
       action: "improve",
       kind: "result",
-      code: result?.isUnchanged
+      code: result?.replayed === true
+        ? "REPLAYED"
+        : result?.isUnchanged
         ? "UNCHANGED_NO_EVIDENCE"
         : String(result?.ragStatus || "").toLowerCase() === "no_evidence"
           ? "NO_EVIDENCE"
           : result?.mode === "ask" ? "ASK" : "IMPROVED",
       durationMs,
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(result?.requestId),
+      client: "web",
+    }),
+    reportFailure: (error, requestId, durationMs) => {
+      const failure = makeMessageModel.classifyMakeError(error);
+      return modules.observability.report(new Error("Make request failed"), {
+        area: "make", action: "improve", kind: failure.kind, code: failure.code,
+        status: failure.status, durationMs, outcome: "failure", level: "error",
+        retryable: failure.retryable, client: "web",
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
+      });
+    },
+    reportConcurrencyRefresh: (requestId, refreshed) => modules.observability.report(new Error("Make concurrency refresh"), {
+      area: "make", action: "refresh-thread", kind: "concurrency",
+      code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+      status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+      level: refreshed ? "info" : "error", retryable: false, client: "web",
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
     }),
     setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
     handleError: handleBackendAccessError,

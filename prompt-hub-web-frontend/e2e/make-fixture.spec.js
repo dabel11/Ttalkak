@@ -96,6 +96,12 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
       await improveHandler(route);
       return;
     }
+    const threadMatch = pathname.match(/^\/api\/make\/threads\/(\d+)$/);
+    if (threadMatch && request.method() === "GET" && fixtures.threads) {
+      const thread = fixtures.threads.find((item) => String(item.serverId || item.id) === threadMatch[1]);
+      await route.fulfill({ status: thread ? 200 : 404, headers: CORS_HEADERS, body: JSON.stringify(thread || { code: "NOT_FOUND" }) });
+      return;
+    }
     if (pathname === "/api/make/threads" && request.method() === "GET" && fixtures.threads) {
       await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: fixtures.threads }) });
       return;
@@ -491,6 +497,187 @@ test("a signed-in server-thread edit exposes cancellation and preserves its draf
   await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
   releaseResponse();
   await expect(page.getByText("Late server response", { exact: true })).toHaveCount(0);
+});
+
+function serverThreadFixture(messages) {
+  return {
+    id: "77",
+    serverId: "77",
+    title: "Idempotency fixture",
+    preview: messages.at(-1)?.content || "Fixture",
+    folderId: "uncategorized",
+    createdAt: 1,
+    messages,
+  };
+}
+
+function signedInThreadState(thread) {
+  return {
+    isLoggedIn: true,
+    currentUser: "Fixture User",
+    currentUserId: 7,
+    currentUserRole: "user",
+    authToken: "fixture-token",
+    token: "fixture-token",
+    activeThreadId: String(thread.id),
+    recentThreads: [thread],
+    backendThreads: [thread],
+  };
+}
+
+test("server follow-up retry reuses its request id and replay does not duplicate messages", async ({ page }) => {
+  const initialMessages = [
+    { id: "server-user-initial", role: "user", content: "Initial prompt" },
+    { id: "server-assistant-initial", role: "assistant", mode: "improve", improvedPrompt: "Initial result", content: "Initial result" },
+  ];
+  const thread = serverThreadFixture(initialMessages);
+  const requests = [];
+  const prompt = "Retry this server follow-up";
+  await openMake(page, initialMessages, signedInThreadState(thread), async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    if (requests.length === 1) {
+      await route.fulfill({ status: 503, headers: CORS_HEADERS, body: JSON.stringify({ code: "AI_SERVICE_UNAVAILABLE" }) });
+      return;
+    }
+    thread.messages = [
+      ...initialMessages,
+      { id: "server-user-replayed", role: "user", content: prompt, requestId: payload.requestId },
+      { id: "server-assistant-replayed", role: "assistant", mode: "improve", content: "Stored replay result", improvedPrompt: "Stored replay result", requestId: payload.requestId },
+    ];
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "Stored replay result", threadId: 77, requestId: payload.requestId, replayed: true }),
+    });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+  const retry = page.locator(".message-failure-status [data-retry-message]");
+  await expect(retry).toBeVisible();
+  await retry.click();
+
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[0].requestId).toBeTruthy();
+  expect(requests[0].requestId.length).toBeLessThanOrEqual(128);
+  expect(requests[1].requestId).toBe(requests[0].requestId);
+  await expect(page.locator(".message.user").getByText(prompt, { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Stored replay result", { exact: true })).toHaveCount(1);
+});
+
+test("ask answers and edited server prompts receive the correct request-id ownership", async ({ page }) => {
+  const messages = [{ ...askMessage, requestId: "request-for-ask-turn" }];
+  const thread = serverThreadFixture(messages);
+  const requests = [];
+  await openMake(page, messages, signedInThreadState(thread), async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    thread.messages = [
+      ...messages,
+      { id: `server-user-${requests.length}`, role: "user", content: payload.prompt, requestId: payload.requestId },
+      { id: `server-assistant-${requests.length}`, role: "assistant", mode: "improve", content: "Answer result", improvedPrompt: "Answer result", requestId: payload.requestId },
+    ];
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ mode: "improve", improvedPrompt: "Answer result", threadId: 77, requestId: payload.requestId, replayed: false }) });
+  });
+
+  const form = page.locator("[data-ask-answer-form]");
+  await form.locator('[name="purpose"]').fill("Explain the release");
+  await form.locator('button[type="submit"]').click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0].requestId).toBeTruthy();
+  expect(requests[0].requestId).not.toBe("request-for-ask-turn");
+});
+
+test("server edit reuses an unchanged request id, rotates it after editing, and conflict is non-retryable", async ({ page }) => {
+  const messages = [
+    { id: "server-user-idempotent", role: "user", content: "Original server prompt", requestId: "request-original" },
+    { id: "server-assistant-idempotent", role: "assistant", mode: "improve", content: "Original result", improvedPrompt: "Original result" },
+  ];
+  const thread = serverThreadFixture(messages);
+  const requests = [];
+  await openMake(page, messages, signedInThreadState(thread), async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    if (requests.length === 2) {
+      await route.fulfill({ status: 409, headers: CORS_HEADERS, body: JSON.stringify({ code: "REQUEST_ID_REUSED" }) });
+      return;
+    }
+    thread.messages = [
+      { ...messages[0], requestId: payload.requestId },
+      { id: "server-assistant-idempotent-updated", role: "assistant", mode: "improve", content: "Unchanged edit result", improvedPrompt: "Unchanged edit result", requestId: payload.requestId },
+    ];
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ mode: "improve", improvedPrompt: "Unchanged edit result", threadId: 77, requestId: payload.requestId, replayed: true }) });
+  });
+
+  await page.locator('[data-edit-message="server-user-idempotent"]').click();
+  await page.locator('[data-edit-message-form="server-user-idempotent"] button[type="submit"]').click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0].requestId).toBe("request-original");
+
+  await page.locator('[data-edit-message="server-user-idempotent"]').click();
+  const editForm = page.locator('[data-edit-message-form="server-user-idempotent"]');
+  await editForm.locator('textarea[name="message"]').fill("Changed server prompt");
+  await editForm.locator('button[type="submit"]').click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1].requestId).toBeTruthy();
+  expect(requests[1].requestId).not.toBe("request-original");
+  await expect(page.getByText("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-retry-message]")).toHaveCount(0);
+});
+
+test("thread concurrency reloads canonical messages before an explicit preserved-prompt retry", async ({ page }) => {
+  const initialMessages = [
+    { id: "server-user-initial", role: "user", content: "Initial prompt" },
+    { id: "server-assistant-initial", role: "assistant", mode: "improve", content: "Initial result", improvedPrompt: "Initial result" },
+  ];
+  const thread = serverThreadFixture(initialMessages);
+  const requests = [];
+  let threadReads = 0;
+  page.on("request", (request) => {
+    if (request.method() === "GET" && request.url().endsWith("/api/make/threads/77")) threadReads += 1;
+  });
+  await openMake(page, initialMessages, signedInThreadState(thread), async (route) => {
+    const payload = route.request().postDataJSON();
+    requests.push(payload);
+    if (requests.length === 1) {
+      thread.messages = [
+        ...initialMessages,
+        { id: "server-user-other", role: "user", content: "Other client prompt" },
+        { id: "server-assistant-other", role: "assistant", mode: "improve", content: "Latest canonical result", improvedPrompt: "Latest canonical result" },
+      ];
+      await route.fulfill({ status: 409, headers: CORS_HEADERS, body: JSON.stringify({
+        code: "THREAD_CONCURRENTLY_UPDATED",
+        message: "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.",
+      }) });
+      return;
+    }
+    thread.messages = [
+      ...thread.messages,
+      { id: "server-user-retry", role: "user", content: payload.prompt, requestId: payload.requestId },
+      { id: "server-assistant-retry", role: "assistant", mode: "improve", content: "Concurrent retry result", improvedPrompt: "Concurrent retry result", requestId: payload.requestId },
+    ];
+    await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({
+      mode: "improve", improvedPrompt: "Concurrent retry result", threadId: 77,
+      requestId: payload.requestId, replayed: false,
+    }) });
+  });
+
+  const prompt = "Preserve this concurrent prompt";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect.poll(() => threadReads).toBeGreaterThan(0);
+  await expect(page.locator(".message.assistant").getByText("Latest canonical result", { exact: true })).toBeVisible();
+  await expect(page.locator(".message.user").getByText(prompt, { exact: true })).toHaveCount(1);
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue(prompt);
+  await expect(page.locator("[data-retry-concurrent]")).toBeVisible();
+  expect(requests).toHaveLength(1);
+  await expect(page.getByText("Concurrent retry result", { exact: true })).toHaveCount(0);
+
+  await page.locator("[data-retry-concurrent]").click();
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(page.getByText("Concurrent retry result", { exact: true })).toHaveCount(1);
 });
 
 const errorCases = [

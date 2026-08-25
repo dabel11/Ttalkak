@@ -143,6 +143,58 @@ describe("Extension improve request behavior", () => {
     expect(props.showNotice).toHaveBeenCalledWith(expect.stringMatching(/새로고침/));
   });
 
+  test("thread concurrency refreshes before exposing an explicit preserved-prompt retry", async () => {
+    const conflict = Object.assign(new Error("concurrent"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockRejectedValueOnce(conflict).mockResolvedValueOnce(improveResponse("retried result"));
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [{ id: "canonical", role: "assistant", content: "latest server state" }] });
+    const props = createProps({ authSession: { accessToken: "token" } });
+    const { result } = renderHook(() => useConversation(props));
+    act(() => result.current.openRecentThread({ id: "42", messages: [] }));
+    act(() => result.current.setComposerValue("preserved concurrent prompt"));
+
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(api.improve).toHaveBeenCalledTimes(1);
+    expect(api.getThread).toHaveBeenCalledWith(props.ragConfig, "42", "token");
+    expect(result.current.composerValue).toBe("preserved concurrent prompt");
+    const conflictMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency");
+    expect(conflictMessage?.sourcePrompt).toBe("preserved concurrent prompt");
+    expect(result.current.messages.some((message) => message.content === "latest server state")).toBe(true);
+
+    await act(async () => { expect(await result.current.retryFailedMessage(conflictMessage)).toBe(true); });
+    expect(api.improve).toHaveBeenCalledTimes(2);
+  });
+
+  test("thread concurrency retries an edited message through the edit route", async () => {
+    const conflict = Object.assign(new Error("concurrent"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" });
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockRejectedValueOnce(conflict).mockResolvedValueOnce(improveResponse("edited retry result"));
+    const canonicalUser = { id: "31", role: "user", content: "old prompt" };
+    api.getThread.mockResolvedValue({ id: "42", serverId: "42", messages: [canonicalUser] });
+    const props = createProps({ authSession: { accessToken: "token" } });
+    const { result } = renderHook(() => useConversation(props));
+    act(() => result.current.openRecentThread({ id: "42", messages: [canonicalUser] }));
+    act(() => result.current.startEditMessage(canonicalUser));
+    act(() => result.current.setEditingDraft("edited concurrent prompt"));
+
+    await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, canonicalUser.id); });
+
+    const conflictMessage = result.current.messages.find((message) => message.failure?.kind === "concurrency");
+    expect(conflictMessage).toMatchObject({
+      sourcePrompt: "edited concurrent prompt",
+      retryMode: "edit",
+      retryMessageId: canonicalUser.id,
+    });
+    await act(async () => { expect(await result.current.retryFailedMessage(conflictMessage)).toBe(true); });
+
+    expect(api.improve).toHaveBeenCalledTimes(2);
+    expect(api.improve.mock.calls[1][1]).toMatchObject({
+      messageId: canonicalUser.id,
+      prompt: "edited concurrent prompt",
+    });
+  });
+
   test("opening and clearing a restored recent thread keeps the active selection in conversation state", () => {
     const { result } = renderHook(() => useConversation(createProps()));
     const restored = { id: "restored-thread", messages: [{ id: "user-restored", role: "user", content: "restored" }] };
@@ -398,6 +450,7 @@ describe("Extension clarification UI", () => {
   test.each([
     [{ kind: "network", retryable: true }, "연결 확인 후 다시 시도"],
     [{ kind: "auth", requiresLogin: true, retryable: false }, "로그인"],
+    [{ kind: "concurrency", retryable: false }, "다시 시도"],
   ])("error actions render from the shared UX policy", (failure, label) => {
     globalThis.HTMLElement.prototype.scrollTo = vi.fn();
     const onResolveError = vi.fn();

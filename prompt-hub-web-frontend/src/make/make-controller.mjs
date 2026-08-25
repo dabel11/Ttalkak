@@ -1,6 +1,28 @@
-import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-request-id.mjs";
+import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../utils/make-request-id.mjs";
 
 "use strict";
+  async function handleThreadConcurrency(ctx, { error, prompt, requestId, retryMessageId = "", threadId }) {
+    if (!isThreadConcurrencyError(error)) return false;
+    const failure = ctx.classifyError(error);
+    const refreshed = await ctx.refreshThread(threadId);
+    ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
+    ctx.setDraft(prompt);
+    if (!refreshed) {
+      ctx.notice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
+      ctx.render();
+      return true;
+    }
+    const messageId = `concurrency-${Date.now()}`;
+    ctx.appendUser(threadId, {
+      id: messageId, role: "user", content: prompt, requestId, excludeFromHistory: true,
+      retryMode: retryMessageId ? "edit" : "follow-up", retryMessageId,
+    });
+    ctx.failRequest(messageId, failure);
+    ctx.updateThread(threadId);
+    ctx.render();
+    ctx.scrollLatest();
+    return true;
+  }
   function collectAskAnswerPayload(form, model) {
     const inputs = [...form.querySelectorAll("[data-ask-answer-input]")];
     const questions = inputs.map((input) => ({ field: input.name, question: input.closest("li")?.querySelector("label span")?.textContent?.trim() || input.name, importance: input.required ? "required" : "recommended" }));
@@ -66,6 +88,13 @@ import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-requ
         ctx.failRequest(userMessageId, ctx.classifyError(error));
         ctx.updateThread(threadId);
         ctx.renderCancellation?.();
+        return;
+      }
+      ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
+      if (await handleThreadConcurrency(ctx, { error, prompt, requestId, threadId })) return;
+      if (isRequestIdReusedError(error)) {
+        await ctx.refreshThread(threadId);
+        ctx.notice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
         return;
       }
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
@@ -134,6 +163,11 @@ import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-requ
           ctx.renderCancellation?.();
           return;
         }
+        ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
+        if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) {
+          ctx.clearEditing();
+          return;
+        }
         ctx.setBackendFailure();
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else if (isRequestIdReusedError(error)) {
@@ -167,6 +201,7 @@ import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-requ
         ctx.renderCancellation?.();
         return;
       }
+      ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
       ctx.failRequest(messageId, ctx.classifyError(error));
       ctx.setBackendFailure();
       ctx.handleError(error, ctx.messages.improveFailed);
@@ -188,4 +223,4 @@ import { isRequestIdReusedError, resolveMakeRequestId } from "../utils/make-requ
     if (result.mode === "ask") ctx.focusAsk();
   }
 
-export { collectAskAnswerPayload, submitAskAnswers, submitPrompt, resendEdited };
+export { collectAskAnswerPayload, handleThreadConcurrency, submitAskAnswers, submitPrompt, resendEdited };

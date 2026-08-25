@@ -372,6 +372,8 @@ import { parts } from "./make-message-parts.mjs";
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
     const failureButton = failureAction?.id === "login"
       ? `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
+      : failureAction?.id === "retry-after-refresh"
+        ? `<button type="button" data-retry-concurrent="${safeMessageId}">${escapeHtml(failureAction.label)}</button>`
       : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";
     return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }

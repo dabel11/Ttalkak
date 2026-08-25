@@ -80,7 +80,8 @@ test("observability bridge exposes only aggregate metadata and isolates listener
   assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
   assert.deepEqual(events[0], {
     area: "api", action: "request", kind: "contract", code: "AI_INVALID_RESPONSE", status: 503,
-    durationMs: 1250, outcome: "retry", level: "error", retryable: true, timestamp: 77,
+    durationMs: 1250, outcome: "retry", level: "error", retryable: true,
+    client: "web", requestCorrelation: "", timestamp: 77,
   });
   assert.equal(JSON.stringify(events[0]).includes("private"), false);
   assert.equal(JSON.stringify(events[0]).includes("secret"), false);

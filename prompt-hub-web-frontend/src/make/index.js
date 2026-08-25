@@ -1,6 +1,7 @@
 // @ts-check
 import { makePreviewUtils as preview } from "../utils/make-preview.mjs";
 import messageModel from "../utils/make-message-model.mjs";
+import * as requestId from "../utils/make-request-id.mjs";
 import { makeState } from "./make-state.mjs";
 import * as focus from "./make-focus.mjs";
 import * as persistence from "./make-persistence.mjs";
@@ -41,4 +42,4 @@ export function loadMakeRuntime() {
   return runtimePromise;
 }
 
-export const make = Object.freeze({ preview, messageModel, state: makeState, focus, persistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });
+export const make = Object.freeze({ preview, messageModel, requestId, state: makeState, focus, persistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });

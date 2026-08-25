@@ -283,6 +283,7 @@ test("request-id conflicts refresh the server thread instead of entering a retry
     buildHistory: () => [], startRequest: () => new AbortController().signal, shouldSync: () => true,
     getBackendThreadId: () => "42", setThinking: () => {}, queueScroll: () => {}, render: () => {},
     improve: async () => { throw Object.assign(new Error("conflict"), { status: 409, code: "REQUEST_ID_REUSED" }); },
+    reportFailure: (error, requestId) => calls.push(["failure", error.code, requestId]),
     clearEditing: () => {}, refreshThread: async () => { calls.push("refresh"); return true; },
     notice: (message) => calls.push(message), stopInFlight: () => {}, updateThread: () => {},
     failRequest: () => {}, classifyError: (error) => error, setBackendFailure: () => {},
@@ -290,9 +291,57 @@ test("request-id conflicts refresh the server thread instead of entering a retry
     messages: { missingThread: "missing", edited: "edited", editFailed: "failed" },
   }, "user-1", "same prompt");
 
-  assert.equal(calls[0], "refresh");
-  assert.match(calls[1], /새로고침/);
+  assert.deepEqual(calls[0], ["failure", "REQUEST_ID_REUSED", "request-existing"]);
+  assert.equal(calls[1], "refresh");
+  assert.match(calls[2], /새로고침/);
   assert.equal(calls.includes("recover"), false);
+});
+
+test("thread concurrency refreshes first and exposes one explicit preserved-prompt retry", async () => {
+  const calls = [];
+  const state = { messages: [{ id: "canonical", role: "assistant", content: "latest" }] };
+  const handled = await makeController.handleThreadConcurrency({
+    state,
+    classifyError: () => ({ kind: "concurrency", code: "THREAD_CONCURRENTLY_UPDATED", status: 409, message: "latest required", retryable: false }),
+    refreshThread: async () => { calls.push("refresh"); return { id: "42", messages: state.messages }; },
+    reportConcurrencyRefresh: (requestId, refreshed) => calls.push(["metric", requestId, refreshed]),
+    setDraft: (prompt) => calls.push(["draft", prompt]),
+    appendUser: (_threadId, message) => { calls.push(["append", message]); state.messages.push(message); },
+    failRequest: (messageId, failure) => calls.push(["failure", messageId, failure.kind]),
+    updateThread: () => calls.push("update"), render: () => calls.push("render"), scrollLatest: () => calls.push("scroll"),
+  }, {
+    error: Object.assign(new Error("conflict"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
+    prompt: "preserved prompt", requestId: "request-concurrent", threadId: "42",
+  });
+
+  assert.equal(handled, true);
+  assert.equal(calls[0], "refresh");
+  assert.deepEqual(calls[1], ["metric", "request-concurrent", true]);
+  assert.deepEqual(calls[2], ["draft", "preserved prompt"]);
+  assert.equal(calls[3][0], "append");
+  assert.equal(calls[3][1].content, "preserved prompt");
+  assert.equal(calls[3][1].retryMode, "follow-up");
+  assert.equal(calls[3][1].retryMessageId, "");
+  assert.equal(calls[4][0], "failure");
+  assert.equal(state.messages.some((message) => message.content === "stale response"), false);
+});
+
+test("thread concurrency preserves the edited message route for explicit retry", async () => {
+  const state = { messages: [] };
+  await makeController.handleThreadConcurrency({
+    state,
+    classifyError: () => ({ kind: "concurrency", code: "THREAD_CONCURRENTLY_UPDATED", status: 409, message: "latest required", retryable: false }),
+    refreshThread: async () => ({ id: "42", messages: state.messages }),
+    reportConcurrencyRefresh: () => {}, setDraft: () => {},
+    appendUser: (_threadId, message) => state.messages.push(message),
+    failRequest: () => {}, updateThread: () => {}, render: () => {}, scrollLatest: () => {},
+  }, {
+    error: Object.assign(new Error("conflict"), { status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
+    prompt: "edited prompt", requestId: "request-edit", retryMessageId: "user-31", threadId: "42",
+  });
+
+  assert.equal(state.messages[0].retryMode, "edit");
+  assert.equal(state.messages[0].retryMessageId, "user-31");
 });
 
 test("a stale cancelled request cannot clear a newer Make request", async () => {
@@ -372,5 +421,5 @@ test("Make event routing records an actual retry before resending", () => {
   });
   const button = { dataset: { retryMessage: "user-1" }, matches: (selector) => selector === "[data-retry-message]" };
   handlers.click({ target: { closest: (selector) => selector.includes("[data-retry-message]") ? button : null } });
-  assert.deepEqual(calls, [["reportRetry"], ["resend", "user-1", "retry me"]]);
+  assert.deepEqual(calls, [["reportRetry", { id: "user-1", role: "user", content: "retry me" }], ["resend", "user-1", "retry me"]]);
 });

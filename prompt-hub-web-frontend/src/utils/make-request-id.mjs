@@ -32,4 +32,19 @@ export function isRequestIdReusedError(error) {
   return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === "REQUEST_ID_REUSED";
 }
 
+export function isThreadConcurrencyError(error) {
+  return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === "THREAD_CONCURRENTLY_UPDATED";
+}
+
+export function createMakeRequestCorrelation(value) {
+  const requestId = normalizeMakeRequestId(value);
+  if (!requestId) return "";
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < requestId.length; index += 1) {
+    hash ^= requestId.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `req_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 export { MAX_REQUEST_ID_LENGTH };
