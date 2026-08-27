@@ -140,6 +140,15 @@ test("thinking messages expose an accessible request cancellation control", () =
   assert.match(html, /aria-live="polite"/);
 });
 
+test("conversation turns group a user request with its reply and highlight pending work", () => {
+  const messages = [{ id: "u1", role: "user" }, { id: "a1", role: "assistant" }, { id: "u2", role: "user" }];
+  const html = MakeFeedView({ icons: { make: "make", send: "send" } }, { hasMessages: true, isThinking: true, messages, renderMessageBubble: (message) => `<i>${message.id}</i>`, templateBarHtml: "" });
+  assert.equal((html.match(/class="conversation-turn/g) || []).length, 2);
+  assert.match(html, /conversation-turn is-processing/);
+  assert.ok(html.indexOf("u1") < html.indexOf("a1"));
+  assert.ok(html.indexOf("u2") < html.indexOf("data-make-thinking-indicator"));
+});
+
 test("real response regressions keep ask inputs and executable results distinct", () => {
   const ask = messageModel.normalizeImproveResponse(fixtureMatrix.regressions.exampleInQuestion);
   const askHtml = MessageBubbleView({

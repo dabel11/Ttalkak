@@ -528,6 +528,19 @@ function serverThreadFixture(messages) {
   };
 }
 
+test("Make groups turns and keeps one recent-list scrollbar with a labeled field toggle", async ({ page }) => {
+  const messages = [
+    { id: "user-1", role: "user", content: "첫 요청" },
+    { id: "assistant-1", role: "assistant", content: "첫 응답", improvedPrompt: "첫 응답", mode: "improve" },
+    { id: "user-2", role: "user", content: "후속 요청" },
+  ];
+  await openMake(page, messages);
+  await expect(page.locator(".conversation-turn")).toHaveCount(2);
+  await expect(page.locator("[data-toggle-templates]")).toContainText("분야");
+  expect(await page.locator(".make-side-panel").evaluate((element) => getComputedStyle(element).overflowY)).toBe("hidden");
+  expect(await page.locator(".recent-thread-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+});
+
 function signedInThreadState(thread) {
   return {
     isLoggedIn: true,

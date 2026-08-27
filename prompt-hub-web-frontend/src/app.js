@@ -1087,12 +1087,16 @@ function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const message = state.backendStatusMessage || "백엔드 연결 확인 중";
   const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? canUseDemoFallback() ? "데모 데이터 표시 중" : "Backend 오류" : "Backend 확인 중";
-  return `
-    <div class="backend-status backend-status-${status}" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">
-      <span class="backend-status-dot" aria-hidden="true"></span>
-      <span>${label}</span>
+  return `<details class="backend-status-menu">
+    <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(message)}">
+      <span class="backend-status-dot" aria-hidden="true"></span><span>${label}</span>
+    </summary>
+    <div class="backend-status-popover" role="status">
+      <strong>${status === "connected" ? "백엔드에 연결되었습니다" : status === "fallback" ? "백엔드 연결을 확인해 주세요" : "연결 상태를 확인하고 있습니다"}</strong>
+      <span>${escapeHtml(message)}</span>
+      ${status === "fallback" ? `<button type="button" data-retry-home-load>다시 연결</button>` : ""}
     </div>
-  `;
+  </details>`;
 }
 function canUseDemoFallback() {
   return DEMO_FALLBACK_ENABLED;

@@ -60,17 +60,34 @@ import { parts } from "./make-message-parts.mjs";
         ${threadPolicyNote ? `<p class="make-thread-policy-note" role="note">${escapeHtml(threadPolicyNote)}</p>` : ""}
         ${
           hasMessages
-            ? messages.map(renderMessageBubble).join("")
+            ? renderConversationTurns(messages, renderMessageBubble, isThinking)
             : `<div class="empty-state make-empty">
                 <div class="spark-badge">${icons.make}</div>
                 <h1>프롬프트 첨삭 도우미</h1>
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
               </div>`
         }
-        ${isThinking ? MessageThinkingView() : ""}
+        ${isThinking && (!messages.length || messages.at(-1)?.role !== "user") ? MessageThinkingView() : ""}
         ${hasMessages ? `<button class="make-scroll-latest" type="button" data-scroll-latest-message aria-label="최신 대화로 이동">${icons.send}</button>` : ""}
       </div>
     `;
+  }
+
+  function renderConversationTurns(messages, renderMessageBubble, isThinking) {
+    const turns = [];
+    let current = [];
+    messages.forEach((message) => {
+      if (message?.role === "user" && current.length) {
+        turns.push(current);
+        current = [];
+      }
+      current.push(message);
+    });
+    if (current.length) turns.push(current);
+    return turns.map((turn, index) => {
+      const waitingForReply = isThinking && index === turns.length - 1 && turn.at(-1)?.role === "user";
+      return `<section class="conversation-turn ${waitingForReply ? "is-processing" : ""}" aria-label="대화 ${index + 1}">${turn.map(renderMessageBubble).join("")}${waitingForReply ? MessageThinkingView() : ""}</section>`;
+    }).join("");
   }
 
   function MessageThinkingView() {
@@ -92,7 +109,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">${templateCollapsed ? "&gt;" : "&lt;"}</button>
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 선택 펼치기" : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}"><span aria-hidden="true">${templateCollapsed ? "›" : "‹"}</span><small>분야</small></button>
         ${
           templateCollapsed
             ? ""
@@ -163,17 +180,18 @@ import { parts } from "./make-message-parts.mjs";
             ${visibleFolders.map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
           </div>
         </section>
-        <div class="make-side-head">
-          <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
-          <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
-        </div>
-        <label class="make-recent-search">
-          <span class="sr-only">최근 대화 검색</span>
-          <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
-          <button type="button" data-clear-recent-thread-search aria-label="최근 대화 검색어 지우기" hidden>&times;</button>
-        </label>
-        <p class="make-recent-search-status" data-recent-thread-search-status aria-live="polite">전체 ${visibleThreads.length}개</p>
-        ${
+        <section class="make-recent-section">
+          <div class="make-side-head">
+            <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
+            <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
+          </div>
+          <label class="make-recent-search">
+            <span class="sr-only">최근 대화 검색</span>
+            <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
+            <button type="button" data-clear-recent-thread-search aria-label="최근 대화 검색어 지우기" hidden>&times;</button>
+          </label>
+          <p class="make-recent-search-status" data-recent-thread-search-status aria-live="polite">전체 ${visibleThreads.length}개</p>
+          ${
           visibleThreads.length
             ? `<div class="recent-thread-list">
                 ${visibleThreads.map((thread, index) => `
@@ -219,7 +237,8 @@ import { parts } from "./make-message-parts.mjs";
                 <button type="button" data-clear-recent-thread-search>검색어 지우기</button>
               </div>`
             : `<p class="recent-empty">아직 저장된 대화가 없습니다.</p>`
-        }
+          }
+        </section>
       </aside>
     `;
   }

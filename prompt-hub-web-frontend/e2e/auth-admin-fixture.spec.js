@@ -85,6 +85,28 @@ test("an expired authenticated session returns to the login state", async ({ pag
   await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
 });
 
+test("topbar menus switch exclusively and close with outside click or Escape", async ({ page }) => {
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const settings = page.locator(".topbar-settings");
+  const backend = page.locator(".backend-status-menu");
+  await backend.locator("summary").click();
+  await expect(backend).toHaveJSProperty("open", true);
+  await settings.locator("summary").click();
+  await expect(settings).toHaveJSProperty("open", true);
+  await expect(backend).toHaveJSProperty("open", false);
+
+  await page.keyboard.press("Escape");
+  await expect(settings).toHaveJSProperty("open", false);
+  await expect(settings.locator("summary")).toBeFocused();
+
+  await settings.locator("summary").click();
+  await page.getByRole("heading", { name: "인기 프롬프트" }).click();
+  await expect(settings).toHaveJSProperty("open", false);
+});
+
 test("withdrawal explains the policy, discards the account scope, and preserves local conversations", async ({ page }) => {
   await seed(page, {
     isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token",
@@ -100,6 +122,7 @@ test("withdrawal explains the policy, discards the account scope, and preserves 
   });
 
   await gotoApp(page);
+  await page.locator(".topbar-settings > summary").click();
   await page.locator('[data-open-auth="withdraw"]').click();
   await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없습니다");
   await expect(page.locator(".auth-helper")).toContainText("기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다");

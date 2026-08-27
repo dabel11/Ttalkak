@@ -51,8 +51,17 @@
       remaining,
       showPromptTools,
     } = data;
+    const settingsMenu = state.isLoggedIn || showPromptTools
+      ? `<details class="topbar-settings">
+          <summary aria-label="계정 및 화면 설정">설정</summary>
+          <div class="topbar-settings-menu">
+            ${showPromptTools ? `<span class="topbar-settings-label">화면 도구</span><button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button><button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>` : ""}
+            ${state.isLoggedIn ? `<span class="topbar-settings-label">계정</span><button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>` : ""}
+          </div>
+        </details>`
+      : "";
     const resolvedAuthButton = state.isLoggedIn
-      ? `<div class="account-actions">${adminAccessButton}<button class="topbar-tool" type="button" data-open-auth="withdraw">회원탈퇴</button><button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+      ? `<div class="account-actions">${adminAccessButton}<button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button>${settingsMenu}</div>`
       : authButton;
 
     return `
@@ -64,14 +73,7 @@
         <div class="topbar-auth">
           ${resolvedAuthButton}
           ${BackendStatusBadge()}
-          ${
-            showPromptTools
-              ? `<div class="topbar-tools">
-                  <button class="topbar-tool ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported title="내가 신고한 게시물만 Home에서 숨깁니다." ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고 숨김 해제" : "신고 숨김"}</button>
-                  <button class="topbar-tool" type="button" data-reset-demo title="브라우저에 저장된 화면 상태만 지우며, 서버 DB 데이터는 삭제하지 않습니다.">데모 초기화</button>
-                </div>`
-              : ""
-          }
+          ${!state.isLoggedIn ? settingsMenu : ""}
           ${state.route === "make" && !state.isLoggedIn ? `<p class="make-auth-hint">비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.</p>` : ""}
         </div>
       </header>

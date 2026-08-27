@@ -68,7 +68,14 @@
       ctx.render();
     }
 
-    return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, scheduleSearchCommit, showSearchTipOnce });
+    async function retryHomeLoad() {
+      ctx.state.backendStatus = "checking";
+      ctx.state.backendStatusMessage = "Home 프롬프트를 다시 불러오는 중입니다.";
+      ctx.render();
+      await ctx.refresh();
+    }
+
+    return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, retryHomeLoad, scheduleSearchCommit, showSearchTipOnce });
   }
 
 export { createHomeController };

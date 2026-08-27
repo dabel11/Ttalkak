@@ -50,13 +50,13 @@
             <h1 id="popular-heading">${isSearching ? "검색 결과" : "인기 프롬프트"}</h1>
           </div>
           <label class="sort-select">
-            <span class="sr-only">정렬</span>
+            <span aria-hidden="true">정렬</span>
             <select data-popular-sort aria-label="프롬프트 정렬 기준">
-              ${SortOption("popular", "인기")}
-              ${SortOption("saves", "저장")}
-              ${SortOption("comments", "댓글")}
-              ${SortOption("likes", "좋아요")}
-              ${SortOption("latest", "최신")}
+              ${SortOption("popular", "인기순")}
+              ${SortOption("saves", "저장순")}
+              ${SortOption("comments", "댓글순")}
+              ${SortOption("likes", "좋아요순")}
+              ${SortOption("latest", "최신순")}
             </select>
           </label>
         </div>
@@ -65,13 +65,16 @@
             ? `<div class="prompt-grid" aria-label="인기 프롬프트 목록">${pagePrompts.map((prompt) => PromptCard(prompt, { showStatus: false })).join("")}</div>
                ${Pagination(totalPages, currentPage)}`
             : state.backendStatus === "fallback" && !canShowDemoFallback
-              ? `<div class="empty-state search-empty">
-                  <span>${icons.search}</span>
-                  <p>서버 데이터를 불러오지 못했습니다. 백엔드 연결과 Network 응답을 확인해주세요.</p>
+              ? `<div class="empty-state search-empty search-error" role="alert">
+                  <span class="empty-state-icon">${icons.search}</span>
+                  <h2>프롬프트를 불러오지 못했습니다</h2>
+                  <p>네트워크 연결을 확인한 뒤 다시 불러와 주세요.</p>
+                  <button type="button" data-retry-home-load>다시 불러오기</button>
                 </div>`
               : `<div class="empty-state search-empty">
-                  <span>${icons.search}</span>
-                  <p>일치하는 프롬프트가 없습니다.</p>
+                  <span class="empty-state-icon">${icons.search}</span>
+                  <h2>${isSearching ? "검색 결과가 없습니다" : "아직 표시할 프롬프트가 없습니다"}</h2>
+                  <p>${isSearching ? "검색어나 검색 대상을 바꿔보세요." : "새로운 프롬프트가 등록되면 이곳에 표시됩니다."}</p>
                 </div>`
         }
       </section>
