@@ -536,7 +536,11 @@ test("Make groups turns and keeps one recent-list scrollbar with a labeled field
   ];
   await openMake(page, messages);
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
-  await expect(page.locator("[data-toggle-templates]")).toContainText("분야");
+  const fieldToggle = page.locator("[data-toggle-templates]");
+  await expect(fieldToggle).toContainText("분야");
+  expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(62);
+  const toolbarColumns = await page.locator(".make-template-bar").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").map(Number.parseFloat));
+  expect(toolbarColumns[0]).toBeGreaterThanOrEqual(62);
   expect(await page.locator(".make-side-panel").evaluate((element) => getComputedStyle(element).overflowY)).toBe("hidden");
   expect(await page.locator(".recent-thread-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
 });
