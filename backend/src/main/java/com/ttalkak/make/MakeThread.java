@@ -9,6 +9,9 @@ public class MakeThread {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Version
+    @Column(nullable = false)
+    private Long version = 0L;
 
     @Column(nullable = false)
     private Long memberId;
@@ -32,6 +35,7 @@ public class MakeThread {
     }
 
     public Long getId() { return id; }
+    public Long getVersion() { return version; }
     public Long getMemberId() { return memberId; }
     public Long getFolderId() { return folderId; }
     public String getTitle() { return title; }

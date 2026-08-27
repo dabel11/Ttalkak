@@ -53,15 +53,15 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
   const { commentsByPrompt, popularPrompts, saveCurrentAccountScope, savedPrompts, state } = ctx;
   saveCurrentAccountScope();
   writePersistedPayload({
-    popularPrompts,
-    savedPrompts: savedPrompts
+    "popularPrompts": popularPrompts,
+    "savedPrompts": savedPrompts
       .filter((/** @returns {prompt is TtalkakStateEntity & {id: TtalkakId}} */ prompt) => prompt.id !== undefined && (!state.pendingUnsaveIds.has(prompt.id) || prompt.source === "mine"))
       .map((prompt) => {
         const promptId = /** @type {TtalkakId} */ (prompt.id);
         return state.pendingUnsaveIds.has(promptId) && prompt.source === "mine" ? { ...prompt, savedByMe: false } : prompt;
       }),
-    commentsByPrompt,
-    state: {
+    "commentsByPrompt": commentsByPrompt,
+    "state": {
       isLoggedIn: state.isLoggedIn,
       currentUser: state.currentUser,
       currentUserId: state.currentUserId,
@@ -123,19 +123,19 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
 
   const parsed = readPersistedPayload();
   if (!parsed) return;
-  if (Array.isArray(parsed.popularPrompts)) {
-    popularPrompts.splice(0, popularPrompts.length, ...parsed.popularPrompts);
+  if (Array.isArray(parsed["popularPrompts"])) {
+    popularPrompts.splice(0, popularPrompts.length, ...parsed["popularPrompts"]);
   }
-  if (Array.isArray(parsed.savedPrompts)) {
-    savedPrompts.splice(0, savedPrompts.length, ...parsed.savedPrompts);
+  if (Array.isArray(parsed["savedPrompts"])) {
+    savedPrompts.splice(0, savedPrompts.length, ...parsed["savedPrompts"]);
     normalizeSavedPromptOwnership();
   }
-  if (parsed.commentsByPrompt && typeof parsed.commentsByPrompt === "object") {
+  if (parsed["commentsByPrompt"] && typeof parsed["commentsByPrompt"] === "object") {
     Object.keys(commentsByPrompt).forEach((key) => delete commentsByPrompt[key]);
-    Object.assign(commentsByPrompt, parsed.commentsByPrompt);
+    Object.assign(commentsByPrompt, parsed["commentsByPrompt"]);
   }
 
-  const savedState = parsed.state || {};
+  const savedState = parsed["state"] || {};
   const storedToken = readStorageItem(AUTH_TOKEN_KEY);
   const restoredToken = storedToken || savedState.authToken || savedState.token || "";
   state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);

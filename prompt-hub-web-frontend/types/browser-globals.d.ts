@@ -141,6 +141,7 @@ interface TtalkakModuleRegistry {
   make: {
     preview: TtalkakCallableModule;
     messageModel: TtalkakCallableModule;
+    requestId: { createMakeRequestCorrelation(value: unknown): string };
     state: TtalkakCallableModule;
     focus: TtalkakCallableModule;
     persistence: TtalkakCallableModule;

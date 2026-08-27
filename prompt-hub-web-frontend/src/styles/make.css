@@ -316,6 +316,7 @@
 }
 
 .make-recent-search {
+  position: relative;
   display: block;
   margin: 0 0 10px;
 }
@@ -326,7 +327,7 @@
   border: 1px solid #d9e5e0;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.82);
-  padding: 7px 11px;
+  padding: 7px 36px 7px 11px;
   color: #173f35;
 }
 
@@ -1666,6 +1667,50 @@ h1 {
   font-weight: 700;
   line-height: 1.35;
 }
+
+.make-recent-search button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 81, 67, 0.08);
+  color: #31544a;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.make-recent-search-status { margin: -5px 2px 7px; color: #31544a; font-size: 0.75rem; }
+.make-recent-search-empty { display: grid; justify-items: start; gap: 8px; padding: 14px 12px; border: 1px dashed rgba(11, 81, 67, 0.2); border-radius: 12px; color: #47675e; }
+.make-recent-search-empty[hidden] { display: none; }
+.make-recent-search-empty button { padding: 6px 10px; border: 1px solid rgba(11, 81, 67, 0.2); border-radius: 999px; background: #fff; color: #0b5143; }
+.message-failure-status.refresh { background: #fff8ed; border-color: #edc98e; color: #71450d; }
+.message-failure-status.recovered { background: #eef7f3; border-color: #a9cfc0; color: #154f40; }
+.message-failure-status.refresh strong,
+.message-failure-status.refresh span,
+.message-failure-status.refresh small,
+.message-failure-status.recovered strong,
+.message-failure-status.recovered span,
+.message-failure-status.recovered small { display: block; }
+.message-failure-status.refresh span,
+.message-failure-status.recovered span { margin-top: 4px; }
+.concurrency-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.concurrency-compare small { min-width: 0; padding: 9px; border: 1px solid rgba(21, 79, 64, 0.14); border-radius: 9px; background: rgba(255, 255, 255, 0.62); overflow-wrap: anywhere; }
+.concurrency-compare b { display: block; margin-bottom: 4px; font-size: 0.72rem; opacity: 0.72; }
+.concurrency-compare em { grid-column: 1 / -1; color: #7a4b12; font-size: 0.76rem; font-style: normal; }
+.message-failure-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.message-failure-actions .secondary { background: transparent; color: inherit; border: 1px solid currentColor; }
+.message-failure-actions button[aria-busy="true"]::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: make-recovery-spin 0.7s linear infinite; }
+.concurrency-new-chat-help { flex-basis: 100%; margin-top: 0 !important; color: inherit; opacity: 0.78; }
+@keyframes make-recovery-spin { to { transform: rotate(360deg); } }
+@media (max-width: 620px) { .concurrency-compare { grid-template-columns: 1fr; } .concurrency-compare em { grid-column: 1; } }
+.composer.is-restored textarea { animation: make-composer-restored 1.4s ease-out; }
+@keyframes make-composer-restored { 0% { box-shadow: 0 0 0 0 rgba(16, 91, 72, .38); } 45% { box-shadow: 0 0 0 5px rgba(16, 91, 72, .16); } 100% { box-shadow: 0 0 0 0 rgba(16, 91, 72, 0); } }
+@media (prefers-reduced-motion: reduce) { .composer.is-restored textarea { animation: none; outline: 2px solid #75a99a; } .message-failure-actions button[aria-busy="true"]::before { animation: none; } }
 
 .prompt-placeholder-chip {
   display: inline-block;

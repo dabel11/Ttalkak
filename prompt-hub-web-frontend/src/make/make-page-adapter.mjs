@@ -111,6 +111,7 @@ export function createMakePageAdapter(ctx) {
     const isAssistant = message.role === "assistant";
     const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
     const failure = !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure : null;
+    const failurePresentation = failure ? ctx.messageModel.getMakeFailurePresentation(failure) : null;
     return ctx.MessageBubbleView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
       {
@@ -125,10 +126,16 @@ export function createMakePageAdapter(ctx) {
         improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
         isCopied: ctx.state.copiedMessageId === message.id,
         isEditing: !isAssistant && ctx.state.editingMessageId === message.id,
-        failureMessage: failure?.message || "",
+        failureTitle: failurePresentation?.title || "",
+        failureMessage: failurePresentation?.description || failurePresentation?.title || "",
+        failureTone: failurePresentation?.tone || "",
         failureKind: failure?.kind || "",
         failureRetryable: Boolean(failure?.retryable),
         failureAction: failure ? ctx.messageModel.getMakeFailureAction(failure) : null,
+        failureRepeated: Boolean(failure?.repeated || message.concurrencyRepeated),
+        recoveryAction: ctx.requestState.recoveryMessageId === String(message.id || "") ? ctx.requestState.recoveryAction : "",
+        retryMode: message.retryMode || failure?.retryMode || "",
+        retryTargetContent: message.retryTargetContent || "",
         isSaved: isAssistant && ctx.isPromptSaved(message.id),
         isThinking: ctx.isThinking() || ctx.requestState.inFlight,
         isUnchanged: Boolean(message.isUnchanged),
