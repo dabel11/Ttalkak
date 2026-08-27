@@ -30,12 +30,13 @@
     "verify:full": "npm run verify && npm run test:e2e && npm run test:e2e:firefox && npm run test:e2e:prod"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.12.1",
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.61.1",
+    "@playwright/test": "1.62.1",
     "esbuild": "0.28.2",
-    "eslint": "10.8.0",
-    "globals": "17.7.0",
+    "eslint": "10.8.1",
+    "globals": "17.11.0",
+    "terser": "5.50.0",
     "typescript": "7.0.2"
   }
 }

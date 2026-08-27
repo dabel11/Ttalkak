@@ -1,12 +1,12 @@
 {
-  "commit": "b19392c",
+  "commit": "3fc6dcf",
   "javascript": {
     "files": 9,
-    "rawBytes": 376790,
-    "gzipBytes": 112095
+    "rawBytes": 358491,
+    "gzipBytes": 108136
   },
   "initialJavascript": {
-    "rawBytes": 235755,
-    "gzipBytes": 70153
+    "rawBytes": 214341,
+    "gzipBytes": 65118
   }
 }

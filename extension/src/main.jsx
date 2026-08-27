@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -11,6 +11,8 @@ import { useConversation } from "./hooks/useConversation";
 import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
+import { showTransientNotice } from "./utils/transientNotice";
+import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
 import "./styles.css";
 import "./styles/response.css";
 
@@ -24,6 +26,13 @@ function App() {
   const [ragConfig] = useState(loadBackendConfig);
   const composerRef = useRef(null);
   const noticeTimerRef = useRef(null);
+  const [recoveryState, setRecoveryState] = useState({ messageId: "", action: "" });
+  const [recoveryCoordinator] = useState(() => createRecoveryActionCoordinator(setRecoveryState));
+
+  useEffect(() => {
+    recoveryCoordinator.activate();
+    return () => recoveryCoordinator.dispose();
+  }, [recoveryCoordinator]);
 
   const {
     authMode,
@@ -83,6 +92,8 @@ function App() {
     cancelEditMessage,
     submitEditedMessage,
     requestDeleteRecentThread,
+    retryFailedMessage,
+    refreshFailedConcurrency,
   } = useConversation({
     authSession,
     executeTarget,
@@ -94,6 +105,22 @@ function App() {
     showNotice,
     onAuthExpired: handleAuthExpired,
   });
+  const focusedConflictId = useRef("");
+  useEffect(() => {
+    const conflict = [...messages].reverse().find((message) => message?.failure?.kind === "concurrency");
+    if (!conflict || focusedConflictId.current === conflict.id) return;
+    focusedConflictId.current = conflict.id;
+    const prompt = String(conflict.sourcePrompt || "");
+    requestAnimationFrame(() => {
+      const input = composerRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange?.(prompt.length, prompt.length);
+      input.closest("form")?.classList.add("is-restored");
+      window.setTimeout(() => input.closest("form")?.classList.remove("is-restored"), 1400);
+      showTransientNotice({ setNotice, timerRef: noticeTimerRef, message: "입력 내용이 입력란에 복원되었습니다.", host: window });
+    });
+  }, [messages]);
 
   const filteredRecentThreads = useMemo(() => {
     if (activeTab !== "recents") return recentThreads;
@@ -103,9 +130,7 @@ function App() {
   const { answeringQuestions } = useAskAnswers({ messages, isLoading, composerRef });
 
   function showNotice(message) {
-    setNotice(message);
-    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(() => setNotice(""), 1800);
+    showTransientNotice({ setNotice, timerRef: noticeTimerRef, message, host: window });
   }
 
   function handleStartNewChat() {
@@ -132,18 +157,43 @@ function App() {
     });
   }
 
-  function handleResolveError(message) {
+  function focusRestoredComposer(prompt) {
+    requestAnimationFrame(() => {
+      const input = composerRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange?.(prompt.length, prompt.length);
+      input.closest("form")?.classList.add("is-restored");
+      window.setTimeout(() => input.closest("form")?.classList.remove("is-restored"), 1400);
+      showNotice("입력 내용이 입력란에 복원되었습니다.");
+    });
+  }
+
+  async function handleResolveError(message) {
+    if (recoveryCoordinator.isActive()) return;
     if (message?.failure?.requiresLogin) {
       setAuthMode("login");
       return;
     }
-    const prompt = String(message?.sourcePrompt || "").trim();
-    if (!prompt) return;
+    const action = message?.failure?.kind === "concurrency_refresh" ? "refresh" : "retry";
+    const recovery = recoveryCoordinator.start(message?.id, action);
+    if (!recovery) return;
+    try {
+      if (action === "refresh") {
+        if (await refreshFailedConcurrency(message)) focusRestoredComposer(String(message.sourcePrompt || ""));
+        return;
+      }
+      await retryFailedMessage(message);
+    } finally {
+      recoveryCoordinator.finish(recovery);
+    }
+  }
+
+  function handleContinueConflictInNewChat(message) {
+    const prompt = String(message?.sourcePrompt || "");
+    startNewChat();
     setComposerValue(prompt);
-    requestAnimationFrame(() => {
-      composerRef.current?.focus();
-      composerRef.current?.setSelectionRange(prompt.length, prompt.length);
-    });
+    focusRestoredComposer(prompt);
   }
 
   return (
@@ -195,6 +245,8 @@ function App() {
             }}
             onRefineUnchanged={handleRefineUnchanged}
             onResolveError={handleResolveError}
+            onContinueConflictInNewChat={handleContinueConflictInNewChat}
+            recoveryState={recoveryState}
             onSelectExample={handleSelectExample}
           />
           <Composer

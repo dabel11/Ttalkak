@@ -32,7 +32,9 @@
     "sources": { "type": "array" },
     "ragStatus": { "type": "string", "minLength": 1 },
     "threadId": { "type": ["integer", "string", "null"] },
-    "conversationId": { "type": ["integer", "string", "null"] }
+    "conversationId": { "type": ["integer", "string", "null"] },
+    "requestId": { "type": ["string", "null"], "maxLength": 128 },
+    "replayed": { "type": "boolean" }
   },
   "allOf": [
     {

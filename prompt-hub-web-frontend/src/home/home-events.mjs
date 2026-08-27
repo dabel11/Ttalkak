@@ -18,6 +18,7 @@
     root.querySelector("[data-search-help]")?.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); searchInput?.focus(); });
     const sort = root.querySelector("[data-popular-sort]");
     sort?.addEventListener("change", () => controller.changeSort(sort.value));
+    root.querySelector("[data-retry-home-load]")?.addEventListener("click", () => controller.retryHomeLoad());
     root.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => controller.changePage(button.dataset.page)));
   }
 

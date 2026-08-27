@@ -289,7 +289,7 @@ export function createAdminView(ctx) {
 
     function getAdminModeNotice() {
       if (state.adminBackendStatus === "fallback" && !canUseDemoFallback()) {
-        return "관리자 API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 관리자 데이터를 표시하지 않습니다.";
+        return "서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.";
       }
       if (state.adminBackendStatus === "demo") {
         return "데모 관리자 데이터를 표시 중입니다. 실제 운영 검수는 관리자 토큰으로 백엔드 API 연결 상태에서 확인해주세요.";

@@ -364,12 +364,13 @@ public class PromptController {
 		);
 	}
 
-	private void replaceMessageAndAppendResponse(
-			List<Map<String, Object>> messages,
-			int messageIndex,
-			String prompt,
-			Map<String, Object> response
-	) {
+    private void replaceMessageAndAppendResponse(
+            List<Map<String, Object>> messages,
+            int messageIndex,
+            String prompt,
+            String requestId,
+            Map<String, Object> response
+    ) {
 		Map<String, Object> editedMessage =
 				new LinkedHashMap<>(
 						messages.get(messageIndex)
@@ -379,6 +380,7 @@ public class PromptController {
 
 		editedMessage.put("content", prompt);
 		editedMessage.put("editedAt", now);
+        putRequestId(editedMessage, requestId);
 
 		while (messages.size() > messageIndex) {
 			messages.remove(messages.size() - 1);
@@ -419,6 +421,7 @@ public class PromptController {
     private void appendMessages(
             List<Map<String, Object>> messages,
             String prompt,
+            String requestId,
             Map<String, Object> response
     ) {
         String now = LocalDateTime.now().toString();
@@ -433,6 +436,7 @@ public class PromptController {
         userMessage.put("role", "user");
         userMessage.put("content", prompt);
         userMessage.put("createdAt", now);
+        putRequestId(userMessage, requestId);
 
         Map<String, Object> assistantMessage =
                 new LinkedHashMap<>();
@@ -481,6 +485,119 @@ public class PromptController {
         )) {
             target.put(field, response.get(field));
         }
+    }
+
+    private String normalizeRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return null;
+        }
+
+        String normalized = requestId.trim();
+
+        if (normalized.length() > 128) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "REQUEST_ID_INVALID",
+                    "requestId는 128자 이하여야 합니다."
+            );
+        }
+
+        return normalized;
+    }
+
+    private Map<String, Object> findIdempotentResponse(
+            List<Map<String, Object>> messages,
+            String requestId,
+            String prompt
+    ) {
+        if (requestId == null) {
+            return null;
+        }
+
+        for (int index = 0; index < messages.size(); index++) {
+            Map<String, Object> message = messages.get(index);
+
+            if (!"user".equalsIgnoreCase(stringValue(message.get("role")))) {
+                continue;
+            }
+
+            if (!Objects.equals(
+                    requestId,
+                    stringValue(message.get("requestId"))
+            )) {
+                continue;
+            }
+
+            if (!Objects.equals(
+                    prompt,
+                    stringValue(message.get("content"))
+            )) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "REQUEST_ID_REUSED",
+                        "같은 requestId를 다른 요청에 사용할 수 없습니다."
+                );
+            }
+
+            if (index + 1 >= messages.size()) {
+                return null;
+            }
+
+            Map<String, Object> assistantMessage =
+                    messages.get(index + 1);
+
+            if (!"assistant".equalsIgnoreCase(
+                    stringValue(assistantMessage.get("role"))
+            )) {
+                return null;
+            }
+
+            Map<String, Object> response =
+                    new LinkedHashMap<>();
+
+            copyImproveContractFields(
+                    response,
+                    assistantMessage
+            );
+
+            response.put(
+                    "improvedPrompt",
+                    assistantMessage.get("improvedPrompt")
+            );
+            response.put(
+                    "sources",
+                    assistantMessage.getOrDefault(
+                            "sources",
+                            List.of()
+                    )
+            );
+            response.put(
+                    "ragStatus",
+                    assistantMessage.get("ragStatus")
+            );
+
+            return response;
+        }
+
+        return null;
+    }
+
+    private String stringValue(Object value) {
+        return value == null
+                ? null
+                : String.valueOf(value);
+    }
+
+    private void putRequestId(
+            Map<String, Object> message,
+            String requestId
+    ) {
+        if (requestId == null) {
+            message.remove("requestId");
+            return;
+        }
+
+        message.put("requestId", requestId);
     }
 
     private List<Map<String, Object>> readMessages(String json) {
@@ -632,6 +749,8 @@ public class PromptController {
 	MakeThread thread = null;
 	List<Map<String, Object>> messages;
 	int editedMessageIndex = -1;
+    String requestId =
+        normalizeRequestId(request.requestId());
 
 	if (requestedThreadId != null) {
 		thread = makeThreadRepository
@@ -648,6 +767,38 @@ public class PromptController {
 		messages = readMessages(
 				thread.getMessagesJson()
 		);
+
+    Map<String, Object> previousResponse =
+        findIdempotentResponse(
+                messages,
+                requestId,
+                prompt
+        );
+
+    if (previousResponse != null) {
+        previousResponse.put(
+                "conversationId",
+                thread.getId()
+        );
+        previousResponse.put(
+                "threadId",
+                thread.getId()
+        );
+        previousResponse.put(
+                "requestId",
+                requestId
+        );
+        previousResponse.put("replayed", true);
+
+        if (editingMessage) {
+            previousResponse.put(
+                    "editedMessageId",
+                    messageId
+            );
+        }
+
+        return previousResponse;
+    }
 
 		if (editingMessage) {
 			editedMessageIndex =
@@ -740,12 +891,14 @@ public class PromptController {
 						messages,
 						editedMessageIndex,
 						prompt,
+                        requestId,
 						body
 				);
 			} else {
 				appendMessages(
 						messages,
 						prompt,
+                        requestId,
 						body
 				);
 			}
@@ -773,6 +926,8 @@ public class PromptController {
 
         body.put("conversationId", savedThreadId);
         body.put("threadId", savedThreadId);
+        body.put("requestId", requestId);
+        body.put("replayed", false);
 
 		if (editingMessage) {
 			body.put("editedMessageId", messageId);
@@ -1156,12 +1311,32 @@ public class PromptController {
 
     public record SharePromptRequest(String title, String text, List<String> tags) {}
     public record VisibilityRequest(Boolean isShared) {}
-	public record ImproveRequest(
-			String prompt,
-			String category,
-			Long conversationId,
-			Long threadId,
-			String messageId,
-			List<Map<String, String>> history
-	) {}
+    public record ImproveRequest(
+            String prompt,
+            String category,
+            Long conversationId,
+            Long threadId,
+            String messageId,
+            String requestId,
+            List<Map<String, String>> history
+    ) {
+        public ImproveRequest(
+                String prompt,
+                String category,
+                Long conversationId,
+                Long threadId,
+                String messageId,
+                List<Map<String, String>> history
+        ) {
+            this(
+                    prompt,
+                    category,
+                    conversationId,
+                    threadId,
+                    messageId,
+                    null,
+                    history
+            );
+        }
+    }
 }

@@ -33,6 +33,22 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(entry, /await import\(["']\.\/demo-data\.mjs["']\)/);
   assert.doesNotMatch(entry, /^import\s+["']\.\/demo-data\.mjs["'];?$/m);
   assert.match(build, /splitting:\s*true/);
+  assert.match(build, /compressProductionJavaScript/);
+  assert.match(build, /terser\.minify/);
+  assert.match(build, /booleans_as_integers:\s*true/);
+  assert.match(build, /passes:\s*3/);
+  assert.match(build, /pure_getters:\s*true/);
+  assert.match(build, /unsafe:\s*true/);
+  assert.match(build, /unsafe_arrows:\s*true/);
+  assert.match(build, /internalContextPropertyPattern/);
+  assert.match(build, /productionManglePropertyPattern/);
+  assert.match(build, /keep_quoted:\s*["']strict["']/);
+  assert.match(build, /const nameCache = \{\}/);
+  assert.match(build, /nameCache,/);
+  assert.match(build, /comments:\s*isEntry\s*\?\s*\/\^!\//);
+  assert.match(build, /banner:\s*\{\s*js:\s*`\/\*! \$\{productionCompressionPolicy\} \*\/`\s*\}/);
+  assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
+  assert.match(build, /metafile\.outputs\[output\]\.bytes\s*=\s*Buffer\.byteLength\(compressed\)/);
   assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
   assert.match(build, /Production bundle must not contain the development-only demo data chunk/);
   assert.match(build, /Production bundle must not contain development-only demo seed records/);
@@ -42,6 +58,18 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /maxRetries:\s*5/);
   const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
   assert.match(packageJson.scripts.verify, /analyze:bundle/);
+});
+
+test("persisted state envelope stays stable while internal state properties are mangled", () => {
+  const persistence = fs.readFileSync(path.resolve(__dirname, "../src/state/state-persistence.mjs"), "utf8");
+  assert.match(persistence, /["']state["']\s*:\s*\{/);
+  assert.match(persistence, /parsed\[["']state["']\]/);
+  assert.match(persistence, /["']savedPrompts["']\s*:/);
+  assert.match(persistence, /parsed\[["']savedPrompts["']\]/);
+  assert.match(persistence, /["']popularPrompts["']\s*:/);
+  assert.match(persistence, /parsed\[["']popularPrompts["']\]/);
+  assert.match(persistence, /["']commentsByPrompt["']\s*:/);
+  assert.match(persistence, /parsed\[["']commentsByPrompt["']\]/);
 });
 
 test("production renderers share the Admin, Make, and Share runtime chunks", () => {

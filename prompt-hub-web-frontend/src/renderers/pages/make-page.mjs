@@ -60,17 +60,34 @@ import { parts } from "./make-message-parts.mjs";
         ${threadPolicyNote ? `<p class="make-thread-policy-note" role="note">${escapeHtml(threadPolicyNote)}</p>` : ""}
         ${
           hasMessages
-            ? messages.map(renderMessageBubble).join("")
+            ? renderConversationTurns(messages, renderMessageBubble, isThinking)
             : `<div class="empty-state make-empty">
                 <div class="spark-badge">${icons.make}</div>
                 <h1>프롬프트 첨삭 도우미</h1>
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
               </div>`
         }
-        ${isThinking ? MessageThinkingView() : ""}
+        ${isThinking && (!messages.length || messages.at(-1)?.role !== "user") ? MessageThinkingView() : ""}
         ${hasMessages ? `<button class="make-scroll-latest" type="button" data-scroll-latest-message aria-label="최신 대화로 이동">${icons.send}</button>` : ""}
       </div>
     `;
+  }
+
+  function renderConversationTurns(messages, renderMessageBubble, isThinking) {
+    const turns = [];
+    let current = [];
+    messages.forEach((message) => {
+      if (message?.role === "user" && current.length) {
+        turns.push(current);
+        current = [];
+      }
+      current.push(message);
+    });
+    if (current.length) turns.push(current);
+    return turns.map((turn, index) => {
+      const waitingForReply = isThinking && index === turns.length - 1 && turn.at(-1)?.role === "user";
+      return `<section class="conversation-turn ${waitingForReply ? "is-processing" : ""}" aria-label="대화 ${index + 1}">${turn.map(renderMessageBubble).join("")}${waitingForReply ? MessageThinkingView() : ""}</section>`;
+    }).join("");
   }
 
   function MessageThinkingView() {
@@ -92,7 +109,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 버튼 펼치기" : "분야 버튼 숨기기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">${templateCollapsed ? "&gt;" : "&lt;"}</button>
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 선택 펼치기" : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}"><span aria-hidden="true">${templateCollapsed ? "›" : "‹"}</span><small>분야</small></button>
         ${
           templateCollapsed
             ? ""
@@ -110,6 +127,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
+        <span class="sr-only" role="status" aria-live="polite" data-composer-restore-status></span>
         <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
         <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
@@ -162,15 +180,18 @@ import { parts } from "./make-message-parts.mjs";
             ${visibleFolders.map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
           </div>
         </section>
-        <div class="make-side-head">
-          <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
-          <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
-        </div>
-        <label class="make-recent-search">
-          <span class="sr-only">최근 대화 검색</span>
-          <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
-        </label>
-        ${
+        <section class="make-recent-section">
+          <div class="make-side-head">
+            <span class="make-side-title"><strong title="${escapeAttr(activeFolderName)}">${escapeHtml(formatMakeSidebarLabel(activeFolderName, "최근 대화", 18))}</strong><small>${visibleThreads.length}</small></span>
+            <button class="make-side-create" type="button" data-new-chat aria-label="새 대화" title="새 대화">+</button>
+          </div>
+          <label class="make-recent-search">
+            <span class="sr-only">최근 대화 검색</span>
+            <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
+            <button type="button" data-clear-recent-thread-search aria-label="최근 대화 검색어 지우기" hidden>&times;</button>
+          </label>
+          <p class="make-recent-search-status" data-recent-thread-search-status aria-live="polite">전체 ${visibleThreads.length}개</p>
+          ${
           visibleThreads.length
             ? `<div class="recent-thread-list">
                 ${visibleThreads.map((thread, index) => `
@@ -210,9 +231,14 @@ import { parts } from "./make-message-parts.mjs";
                     </div>
                   </article>
                 `).join("")}
+              </div>
+              <div class="make-recent-search-empty" data-recent-thread-search-empty hidden>
+                <strong>검색 결과가 없습니다</strong>
+                <button type="button" data-clear-recent-thread-search>검색어 지우기</button>
               </div>`
             : `<p class="recent-empty">아직 저장된 대화가 없습니다.</p>`
-        }
+          }
+        </section>
       </aside>
     `;
   }
@@ -294,7 +320,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRetryable, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, recoveryAction, retryMode, retryTargetContent, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -349,7 +375,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId })}
+        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId })}
       </div>
     `;
   }
@@ -367,13 +393,26 @@ import { parts } from "./make-message-parts.mjs";
 
   function UserMessageView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { canSplit, content, failureAction, failureKind, failureMessage, failureRetryable, isEditing, role, safeContent, safeMessageId } = data;
+    const { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId } = data;
     if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
+    const recoveryPending = Boolean(recoveryAction);
+    const recoveryLabel = recoveryAction === "refresh" ? "불러오는 중…" : recoveryAction === "retry" ? "보내는 중…" : "";
     const failureButton = failureAction?.id === "login"
       ? `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
+      : failureAction?.id === "reload-thread"
+        ? `<button type="button" data-refresh-concurrent="${safeMessageId}" ${recoveryPending ? "disabled aria-busy=\"true\"" : ""}>${escapeHtml(recoveryLabel || failureAction.label)}</button>`
+      : failureAction?.id === "retry-after-refresh"
+        ? `<button type="button" data-retry-concurrent="${safeMessageId}" ${recoveryPending ? "disabled aria-busy=\"true\"" : ""}>${escapeHtml(recoveryLabel || failureAction.label)}</button>`
       : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";
-    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureMessage ? `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>` : ""}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
+    const editDiffers = retryMode === "edit" && String(content || "").trim() !== String(retryTargetContent || "").trim();
+    const editPreview = failureMessage && retryMode === "edit" ? `<div class="concurrency-compare" aria-label="충돌한 수정 내용 비교"><small><b>수정한 내용</b>${escapeHtml(String(content || "").slice(0, 120))}</small><small><b>서버 최신 내용</b>${escapeHtml(String(retryTargetContent || "내용을 찾지 못했습니다.").slice(0, 120))}</small>${editDiffers ? `<em>두 내용이 다릅니다. 확인한 뒤 다시 보내 주세요.</em>` : ""}</div>` : "";
+    const newChatButton = failureRepeated ? `<button type="button" class="secondary" data-concurrency-new-chat="${safeMessageId}" ${recoveryPending ? "disabled" : ""}>새 대화에서 계속하기</button><small class="concurrency-new-chat-help">현재 입력을 새 대화로 옮기며 기존 대화는 유지됩니다.</small>` : "";
+    const concurrencyFailure = failureKind === "concurrency" || failureKind === "concurrency_refresh";
+    const failureStatus = !failureMessage ? "" : concurrencyFailure
+      ? `<div class="message-failure-status ${escapeAttr(failureTone)}" role="${failureRole}"><strong>${escapeHtml(failureTitle)}</strong><span>${escapeHtml(failureMessage)}</span>${editPreview}<div class="message-failure-actions">${failureButton}${newChatButton}</div></div>`
+      : `<div class="message-failure-status" role="${failureRole}">${escapeHtml(failureMessage)} ${failureButton}</div>`;
+    return `<article class="message ${escapeAttr(role)}"><p>${renderPromptTextWithPlaceholders(content, escapeHtml)}</p>${failureStatus}<div class="user-message-actions">${canSplit ? `<button class="user-message-split-button" type="button" data-split-thread-from="${safeMessageId}" aria-label="이 메시지부터 새 대화로 분리" title="새 대화로 분리">↗</button>` : ""}<button class="user-message-edit-button" type="button" data-edit-message="${safeMessageId}" aria-label="메시지 수정" title="수정">${icons.edit}</button></div></article>`;
   }
 
   const renderers = Object.freeze({

@@ -2,6 +2,14 @@
 
 This document records frontend decisions that remain valid regardless of which AI or RAG design is selected. Research papers and experiments may motivate a proposal, but they do not change the frontend contract until the AI, backend, and frontend owners agree on an API example and rollout plan.
 
+## Dependency update automation
+
+- `.github/dependabot.yml` creates separate weekly update PRs for the web frontend, Chrome Extension, and GitHub Actions.
+- Version-update PRs target `develop-integrated`; the configuration must also be present on the repository default branch (`main`) for Dependabot to activate it.
+- Patch and minor updates are grouped per frontend surface. Major updates are intentionally excluded and require a separately planned compatibility review.
+- Dependabot PRs must pass the same CI jobs as human-authored changes and are not auto-merged by this policy.
+- Repository-level Dependabot security updates remain governed by GitHub settings and are not disabled by the version-update grouping policy.
+
 ## 1. Production configuration register
 
 Complete every `TBD` before a production release. Values containing credentials or private keys must live in the deployment secret store, not in this repository.
@@ -36,6 +44,34 @@ An AI/backend response change is ready for frontend implementation only after th
 9. Verify previously stored and legacy messages still render.
 
 Unknown optional fields must be ignored safely. A paper, prototype, or backend-only experiment does not by itself authorize a frontend contract change.
+
+### 2.1 Make thread concurrency conflict
+
+`MakeThread` uses optimistic locking. If another request updates the same thread after the client request has read it, the stale request must not overwrite the newer messages.
+
+The backend returns:
+
+```json
+{
+  "timestamp": "2026-08-25T00:00:00Z",
+  "status": 409,
+  "error": "Conflict",
+  "code": "THREAD_CONCURRENTLY_UPDATED",
+  "message": "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.",
+  "path": "/api/prompts/improve"
+}
+```
+
+Frontend handling requirements:
+
+- Do not append the stale response to local conversation state.
+- Reload the latest thread through `GET /api/make/threads/{threadId}`.
+- Replace the local server-backed thread state with the reloaded messages.
+- Preserve the user's attempted prompt so it can be retried after refresh.
+- Show the backend message and an explicit retry action.
+- Do not retry automatically before refreshing because the conversation history has changed.
+- Treat `THREAD_CONCURRENTLY_UPDATED` separately from authentication, network, AI-service, timeout, and generic `409` failures.
+- Add this failure state to the shared fixture matrix before implementing client-specific behavior.
 
 ## 3. Shared AI response fixture policy
 
@@ -130,3 +166,13 @@ Use the local verification script at one of two levels:
 - `powershell -ExecutionPolicy Bypass -File scripts/verify-local.ps1 -Full` additionally runs Chromium fixture E2E, Firefox smoke, and production-bundle E2E.
 
 The script reads the ignored root `.env` without printing its values and restores the caller's database environment variables when it finishes. Browser E2E uses an isolated fixture server on `127.0.0.1:4174` and a production server on `127.0.0.1:4175`; override them with `TTALKAK_E2E_PORT` and `TTALKAK_E2E_PROD_PORT` when those ports are unavailable. Existing servers are never reused, so a collision fails with an explicit diagnostic instead of testing a stale preview.
+
+## 9. Make request idempotency boundary
+
+- Web and Extension generate a new `requestId` for each logged-in server-thread request.
+- A retry of the same prompt on the same thread reuses that ID; editing the prompt creates a new ID.
+- Failed-message state retains the ID so a response saved by the backend but lost in transit can be replayed without appending another turn.
+- `replayed: true` is treated as an ordinary successful response and must not create a duplicate local user or assistant message.
+- `409 / REQUEST_ID_REUSED` is non-retryable with the stale ID. Refresh the canonical server thread and require the next changed request to use a new ID.
+- Anonymous requests and a new conversation before it has a server `threadId` keep the existing non-idempotent behavior.
+- This contract deduplicates requests only after a turn has been saved. It does not guarantee serialization of two requests that reach the backend concurrently before either save completes; that remains a backend concurrency-policy responsibility. Frontend in-flight guards remain required but are not a server-side concurrency guarantee.
