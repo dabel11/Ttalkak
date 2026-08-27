@@ -5,6 +5,13 @@
 > 기본 설정: `use_reranker=True`, `use_hybrid=False`, `use_hyde=False`, `use_query_transform=False`, `min_score=0.40`.
 > 생성은 **2단계**(분석기 temp 0.2 → 생성기 temp 0.7) — 규약 v3, §1-[C0]/[C].
 
+> **⚠️ 2026-08-21 모델 교체 (중요)**: Groq가 **llama-3.x 계열을 폐기**해(`404 model_not_found`)
+> 아래 본문에 등장하는 `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` 는 **더 이상 호출되지 않는다**.
+> 현재 실제 사용 모델은 **생성 `openai/gpt-oss-120b`, 판단·변환 `openai/gpt-oss-20b`** (TPM 실측 각 8000).
+> 본문의 70b/8b 서술은 **교체 시점까지의 측정 근거로서 보존**한 것이며, 그 수치는 폐기 전 모델 기준이다.
+> 특히 `analyzer`·`query_transform` 은 폐기 이후 404 를 삼킨 채 동작해 왔으므로(분석 없이 진행),
+> 그 기간에 나온 평가 수치는 **분석기가 빠진 상태**의 값일 수 있어 재측정이 필요하다. (WORKLOG 2026-08-21)
+
 ---
 
 ## 0. 한눈에 보기

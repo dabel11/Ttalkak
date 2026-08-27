@@ -358,14 +358,14 @@ def _build_context_blocks(contexts: list[dict]) -> str:
 class GroqGenerator:
     """Groq API 사용 (무료 14,400회/일, 매우 빠름)"""
     GROQ_MODEL_MAP = {
-        "gemini-2.0-flash":  "llama-3.3-70b-versatile",
-        "gemini-1.5-flash":  "llama-3.1-8b-instant",
-        "gemini-1.5-pro":    "llama-3.3-70b-versatile",
+        "gemini-2.0-flash":  "openai/gpt-oss-120b",
+        "gemini-1.5-flash":  "openai/gpt-oss-20b",
+        "gemini-1.5-pro":    "openai/gpt-oss-120b",
     }
     # 무료 티어 TPM(분당 토큰) — Groq는 요청 크기를 '입력 + max_tokens(출력 예약)'로 계산
     TPM_LIMIT = {
-        "llama-3.3-70b-versatile": 12000,
-        "llama-3.1-8b-instant":    6000,
+        "openai/gpt-oss-120b": 8000,
+        "openai/gpt-oss-20b":    8000,
     }
 
     @classmethod
@@ -390,7 +390,7 @@ class GroqGenerator:
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
                  analysis: dict | None = None) -> str:
-        groq_model = self.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
+        groq_model = self.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
@@ -586,7 +586,7 @@ class Generator:
         backend = self._groq or self._gemini
 
         if self._groq and self._gemini:
-            groq_model = GroqGenerator.GROQ_MODEL_MAP.get(model, "llama-3.3-70b-versatile")
+            groq_model = GroqGenerator.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
             if _needs_long_context(query, contexts, history, groq_model):
                 print("[Generator] 장문 입력 → Gemini 라우팅 (Groq TPM 예산 부족)")
                 backend = self._gemini

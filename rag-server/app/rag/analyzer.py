@@ -25,7 +25,7 @@ from app.rag.axes import (
     MAX_AXES_PER_REQUEST, build_axis_catalog, normalize_axes,
 )
 
-_MODEL = "llama-3.1-8b-instant"   # 형식 판단이라 8b로 충분. TPM 6000 주의.
+_MODEL = "openai/gpt-oss-20b"   # 형식 판단이라 소형 모델로 충분. TPM 8000 주의.
 _TEMPERATURE = 0.2                 # 결정성 우선 — 같은 입력 → 같은 필드/mode
 
 # 주의: 구체적인 예시 하나를 길게 쓰면 8b가 그 예시를 무관한 요청에도 복사한다

@@ -1452,3 +1452,40 @@ gold 를 보지 않는 고정 템플릿으로 질의 형태만 카드 쪽에 정
 - 조회 경로를 `run_generation` 앞단에 연결(현재 `axes.py`는 순수 함수만, 아직 배선 전)
 - gold 대비 Recall@5 재측정. 목표 0.215 → 0.50
 - 8b로도 태깅이 되는지 확인(현재 70b 기준). TPD 예산상 중요
+
+---
+
+## [2026-08-21] Groq 모델 폐기 대응 — llama-3.x → openai/gpt-oss 교체
+**목적**: Groq가 llama-3.x 계열을 폐기(`model_not_found`)해 LLM 경로가 전면 실패. 프롬프트 개선 기능이 503으로 죽어 테스트 자체가 불가능한 상태를 복구.
+
+**Before**
+- 코드가 참조하던 모델: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`
+- Groq API 모델 목록에 **둘 다 없음** → 호출 시 `404 model_not_found`
+- 실패 양상이 계층별로 달라 원인이 가려져 있었다:
+  | 지점 | 증상 |
+  |---|---|
+  | `analyzer.py` | 404를 **삼키고** "분석 없이 진행" — 서버는 200, 품질만 조용히 저하 |
+  | `query_transform.py` | 동일 모델 → 쿼리 변환·HyDE 무력화 |
+  | `generator.py` | 404 → `Groq 실패 → Gemini 폴백` |
+- 폴백처인 Gemini도 동시에 `503 UNAVAILABLE(high demand)` → 1·2차 경로 동시 차단 → 최종 503
+
+**After**
+- `llama-3.3-70b-versatile` → `openai/gpt-oss-120b`
+- `llama-3.1-8b-instant` → `openai/gpt-oss-20b`
+- TPM_LIMIT 실측 반영: 12000/6000 → **8000/8000** (`x-ratelimit-limit-tokens` 헤더 실측)
+- Groq 경로 복구 → Gemini 가용성과 무관하게 동작
+
+**변경 파일**
+- 수정: `app/rag/generator.py` (GROQ_MODEL_MAP 3곳, TPM_LIMIT 2곳, 기본값 2곳)
+- 수정: `app/rag/analyzer.py` (`_MODEL`, 낡은 "TPM 6000" 주석 정정)
+- 수정: `app/rag/query_transform.py` (`_TRANSFORM_MODEL`, `_HYDE_MODEL`)
+
+**검증**
+- 후보 모델 직접 호출: `openai/gpt-oss-120b`가 `response_format=json_object`로 **JSON 구조화 출력 성공**
+- `POST /query` ("블로그 글 잘 써줘") → `mode: "ask"` — analyzer가 **되살아나** 주제 없음을 판단하고 되물음(교체 전에는 404로 죽어 그냥 통과하던 지점)
+- 브라우저 E2E(localhost:4173 → Make): "신입 개발자를 위한 Git 브랜치 전략 블로그 글" → 개선 프롬프트 정상 생성, `참고한 프롬프트 기법` 2건 근거 표시, `POST /api/prompts/improve → 200`
+- 한국어 출력 품질 정상(교체 후 한국어 지시에 한국어로 응답)
+
+**결정·근거**
+- Groq 잔존 모델 중 `gpt-oss-120b/20b`가 기존 70b/8b의 역할 분담(생성/판단)에 그대로 대응돼 구조 변경 없이 이름만 교체.
+- **미검증으로 남긴 것**: 교체가 검색·생성 품질에 준 영향의 정량 비교(A/B). 기능 복구가 우선이라 라이브 A/B는 수행하지 않았다. `analyzer`가 그간 404로 무력화돼 있었으므로, 과거 평가 수치는 analyzer 없는 상태에서 측정된 것일 수 있어 재측정이 필요하다.
