@@ -1,22 +1,26 @@
 // @ts-check
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createAssistantMessage, createImproveErrorMessage } from "../conversation/conversationState.js";
 import { createGuestRetryContext } from "../conversation/messageRetry.js";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage.js";
 import { isAuthExpiredError } from "../utils/apiErrors.js";
 import { getServerEditErrorMessage } from "../utils/conversationMessages.js";
 import { makeTitle } from "../utils/promptUtils.js";
-import { reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { classifyMakeError } from "../../../shared/make-message-model.js";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
   ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
   refreshServerThreads, requestInFlight, sendImproveRequest, sessionUuid,
   setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
-  setSessionUuid, showNotice,
+  setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
+  isLifecycleActive = () => true,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
+  const serverEditRequests = useRef(new Map());
 
   function startEditMessage(message) {
     if (!message || message.role !== "user" || isLoading) return;
@@ -29,13 +33,13 @@ export function useMessageRetry({
     setEditingDraft("");
   }
 
-  async function submitEditedMessage(event, messageId) {
+  async function submitEditedMessage(event, messageId, promptOverride = "") {
     event?.preventDefault?.();
     if (isLoading || requestInFlight.current) {
       if (requestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
       return;
     }
-    const prompt = editingDraft.trim();
+    const prompt = String(promptOverride || editingDraft).trim();
     if (!prompt) return;
 
     if (isLoggedIn) {
@@ -44,15 +48,25 @@ export function useMessageRetry({
         showNotice("서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.");
         return;
       }
+      const originalMessage = messages.find((message) => message.id === messageId && message.role === "user");
+      const previous = serverEditRequests.current.get(String(messageId));
+      const requestId = resolveMakeRequestId({
+        previousRequestId: previous?.requestId || originalMessage?.requestId,
+        previousPrompt: previous?.prompt || originalMessage?.content,
+        prompt,
+      });
+      serverEditRequests.current.set(String(messageId), { prompt, requestId });
       setEditingMessageId("");
       setEditingDraft("");
-      reportMakeRetry();
+      reportMakeRetry(requestId);
       return sendImproveRequest({
         ragConfig,
         prompt,
         restoreComposer: true,
-        payload: { accessToken: authSession.accessToken, threadId, messageId, prompt, category: "prompt_techniques" },
+        payload: { accessToken: authSession.accessToken, threadId, messageId, requestId, prompt, category: "prompt_techniques" },
         onSuccess: async () => {
+          serverEditRequests.current.delete(String(messageId));
+          resetConcurrency?.(threadId);
           setRagStatus("connected");
           await refreshActiveServerThread(String(threadId));
           showNotice("수정한 메시지로 다시 개선했습니다.");
@@ -61,6 +75,36 @@ export function useMessageRetry({
           setRagStatus("error");
           if (isAuthExpiredError(error)) {
             await onAuthExpired?.();
+            return;
+          }
+          if (isRequestIdReusedError(error)) {
+            serverEditRequests.current.delete(String(messageId));
+            await refreshActiveServerThread(String(threadId)).catch(() => false);
+            showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
+            return;
+          }
+          if (isThreadConcurrencyError(error)) {
+            const repeated = (recordConcurrency?.(threadId) || 1) >= 2;
+            const refreshed = await refreshActiveServerThread(String(threadId)).catch(() => null);
+            if (!isLifecycleActive()) return;
+            reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, error, refreshed
+              ? { requestId, retryMode: "edit", retryMessageId: messageId, concurrencyRepeated: repeated, failure: { ...classifyMakeError(error), retryMode: "edit", repeated } }
+              : {
+                  requestId,
+                  retryMode: "edit",
+                  retryMessageId: messageId,
+                  concurrencyRepeated: repeated,
+                  failure: {
+                    ...classifyMakeError(error),
+                    kind: "concurrency_refresh",
+                    retryMode: "edit",
+                    repeated,
+                  },
+                })]);
+            showNotice(refreshed
+              ? "최신 대화를 불러왔습니다. 수정한 내용은 입력란에 유지되어 있습니다."
+              : "연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
             return;
           }
           if (Number(error?.status || 0) === 404) await refreshServerThreads().catch(() => {});

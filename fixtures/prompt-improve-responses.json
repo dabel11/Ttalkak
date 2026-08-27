@@ -9,7 +9,8 @@
   },
   "errors": {
     "aiUnavailable": { "status": 503, "code": "AI_SERVICE_UNAVAILABLE", "message": "AI 서비스를 일시적으로 사용할 수 없습니다." },
-    "timeout": { "status": 408, "code": "REQUEST_TIMEOUT", "message": "요청 시간이 초과되었습니다." }
+    "timeout": { "status": 408, "code": "REQUEST_TIMEOUT", "message": "요청 시간이 초과되었습니다." },
+    "threadConcurrentlyUpdated": { "status": 409, "code": "THREAD_CONCURRENTLY_UPDATED", "message": "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요." }
   },
   "clientMessages": {
     "cancelled": { "role": "assistant", "content": "요청을 취소했습니다. 입력한 내용은 입력란에 복원되었습니다.", "isCancelled": true, "isError": false, "excludeFromHistory": true },

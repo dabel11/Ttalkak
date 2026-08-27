@@ -86,6 +86,7 @@ let makeControllerModule = null;
 let makeEventsModule = null;
 const makeFocusModule = modules.make.focus;
 const makeMessageModel = modules.make.messageModel;
+const makeRequestIdModule = modules.make.requestId;
 const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
 const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
@@ -438,7 +439,8 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
@@ -597,9 +599,7 @@ const ensureShareRuntime = shareRuntime.ensure;
 const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
 const authSession = createAuthSession({ state, applyIdentity: applyAuthenticatedIdentityState, resetBackend: resetSessionBackendStateValue, clearState: clearAuthenticatedSessionState, normalizeLikes: normalizePersistedLikeCounts, writeToken: (token) => writeStorageItem(AUTH_TOKEN_KEY, token), removeToken: () => removeStorageItem(AUTH_TOKEN_KEY) });
 const getCurrentAccountScopeKey = authSession.key;
-const snapshotCurrentAccountScope = authSession.snapshot;
 const saveCurrentAccountScope = authSession.saveScope;
-const applyAccountScope = authSession.applyScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
@@ -1690,9 +1690,79 @@ function bindDelegatedMakeEvents() {
         }, 0);
       },
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
-      reportRetry: () => modules.observability.report(new Error("User retried Make request"), {
+      retryConcurrent: (message) => {
+        const prompt = String(message?.content || "").trim();
+        const retryMessageId = message?.retryMode === "edit" ? String(message.retryMessageId || "") : "";
+        if (!prompt || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "retry")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
+        window.setTimeout(() => {
+          state.messages = state.messages.filter((item) => item.id !== message.id);
+          makeStateModule.completeMakeRequest(makeRequestState);
+          makeStateModule.setMakeComposerDraft(state, prompt);
+          updateRecentThread(state.activeThreadId);
+          renderPreservingMakeScroll();
+          if (retryMessageId) {
+            resendEditedMessage(retryMessageId, prompt);
+            return;
+          }
+          const composer = document.querySelector("[data-composer]");
+          if (composer) submitMakePrompt(composer);
+        }, 80);
+      },
+      newChatFromConflict: (message) => {
+        const prompt = String(message?.content || "").trim();
+        startNewChat();
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        render();
+        focusRestoredMakeComposer(prompt);
+      },
+      refreshConcurrent: async (message) => {
+        const prompt = String(message?.content || "").trim();
+        const threadId = String(state.activeThreadId || "");
+        if (!prompt || !threadId || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "refresh")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
+        const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true });
+        modules.observability.report(new Error("Make concurrency refresh"), {
+          area: "make", action: "refresh-thread", kind: "concurrency",
+          code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+          status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+          level: refreshed ? "info" : "error", retryable: false, client: "web",
+          requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
+        });
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        if (!refreshed) {
+          makeStateModule.finishMakeRecovery(makeRequestState);
+          showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
+          pendingMessageScrollId = message.id;
+          renderPreservingMakeScroll();
+          return;
+        }
+        const retryMessageId = String(message.retryMessageId || "");
+        const retryTargetContent = retryMessageId
+          ? String(state.messages.find((item) => String(item.id || "") === retryMessageId)?.content || "")
+          : "";
+        const messageId = String(message.id || `concurrency-${Date.now()}`);
+        appendMakeUserMessageState(state, threadId, {
+          id: messageId, role: "user", content: prompt, requestId: message.requestId,
+          excludeFromHistory: true, retryMode: message.retryMode || "follow-up",
+          retryMessageId, retryTargetContent, concurrencyRepeated: Boolean(message?.concurrencyRepeated),
+        });
+        makeStateModule.finishMakeRecovery(makeRequestState);
+        makeStateModule.failMakeRequest(makeRequestState, messageId, {
+          ...makeMessageModel.classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
+          retryMode: message.retryMode || "follow-up", repeated: Boolean(message?.concurrencyRepeated),
+        });
+        updateRecentThread(threadId);
+        pendingMessageScrollId = messageId;
+        renderPreservingMakeScroll();
+        focusRestoredMakeComposer(prompt);
+      },
+      reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
         area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
         status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
       }),
       openLogin: () => { state.authView = "login"; render(); },
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
@@ -1779,6 +1849,7 @@ function getMakeControllerContext() {
     setThinking: (value) => { isMakeThinking = value; },
     updateThread: updateRecentThread,
     render,
+    focusRestored: focusRestoredMakeComposer,
     scrollLatest: () => scheduleMakeLatestScroll({ behavior: "auto" }),
     waitForPaint: waitForThinkingIndicatorPaint,
     improve: improvePromptWithBackend,
@@ -1788,12 +1859,32 @@ function getMakeControllerContext() {
       area: "make",
       action: "improve",
       kind: "result",
-      code: result?.isUnchanged
+      code: result?.replayed === true
+        ? "REPLAYED"
+        : result?.isUnchanged
         ? "UNCHANGED_NO_EVIDENCE"
         : String(result?.ragStatus || "").toLowerCase() === "no_evidence"
           ? "NO_EVIDENCE"
           : result?.mode === "ask" ? "ASK" : "IMPROVED",
       durationMs,
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(result?.requestId),
+      client: "web",
+    }),
+    reportFailure: (error, requestId, durationMs) => {
+      const failure = makeMessageModel.classifyMakeError(error);
+      return modules.observability.report(new Error("Make request failed"), {
+        area: "make", action: "improve", kind: failure.kind, code: failure.code,
+        status: failure.status, durationMs, outcome: "failure", level: "error",
+        retryable: failure.retryable, client: "web",
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
+      });
+    },
+    reportConcurrencyRefresh: (requestId, refreshed) => modules.observability.report(new Error("Make concurrency refresh"), {
+      area: "make", action: "refresh-thread", kind: "concurrency",
+      code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+      status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+      level: refreshed ? "info" : "error", retryable: false, client: "web",
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
     }),
     setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
     handleError: handleBackendAccessError,
@@ -1804,7 +1895,7 @@ function getMakeControllerContext() {
     },
     applyPendingThread: applyPendingImproveThreadId,
     shouldSync: shouldUseImproveThreadSync,
-    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true }),
+    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true }),
     syncThread: syncMakeThreadWithBackend,
     focusAsk: focusLatestAskAnswer,
     findEditableMessage: (messageId) => state.messages.findIndex((message) => message.id === messageId && message.role === "user"),
@@ -1850,32 +1941,15 @@ function makePromptTitle(text) {
   if (!clean) return "Make에서 저장한 프롬프트";
   return clean.length > 26 ? `${clean.slice(0, 26)}...` : clean;
 }
-const normalizeSavedPage = () => normalizeSavedPageState(state, getSavedFilteredCount(), SAVED_PAGE_SIZE);
 const restoreSearchFocus = () => homeController.restoreSearchFocus();
 const getSavedPagePrompts = () => savedLibraryController.getPagePrompts();
-const getLocalSavedPagePrompts = () => savedLibraryController.getLocalPrompts();
-function hasUserLibraryContent() {
-  return getSavedPagePrompts().length > 0;
-}
 const matchesSavedFilter = (prompt) => savedLibraryController.matchesFilter(prompt);
 const getSavedSorter = () => savedLibraryController.getSorter();
 function scheduleAdminPromptSearchCommit(value) {
   discoveryController.scheduleAdminPromptSearch(value);
 }
-function commitAdminPromptSearchQuery(value) {
-  discoveryController.commitAdminPromptSearch(value);
-}
-function restoreAdminPromptSearchFocus() {
-  discoveryController.restoreAdminPromptFocus();
-}
 function scheduleAdminTagSearchCommit(value) {
   discoveryController.scheduleAdminTagSearch(value);
-}
-function commitAdminTagSearchQuery(value) {
-  discoveryController.commitAdminTagSearch(value);
-}
-function restoreAdminTagSearchFocus() {
-  discoveryController.restoreAdminTagFocus();
 }
 function searchByTag(tag) {
   discoveryController.searchByTag(tag);
@@ -2113,15 +2187,29 @@ function applyPendingImproveThreadId(threadId) {
 function shouldUseImproveThreadSync() {
   return getMakeServerSyncEffects().shouldUseImproveThreadSync();
 }
-/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, signal?: AbortSignal }} [options] */
+/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, requestId?: string, signal?: AbortSignal }} [options] */
 async function improvePromptWithBackend(prompt, {
   history = buildMakeImproveHistory(),
   threadId = state.activeThreadId,
   messageId = "",
   category = "",
+  requestId = "",
   signal,
 } = {}) {
-  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, signal });
+  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, requestId, signal });
+}
+function focusRestoredMakeComposer(prompt) {
+  window.setTimeout(() => {
+    const input = document.querySelector('[data-composer] textarea[name="prompt"]');
+    const composer = input?.closest?.("[data-composer]");
+    if (!input || !composer) return;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange?.(prompt.length, prompt.length);
+    composer.classList.add("is-restored");
+    const status = composer.querySelector("[data-composer-restore-status]");
+    if (status) status.textContent = "입력 내용이 복원되었습니다.";
+    window.setTimeout(() => composer.classList.remove("is-restored"), 1400);
+  }, 0);
 }
 function queueLatestMakeThreadScroll(thread) {
   const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;

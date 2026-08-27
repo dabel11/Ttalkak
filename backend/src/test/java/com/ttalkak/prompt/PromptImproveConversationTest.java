@@ -232,6 +232,214 @@ class PromptImproveConversationTest {
 	}
 
 	@Test
+	void repeatedRequestIdReturnsStoredResponseWithoutAppendingTurn()
+			throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		String existingMessages = objectMapper.writeValueAsString(
+				List.of(
+						Map.of(
+								"id", "user-1",
+								"role", "user",
+								"content", "운동 계획을 만들어줘",
+								"requestId", "request-123"
+						),
+						Map.of(
+								"id", "assistant-1",
+								"role", "assistant",
+								"content", "저장된 답변",
+								"answer", "저장된 답변",
+								"mode", "improve",
+								"improvedPrompt", "저장된 개선 프롬프트",
+								"sources", List.of(),
+								"ragStatus", "no_evidence"
+						)
+				)
+		);
+
+		MakeThread existingThread = new MakeThread(
+				7L,
+				"기존 대화",
+				existingMessages,
+				null
+		);
+
+		ReflectionTestUtils.setField(
+				existingThread,
+				"id",
+				42L
+		);
+
+		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
+				.thenReturn(Optional.of(existingThread));
+
+		Map<String, Object> response = controller.improve(
+				new PromptController.ImproveRequest(
+						"운동 계획을 만들어줘",
+						"prompt_techniques",
+						null,
+						42L,
+						null,
+						"request-123",
+						List.of()
+				),
+				AUTHORIZATION
+		);
+
+		assertEquals(true, response.get("replayed"));
+		assertEquals(
+				"저장된 개선 프롬프트",
+				response.get("improvedPrompt")
+		);
+		assertEquals("request-123", response.get("requestId"));
+
+		verify(makeThreadRepository, never())
+				.save(any(MakeThread.class));
+	}
+
+	@Test
+	void newRequestIdIsStoredWithUserMessage()
+			throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		Map<String, Object> response = controller.improve(
+				new PromptController.ImproveRequest(
+						"운동 계획을 만들어줘",
+						"prompt_techniques",
+						null,
+						null,
+						null,
+						"request-new-123",
+						List.of()
+				),
+				AUTHORIZATION
+		);
+
+		ArgumentCaptor<MakeThread> captor =
+				ArgumentCaptor.forClass(MakeThread.class);
+
+		verify(makeThreadRepository)
+				.save(captor.capture());
+
+		List<Map<String, Object>> messages =
+				readMessages(captor.getValue());
+
+		assertEquals(2, messages.size());
+		assertEquals(
+				"request-new-123",
+				messages.get(0).get("requestId")
+		);
+		assertEquals(
+				"request-new-123",
+				response.get("requestId")
+		);
+		assertEquals(false, response.get("replayed"));
+	}
+
+	@Test
+	void reusedRequestIdWithDifferentPromptIsRejected()
+			throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		String existingMessages = objectMapper.writeValueAsString(
+				List.of(
+						Map.of(
+								"id", "user-1",
+								"role", "user",
+								"content", "원래 요청",
+								"requestId", "request-123"
+						),
+						Map.of(
+								"id", "assistant-1",
+								"role", "assistant",
+								"content", "원래 답변"
+						)
+				)
+		);
+
+		MakeThread existingThread = new MakeThread(
+				7L,
+				"기존 대화",
+				existingMessages,
+				null
+		);
+
+		ReflectionTestUtils.setField(
+				existingThread,
+				"id",
+				42L
+		);
+
+		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
+				.thenReturn(Optional.of(existingThread));
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						new PromptController.ImproveRequest(
+								"다른 요청",
+								"prompt_techniques",
+								null,
+								42L,
+								null,
+								"request-123",
+								List.of()
+						),
+						AUTHORIZATION
+				)
+		);
+
+		assertEquals(
+				409,
+				exception.getStatusCode().value()
+		);
+		assertEquals(
+				"REQUEST_ID_REUSED",
+				exception.getCode()
+		);
+
+		verify(makeThreadRepository, never())
+				.save(any(MakeThread.class));
+	}
+
+	@Test
+	void rejectsRequestIdLongerThan128Characters() {
+		when(authService.currentMemberIdOrNull(null))
+				.thenReturn(null);
+
+		ApiException exception = assertThrows(
+				ApiException.class,
+				() -> controller.improve(
+						new PromptController.ImproveRequest(
+								"운동 계획을 만들어줘",
+								"prompt_techniques",
+								null,
+								null,
+								null,
+								"x".repeat(129),
+								List.of()
+						),
+						null
+				)
+		);
+
+		assertEquals(
+				400,
+				exception.getStatusCode().value()
+		);
+		assertEquals(
+				"REQUEST_ID_INVALID",
+				exception.getCode()
+		);
+
+		verify(makeThreadRepository, never())
+				.save(any(MakeThread.class));
+	}
+
+	@Test
 	void anonymousUserCannotContinueSavedThread() {
 		when(
 				authService.currentMemberIdOrNull(null)).thenReturn(null);
@@ -800,6 +1008,7 @@ class PromptImproveConversationTest {
 								"id", "user-2",
 								"role", "user",
 								"content", "수정 전 질문",
+								"requestId", "old-request-id",
 								"createdAt", "2026-07-22T10:00:02"
 						),
 						Map.of(
@@ -879,6 +1088,9 @@ class PromptImproveConversationTest {
 		assertNotNull(
 				savedMessages.get(2).get("editedAt")
 		);
+        assertNull(
+                savedMessages.get(2).get("requestId")
+        );
 
 		assertEquals(
 				"assistant",

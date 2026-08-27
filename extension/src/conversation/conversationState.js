@@ -7,7 +7,7 @@ import {
   isUnchangedNoEvidence,
 } from "../utils/conversationMessages.js";
 import { isAskResponse } from "./askAnswers.js";
-import { classifyMakeError } from "../../../shared/make-message-model.js";
+import { classifyMakeError, getMakeFailurePresentation } from "../../../shared/make-message-model.js";
 
 export function createUserMessage(prompt, base = {}) {
   return { id: `user-${Date.now()}`, role: "user", content: prompt, ...base };
@@ -32,17 +32,21 @@ export function createAssistantMessage(prompt, data) {
     techniques: data.techniques || data.techniquesApplied || [], summary: data.summary || "",
     ragStatus,
     executablePrompt, sourcePrompt: prompt, sources: data.sources || [], saved: false,
+    requestId: data.requestId || "", replayed: data.replayed === true,
     ...(unchangedNoEvidence ? { isUnchanged: true } : {}),
     ...(noEvidence ? { excludeFromHistory: true } : {}),
   };
 }
 
-export function createImproveErrorMessage(prompt, error) {
-  const failure = classifyMakeError(error);
-  const content = error instanceof TypeError
+export function createImproveErrorMessage(prompt, error, base = {}) {
+  const failure = { ...classifyMakeError(error), ...(base.failure || {}) };
+  const presentation = getMakeFailurePresentation(failure);
+  const content = failure.kind === "concurrency" || failure.kind === "concurrency_refresh"
+    ? `${presentation.title}\n\n${presentation.description}`
+    : error instanceof TypeError
     ? "백엔드 API에 연결할 수 없습니다.\n\n잠시 후 다시 시도해주세요."
     : `오류가 발생했습니다.\n\n${error?.message || "알 수 없는 오류"}`;
-  return { id: `assistant-${Date.now()}`, role: "assistant", content, executablePrompt: null, sourcePrompt: prompt, sources: [], saved: false, isError: true, failure, excludeFromHistory: true };
+  return { id: `assistant-${Date.now()}`, role: "assistant", content, executablePrompt: null, sourcePrompt: prompt, sources: [], saved: false, isError: true, excludeFromHistory: true, ...base, failure };
 }
 
 export function upsertRecentThread(threads, { id, prompt, messages, makeTitle }) {

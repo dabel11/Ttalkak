@@ -16,8 +16,27 @@ function getMakeProgressStatus(elapsedMs = 0) {
 }
 function getMakeFailureAction(failure = {}) {
   if (failure.requiresLogin || failure.kind === "auth") return { id: "login", label: "로그인" };
+  if (failure.kind === "concurrency_refresh") return { id: "reload-thread", label: "최신 대화 불러오기" };
+  if (failure.kind === "concurrency") return { id: "retry-after-refresh", label: failure.retryMode === "edit" ? "수정한 내용 다시 보내기" : "다시 보내기" };
   if (failure.retryable) return { id: "retry", label: failure.kind === "network" ? "연결 확인 후 다시 시도" : "잠시 후 다시 시도" };
   return null;
+}
+function getMakeFailurePresentation(failure = {}) {
+  if (failure.kind === "concurrency_refresh") return {
+    title: failure.repeated ? "대화가 계속 업데이트되고 있습니다" : "다른 곳에서 대화가 업데이트됐습니다",
+    description: failure.repeated
+      ? "다른 창의 요청이 끝난 뒤 최신 대화를 다시 불러오거나 새 대화에서 계속해 주세요."
+      : "최신 대화를 불러온 뒤 입력한 내용을 다시 보낼 수 있습니다.",
+    tone: "refresh",
+  };
+  if (failure.kind === "concurrency") return {
+    title: failure.repeated ? "최신 대화를 다시 불러왔습니다" : "최신 대화를 불러왔습니다",
+    description: failure.retryMode === "edit"
+      ? "수정한 내용은 입력란에 복원되어 있습니다. 서버의 최신 메시지를 확인한 뒤 다시 보내 주세요."
+      : "입력한 내용은 입력란에 복원되어 있습니다.",
+    tone: "recovered",
+  };
+  return { title: failure.message || "요청을 처리하지 못했습니다.", description: "", tone: "error" };
 }
 function getMakeRecentDateGroup(value, nowValue = Date.now()) {
   const date = new Date(value);
@@ -114,7 +133,7 @@ function normalizeImproveResponse(payload, fallbackPrompt = "") {
   const ragStatus = String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase();
   const isUnchanged = mode !== "ask" && isUnchangedNoEvidence(fallbackPrompt, { ...result, improvedPrompt: rawImprovedPrompt, ragStatus });
   const improvedPrompt = isUnchanged ? "" : rawImprovedPrompt;
-  return { mode, answer: legacy.leadText || answer, summary: text(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : isUnchanged ? UNCHANGED_NO_EVIDENCE_MESSAGE : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus, ragMessage: text(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || ""), ...(ragStatus === "no_evidence" ? { excludeFromHistory: true } : {}), ...(isUnchanged ? { isUnchanged: true } : {}) };
+  return { mode, answer: legacy.leadText || answer, summary: text(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : isUnchanged ? UNCHANGED_NO_EVIDENCE_MESSAGE : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus, ragMessage: text(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || ""), requestId: text(result.requestId || payload?.requestId), replayed: result.replayed === true, ...(ragStatus === "no_evidence" ? { excludeFromHistory: true } : {}), ...(isUnchanged ? { isUnchanged: true } : {}) };
 }
 
 const migrateV0ToV1 = (/** @type {Record<string, *>} */ raw = {}) => ({ ...raw, schemaVersion: 1, mode: String(raw.mode || raw.type || "").toLowerCase() === "question" ? "ask" : raw.mode });
@@ -143,7 +162,7 @@ function isUtilityOnlyPrompt(value) { const normalized = text(value).replace(/\s
 function isAskOnlyResponse(value) { const normalized = text(value); return !normalized || isUtilityOnlyPrompt(normalized) || ASK_ONLY_PATTERNS.some((pattern) => pattern.test(normalized)); }
 function isExecutableMessage(message) { const value = migrateMakeMessage(message); const prompt = text(message?.executablePrompt || message?.finalPrompt || value.improvedPrompt || value.content); return !message?.isCancelled && !message?.isError && !message?.isThinking && !message?.isUnchanged && value.mode !== "ask" && !(value.questions.length && !value.improvedPrompt) && Boolean(prompt) && !isUtilityOnlyPrompt(prompt) && !isAskOnlyResponse(prompt); }
 function composeAskAnswers(questions, values = {}) { const normalized = normalizeQuestions(questions); const missingFields = normalized.filter((item) => item.importance === "required" && !text(values[item.field])).map((item) => item.field); const lines = normalized.map((item) => text(values[item.field]) ? `- ${item.question}: ${text(values[item.field])}` : "").filter(Boolean); return { missingFields, message: lines.length ? `추가 정보:\n${lines.join("\n")}` : "" }; }
-function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_ABORTED") return result("cancelled", "요청이 취소되었습니다.", false); if (code === "REQUEST_TIMEOUT") return result("timeout", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
+function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "THREAD_CONCURRENTLY_UPDATED") return result("concurrency", "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.", false); if (code === "REQUEST_ID_REUSED") return result("conflict", "요청 식별자가 다른 내용에 사용되었습니다. 서버 대화를 새로고침한 뒤 다시 요청해주세요.", false); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_ABORTED") return result("cancelled", "요청이 취소되었습니다.", false); if (code === "REQUEST_TIMEOUT") return result("timeout", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
 
-const MakeMessageModel = Object.freeze({ SCHEMA_VERSION, UNCHANGED_NO_EVIDENCE_MESSAGE, MAKE_PROGRESS_STAGES, getMakeProgressStatus, getMakeFailureAction, getMakeRecentDateGroup, normalizePromptForComparison, isUnchangedNoEvidence, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
+const MakeMessageModel = /* @__PURE__ */ Object.freeze({ SCHEMA_VERSION, UNCHANGED_NO_EVIDENCE_MESSAGE, MAKE_PROGRESS_STAGES, getMakeProgressStatus, getMakeFailureAction, getMakeFailurePresentation, getMakeRecentDateGroup, normalizePromptForComparison, isUnchangedNoEvidence, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
 module.exports = MakeMessageModel;

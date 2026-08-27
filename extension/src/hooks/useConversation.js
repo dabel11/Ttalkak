@@ -1,5 +1,5 @@
 // @ts-check
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteMakeThread } from "../api/make";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
@@ -11,6 +11,9 @@ import { useServerThreadSync } from "./useServerThreads";
 import { useMakeRequest } from "./useMakeRequest";
 import { useConversationHistory } from "./useConversationHistory";
 import { useMessageRetry } from "./useMessageRetry";
+import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
+import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
+import { classifyMakeError } from "../../../shared/make-message-model.js";
 
 export function useConversation({
   authSession,
@@ -28,6 +31,26 @@ export function useConversation({
   const [copiedId, setCopiedId] = useState("");
   const [ragStatus, setRagStatus] = useState("idle");
   const activeThreadId = useRef(null);
+  const pendingRetry = useRef(null);
+  const lifecycleActive = useRef(true);
+  useEffect(() => {
+    lifecycleActive.current = true;
+    return () => { lifecycleActive.current = false; };
+  }, []);
+  const concurrencyCounts = useRef(new Map());
+  const recordConcurrency = useCallback((threadId) => {
+    const key = String(threadId || "local");
+    const count = (concurrencyCounts.current.get(key) || 0) + 1;
+    concurrencyCounts.current.set(key, count);
+    return count;
+  }, []);
+  const resetConcurrency = useCallback((threadId) => {
+    if (threadId == null || threadId === "") {
+      concurrencyCounts.current.clear();
+      return;
+    }
+    concurrencyCounts.current.delete(String(threadId));
+  }, []);
   const [activeRecentId, setActiveRecentId] = useState("");
   const setActiveThreadId = useCallback((value) => {
     const normalized = value == null ? "" : String(value);
@@ -62,7 +85,8 @@ export function useConversation({
     ragConfig, recoverActiveServerThreadAfterFailure, refreshActiveServerThread,
     refreshServerThreads, requestInFlight: improveRequestInFlight, sendImproveRequest,
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
-    setActiveThreadId, setRagStatus, setSessionUuid, showNotice,
+    setActiveThreadId, setRagStatus, setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
+    isLifecycleActive: () => lifecycleActive.current,
   });
 
   function openPrompt(item) {
@@ -83,10 +107,26 @@ export function useConversation({
   }
 
   function startNewChat() {
+    pendingRetry.current = null;
+    resetConcurrency();
     setActiveThreadId(null);
     setMessages([]);
     setComposerValue("");
     cancelEditMessage();
+  }
+
+  function prepareFailedRetry(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt) return false;
+    pendingRetry.current = {
+      errorMessageId: String(message.id || ""),
+      prompt,
+      requestId: String(message.requestId || ""),
+      threadId: String(activeThreadId.current || ""),
+    };
+    reportMakeRetry(message.requestId || "");
+    setComposerValue(prompt);
+    return true;
   }
 
   async function copyMessage(message) {
@@ -178,27 +218,46 @@ export function useConversation({
     showNotice("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 복사한 프롬프트를 붙여넣어 주세요.");
   }
 
-  async function submitPrompt() {
-    const prompt = composerValue.trim();
+  async function submitPrompt(promptOverride = "") {
+    const prompt = String(promptOverride || composerValue).trim();
     if (!prompt || isLoading || improveRequestInFlight.current) {
       if (prompt && improveRequestInFlight.current) showNotice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.");
       return;
     }
     const guestSessionUuid = authSession?.accessToken ? "" : sessionUuid || (await getOrCreateSessionUuid());
     if (guestSessionUuid && !sessionUuid) setSessionUuid(guestSessionUuid);
-    const userMsg = createUserMessage(prompt);
     const history = buildImproveHistory(messages);
     const activeServerThreadId = /^\d+$/.test(String(activeThreadId.current || "")) ? Number(activeThreadId.current) : null;
+    const retry = pendingRetry.current;
+    const retryMatches = Boolean(
+      retry && authSession?.accessToken && activeServerThreadId
+      && retry.prompt === prompt && retry.threadId === String(activeServerThreadId)
+    );
+    const requestId = authSession?.accessToken && activeServerThreadId
+      ? resolveMakeRequestId({
+          previousRequestId: retryMatches ? retry.requestId : "",
+          previousPrompt: retryMatches ? retry.prompt : "",
+          prompt,
+        })
+      : "";
+    const baseMessages = retryMatches
+      ? messages.filter((message) => message.id !== retry.errorMessageId)
+      : messages;
+    const existingUserMessage = retryMatches
+      ? [...baseMessages].reverse().find((message) => message.role === "user" && message.requestId === requestId)
+      : null;
+    const requestUserMessage = existingUserMessage || createUserMessage(prompt, requestId ? { requestId } : {});
     const improvePayload = {
       prompt,
       category: "prompt_techniques",
       accessToken: authSession?.accessToken || "",
       sessionUuid: guestSessionUuid,
       ...(authSession?.accessToken && activeServerThreadId ? { threadId: activeServerThreadId } : {}),
+      ...(requestId ? { requestId } : {}),
       ...(!authSession?.accessToken ? { history } : {}),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages(retryMatches ? baseMessages : [...baseMessages, requestUserMessage]);
     setComposerValue("");
     return sendImproveRequest({
       ragConfig,
@@ -206,10 +265,12 @@ export function useConversation({
       payload: improvePayload,
       restoreComposer: true,
       onSuccess: async (data) => {
+        pendingRetry.current = null;
+        resetConcurrency(data.threadId || activeServerThreadId);
         setRagStatus("connected");
         if (authSession?.accessToken && data.threadId) setActiveThreadId(data.threadId);
         const assistantMsg = createAssistantMessage(prompt, data);
-        const nextMessages = [...messages, userMsg, assistantMsg];
+        const nextMessages = [...baseMessages, ...(existingUserMessage ? [] : [requestUserMessage]), assistantMsg];
         setMessages((prev) => [...prev, assistantMsg]);
         if (isLoggedIn) {
           await refreshActiveServerThread(String(data.threadId || activeThreadId.current || ""));
@@ -229,14 +290,86 @@ export function useConversation({
           return;
         }
         if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+        if (isRequestIdReusedError(err)) {
+          pendingRetry.current = null;
+          await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => false);
+          showNotice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
+          return;
+        }
+        if (isThreadConcurrencyError(err)) {
+          pendingRetry.current = null;
+          const repeated = recordConcurrency(activeServerThreadId) >= 2;
+          const refreshed = await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => null);
+          if (!lifecycleActive.current) return;
+          reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+          setComposerValue(prompt);
+          if (refreshed) {
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, { requestId, concurrencyRepeated: repeated, failure: { ...classifyMakeError(err), repeated } })]);
+            showNotice("최신 대화를 불러왔습니다. 입력한 내용은 유지되어 있습니다.");
+          } else {
+            setMessages((current) => [...current, createImproveErrorMessage(prompt, err, {
+              requestId,
+              failure: {
+                ...classifyMakeError(err),
+                kind: "concurrency_refresh",
+                repeated,
+              },
+            })]);
+            showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
+          }
+          return;
+        }
         const recovered = await recoverActiveServerThreadAfterFailure(prompt).catch(() => false);
         if (recovered) {
+          pendingRetry.current = null;
           showNotice("요청 상태를 서버 대화 기준으로 다시 확인했습니다.");
           return;
         }
-        setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err)]);
+        setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err, { requestId })]);
       },
     });
+  }
+
+  async function retryFailedMessage(message) {
+    const prompt = String(message?.sourcePrompt || "").trim();
+    if (!prompt || !prepareFailedRetry(message)) return false;
+    if (message?.retryMode === "edit" && message?.retryMessageId) {
+      await submitEditedMessage(null, message.retryMessageId, prompt);
+    } else {
+      await submitPrompt(prompt);
+    }
+    return true;
+  }
+
+  async function refreshFailedConcurrency(message) {
+    const requestId = String(message?.requestId || "");
+    const refreshed = await refreshActiveServerThread(String(activeThreadId.current || "")).catch(() => null);
+    if (!lifecycleActive.current) return false;
+    reportMakeConcurrencyRefresh(requestId, Boolean(refreshed));
+    if (!refreshed) {
+      showNotice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.");
+      return false;
+    }
+    const recoveredMessage = createImproveErrorMessage(message.sourcePrompt, {
+      status: 409,
+      code: "THREAD_CONCURRENTLY_UPDATED",
+      message: "최신 대화를 반영했습니다. 다시 시도해 주세요.",
+    }, {
+      id: message.id,
+      requestId,
+      retryMode: message.retryMode,
+      retryMessageId: message.retryMessageId,
+      concurrencyRepeated: message.concurrencyRepeated,
+      failure: { ...classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }), retryMode: message.retryMode, repeated: message.concurrencyRepeated },
+    });
+    setMessages((current) => {
+      const index = current.findIndex((item) => item.id === message.id);
+      if (index < 0) return [...current, recoveredMessage];
+      return current.map((item, itemIndex) => itemIndex === index ? recoveredMessage : item);
+    });
+    setComposerValue(String(message.sourcePrompt || ""));
+    showNotice("최신 대화를 불러왔습니다. 입력한 내용은 유지되어 있습니다.");
+    return true;
   }
 
   function requestDeleteRecentThreadLocal(id, setConfirmAction) {
@@ -340,5 +473,8 @@ export function useConversation({
     cancelEditMessage,
     submitEditedMessage,
     requestDeleteRecentThread,
+    prepareFailedRetry,
+    retryFailedMessage,
+    refreshFailedConcurrency,
   };
 }

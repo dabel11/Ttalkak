@@ -5,6 +5,23 @@ import { AssistantResponse, PromptText } from "./AssistantResponse";
 import { getMessageActionVisibility } from "../utils/messageActions";
 import { getMakeFailureAction, getMakeProgressStatus } from "../../../shared/make-message-model.js";
 
+export function orderConversationMessages(messages = []) {
+  const targetIds = new Set(messages.map((message) => String(message?.id || "")));
+  const anchored = new Map();
+  for (const message of messages) {
+    const targetId = String(message?.retryMessageId || "");
+    if (message?.retryMode !== "edit" || !targetId || !targetIds.has(targetId)) continue;
+    const items = anchored.get(targetId) || [];
+    items.push(message);
+    anchored.set(targetId, items);
+  }
+  const anchoredMessages = new Set([...anchored.values()].flat());
+  return messages.flatMap((message) => {
+    if (anchoredMessages.has(message)) return [];
+    return [message, ...(anchored.get(String(message?.id || "")) || [])];
+  });
+}
+
 export function ChatFeed({
   messages,
   isLoading,
@@ -22,6 +39,8 @@ export function ChatFeed({
   onCancelRequest,
   onRefineUnchanged,
   onResolveError,
+  onContinueConflictInNewChat,
+  recoveryState,
   onSelectExample,
 }) {
   const isEmpty = messages.length === 0 && !isLoading;
@@ -39,9 +58,12 @@ export function ChatFeed({
         <Intro onSelectExample={onSelectExample} />
       ) : (
         <div className="message-stack">
-          {messages.map((message) => (
+          {orderConversationMessages(messages).map((message) => (
             <MessageCard
               message={message}
+              retryTarget={message.retryMode === "edit"
+                ? messages.find((item) => String(item.id) === String(message.retryMessageId))
+                : null}
               copied={copiedId === message.id}
               canEditUserMessages={canEditUserMessages}
               isEditing={editingMessageId === message.id}
@@ -55,6 +77,8 @@ export function ChatFeed({
               onSubmitEdit={onSubmitEdit}
               onRefineUnchanged={onRefineUnchanged}
               onResolveError={onResolveError}
+              onContinueConflictInNewChat={onContinueConflictInNewChat}
+              recoveryAction={recoveryState?.messageId === String(message.id || "") ? recoveryState.action : ""}
               key={message.id}
             />
           ))}
@@ -96,6 +120,7 @@ function Intro({ onSelectExample }) {
 
 function MessageCard({
   message,
+  retryTarget,
   copied,
   canEditUserMessages,
   isEditing,
@@ -109,15 +134,22 @@ function MessageCard({
   onSubmitEdit,
   onRefineUnchanged,
   onResolveError,
+  onContinueConflictInNewChat,
+  recoveryAction,
 }) {
   const isAssistant = message.role === "assistant";
   const isAsk = message.mode === "ask";
-  const failureAction = message.failure ? getMakeFailureAction(message.failure) : null;
+  const failureAction = message.failure ? getMakeFailureAction({ ...message.failure, retryMode: message.retryMode }) : null;
   const actionVisibility = getMessageActionVisibility(message);
   const hasActions = Object.values(actionVisibility).some(Boolean);
   const [showSources, setShowSources] = useState(false);
   const hasSources = isAssistant && message.sources?.length > 0;
   const canEdit = !isAssistant && canEditUserMessages && !message.isError;
+  const retryTargetContent = String(retryTarget?.content || "").trim();
+  const editedContent = String(message.sourcePrompt || "").trim();
+  const editDiffersFromServer = Boolean(retryTargetContent && editedContent && retryTargetContent !== editedContent);
+  const recoveryPending = Boolean(recoveryAction);
+  const recoveryLabel = recoveryAction === "refresh" ? "불러오는 중…" : recoveryAction === "retry" ? "보내는 중…" : "";
 
   return (
     <article
@@ -196,10 +228,15 @@ function MessageCard({
         )}
         {isAssistant && message.isError && failureAction && (
           <div className="error-followup">
-            <button type="button" onClick={() => onResolveError(message)}>
-              {failureAction.label}
+            {message.retryMode === "edit" && <small className="conflict-edit-preview">수정 내용: {editedContent.slice(0, 80)}</small>}
+            {message.retryMode === "edit" && retryTargetContent && <small className="conflict-edit-preview">서버 최신 내용: {retryTargetContent.slice(0, 80)}</small>}
+            {editDiffersFromServer && <small className="conflict-edit-guidance">서버 최신 내용과 수정한 내용이 다릅니다. 확인한 뒤 다시 보내 주세요.</small>}
+            <button type="button" disabled={recoveryPending} aria-busy={recoveryPending || undefined} onClick={() => onResolveError(message)}>
+              {recoveryLabel || failureAction.label}
             </button>
-            <small>입력한 내용은 유지됩니다.</small>
+            {message.concurrencyRepeated && <button className="secondary" type="button" disabled={recoveryPending} onClick={() => onContinueConflictInNewChat(message)}>새 대화에서 계속하기</button>}
+            {message.concurrencyRepeated && <small className="concurrency-new-chat-help">현재 입력을 새 대화로 옮기며 기존 대화는 유지됩니다.</small>}
+            <small>{message.failure?.kind === "concurrency" ? "입력한 내용은 입력란에 복원되어 있습니다." : "입력한 내용은 유지됩니다."}</small>
           </div>
         )}
         {canEdit && !isEditing && (

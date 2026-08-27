@@ -9,9 +9,17 @@ const fixtures = JSON.parse(fs.readFileSync(new URL("../../fixtures/prompt-impro
 
 test("shared fixture matrix contains every required compatibility case", () => {
   assert.deepEqual(Object.keys(fixtures.responses).sort(), ["ask", "emptyCollections", "improve", "missingOptionalFields", "noEvidence", "unknownAdditionalField"]);
-  assert.deepEqual(Object.keys(fixtures.errors).sort(), ["aiUnavailable", "timeout"]);
+  assert.deepEqual(Object.keys(fixtures.errors).sort(), ["aiUnavailable", "threadConcurrentlyUpdated", "timeout"]);
   assert.deepEqual(Object.keys(fixtures.clientMessages).sort(), ["cancelled", "legacyAssistant"]);
   assert.deepEqual(Object.keys(fixtures.regressions).sort(), ["exampleInQuestion", "improveWithNonActionableQuestions", "markdownDescription"]);
+});
+
+test("thread concurrency fixture stays distinct and requires an explicit post-refresh retry", async () => {
+  const { classifyMakeError, getMakeFailureAction } = await import("../../shared/make-message-model.js");
+  const failure = classifyMakeError(fixtures.errors.threadConcurrentlyUpdated);
+  assert.equal(failure.kind, "concurrency");
+  assert.equal(failure.retryable, false);
+  assert.deepEqual(getMakeFailureAction(failure), { id: "retry-after-refresh", label: "다시 보내기" });
 });
 
 test("optional, unknown, empty, and no-evidence fixtures remain normalizable", () => {
