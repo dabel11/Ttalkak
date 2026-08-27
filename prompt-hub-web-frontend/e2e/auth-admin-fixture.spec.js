@@ -92,6 +92,13 @@ test("topbar menus switch exclusively and close with outside click or Escape", a
 
   const settings = page.locator(".topbar-settings");
   const backend = page.locator(".backend-status-menu");
+  const primaryActions = page.locator(".topbar-primary-actions");
+  await expect(primaryActions).toBeVisible();
+  const actionCenters = await primaryActions.locator(":scope > *").evaluateAll((elements) => elements.map((element) => {
+    const rect = element.getBoundingClientRect();
+    return Math.round(rect.top + rect.height / 2);
+  }));
+  expect(Math.max(...actionCenters) - Math.min(...actionCenters)).toBeLessThanOrEqual(1);
   await backend.locator("summary").click();
   await expect(backend).toHaveJSProperty("open", true);
   await settings.locator("summary").click();

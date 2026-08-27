@@ -23,5 +23,7 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   expect(await empty.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(320);
 
   await page.locator(".backend-status-menu > summary").click();
+  await expect(page.locator(".backend-status-popover")).toContainText("서버에 연결할 수 없습니다");
+  await expect(page.locator(".backend-status-popover")).toContainText("잠시 후 다시 연결해 주세요");
   await expect(page.locator(".backend-status-popover [data-retry-home-load]")).toBeVisible();
 });

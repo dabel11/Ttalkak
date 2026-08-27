@@ -263,9 +263,18 @@ svg {
   max-width: min(100%, 560px);
 }
 
+.topbar-primary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .account-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
@@ -3587,9 +3596,14 @@ input[type="checkbox"] {
   }
 
   .account-actions,
-  .topbar-tools {
+  .topbar-tools,
+  .topbar-primary-actions {
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .topbar-primary-actions {
+    flex-wrap: wrap;
   }
 
   .backend-status {

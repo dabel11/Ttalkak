@@ -142,6 +142,8 @@ test("account and development actions are grouped behind the settings menu", () 
   });
 
   assert.match(html, /<details class="topbar-settings">/);
+  assert.match(html, /<div class="topbar-primary-actions">/);
+  assert.match(html, /account-actions[\s\S]*backend-status[\s\S]*topbar-settings/);
   assert.match(html, /data-reset-demo/);
   assert.match(html, /data-toggle-reported/);
   assert.match(html, /data-open-auth="withdraw"/);

@@ -61,7 +61,7 @@
         </details>`
       : "";
     const resolvedAuthButton = state.isLoggedIn
-      ? `<div class="account-actions">${adminAccessButton}<button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button>${settingsMenu}</div>`
+      ? `<div class="account-actions">${adminAccessButton}<button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
       : authButton;
 
     return `
@@ -71,9 +71,11 @@
           <span>TTALKAK</span>
         </button>
         <div class="topbar-auth">
-          ${resolvedAuthButton}
-          ${BackendStatusBadge()}
-          ${!state.isLoggedIn ? settingsMenu : ""}
+          <div class="topbar-primary-actions">
+            ${resolvedAuthButton}
+            ${BackendStatusBadge()}
+            ${settingsMenu}
+          </div>
           ${state.route === "make" && !state.isLoggedIn ? `<p class="make-auth-hint">비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.</p>` : ""}
         </div>
       </header>

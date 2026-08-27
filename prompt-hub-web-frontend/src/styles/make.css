@@ -7,14 +7,17 @@
 }
 
 .make-side-panel {
+  display: flex;
+  flex-direction: column;
   grid-row: 1 / span 2;
   min-height: 0;
   margin: 16px 0 16px 16px;
   padding: 22px 16px;
-  border-right: 1px solid var(--line);
+  border-right: 0;
   border-radius: 10px;
   background: #eef4ef;
-  overflow-y: auto;
+  overflow: hidden;
+  box-shadow: 10px 0 28px -26px rgba(5, 5, 16, 0.38), 0 8px 24px rgba(5, 5, 16, 0.035);
 }
 
 .make-side-head {
@@ -124,17 +127,6 @@
   box-shadow: var(--edge-shadow-hover);
 }
 
-.make-folder-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.34);
-  transition: background 0.16s, box-shadow 0.16s, transform 0.16s;
-}
-
 .make-folder-item:hover,
 .make-folder-item.active {
   background: var(--brand-green);
@@ -221,27 +213,6 @@
   height: 13px;
 }
 
-.make-folder-menu-wrap {
-  position: relative;
-  display: grid;
-  place-items: center;
-  padding-right: 5px;
-}
-
-.make-folder-more {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.16s, background 0.16s, color 0.16s;
-}
-
 .make-folder-item:hover .make-folder-more,
 .make-folder-item.active .make-folder-more,
 .make-folder-item.menu-open .make-folder-more,
@@ -264,39 +235,6 @@
 .make-folder-more svg {
   width: 16px;
   height: 16px;
-}
-
-.make-folder-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 4px;
-  z-index: 20;
-  display: grid;
-  gap: 4px;
-  min-width: 116px;
-  padding: 6px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: var(--edge-shadow-hover);
-  transform-origin: top right;
-  animation: menu-island-in var(--motion-menu) both;
-}
-
-.make-folder-menu button {
-  display: grid;
-  grid-template-columns: 15px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  border: 0;
-  border-radius: 9px;
-  padding: 0 9px;
-  background: transparent;
-  color: var(--brand-green);
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
 }
 
 .make-folder-menu button:hover {
@@ -355,19 +293,6 @@
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.42);
   transition: background 0.16s, border-color 0.16s, transform 0.16s, box-shadow 0.16s;
-}
-
-.recent-thread {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  width: 100%;
-  padding: 2px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
 .recent-thread-item:hover,
@@ -628,7 +553,8 @@
 }
 
 .make-template-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: flex-start;
   gap: 10px;
   width: calc(100% - 24px);
@@ -645,8 +571,10 @@
 
 .template-toggle {
   flex: 0 0 auto;
-  width: 36px;
+  width: auto;
+  min-width: 62px;
   height: 36px;
+  padding: 0 11px;
   border: 0;
   border-radius: 999px;
   background: #eef4ef;
@@ -668,7 +596,7 @@
 .template-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   max-height: 110px;
   overflow: hidden;
@@ -679,12 +607,12 @@
 
 .template-list button {
   height: 36px;
-  padding: 0 15px;
-  border: 0;
+  padding: 0 14px;
+  border: 1px solid rgba(18, 63, 52, 0.09);
   border-radius: 999px;
   background: #eef4ef;
   color: var(--brand-green);
-  box-shadow: var(--edge-shadow);
+  box-shadow: none;
   font-size: 13px;
   font-weight: 600;
   transition: background 0.16s, color 0.16s, box-shadow 0.16s, transform 0.16s;
@@ -778,8 +706,9 @@
   width: min(820px, calc(100% - 80px));
   margin: 0 auto;
   padding: 10px 0;
-  border-top: 1px solid var(--line);
+  border-top: 0;
   background: #fff;
+  box-shadow: 0 -16px 34px -32px rgba(5, 5, 16, 0.62);
 }
 
 .composer.has-newchat {
@@ -959,30 +888,6 @@
   }
 }
 
-.message.user {
-  display: block;
-  align-self: flex-end;
-  width: fit-content;
-  max-width: min(420px, 62%);
-  margin-left: auto;
-  margin-right: clamp(10px, 2vw, 24px);
-  min-height: 0;
-  padding: 12px 18px;
-  background: var(--cta);
-  color: #fff;
-  line-height: 1.5;
-  overflow: hidden;
-  white-space: normal;
-}
-
-.message.user p {
-  display: block;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
 .message.user:hover {
   background: var(--brand-green);
 }
@@ -1084,6 +989,8 @@
 
 .message.user {
   position: relative;
+  display: block;
+  align-self: flex-end;
   flex: 0 1 auto;
   box-sizing: border-box;
   width: fit-content;
@@ -1092,8 +999,11 @@
   min-height: auto;
   height: auto;
   margin-left: auto;
-  margin-right: clamp(46px, 5vw, 68px);
-  padding: 10px 16px 12px;
+  margin-right: clamp(10px, 2vw, 24px);
+  padding: 10px 76px 12px 16px;
+  background: var(--cta);
+  color: #fff;
+  line-height: 1.5;
   overflow: visible;
   white-space: normal;
 }
@@ -1118,15 +1028,16 @@
 
 .user-message-actions {
   position: absolute;
-  top: 50%;
-  right: -40px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   display: flex;
   justify-content: flex-end;
   width: auto;
   margin: 0;
-  opacity: 0.82;
-  transform: translateY(-50%);
+  gap: 4px;
+  opacity: 0.55;
+  transform: none;
   transition: opacity 0.16s;
 }
 
@@ -1219,19 +1130,6 @@
   background: var(--brand-green);
   color: #fff;
   box-shadow: var(--edge-shadow-hover);
-}
-
-.recent-thread {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--edge-shadow);
-  z-index: 1;
 }
 
 .recent-thread.menu-open {
@@ -1492,16 +1390,6 @@ h1 {
 .section-icon {
   font-size: 24px;
   font-weight: 800;
-}
-
-.make-side-panel {
-  border-right: 0;
-  box-shadow: 10px 0 28px -26px rgba(5, 5, 16, 0.38), 0 8px 24px rgba(5, 5, 16, 0.035);
-}
-
-.composer {
-  border-top: 0;
-  box-shadow: 0 -16px 34px -32px rgba(5, 5, 16, 0.62);
 }
 
 .recent-thread-item,
@@ -1819,6 +1707,10 @@ h1 {
   align-items: center;
   position: relative;
   z-index: 1;
+  min-width: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  transition: background 0.16s, box-shadow 0.16s, transform 0.16s;
 }
 
 .make-folder-item.menu-open {
@@ -1839,8 +1731,10 @@ h1 {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.58);
   color: var(--brand-green);
+  box-shadow: none;
   text-align: left;
 }
 
@@ -1880,12 +1774,19 @@ h1 {
   place-items: center;
   width: 30px;
   min-width: 30px;
+  padding-right: 5px;
   transform: translateY(-50%);
 }
 
 .make-folder-more {
+  display: grid;
+  place-items: center;
   width: 30px;
   height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
   opacity: 0;
   pointer-events: none;
   cursor: pointer;
@@ -1925,6 +1826,8 @@ h1 {
   background: #fff;
   box-shadow: var(--edge-shadow-hover);
   pointer-events: auto;
+  transform-origin: top right;
+  animation: menu-island-in var(--motion-menu) both;
 }
 
 .make-folder-menu button {
@@ -1941,6 +1844,7 @@ h1 {
   font-weight: 700;
   text-align: left;
   cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
 }
 
 .make-folder-menu button:hover {
@@ -2104,12 +2008,6 @@ h1 {
   border-radius: 9px;
 }
 
-.make-folder-item > button {
-  padding: 0 10px;
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow: none;
-}
-
 .make-folder-item.user-folder > button {
   padding-right: 40px;
 }
@@ -2146,6 +2044,14 @@ h1 {
 }
 
 .recent-thread {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  z-index: 1;
+  min-width: 0;
+  width: 100%;
   min-height: 68px;
   padding: 10px;
   border: 1px solid transparent;
@@ -2154,6 +2060,9 @@ h1 {
   background: #fff;
   color: var(--text);
   box-sizing: border-box;
+  box-shadow: var(--edge-shadow);
+  text-align: left;
+  cursor: pointer;
   transition: background 0.16s, border-color 0.16s, box-shadow 0.16s;
 }
 
@@ -2235,19 +2144,9 @@ h1 {
   align-items: start;
 }
 
-.template-toggle,
-.template-list button {
+.template-toggle {
   border: 1px solid rgba(18, 63, 52, 0.09);
   box-shadow: none;
-}
-
-.template-list {
-  gap: 8px;
-}
-
-.template-list button {
-  height: 36px;
-  padding: 0 14px;
 }
 
 .template-toggle:hover,
@@ -2580,19 +2479,6 @@ h1 {
   justify-self: end;
 }
 
-.message.user {
-  margin-right: clamp(10px, 2vw, 24px);
-  padding-right: 76px;
-}
-
-.user-message-actions {
-  top: 8px;
-  right: 8px;
-  opacity: 0.55;
-  transform: none;
-  gap: 4px;
-}
-
 .user-message-edit-button,
 .user-message-split-button {
   width: 28px;
@@ -2648,10 +2534,7 @@ h1 {
   display: none !important;
 }
 
-.make-side-panel { display: flex; flex-direction: column; overflow: hidden; }
 .make-recent-section { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .make-recent-section .recent-thread-list { min-height: 0; padding-right: 7px; overflow-y: auto; scrollbar-gutter: stable; }
-.template-toggle { width: auto; min-width: 62px; padding: 0 11px; }
-.make-template-bar { grid-template-columns: auto minmax(0, 1fr); }
 .conversation-turn { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 18px; border-bottom: 1px solid rgba(18, 63, 52, 0.07); }
 .conversation-turn.is-processing { margin: 0 -10px; padding: 12px 10px 18px; border: 0; border-radius: 16px; background: rgba(231, 242, 237, 0.6); }

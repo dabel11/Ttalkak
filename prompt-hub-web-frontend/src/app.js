@@ -1085,16 +1085,18 @@ function PromptCard(prompt, options = {}) {
 }
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
-  const message = state.backendStatusMessage || "백엔드 연결 확인 중";
-  const label = status === "connected" ? "Backend 연결됨" : status === "fallback" ? canUseDemoFallback() ? "데모 데이터 표시 중" : "Backend 오류" : "Backend 확인 중";
+  const isUnavailable = status === "fallback";
+  const title = status === "connected" ? "서버에 연결되었습니다" : isUnavailable ? "서버에 연결할 수 없습니다" : "서버 연결을 확인하고 있습니다";
+  const message = status === "connected" ? "모든 기능을 정상적으로 사용할 수 있습니다." : isUnavailable ? "잠시 후 다시 연결해 주세요." : "연결 상태를 확인하는 동안 잠시만 기다려 주세요.";
+  const label = status === "connected" ? "연결됨" : isUnavailable ? canUseDemoFallback() ? "데모 데이터" : "연결 오류" : "연결 확인 중";
   return `<details class="backend-status-menu">
-    <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(message)}">
+    <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(title)}">
       <span class="backend-status-dot" aria-hidden="true"></span><span>${label}</span>
     </summary>
     <div class="backend-status-popover" role="status">
-      <strong>${status === "connected" ? "백엔드에 연결되었습니다" : status === "fallback" ? "백엔드 연결을 확인해 주세요" : "연결 상태를 확인하고 있습니다"}</strong>
+      <strong>${title}</strong>
       <span>${escapeHtml(message)}</span>
-      ${status === "fallback" ? `<button type="button" data-retry-home-load>다시 연결</button>` : ""}
+      ${isUnavailable ? `<button type="button" data-retry-home-load>다시 연결</button>` : ""}
     </div>
   </details>`;
 }
@@ -1102,7 +1104,8 @@ function canUseDemoFallback() {
   return DEMO_FALLBACK_ENABLED;
 }
 function getApiFailureMessage(areaLabel = "API") {
-  return `${areaLabel} 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 데이터를 표시하지 않습니다.`;
+  void areaLabel;
+  return "서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.";
 }
 function getPromptCardPreviewTags(tags) {
   const normalizedTags = Array.isArray(tags) ? tags : [];
@@ -1148,7 +1151,7 @@ function DemoLibraryPrompt() {
       <div class="demo-library-prompt">
         <div>
           <strong>현재: 서버 응답 실패</strong>
-          <p>My page API 호출에 실패했습니다. 통합 테스트/시연 모드에서는 데모 보관함을 표시하지 않습니다.</p>
+          <p>서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.</p>
         </div>
       </div>
     `;
