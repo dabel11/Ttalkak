@@ -756,7 +756,7 @@
   background: #eef4ef;
   color: var(--text);
   line-height: 1.38;
-  overflow-y: auto;
+  overflow-y: hidden;
   transition: border-color 0.16s, box-shadow 0.16s;
 }
 

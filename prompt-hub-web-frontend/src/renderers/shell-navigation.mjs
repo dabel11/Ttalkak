@@ -51,17 +51,26 @@
       remaining,
       showPromptTools,
     } = data;
-    const settingsMenu = state.isLoggedIn || showPromptTools
+    const settingsMenu = showPromptTools
       ? `<details class="topbar-settings">
-          <summary aria-label="계정 및 화면 설정">설정</summary>
+          <summary aria-label="화면 설정">설정</summary>
           <div class="topbar-settings-menu">
-            ${showPromptTools ? `<span class="topbar-settings-label">화면 도구</span><button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button><button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>` : ""}
-            ${state.isLoggedIn ? `<span class="topbar-settings-label">계정</span><button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>` : ""}
+            <span class="topbar-settings-label">화면 도구</span><button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button><button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>
+          </div>
+        </details>`
+      : "";
+    const accountMenu = state.isLoggedIn
+      ? `<details class="topbar-account">
+          <summary aria-label="계정 메뉴">${escapeHtml(state.currentUser || "사용자")}님</summary>
+          <div class="topbar-account-menu">
+            <span class="topbar-settings-label">계정</span>
+            <button class="topbar-menu-action" type="button" data-logout>로그아웃</button>
+            <button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>
           </div>
         </details>`
       : "";
     const resolvedAuthButton = state.isLoggedIn
-      ? `<div class="account-actions">${adminAccessButton}<button class="login-button logged-in" type="button" data-logout>${escapeHtml(state.currentUser || "사용자")}님 · 로그아웃</button></div>`
+      ? `<div class="account-actions">${adminAccessButton}${accountMenu}</div>`
       : authButton;
 
     return `

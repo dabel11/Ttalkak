@@ -54,8 +54,9 @@ test("login accepts a valid auth contract and rejects a malformed response", asy
   await page.locator('[data-auth-form] input[name="userId"]').fill("fixture");
   await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
   await page.locator('[data-auth-form]').getByRole("button", { name: "로그인", exact: true }).click();
-  await expect(page.locator(".login-button.logged-in")).toContainText("Fixture User");
+  await expect(page.locator(".topbar-account > summary")).toContainText("Fixture User");
 
+  await page.locator(".topbar-account > summary").click();
   await page.locator("[data-logout]").click();
   await page.locator("[data-confirm-action]").click();
   await page.locator('[data-open-auth="login"]').click();
@@ -91,6 +92,7 @@ test("topbar menus switch exclusively and close with outside click or Escape", a
   await gotoApp(page);
 
   const settings = page.locator(".topbar-settings");
+  const account = page.locator(".topbar-account");
   const backend = page.locator(".backend-status-menu");
   const primaryActions = page.locator(".topbar-primary-actions");
   await expect(primaryActions).toBeVisible();
@@ -101,9 +103,12 @@ test("topbar menus switch exclusively and close with outside click or Escape", a
   expect(Math.max(...actionCenters) - Math.min(...actionCenters)).toBeLessThanOrEqual(1);
   await backend.locator("summary").click();
   await expect(backend).toHaveJSProperty("open", true);
+  await account.locator("summary").click();
+  await expect(account).toHaveJSProperty("open", true);
+  await expect(backend).toHaveJSProperty("open", false);
   await settings.locator("summary").click();
   await expect(settings).toHaveJSProperty("open", true);
-  await expect(backend).toHaveJSProperty("open", false);
+  await expect(account).toHaveJSProperty("open", false);
 
   await page.keyboard.press("Escape");
   await expect(settings).toHaveJSProperty("open", false);
@@ -129,7 +134,7 @@ test("withdrawal explains the policy, discards the account scope, and preserves 
   });
 
   await gotoApp(page);
-  await page.locator(".topbar-settings > summary").click();
+  await page.locator(".topbar-account > summary").click();
   await page.locator('[data-open-auth="withdraw"]').click();
   await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없습니다");
   await expect(page.locator(".auth-helper")).toContainText("기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다");

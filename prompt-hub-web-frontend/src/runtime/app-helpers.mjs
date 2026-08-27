@@ -8,7 +8,9 @@ export function truncateText(text, maxLength = 80) {
 /** @param {HTMLTextAreaElement} textarea */
 export function autosizeTextarea(textarea) {
   textarea.style.height = "auto";
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  const nextHeight = Math.min(textarea.scrollHeight, 120);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > nextHeight ? "auto" : "hidden";
 }
 /** @param {TtalkakStateEntity[]} list @param {TtalkakStateEntity} prompt */
 export function upsertPrompt(list, prompt) {

@@ -20,7 +20,9 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   await expect(empty).toBeVisible();
   await expect(empty.getByRole("heading", { name: "프롬프트를 불러오지 못했습니다" })).toBeVisible();
   await expect(empty.getByRole("button", { name: "다시 불러오기" })).toBeVisible();
-  expect(await empty.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(320);
+  const errorHeight = await empty.evaluate((element) => element.getBoundingClientRect().height);
+  expect(errorHeight).toBeGreaterThanOrEqual(180);
+  expect(errorHeight).toBeLessThanOrEqual(210);
 
   await page.locator(".backend-status-menu > summary").click();
   await expect(page.locator(".backend-status-popover")).toContainText("서버에 연결할 수 없습니다");

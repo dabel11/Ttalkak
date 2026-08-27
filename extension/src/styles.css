@@ -807,6 +807,7 @@ button:disabled {
   outline: 0;
   font-size: 14px;
   line-height: 1.5;
+  overflow-y: hidden;
   transition: border-color 0.16s, box-shadow 0.16s, background 0.16s;
 }
 
