@@ -4,12 +4,12 @@ const fixtures = require("./fixtures/make-responses.js");
 const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
 const messageModel = require("../src/utils/make-message-model.js");
 
-let MessageQuestionsView; let MakeFeedView; let MessageBubbleView;
+let MessageQuestionsView; let MakeFeedView; let MakeFolderButtonView; let MakeTemplateBarView; let MessageBubbleView;
 test.before(async () => {
   const { parts } = await import("../src/renderers/pages/make-message-parts.mjs");
   const { renderers } = await import("../src/renderers/pages/make-page.mjs");
   ({ MessageQuestionsView } = parts);
-  ({ MakeFeedView, MessageBubbleView } = renderers);
+  ({ MakeFeedView, MakeFolderButtonView, MakeTemplateBarView, MessageBubbleView } = renderers);
 });
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
@@ -138,6 +138,41 @@ test("thinking messages expose an accessible request cancellation control", () =
   assert.match(html, /data-cancel-make-request/);
   assert.match(html, /aria-label="요청 취소"/);
   assert.match(html, /aria-live="polite"/);
+});
+
+test("empty Make state offers focused template starters", () => {
+  const html = MakeFeedView({ icons: { make: "make", send: "send" }, escapeAttr, escapeHtml }, {
+    hasMessages: false,
+    isThinking: false,
+    messages: [],
+    promptTemplates: [
+      { id: "writing", label: "글쓰기", prompt: "글쓰기 템플릿" },
+      { id: "summary", label: "요약", prompt: "요약 템플릿" },
+    ],
+    renderMessageBubble: () => "",
+    templateBarHtml: "",
+  });
+  assert.match(html, /make-empty-starters/);
+  assert.match(html, /data-template="writing"/);
+  assert.match(html, /글쓰기 예시로 시작하기/);
+});
+
+test("template selection explains its effect and exposes pressed state", () => {
+  const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
+    promptTemplates: [{ id: "writing", label: "글쓰기", description: "글의 뼈대를 만듭니다." }],
+    selectedTemplateId: "writing",
+    templateCollapsed: false,
+  });
+  assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /template-guidance/);
+  assert.match(html, /글의 뼈대를 만듭니다/);
+});
+
+test("folder action names identify their owning folder", () => {
+  const html = MakeFolderButtonView({ icons: { bookmark: "bookmark", more: "more" }, escapeAttr, escapeHtml, formatNumber: String }, {
+    canManage: true, count: 2, folderId: "folder-1", isActive: false, isEditing: false, isMenuOpen: false, isUserFolder: true, name: "업무 자료",
+  });
+  assert.match(html, /aria-label="업무 자료 폴더 더보기"/);
 });
 
 test("conversation turns group a user request with its reply and highlight pending work", () => {

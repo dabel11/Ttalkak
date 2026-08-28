@@ -46,7 +46,10 @@ test("essential navigation and authentication remain reachable on a small screen
   await expect(page.locator(".share-page")).toBeVisible();
   await expectNoDocumentOverflow(page);
 
-  await page.locator('[data-open-auth="login"]').first().click();
+  const compactMenu = page.getByRole("button", { name: "메뉴" });
+  await compactMenu.click();
+  await expect(compactMenu).toHaveAttribute("aria-expanded", "true");
+  await page.locator('#topbar-action-menu [data-open-auth="login"]').click();
   const form = page.locator("[data-auth-form]");
   await expect(form).toBeVisible();
   await form.locator('input[name="userId"]').fill("fixture");

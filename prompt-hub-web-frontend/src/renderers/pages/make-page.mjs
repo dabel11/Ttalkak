@@ -51,8 +51,9 @@ import { parts } from "./make-message-parts.mjs";
   }
 
   function MakeFeedView(ctx, data) {
-    const { icons, escapeHtml } = ctx;
-    const { hasMessages, isThinking, messages, renderMessageBubble, templateBarHtml, threadPolicyNote } = data;
+    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { hasMessages, isThinking, messages, promptTemplates = [], renderMessageBubble, templateBarHtml, threadPolicyNote } = data;
+    const starterTemplates = promptTemplates.filter((template) => template.prompt).slice(0, 4);
 
     return `
       <div class="chat-feed">
@@ -65,6 +66,10 @@ import { parts } from "./make-message-parts.mjs";
                 <div class="spark-badge">${icons.make}</div>
                 <h1>프롬프트 첨삭 도우미</h1>
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
+                <div class="make-empty-starters" aria-label="예시 요청으로 시작하기">
+                  <strong>예시로 시작하기</strong>
+                  <div>${starterTemplates.map((template) => `<button type="button" data-template="${escapeAttr(template.id)}" aria-label="${escapeAttr(template.label)} 예시로 시작하기">${escapeHtml(template.label)}</button>`).join("")}</div>
+                </div>
               </div>`
         }
         ${isThinking && (!messages.length || messages.at(-1)?.role !== "user") ? MessageThinkingView() : ""}
@@ -105,7 +110,8 @@ import { parts } from "./make-message-parts.mjs";
 
   function MakeTemplateBarView(ctx, data) {
     const { escapeAttr, escapeHtml } = ctx;
-    const { promptTemplates, templateCollapsed } = data;
+    const { promptTemplates, selectedTemplateId, templateCollapsed } = data;
+    const selectedTemplate = promptTemplates.find((template) => template.id === selectedTemplateId);
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
@@ -114,9 +120,10 @@ import { parts } from "./make-message-parts.mjs";
           templateCollapsed
             ? ""
             : `<div class="template-list">
-                ${promptTemplates.map((template) => `<button type="button" data-template="${escapeAttr(template.id)}">${escapeHtml(template.label)}</button>`).join("")}
+                ${promptTemplates.map((template) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}">${escapeHtml(template.label)}</button>`).join("")}
               </div>`
         }
+        ${templateCollapsed ? "" : `<p class="template-guidance" role="status">${selectedTemplate ? `<strong>${escapeHtml(selectedTemplate.label)}</strong> ${escapeHtml(selectedTemplate.description || "입력란에 템플릿을 적용했습니다.")}` : "분야를 선택하면 입력에 필요한 항목과 예시가 준비됩니다."}</p>`}
       </div>
     `;
   }
@@ -138,6 +145,7 @@ import { parts } from "./make-message-parts.mjs";
     const { icons, escapeAttr, escapeHtml, formatShortDate } = ctx;
     const {
       activeFolderName,
+      activeFolderId,
       activeThreadId,
       canCreateFolder,
       canManageFolders,
@@ -177,7 +185,11 @@ import { parts } from "./make-message-parts.mjs";
           }
           <div class="make-folder-list">
             ${renderFolderButton("all", "전체", threadCount)}
-            ${visibleFolders.map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
+            ${visibleFolders.slice(0, 3).map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}
+            ${visibleFolders.length > 3 ? `<details class="make-folder-overflow" ${visibleFolders.slice(3).some((folder) => folder.id === activeFolderId) ? "open" : ""}>
+              <summary>폴더 ${visibleFolders.length - 3}개 더 보기</summary>
+              <div>${visibleFolders.slice(3).map((folder) => renderFolderButton(folder.id, folder.name, folder.threadCount)).join("")}</div>
+            </details>` : ""}
           </div>
         </section>
         <section class="make-recent-section">
@@ -190,7 +202,7 @@ import { parts } from "./make-message-parts.mjs";
             <input type="search" data-recent-thread-search placeholder="최근 대화 검색" autocomplete="off" />
             <button type="button" data-clear-recent-thread-search aria-label="최근 대화 검색어 지우기" hidden>&times;</button>
           </label>
-          <p class="make-recent-search-status" data-recent-thread-search-status aria-live="polite">전체 ${visibleThreads.length}개</p>
+          <p class="make-recent-search-status" data-recent-thread-search-status aria-live="polite" hidden></p>
           ${
           visibleThreads.length
             ? `<div class="recent-thread-list">
@@ -203,7 +215,7 @@ import { parts } from "./make-message-parts.mjs";
                       <small>${formatMakeSidebarDate(thread.createdAt, formatShortDate)}</small>
                     </button>
                     <div class="recent-thread-menu-wrap">
-                      <button class="recent-thread-more" type="button" data-thread-menu="${escapeAttr(thread.id)}" aria-label="대화 더보기" aria-expanded="${openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
+                      <button class="recent-thread-more" type="button" data-thread-menu="${escapeAttr(thread.id)}" aria-label="${escapeAttr(formatMakeSidebarLabel(thread.title, "대화", 40))} 대화 더보기" aria-expanded="${openThreadMenuId === thread.id ? "true" : "false"}">${icons.more}</button>
                       ${
                         openThreadMenuId === thread.id
                           ? `<div class="recent-thread-menu" role="menu">
@@ -302,7 +314,7 @@ import { parts } from "./make-message-parts.mjs";
         ${
           canManage
             ? `<div class="make-folder-menu-wrap">
-                <button class="make-folder-more" type="button" data-folder-menu="${safeFolderId}" aria-label="폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
+                <button class="make-folder-more" type="button" data-folder-menu="${safeFolderId}" aria-label="${escapeAttr(name)} 폴더 더보기" aria-expanded="${isMenuOpen ? "true" : "false"}">${icons.more}</button>
                 ${
                   isMenuOpen
                     ? `<div class="make-folder-menu" role="menu">

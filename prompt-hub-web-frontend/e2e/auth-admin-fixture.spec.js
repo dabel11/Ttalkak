@@ -96,7 +96,7 @@ test("topbar menus switch exclusively and close with outside click or Escape", a
   const backend = page.locator(".backend-status-menu");
   const primaryActions = page.locator(".topbar-primary-actions");
   await expect(primaryActions).toBeVisible();
-  const actionCenters = await primaryActions.locator(":scope > *").evaluateAll((elements) => elements.map((element) => {
+  const actionCenters = await primaryActions.locator(".topbar-action-menu > *").evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
     return Math.round(rect.top + rect.height / 2);
   }));
@@ -117,6 +117,29 @@ test("topbar menus switch exclusively and close with outside click or Escape", a
   await settings.locator("summary").click();
   await page.getByRole("heading", { name: "인기 프롬프트" }).click();
   await expect(settings).toHaveJSProperty("open", false);
+});
+
+test("narrow screens collapse account, connection and settings into one keyboard-safe menu", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const toggle = page.getByRole("button", { name: "메뉴" });
+  const actionMenu = page.locator("#topbar-action-menu");
+  await expect(toggle).toBeVisible();
+  await expect(actionMenu).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(actionMenu).toBeVisible();
+  await expect(actionMenu.locator(".topbar-account")).toBeVisible();
+  await expect(actionMenu.locator(".backend-status-menu")).toBeVisible();
+  await expect(actionMenu.locator(".topbar-settings")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(actionMenu).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
 test("withdrawal explains the policy, discards the account scope, and preserves local conversations", async ({ page }) => {

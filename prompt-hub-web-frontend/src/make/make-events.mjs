@@ -30,7 +30,10 @@
     });
     panel.querySelectorAll("[data-clear-recent-thread-search]").forEach((button) => { button.hidden = !query; });
     const status = panel.querySelector("[data-recent-thread-search-status]");
-    if (status) status.textContent = query ? `검색 결과 ${visibleCount}개` : `전체 ${threads.length}개`;
+    if (status) {
+      status.hidden = !query;
+      status.textContent = query ? `검색 결과 ${visibleCount}개` : "";
+    }
     const empty = panel.querySelector("[data-recent-thread-search-empty]");
     if (empty) empty.hidden = !query || visibleCount > 0;
     return visibleCount;

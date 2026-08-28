@@ -272,6 +272,18 @@ svg {
   max-width: 100%;
 }
 
+.topbar-mobile-toggle {
+  display: none;
+}
+
+.topbar-action-menu {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .account-actions {
   display: flex;
   flex-wrap: nowrap;
@@ -3619,7 +3631,77 @@ input[type="checkbox"] {
   }
 
   .topbar-primary-actions {
-    flex-wrap: wrap;
+    position: relative;
+    display: block;
+  }
+
+  .topbar-mobile-toggle {
+    display: inline-grid;
+    place-items: center;
+    min-width: 76px;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid #dce6e1;
+    border-radius: 999px;
+    background: #eef4ef;
+    color: var(--brand-green);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .topbar-mobile-toggle::after {
+    margin-left: 7px;
+    content: "⌄";
+  }
+
+  .topbar-mobile-toggle[aria-expanded="true"]::after {
+    content: "⌃";
+  }
+
+  .topbar-mobile-toggle:focus-visible {
+    outline: 3px solid rgba(18, 63, 52, 0.18);
+    outline-offset: 2px;
+  }
+
+  .topbar-action-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 35;
+    display: none;
+    align-items: stretch;
+    justify-items: stretch;
+    gap: 8px;
+    width: min(300px, calc(100vw - 32px));
+    padding: 12px;
+    border: 1px solid #dce6e1;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 18px 42px rgba(5, 40, 31, 0.16);
+  }
+
+  .topbar-primary-actions.compact-open .topbar-action-menu {
+    display: grid;
+  }
+
+  .topbar-action-menu > :is(.account-actions, .backend-status-menu, .topbar-settings),
+  .topbar-action-menu > .login-button {
+    width: 100%;
+  }
+
+  .topbar-action-menu :is(.backend-status-menu, .topbar-settings, .topbar-account) > summary,
+  .topbar-action-menu .login-button {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .topbar-action-menu :is(.backend-status-popover, .topbar-settings-menu, .topbar-account-menu) {
+    position: static;
+    width: 100%;
+    margin-top: 6px;
+    box-shadow: none;
   }
 
   .backend-status {

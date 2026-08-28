@@ -51,14 +51,14 @@
       remaining,
       showPromptTools,
     } = data;
-    const settingsMenu = showPromptTools
-      ? `<details class="topbar-settings">
+    const settingsMenu = `<details class="topbar-settings">
           <summary aria-label="화면 설정">설정</summary>
           <div class="topbar-settings-menu">
-            <span class="topbar-settings-label">화면 도구</span><button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button><button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>
+            <span class="topbar-settings-label">화면 및 데이터</span>
+            ${showPromptTools ? `<button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button>` : ""}
+            <button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>
           </div>
-        </details>`
-      : "";
+        </details>`;
     const accountMenu = state.isLoggedIn
       ? `<details class="topbar-account">
           <summary aria-label="계정 메뉴">${escapeHtml(state.currentUser || "사용자")}님</summary>
@@ -81,9 +81,12 @@
         </button>
         <div class="topbar-auth">
           <div class="topbar-primary-actions">
-            ${resolvedAuthButton}
-            ${BackendStatusBadge()}
-            ${settingsMenu}
+            <button class="topbar-mobile-toggle" type="button" aria-expanded="false" aria-controls="topbar-action-menu">메뉴</button>
+            <div class="topbar-action-menu" id="topbar-action-menu">
+              ${resolvedAuthButton}
+              ${BackendStatusBadge()}
+              ${settingsMenu}
+            </div>
           </div>
           ${state.route === "make" && !state.isLoggedIn ? `<p class="make-auth-hint">비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.</p>` : ""}
         </div>

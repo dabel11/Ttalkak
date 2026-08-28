@@ -14,11 +14,12 @@ export function createMakePageAdapter(ctx) {
   function feed(hasMessages) {
     const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
     return ctx.MakeFeedView(
-      { icons: ctx.icons, escapeHtml: ctx.escapeHtml },
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
       {
         hasMessages,
         isThinking: ctx.isThinking(),
         messages: ctx.state.messages,
+        promptTemplates: ctx.promptTemplates,
         renderMessageBubble: messageBubble,
         templateBarHtml: templateBar(),
         threadPolicyNote: activeThread && !ctx.canSplitMakeThread(activeThread, ctx.isBackendNumericId)
@@ -29,9 +30,10 @@ export function createMakePageAdapter(ctx) {
   }
 
   function templateBar() {
+    const selectedTemplateId = ctx.promptTemplates.find((/** @type {TtalkakStateEntity} */ template) => template.prompt === ctx.state.composerDraft)?.id || "";
     return ctx.MakeTemplateBarView(
       { escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
-      { promptTemplates: ctx.promptTemplates, templateCollapsed: ctx.state.templateCollapsed },
+      { promptTemplates: ctx.promptTemplates, selectedTemplateId, templateCollapsed: ctx.state.templateCollapsed },
     );
   }
 
@@ -67,6 +69,7 @@ export function createMakePageAdapter(ctx) {
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml, formatShortDate: ctx.formatShortDate },
       {
         activeFolderName: ctx.getActiveFolderName(),
+        activeFolderId: ctx.state.activeFolderId,
         activeThreadId: ctx.state.activeThreadId,
         canCreateFolder,
         canManageFolders,

@@ -144,6 +144,8 @@ test("account and development actions use separate menus", () => {
   assert.match(html, /<details class="topbar-settings">/);
   assert.match(html, /<details class="topbar-account">/);
   assert.match(html, /<div class="topbar-primary-actions">/);
+  assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="false"[^>]*>메뉴/);
+  assert.match(html, /id="topbar-action-menu"/);
   assert.match(html, /account-actions[\s\S]*topbar-account[\s\S]*backend-status[\s\S]*topbar-settings/);
   assert.match(html, /data-reset-demo/);
   assert.match(html, /data-toggle-reported/);
@@ -151,6 +153,18 @@ test("account and development actions use separate menus", () => {
   assert.match(html, /data-logout>로그아웃/);
   assert.doesNotMatch(html, /님 · 로그아웃/);
   assert.doesNotMatch(html, /Backend 오류[^<]*데모 초기화/);
+});
+
+test("screen settings remain available outside prompt-list routes", () => {
+  const html = HeaderView({
+    icons: {},
+    state: { isLoggedIn: true, currentUser: "Fixture", route: "make", hideReportedPrompts: false },
+    escapeHtml: (value) => String(value),
+    BackendStatusBadge: () => '<span class="backend-status">연결됨</span>',
+  }, { adminAccessButton: "", authButton: "", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: false });
+  assert.match(html, /<details class="topbar-settings">/);
+  assert.match(html, /data-reset-demo/);
+  assert.doesNotMatch(html, /data-toggle-reported/);
 });
 
 test("Home retry exposes an actionable compact error state", async () => {
@@ -167,4 +181,9 @@ test("Home retry exposes an actionable compact error state", async () => {
   assert.match(html, /data-retry-home-load/);
   assert.match(html, />정렬</);
   assert.match(html, />저장순</);
+
+  const checkingHtml = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "checking", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
+  assert.match(checkingHtml, /프롬프트를 확인하고 있습니다/);
+  assert.match(checkingHtml, /aria-busy="true"/);
+  assert.doesNotMatch(checkingHtml, /data-retry-home-load/);
 });

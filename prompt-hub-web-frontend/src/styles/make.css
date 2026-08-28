@@ -633,7 +633,8 @@
 }
 
 .make-empty {
-  min-height: 56vh;
+  min-height: clamp(300px, 40vh, 430px);
+  padding: 28px 0 18px;
 }
 
 .make-empty .spark-badge {
@@ -695,6 +696,46 @@
 
 .empty-state.make-empty p {
   line-height: 1.45;
+}
+
+.make-empty-starters {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.make-empty-starters > strong {
+  color: var(--muted-dark);
+  font-size: 12px;
+}
+
+.make-empty-starters > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.make-empty-starters button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(18, 63, 52, 0.14);
+  border-radius: 999px;
+  background: #f5f9f7;
+  color: var(--brand-green);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast);
+}
+
+.make-empty-starters button:hover,
+.make-empty-starters button:focus-visible {
+  border-color: rgba(18, 63, 52, 0.3);
+  background: #e4f0ea;
+  transform: translateY(-1px);
 }
 
 .composer {
@@ -1497,7 +1538,8 @@ h1 {
   line-height: 1;
 }
 
-.make-recent-search-status { margin: -5px 2px 7px; color: #31544a; font-size: 0.75rem; }
+.make-recent-search-status { width: fit-content; margin: -5px 2px 7px; padding: 3px 7px; border-radius: 999px; background: rgba(18, 63, 52, 0.07); color: #31544a; font-size: 0.75rem; }
+.make-recent-search-status[hidden] { display: none; }
 .make-recent-search-empty { display: grid; justify-items: start; gap: 8px; padding: 14px 12px; border: 1px dashed rgba(11, 81, 67, 0.2); border-radius: 12px; color: #47675e; }
 .make-recent-search-empty[hidden] { display: none; }
 .make-recent-search-empty button { padding: 6px 10px; border: 1px solid rgba(11, 81, 67, 0.2); border-radius: 999px; background: #fff; color: #0b5143; }
@@ -1521,6 +1563,17 @@ h1 {
 .concurrency-new-chat-help { flex-basis: 100%; margin-top: 0 !important; color: inherit; opacity: 0.78; }
 @keyframes make-recovery-spin { to { transform: rotate(360deg); } }
 @media (max-width: 620px) { .concurrency-compare { grid-template-columns: 1fr; } .concurrency-compare em { grid-column: 1; } }
+
+@media (max-height: 720px) {
+  .make-empty { min-height: 270px; padding-top: 18px; }
+  .make-empty .spark-badge { width: 66px; height: 66px; }
+  .make-empty-starters { margin-top: 14px; }
+}
+
+@media (max-width: 760px) {
+  .template-guidance { grid-column: 1 / -1; }
+  .make-empty-starters > div { max-width: 360px; }
+}
 .composer.is-restored textarea { animation: make-composer-restored 1.4s ease-out; }
 @keyframes make-composer-restored { 0% { box-shadow: 0 0 0 0 rgba(16, 91, 72, .38); } 45% { box-shadow: 0 0 0 5px rgba(16, 91, 72, .16); } 100% { box-shadow: 0 0 0 0 rgba(16, 91, 72, 0); } }
 @media (prefers-reduced-motion: reduce) { .composer.is-restored textarea { animation: none; outline: 2px solid #75a99a; } .message-failure-actions button[aria-busy="true"]::before { animation: none; } }
@@ -1999,6 +2052,47 @@ h1 {
 }
 
 .make-folder-list {
+  gap: 4px;
+}
+
+.make-folder-overflow {
+  display: grid;
+  gap: 4px;
+}
+
+.make-folder-overflow > summary {
+  min-height: 32px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  text-align: center;
+}
+
+.make-folder-overflow > summary::-webkit-details-marker {
+  display: none;
+}
+
+.make-folder-overflow > summary::after {
+  margin-left: 6px;
+  content: "⌄";
+}
+
+.make-folder-overflow[open] > summary::after {
+  content: "⌃";
+}
+
+.make-folder-overflow > summary:hover,
+.make-folder-overflow > summary:focus-visible {
+  background: rgba(18, 63, 52, 0.08);
+  color: var(--brand-green);
+}
+
+.make-folder-overflow > div {
+  display: grid;
   gap: 4px;
 }
 
@@ -2530,6 +2624,26 @@ h1 {
 .recent-thread[hidden],
 .recent-thread-group[hidden] {
   display: none !important;
+}
+
+.template-list button.active,
+.template-list button[aria-pressed="true"] {
+  border-color: var(--brand-green);
+  background: var(--brand-green);
+  color: #fff;
+}
+
+.template-guidance {
+  grid-column: 2;
+  margin: 0 4px;
+  color: var(--muted-dark);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.template-guidance strong {
+  margin-right: 4px;
+  color: var(--brand-green);
 }
 
 .make-recent-section { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }

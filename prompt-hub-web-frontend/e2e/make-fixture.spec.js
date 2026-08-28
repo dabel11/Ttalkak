@@ -253,14 +253,14 @@ test("recent conversation search hides unmatched threads and empty date groups",
   await expect(page.locator("[data-clear-recent-thread-search]").first()).toBeVisible();
   await page.locator("[data-clear-recent-thread-search]").first().click();
   await expect(page.locator("[data-recent-thread-search]")).toHaveValue("");
-  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("전체 3개");
+  await expect(page.locator("[data-recent-thread-search-status]")).toBeHidden();
 
   await page.locator("[data-recent-thread-search]").fill("not found");
   await expect(page.locator("[data-recent-thread-search-empty]")).toBeVisible();
   await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("검색 결과 0개");
   await page.locator("[data-recent-thread-search]").press("Escape");
   await expect(page.locator("[data-recent-thread-search]")).toHaveValue("");
-  await expect(page.locator("[data-recent-thread-search-status]")).toHaveText("전체 3개");
+  await expect(page.locator("[data-recent-thread-search-status]")).toBeHidden();
   await expect(page.locator(".recent-thread")).toHaveCount(3);
 });
 
@@ -361,6 +361,34 @@ test("empty composer hides its scrollbar and enables it only after reaching the 
   await expect(composer).toHaveCSS("overflow-y", "hidden");
   await composer.fill(Array.from({ length: 16 }, (_, index) => `긴 입력 ${index}`).join("\n"));
   await expect(composer).toHaveCSS("overflow-y", "auto");
+});
+
+test("dense folder lists collapse while keeping the active folder discoverable", async ({ page }) => {
+  const makeFolders = [
+    { id: "uncategorized", name: "미분류" },
+    { id: "folder-1", name: "업무" },
+    { id: "folder-2", name: "학습" },
+    { id: "folder-3", name: "개인" },
+    { id: "folder-4", name: "보관" },
+  ];
+  await openMake(page, [], { isLoggedIn: true, currentUser: "Fixture", authToken: "fixture-token", makeFolders, activeFolderId: "folder-4" });
+  const overflow = page.locator(".make-folder-overflow");
+  await expect(overflow).toBeVisible();
+  await expect(overflow).toHaveAttribute("open", "");
+  await expect(overflow.getByRole("button", { name: "보관 폴더 더보기" })).toBeVisible();
+});
+
+test("empty Make state keeps examples close to the composer and settings available", async ({ page }) => {
+  await openMake(page);
+  await expect(page.locator(".topbar-settings")).toBeVisible();
+  const starters = page.locator(".make-empty-starters [data-template]");
+  await expect(starters).toHaveCount(4);
+  await starters.first().click();
+  const composer = page.locator("[data-composer] textarea");
+  await expect(composer).toBeFocused();
+  await expect(composer).not.toHaveValue("");
+  await expect(page.locator('.template-list [aria-pressed="true"]')).toContainText("글쓰기");
+  await expect(page.locator(".template-guidance")).toContainText("글의 뼈대를");
 });
 
 for (const threadIdentity of [
