@@ -12,6 +12,7 @@ test("runtime config centralizes defaults and normalizes the API URL", () => {
 test("runtime config distinguishes local development APIs from production APIs", () => {
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://localhost:8080" }).apiEnvironment, "development");
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://127.0.0.1:8080" }).apiEnvironment, "development");
+  assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://[::1]:8080" }).apiEnvironment, "development");
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.ttalkak.com" }).apiEnvironment, "production");
 });
 

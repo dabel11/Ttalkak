@@ -16,7 +16,7 @@ export function readRuntimeConfig(browserWindow = globalThis.window) {
   let parsedUrl;
   try { parsedUrl = new URL(apiBaseUrl); } catch { throw new TypeError("TTALKAK API base URL is invalid."); }
   if (!/^https?:$/.test(parsedUrl.protocol)) throw new TypeError("TTALKAK API base URL must use HTTP or HTTPS.");
-  const normalizedHostname = parsedUrl.hostname.toLowerCase().replace(/\.$/, "");
+  const normalizedHostname = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   const apiEnvironment = normalizedHostname === "localhost" || normalizedHostname === "127.0.0.1" || normalizedHostname === "::1" ? "development" : "production";
   return Object.freeze({
     apiBaseUrl,
