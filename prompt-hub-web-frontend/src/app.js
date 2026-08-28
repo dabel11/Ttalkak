@@ -92,6 +92,7 @@ const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
 const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
 if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
   [
     normalizeSearchText,
     normalizeTag,
@@ -154,7 +155,10 @@ const {
   ConfirmDialog,
   Pagination: BasePagination,
 } = modules.components;
-if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
+if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
+  [AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")
+) {
   throw moduleLoadError("공통 컴포넌트");
 }
 const { bindAppEvents } = modules.events.app;
@@ -440,7 +444,7 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
@@ -2130,7 +2134,7 @@ function callBackendApi(action, ...args) {
   const handler = api?.[action];
   if (typeof handler !== "function") return Promise.resolve(null);
   const token = getAuthToken();
-  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+  if (!token || isDemoAuthToken(token)) {
     console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다.`);
     return Promise.resolve(null);
   }
@@ -2151,7 +2155,7 @@ async function runPromptStateMutation(action, promptId, fallbackMessage) {
   const handler = api?.[action];
   if (typeof handler !== "function") return true;
   const token = getAuthToken();
-  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+  if (!token || isDemoAuthToken(token)) {
     openAuth("login");
     showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
     return false;

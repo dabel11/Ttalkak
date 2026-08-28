@@ -65,35 +65,6 @@ export function createAppStaticData({ demo = null, demoFallbackEnabled = false }
   ];
   const FREE_MAKE_LIMIT = 3;
   const WITHDRAWN_AUTHOR_LABEL = "탈퇴한 사용자";
-  const PROTECTED_BACKEND_ACTIONS = new Set([
-    "addComment",
-    "addReply",
-    "deleteComment",
-    "deleteAdminComment",
-    "deleteMakeFolder",
-    "deletePrompt",
-    "hideAdminComment",
-    "hideAdminPrompt",
-    "likeComment",
-    "likePrompt",
-    "reportComment",
-    "reportPrompt",
-    "requestAuthorRevision",
-    "requestPromptRevision",
-    "restoreAdminPrompt",
-    "savePrompt",
-    "unlikeComment",
-    "unlikePrompt",
-    "unhideAdminComment",
-    "unsavePrompt",
-    "unsharePrompt",
-    "updateAuthorRevisionRequest",
-    "updateAdminReportStatus",
-    "updateAdminRevisionRequestStatus",
-    "updateAdminTagStatus",
-    "updateComment",
-    "updateMakeFolder",
-  ]);
   const SAVED_PAGE_SIZE = 16;
   const HOME_PAGE_SIZE = 16;
   const SEARCH_DEBOUNCE_MS = 320;
@@ -102,5 +73,5 @@ export function createAppStaticData({ demo = null, demoFallbackEnabled = false }
   const DEMO_EXISTING_USER_IDS = DEMO_DATA_ENABLED ? demo?.existingUserIds || [] : [];
   const commentsByPrompt = DEMO_DATA_ENABLED ? structuredClone(demo?.commentOverrides || {}) : {};
   const demoCommentBackfill = commentsByPrompt;
-  return Object.freeze({ DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill });
+  return Object.freeze({ DEMO_FALLBACK_ENABLED, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill });
 }
