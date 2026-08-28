@@ -94,6 +94,8 @@ services:
       - backend
     volumes:
       - ./prompt-hub-web-frontend:/usr/share/nginx/html:ro
+      # .mjs 를 application/javascript 로 서빙(기본 mime.types 에 없음 → ESM 로딩 실패·백지)
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "4173:80"
 
