@@ -16,13 +16,52 @@ export function getBackendStatusPresentation(status, { apiEnvironment = "product
  *   browserWindow?: Window & typeof globalThis;
  *   browserDocument?: Document;
  *   intervalMs?: number;
+ *   maxIntervalMs?: number;
+ *   leaseMs?: number;
+ *   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
+ *   now?: () => number;
  * }} options
  */
-export function createBackendRecoveryMonitor({ getStatus, retry, browserWindow = globalThis.window, browserDocument = globalThis.document, intervalMs = 15_000 }) {
+export function createBackendRecoveryMonitor({
+  getStatus,
+  retry,
+  browserWindow = globalThis.window,
+  browserDocument = globalThis.document,
+  intervalMs = 15_000,
+  maxIntervalMs = 60_000,
+  leaseMs = 20_000,
+  storage,
+  now = Date.now,
+}) {
   /** @type {ReturnType<typeof setTimeout> | null} */
   let timerId = null;
   let retrying = false;
   let disposed = false;
+  let failures = 0;
+  let recoveryStorage = storage;
+  if (recoveryStorage === undefined) {
+    try { recoveryStorage = browserWindow?.localStorage || null; } catch { recoveryStorage = null; }
+  }
+  const owner = `${now()}-${Math.random()}`;
+  const leaseKey = "ttalkak:backend-recovery-lease";
+  const isOffline = () => browserWindow.navigator?.onLine === false;
+  const acquireLease = () => {
+    if (!recoveryStorage) return true;
+    try {
+      const current = JSON.parse(recoveryStorage.getItem(leaseKey) || "null");
+      if (current?.expiresAt > now() && current.owner !== owner) return false;
+      recoveryStorage.setItem(leaseKey, JSON.stringify({ owner, expiresAt: now() + leaseMs }));
+      return JSON.parse(recoveryStorage.getItem(leaseKey) || "null")?.owner === owner;
+    } catch {
+      return true;
+    }
+  };
+  const releaseLease = () => {
+    if (!recoveryStorage) return;
+    try {
+      if (JSON.parse(recoveryStorage.getItem(leaseKey) || "null")?.owner === owner) recoveryStorage.removeItem(leaseKey);
+    } catch { /* storage can be unavailable in privacy-restricted contexts */ }
+  };
   const clearTimer = () => {
     if (timerId == null) return;
     browserWindow.clearTimeout(timerId);
@@ -30,24 +69,36 @@ export function createBackendRecoveryMonitor({ getStatus, retry, browserWindow =
   };
   const schedule = () => {
     clearTimer();
-    if (disposed || getStatus() !== "fallback" || browserDocument.visibilityState === "hidden") return;
-    timerId = browserWindow.setTimeout(() => { void check(); }, intervalMs);
+    if (disposed || getStatus() !== "fallback" || browserDocument.visibilityState === "hidden" || isOffline()) return;
+    const delay = Math.min(maxIntervalMs, intervalMs * (2 ** failures));
+    timerId = browserWindow.setTimeout(() => { void check(); }, delay);
   };
   const check = async () => {
     clearTimer();
-    if (disposed || retrying || getStatus() !== "fallback" || browserDocument.visibilityState === "hidden") return false;
+    if (disposed || retrying || getStatus() !== "fallback" || browserDocument.visibilityState === "hidden" || isOffline()) return false;
+    if (!acquireLease()) {
+      schedule();
+      return false;
+    }
     retrying = true;
     try {
       await retry({ automatic: true });
+      failures = getStatus() === "fallback" ? failures + 1 : 0;
       return true;
+    } catch {
+      failures += 1;
+      return false;
     } finally {
       retrying = false;
+      releaseLease();
       schedule();
     }
   };
-  const onOnline = () => { void check(); };
+  const onOnline = () => { failures = 0; void check(); };
+  const onOffline = clearTimer;
   const onVisibilityChange = () => browserDocument.visibilityState === "hidden" ? clearTimer() : void check();
   browserWindow.addEventListener("online", onOnline);
+  browserWindow.addEventListener("offline", onOffline);
   browserDocument.addEventListener("visibilitychange", onVisibilityChange);
   return Object.freeze({
     sync: schedule,
@@ -55,7 +106,9 @@ export function createBackendRecoveryMonitor({ getStatus, retry, browserWindow =
     dispose() {
       disposed = true;
       clearTimer();
+      releaseLease();
       browserWindow.removeEventListener("online", onOnline);
+      browserWindow.removeEventListener("offline", onOffline);
       browserDocument.removeEventListener("visibilitychange", onVisibilityChange);
     },
   });
