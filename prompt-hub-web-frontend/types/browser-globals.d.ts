@@ -127,7 +127,7 @@ interface TtalkakModuleRegistry {
     commentOverrides?: Record<string, TtalkakStateEntity[]>;
   } | null;
   utils: TtalkakCallableModule;
-  home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  home: { backendStatus: TtalkakCallableModule; model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
   saved: { createMyPageDataModel: Function; createSavedLibraryController: Function };
   discovery: { createDiscoveryController: Function };
   interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
@@ -157,7 +157,7 @@ interface TtalkakModuleRegistry {
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
-  runtimeConfig: { apiBaseUrl: string; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
+  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };

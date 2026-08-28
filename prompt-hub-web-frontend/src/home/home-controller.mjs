@@ -68,9 +68,9 @@
       ctx.render();
     }
 
-    async function retryHomeLoad() {
+    async function retryHomeLoad({ automatic = false } = {}) {
       ctx.state.backendStatus = "checking";
-      ctx.state.backendStatusMessage = "Home 프롬프트를 다시 불러오는 중입니다.";
+      ctx.state.backendStatusMessage = automatic ? "서버 연결 복구를 자동으로 확인 중입니다." : "Home 프롬프트를 다시 불러오는 중입니다.";
       ctx.render();
       await ctx.refresh();
     }

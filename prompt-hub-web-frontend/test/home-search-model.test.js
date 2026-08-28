@@ -126,7 +126,7 @@ test("Home event binder delegates controls to the controller", () => {
   assert.deepEqual(calls, ["scope:author", "sort:latest", "retry", "page:2"]);
 });
 
-test("account and development actions are grouped behind the settings menu", () => {
+test("account and development actions use separate menus", () => {
   const html = HeaderView({
     icons: {},
     state: { isLoggedIn: true, currentUser: "Fixture", route: "home", hideReportedPrompts: false },
@@ -142,11 +142,14 @@ test("account and development actions are grouped behind the settings menu", () 
   });
 
   assert.match(html, /<details class="topbar-settings">/);
+  assert.match(html, /<details class="topbar-account">/);
   assert.match(html, /<div class="topbar-primary-actions">/);
-  assert.match(html, /account-actions[\s\S]*backend-status[\s\S]*topbar-settings/);
+  assert.match(html, /account-actions[\s\S]*topbar-account[\s\S]*backend-status[\s\S]*topbar-settings/);
   assert.match(html, /data-reset-demo/);
   assert.match(html, /data-toggle-reported/);
   assert.match(html, /data-open-auth="withdraw"/);
+  assert.match(html, /data-logout>로그아웃/);
+  assert.doesNotMatch(html, /님 · 로그아웃/);
   assert.doesNotMatch(html, /Backend 오류[^<]*데모 초기화/);
 });
 

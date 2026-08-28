@@ -22,7 +22,7 @@ export function createMakePageAdapter(ctx) {
         renderMessageBubble: messageBubble,
         templateBarHtml: templateBar(),
         threadPolicyNote: activeThread && !ctx.canSplitMakeThread(activeThread, ctx.isBackendNumericId)
-          ? "대화 분리는 로컬 대화에서 사용할 수 있습니다."
+          ? "이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다."
           : "",
       },
     );

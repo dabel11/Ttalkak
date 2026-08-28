@@ -40,6 +40,7 @@ const {
 const getUniquePrompts = uniquePrompts;
 const { createHomeController } = modules.home.controller;
 const { bindHomeEvents } = modules.home.events;
+const { createBackendRecoveryMonitor, getBackendStatusPresentation } = modules.home.backendStatus;
 const { createSavedLibraryController } = modules.saved;
 const { createMyPageDataModel } = modules.saved;
 const { createDiscoveryController } = modules.discovery;
@@ -91,6 +92,7 @@ const makePersistenceModule = modules.make.persistence;
 const makeStateModule = modules.make.state;
 const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
 if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
   [
     normalizeSearchText,
     normalizeTag,
@@ -153,7 +155,10 @@ const {
   ConfirmDialog,
   Pagination: BasePagination,
 } = modules.components;
-if ([AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")) {
+if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
+  [AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")
+) {
   throw moduleLoadError("공통 컴포넌트");
 }
 const { bindAppEvents } = modules.events.app;
@@ -439,7 +444,7 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, PROTECTED_BACKEND_ACTIONS, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
@@ -472,6 +477,12 @@ const homeController = createHomeController({
   applyPage: (value) => applyHomePageState(state, value),
   refresh: refreshBackendHomePrompts,
   render,
+});
+const backendRecoveryMonitor = createBackendRecoveryMonitor({
+  getStatus: () => state.backendStatus,
+  retry: (options) => homeController.retryHomeLoad(options),
+  browserWindow: window,
+  browserDocument: document,
 });
 const savedLibraryController = createSavedLibraryController({
   state,
@@ -1086,9 +1097,7 @@ function PromptCard(prompt, options = {}) {
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const isUnavailable = status === "fallback";
-  const title = status === "connected" ? "서버에 연결되었습니다" : isUnavailable ? "서버에 연결할 수 없습니다" : "서버 연결을 확인하고 있습니다";
-  const message = status === "connected" ? "모든 기능을 정상적으로 사용할 수 있습니다." : isUnavailable ? "잠시 후 다시 연결해 주세요." : "연결 상태를 확인하는 동안 잠시만 기다려 주세요.";
-  const label = status === "connected" ? "연결됨" : isUnavailable ? canUseDemoFallback() ? "데모 데이터" : "연결 오류" : "연결 확인 중";
+  const { label, message, title } = getBackendStatusPresentation(status, { apiEnvironment: runtimeConfig.apiEnvironment, demoFallbackEnabled: canUseDemoFallback() });
   return `<details class="backend-status-menu">
     <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(title)}">
       <span class="backend-status-dot" aria-hidden="true"></span><span>${label}</span>
@@ -1533,6 +1542,7 @@ function bindPromptInteractionEvents() {
 }
 function bindHomeSearchEvents() {
   bindHomeEvents(document, homeController, state);
+  backendRecoveryMonitor.sync();
   document.querySelectorAll("[data-saved-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.savedPage = Number(button.dataset.savedPage);
@@ -2124,7 +2134,7 @@ function callBackendApi(action, ...args) {
   const handler = api?.[action];
   if (typeof handler !== "function") return Promise.resolve(null);
   const token = getAuthToken();
-  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+  if (!token || isDemoAuthToken(token)) {
     console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다.`);
     return Promise.resolve(null);
   }
@@ -2145,7 +2155,7 @@ async function runPromptStateMutation(action, promptId, fallbackMessage) {
   const handler = api?.[action];
   if (typeof handler !== "function") return true;
   const token = getAuthToken();
-  if (PROTECTED_BACKEND_ACTIONS.has(action) && (!token || isDemoAuthToken(token))) {
+  if (!token || isDemoAuthToken(token)) {
     openAuth("login");
     showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
     return false;

@@ -48,6 +48,10 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /comments:\s*isEntry\s*\?\s*\/\^!\//);
   assert.match(build, /banner:\s*\{\s*js:\s*`\/\*! \$\{productionCompressionPolicy\} \*\/`\s*\}/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
+  assert.match(build, /async function writeProductionStyles/);
+  assert.match(build, /loader:\s*["']css["']/);
+  assert.match(build, /await writeProductionStyles\(path\.join\(webRoot, ["']src["'], ["']styles\.css["']/);
+  assert.doesNotMatch(build, /copyFileSync\(path\.join\(webRoot, ["']src["'], ["']styles\.css["']/);
   assert.match(build, /metafile\.outputs\[output\]\.bytes\s*=\s*Buffer\.byteLength\(compressed\)/);
   assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
   assert.match(build, /Production bundle must not contain the development-only demo data chunk/);

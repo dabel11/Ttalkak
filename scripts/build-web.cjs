@@ -27,8 +27,10 @@ async function compressProductionJavaScript(metafile) {
     const isEntry = Boolean(metafile.outputs[output]?.entryPoint);
     const result = await terser.minify(source, {
       module: true,
+      ecma: 2023,
       compress: {
         booleans_as_integers: true,
+        keep_fargs: false,
         passes: 3,
         pure_getters: true,
         unsafe: true,
@@ -39,13 +41,22 @@ async function compressProductionJavaScript(metafile) {
       },
       mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern } },
       nameCache,
-      format: { comments: isEntry ? /^!/ : false, semicolons: false },
+      format: { comments: isEntry ? /^!/ : false, ecma: 2023, semicolons: false },
     });
     if (!result.code) throw new Error(`Terser produced no output for ${output}`);
     const compressed = `${result.code}\n`;
     fs.writeFileSync(path.resolve(output), compressed, "utf8");
     metafile.outputs[output].bytes = Buffer.byteLength(compressed);
   }
+}
+
+async function writeProductionStyles(source, destination) {
+  const result = await esbuild.transform(fs.readFileSync(source, "utf8"), {
+    loader: "css",
+    minify: true,
+    target: ["chrome110", "firefox110"],
+  });
+  fs.writeFileSync(destination, result.code, "utf8");
 }
 
 function assertSafeOutputPath() {
@@ -119,8 +130,8 @@ async function build() {
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
     html = html.replace('./src/app-entry.js', `./${bundle}`);
     fs.mkdirSync(path.join(outputRoot, "assets", "styles"), { recursive: true });
-    fs.copyFileSync(path.join(webRoot, "src", "styles.css"), path.join(outputRoot, "assets", "styles.css"));
-    fs.copyFileSync(path.join(webRoot, "src", "styles", "make.css"), path.join(outputRoot, "assets", "styles", "make.css"));
+    await writeProductionStyles(path.join(webRoot, "src", "styles.css"), path.join(outputRoot, "assets", "styles.css"));
+    await writeProductionStyles(path.join(webRoot, "src", "styles", "make.css"), path.join(outputRoot, "assets", "styles", "make.css"));
     html = html.replaceAll("./src/styles.css", "./assets/styles.css").replaceAll("./src/styles/make.css", "./assets/styles/make.css");
   } else {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });

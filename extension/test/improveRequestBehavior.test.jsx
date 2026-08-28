@@ -723,4 +723,23 @@ describe("Extension clarification UI", () => {
     expect(screen.getByLabelText("추가 질문 답변 입력").getAttribute("placeholder"))
       .toBe("위 질문에 대한 답변을 입력하세요...");
   });
+
+  test("composer hides an empty scrollbar and enables scrolling after the height cap", () => {
+    const props = {
+      value: "",
+      onChange() {},
+      onSubmit() {},
+      disabled: false,
+      onNewChat() {},
+      hasMessages: false,
+      answeringQuestions: false,
+    };
+    const view = render(createElement(Composer, props));
+    const input = screen.getByLabelText("프롬프트 입력");
+    expect(input.style.overflowY).toBe("hidden");
+    Object.defineProperty(input, "scrollHeight", { configurable: true, value: 180 });
+    view.rerender(createElement(Composer, { ...props, value: "긴 입력\n".repeat(20) }));
+    expect(input.style.height).toBe("132px");
+    expect(input.style.overflowY).toBe("auto");
+  });
 });

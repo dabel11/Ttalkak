@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { Plus, Send } from "lucide-react";
 
 /**
@@ -17,6 +17,17 @@ import { Plus, Send } from "lucide-react";
  * @param {import("react").ForwardedRef<HTMLTextAreaElement>} ref
  */
 function ComposerView({ value, onChange, onSubmit, disabled, onNewChat, hasMessages, answeringQuestions }, ref) {
+  const inputRef = useRef(null);
+  useImperativeHandle(ref, () => inputRef.current);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    const maxHeight = 132;
+    const nextHeight = Math.min(input.scrollHeight, maxHeight);
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > nextHeight ? "auto" : "hidden";
+  }, [value]);
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       {hasMessages && (
@@ -25,7 +36,7 @@ function ComposerView({ value, onChange, onSubmit, disabled, onNewChat, hasMessa
         </button>
       )}
       <textarea
-        ref={ref}
+        ref={inputRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {

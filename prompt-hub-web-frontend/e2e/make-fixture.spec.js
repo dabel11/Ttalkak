@@ -355,6 +355,14 @@ test("a later user message can be split into a new local conversation", async ({
   await expect(page.locator(".recent-thread")).toHaveCount(2);
 });
 
+test("empty composer hides its scrollbar and enables it only after reaching the height cap", async ({ page }) => {
+  await openMake(page);
+  const composer = page.locator("[data-composer] textarea");
+  await expect(composer).toHaveCSS("overflow-y", "hidden");
+  await composer.fill(Array.from({ length: 16 }, (_, index) => `긴 입력 ${index}`).join("\n"));
+  await expect(composer).toHaveCSS("overflow-y", "auto");
+});
+
 for (const threadIdentity of [
   { label: "explicit serverId", id: "server-thread-77", serverId: "77" },
   { label: "legacy numeric id", id: 77 },
@@ -376,7 +384,7 @@ for (const threadIdentity of [
 
   await expect(page.locator('[data-message-id="server-topic-two"]')).toBeVisible();
   await expect(page.locator('[data-split-thread-from]')).toHaveCount(0);
-  await expect(page.getByText("대화 분리는 로컬 대화에서 사용할 수 있습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다.", { exact: true })).toBeVisible();
 });
 
 test("leaving Make aborts an in-flight request and preserves a non-retryable cancellation state", async ({ page }) => {
@@ -535,6 +543,7 @@ test("Make groups turns and keeps one recent-list scrollbar with a labeled field
     { id: "user-2", role: "user", content: "후속 요청" },
   ];
   await openMake(page, messages);
+  await expect(page.getByText("이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다.", { exact: true })).toHaveCount(0);
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
   await expect(fieldToggle).toContainText("분야");
