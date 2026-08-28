@@ -40,6 +40,7 @@ const {
 const getUniquePrompts = uniquePrompts;
 const { createHomeController } = modules.home.controller;
 const { bindHomeEvents } = modules.home.events;
+const { createBackendRecoveryMonitor, getBackendStatusPresentation } = modules.home.backendStatus;
 const { createSavedLibraryController } = modules.saved;
 const { createMyPageDataModel } = modules.saved;
 const { createDiscoveryController } = modules.discovery;
@@ -472,6 +473,12 @@ const homeController = createHomeController({
   applyPage: (value) => applyHomePageState(state, value),
   refresh: refreshBackendHomePrompts,
   render,
+});
+const backendRecoveryMonitor = createBackendRecoveryMonitor({
+  getStatus: () => state.backendStatus,
+  retry: (options) => homeController.retryHomeLoad(options),
+  browserWindow: window,
+  browserDocument: document,
 });
 const savedLibraryController = createSavedLibraryController({
   state,
@@ -1086,9 +1093,7 @@ function PromptCard(prompt, options = {}) {
 function BackendStatusBadge() {
   const status = state.backendStatus || "checking";
   const isUnavailable = status === "fallback";
-  const title = status === "connected" ? "서버에 연결되었습니다" : isUnavailable ? "서버에 연결할 수 없습니다" : "서버 연결을 확인하고 있습니다";
-  const message = status === "connected" ? "모든 기능을 정상적으로 사용할 수 있습니다." : isUnavailable ? "잠시 후 다시 연결해 주세요." : "연결 상태를 확인하는 동안 잠시만 기다려 주세요.";
-  const label = status === "connected" ? "연결됨" : isUnavailable ? canUseDemoFallback() ? "데모 데이터" : "연결 오류" : "연결 확인 중";
+  const { label, message, title } = getBackendStatusPresentation(status, { apiEnvironment: runtimeConfig.apiEnvironment, demoFallbackEnabled: canUseDemoFallback() });
   return `<details class="backend-status-menu">
     <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(title)}">
       <span class="backend-status-dot" aria-hidden="true"></span><span>${label}</span>
@@ -1533,6 +1538,7 @@ function bindPromptInteractionEvents() {
 }
 function bindHomeSearchEvents() {
   bindHomeEvents(document, homeController, state);
+  backendRecoveryMonitor.sync();
   document.querySelectorAll("[data-saved-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.savedPage = Number(button.dataset.savedPage);

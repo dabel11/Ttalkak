@@ -16,8 +16,11 @@ export function readRuntimeConfig(browserWindow = globalThis.window) {
   let parsedUrl;
   try { parsedUrl = new URL(apiBaseUrl); } catch { throw new TypeError("TTALKAK API base URL is invalid."); }
   if (!/^https?:$/.test(parsedUrl.protocol)) throw new TypeError("TTALKAK API base URL must use HTTP or HTTPS.");
+  const normalizedHostname = parsedUrl.hostname.toLowerCase().replace(/\.$/, "");
+  const apiEnvironment = normalizedHostname === "localhost" || normalizedHostname === "127.0.0.1" || normalizedHostname === "::1" ? "development" : "production";
   return Object.freeze({
     apiBaseUrl,
+    apiEnvironment,
     apiTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_API_TIMEOUT_MS, DEFAULT_API_TIMEOUT_MS, "TTALKAK_API_TIMEOUT_MS"),
     improveTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_IMPROVE_TIMEOUT_MS, DEFAULT_IMPROVE_TIMEOUT_MS, "TTALKAK_IMPROVE_TIMEOUT_MS"),
     googleCredential: String(browserWindow?.TTALKAK_GOOGLE_CREDENTIAL || ""),
