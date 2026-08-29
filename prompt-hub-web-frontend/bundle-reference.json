@@ -1,12 +1,12 @@
 {
-  "commit": "db30b2d",
+  "commit": "1389aac",
   "javascript": {
     "files": 9,
-    "rawBytes": 356509,
-    "gzipBytes": 108993
+    "rawBytes": 336438,
+    "gzipBytes": 107000
   },
   "initialJavascript": {
-    "rawBytes": 213365,
-    "gzipBytes": 66042
+    "rawBytes": 207392,
+    "gzipBytes": 65469
   }
 }
