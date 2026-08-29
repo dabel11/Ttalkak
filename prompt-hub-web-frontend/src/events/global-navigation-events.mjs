@@ -1,3 +1,5 @@
+const compactViewportCleanups = new WeakMap();
+
 export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModal, navigateTo }) {
   const topbarMenus = [...root.querySelectorAll(".topbar-settings, .topbar-account, .backend-status-menu")];
   const compactHeader = root.querySelector(".topbar-primary-actions");
@@ -15,6 +17,15 @@ export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModa
     if (restoreFocus) openMenus.at(-1)?.querySelector("summary")?.focus();
     return openMenus.length > 0;
   };
+  compactViewportCleanups.get(root)?.();
+  const compactViewport = root.defaultView?.matchMedia?.("(max-width: 760px)");
+  const resetCompactMenusAtDesktop = (event) => {
+    if (event.matches) return;
+    closeTopbarMenus();
+    closeCompactHeader();
+  };
+  compactViewport?.addEventListener("change", resetCompactMenusAtDesktop);
+  compactViewportCleanups.set(root, () => compactViewport?.removeEventListener("change", resetCompactMenusAtDesktop));
   topbarMenus.forEach((menu) => menu.addEventListener("toggle", () => {
     if (!menu.open) return;
     topbarMenus.forEach((otherMenu) => { if (otherMenu !== menu) otherMenu.open = false; });

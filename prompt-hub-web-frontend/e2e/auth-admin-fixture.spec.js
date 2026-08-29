@@ -125,7 +125,7 @@ test("narrow screens collapse account, connection and settings into one keyboard
   await mockBackend(page);
   await gotoApp(page);
 
-  const toggle = page.getByRole("button", { name: "메뉴" });
+  const toggle = page.locator(".topbar-mobile-toggle");
   const actionMenu = page.locator("#topbar-action-menu");
   await expect(toggle).toBeVisible();
   await expect(actionMenu).toBeHidden();
@@ -139,6 +139,30 @@ test("narrow screens collapse account, connection and settings into one keyboard
   await page.keyboard.press("Escape");
   await expect(actionMenu).toBeHidden();
   await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("compact header state resets when crossing the desktop viewport boundary", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const toggle = page.locator(".topbar-mobile-toggle");
+  const primaryActions = page.locator(".topbar-primary-actions");
+  const account = page.locator(".topbar-account");
+  await toggle.click();
+  await account.locator("summary").click();
+  await expect(primaryActions).toHaveClass(/compact-open/);
+  await expect(account).toHaveJSProperty("open", true);
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(primaryActions).not.toHaveClass(/compact-open/);
+  await expect(account).toHaveJSProperty("open", false);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await page.setViewportSize({ width: 620, height: 800 });
+  await expect(page.locator("#topbar-action-menu")).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
