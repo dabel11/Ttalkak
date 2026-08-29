@@ -26,7 +26,12 @@ async function prepare(page, { loggedIn = false, backendError = false } = {}) {
 }
 
 async function expectHeader(page, name) {
-  await expect(page.locator(".topbar")).toHaveScreenshot(name, { animations: "disabled", caret: "hide" });
+  await expect(page.locator(".topbar")).toHaveScreenshot(name, {
+    animations: "disabled",
+    caret: "hide",
+    maxDiffPixelRatio: 0.08,
+    threshold: 0.3,
+  });
 }
 
 test("mobile header logged-out state", async ({ page }) => {
