@@ -102,6 +102,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ? resolveMakeRequestId({ prompt })
       : "";
     const startedAt = Date.now();
+    ctx.reportStart?.("submit");
     const signal = ctx.startRequest();
     ctx.setDraft("");
     ctx.appendUser(threadId, { id: userMessageId, role: "user", content: prompt, ...(requestId ? { requestId } : {}) });
@@ -118,6 +119,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+        ctx.reportCancel?.("submit");
         ctx.failRequest(userMessageId, ctx.classifyError(error));
         ctx.updateThread(threadId);
         ctx.renderCancellation?.();
@@ -168,6 +170,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       : "";
     const history = ctx.buildHistory(ctx.getMessages().slice(0, index));
     const startedAt = Date.now();
+    ctx.reportStart?.("edit");
     const signal = ctx.startRequest();
     if (ctx.shouldSync()) {
       if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
@@ -191,6 +194,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
         ctx.setThinking(false);
         if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+          ctx.reportCancel?.("edit");
           ctx.failRequest(messageId, ctx.classifyError(error));
           ctx.setDraft(cleanValue);
           ctx.clearEditing();
@@ -230,6 +234,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
+        ctx.reportCancel?.("edit");
         ctx.failRequest(messageId, ctx.classifyError(error));
         ctx.clearEditing();
         ctx.updateThread(threadId);

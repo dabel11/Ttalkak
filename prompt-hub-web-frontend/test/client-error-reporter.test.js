@@ -4,6 +4,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const reporterModule = import(pathToFileURL(path.resolve(__dirname, "../src/observability/client-error-reporter.mjs")));
+const policyModule = import(pathToFileURL(path.resolve(__dirname, "../src/observability/data-policy.mjs")));
 
 test("client error reporter normalizes, redacts, bounds, and isolates sink failures", async () => {
   const { createClientErrorReporter } = await reporterModule;
@@ -49,7 +50,8 @@ test("explicit warning reporter preserves domain context without replacing conso
 });
 
 test("observability boundary excludes payload fields and redacts direct identifiers", async () => {
-  const { OBSERVABILITY_DATA_POLICY, createClientErrorReporter } = await reporterModule;
+  const { createClientErrorReporter } = await reporterModule;
+  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
   const delivered = [];
   const reporter = createClientErrorReporter({ sink: (record) => delivered.push(record) });
   reporter.report(new Error("contact user@example.com or 010-1234-5678"), {
@@ -68,7 +70,8 @@ test("observability boundary excludes payload fields and redacts direct identifi
 });
 
 test("observability bridge exposes only aggregate metadata and isolates listeners", async () => {
-  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const { createClientErrorReporter, createObservabilityEventSink } = await reporterModule;
+  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
   const target = new EventTarget();
   const events = [];
   target.addEventListener("ttalkak:observability", (event) => { events.push(event.detail); });
@@ -88,7 +91,8 @@ test("observability bridge exposes only aggregate metadata and isolates listener
 });
 
 test("successful Make outcomes expose content-free aggregate metadata", async () => {
-  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const { createClientErrorReporter, createObservabilityEventSink } = await reporterModule;
+  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
   const target = new EventTarget();
   const events = [];
   target.addEventListener("ttalkak:observability", (event) => { events.push(event.detail); });
@@ -106,7 +110,8 @@ test("successful Make outcomes expose content-free aggregate metadata", async ()
 });
 
 test("actual retry interactions expose no prompt or conversation content", async () => {
-  const { createClientErrorReporter, createObservabilityEventSink, OBSERVABILITY_DATA_POLICY } = await reporterModule;
+  const { createClientErrorReporter, createObservabilityEventSink } = await reporterModule;
+  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
   const target = new EventTarget();
   const events = [];
   target.addEventListener("ttalkak:observability", (event) => events.push(event.detail));
@@ -118,4 +123,20 @@ test("actual retry interactions expose no prompt or conversation content", async
   assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
   assert.equal(events[0].outcome, "retry");
   assert.equal(JSON.stringify(events[0]).includes("secret"), false);
+});
+
+test("starter usage metrics expose only a static template identifier", async () => {
+  const { createClientErrorReporter, createObservabilityEventSink } = await reporterModule;
+  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
+  const target = new EventTarget();
+  const events = [];
+  target.addEventListener("ttalkak:observability", (event) => events.push(event.detail));
+  const reporter = createClientErrorReporter({ sink: createObservabilityEventSink(target), now: () => 100 });
+  reporter.report(new Error("Make starter interaction"), {
+    area: "make", action: "starter-select", kind: "interaction", code: "STARTER_SELECTED_WRITING",
+    outcome: "success", level: "info", prompt: "private prompt", generatedPrompt: "private result",
+  });
+  assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
+  assert.equal(events[0].code, "STARTER_SELECTED_WRITING");
+  assert.equal(JSON.stringify(events[0]).includes("private"), false);
 });

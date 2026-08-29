@@ -379,6 +379,10 @@ test("dense folder lists collapse while keeping the active folder discoverable",
 });
 
 test("empty Make state keeps examples close to the composer and settings available", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__starterMetrics = [];
+    window.addEventListener("ttalkak:observability", (event) => window.__starterMetrics.push(event.detail));
+  });
   await openMake(page);
   await expect(page.locator(".topbar-settings")).toBeVisible();
   const starters = page.locator(".make-empty-starters [data-template]");
@@ -389,6 +393,26 @@ test("empty Make state keeps examples close to the composer and settings availab
   await expect(composer).not.toHaveValue("");
   await expect(page.locator('.template-list [aria-pressed="true"]')).toContainText("글쓰기");
   await expect(page.locator(".template-guidance")).toContainText("글의 뼈대를");
+  const starterMetric = await page.evaluate(() => window.__starterMetrics.find((event) => event.action === "starter-select"));
+  expect(starterMetric).toMatchObject({ area: "make", code: "STARTER_SELECTED_WRITING", outcome: "success" });
+  expect(JSON.stringify(starterMetric)).not.toContain(await composer.inputValue());
+});
+
+test("starter attribution resets before a regular template submission", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__starterMetrics = [];
+    window.addEventListener("ttalkak:observability", (event) => window.__starterMetrics.push(event.detail));
+  });
+  await openMake(page);
+  await page.locator('.make-empty-starters [data-template="writing"]').click();
+  await page.locator('.template-list [data-template="summary"]').click();
+  await page.locator("[data-composer]").getByRole("button", { name: "보내기" }).click();
+  await expect(page.locator(".message.assistant")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__starterMetrics.some((event) => event.code === "DIRECT_COMPLETED"))).toBe(true);
+  const codes = await page.evaluate(() => window.__starterMetrics.map((event) => event.code));
+  expect(codes).toContain("DIRECT_SUBMIT");
+  expect(codes).toContain("DIRECT_COMPLETED");
+  expect(codes).not.toContain("STARTER_SUBMIT_WRITING");
 });
 
 for (const threadIdentity of [

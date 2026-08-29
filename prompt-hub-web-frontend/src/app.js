@@ -56,7 +56,7 @@ const {
   getCommentLikes: getCommentLikesModel,
   sortComments: sortCommentsModel,
   syncPromptCommentCount: syncPromptCommentCountModel,
-} = modules.interactions.comments;
+} = modules.interactions.commentModel;
 const { createCommentView } = modules.interactions.commentView;
 const { createPromptWorkflows } = modules.interactions.workflows;
 const loadShareRuntime = modules.share.loadRuntime;
@@ -74,7 +74,7 @@ const { createAppBootstrap } = modules.bootstrap;
 const {
   makePreview,
   sanitizeMakeBackendMessage,
-} = modules.make.preview;
+} = modules.make.previewUtils;
 const {
   recoverActiveMakeThreadAfterFailure,
 } = modules.effects.makeFailureRecovery;
@@ -85,7 +85,7 @@ const loadMakeRuntime = modules.make.loadRuntime;
 const apiClient = modules.api;
 let makeControllerModule = null;
 let makeEventsModule = null;
-const makeFocusModule = modules.make.focus;
+const makeFocusModule = modules.make.focusUtils;
 const makeMessageModel = modules.make.messageModel;
 const makeRequestIdModule = modules.make.requestId;
 const makePersistenceModule = modules.make.persistence;
@@ -253,7 +253,7 @@ if (
 ) {
   throw moduleLoadError("admin effects");
 }
-const { handleBackendAccessErrorEffect } = modules.effects.error;
+const { handleBackendAccessErrorEffect } = modules.effects.errorBoundary;
 if (typeof handleBackendAccessErrorEffect !== "function") {
   throw moduleLoadError("error effects");
 }
@@ -454,7 +454,33 @@ let activeMakeRequestController = null;
 let makeProgressStartedAt = 0;
 let makeProgressTimerId = null;
 let makeInteractionVersion = 0;
+let pendingStarterTemplateId = null;
+/** @type {false | string | null} */
+let activeStarterMetric = false;
 let makeServerSyncEffects = null;
+const starterTemplateIds = promptTemplates.slice(0, 4).map(({ id }) => id);
+function reportStarterInteraction(action, code, outcome = "success") {
+  modules.observability.report(null, {
+    area: "make", action, kind: "interaction", code, outcome, level: "info",
+  });
+}
+function selectStarterTemplate(templateId) {
+  pendingStarterTemplateId = starterTemplateIds.includes(templateId) ? templateId : null;
+  if (pendingStarterTemplateId) reportStarterInteraction("starter-select", `STARTER_SELECTED_${pendingStarterTemplateId.toUpperCase()}`);
+}
+function startStarterMetric(mode) {
+  if (mode !== "submit") return;
+  activeStarterMetric = pendingStarterTemplateId;
+  pendingStarterTemplateId = null;
+  reportStarterInteraction("starter-submit", activeStarterMetric ? `STARTER_SUBMIT_${activeStarterMetric.toUpperCase()}` : "DIRECT_SUBMIT");
+}
+function finishStarterMetric(cancelled = false) {
+  if (activeStarterMetric === false) return;
+  const templateId = activeStarterMetric;
+  activeStarterMetric = false;
+  const result = cancelled ? "CANCELLED" : "COMPLETED";
+  reportStarterInteraction("starter-submit", templateId ? `STARTER_${result}_${templateId.toUpperCase()}` : `DIRECT_${result}`, cancelled ? "cancel" : "success");
+}
 let appBootstrap = null;
 const getBackendDataEffectContext = (...args) => appBootstrap.getBackendDataEffectContext(...args);
 const getBackendHydrationEffectContext = (...args) => appBootstrap.getBackendHydrationEffectContext(...args);
@@ -1784,8 +1810,14 @@ function bindDelegatedMakeEvents() {
       openLogin: () => { state.authView = "login"; render(); },
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
-      applyTemplate, toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
-      share: openShareFromMakeMessage, execute: openExecuteModal, newChat: startNewChat,
+      applyTemplate: (templateId, options) => {
+        if (options?.starter) selectStarterTemplate(templateId);
+        else pendingStarterTemplateId = null;
+        return applyTemplate(templateId);
+      }, updateStarterAttribution: (value) => { if (!value.trim()) pendingStarterTemplateId = null; },
+      toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
+      share: openShareFromMakeMessage, execute: openExecuteModal,
+      newChat: () => { pendingStarterTemplateId = null; return startNewChat(); },
       splitThread: splitThreadFromMessage,
       openThread: openRecentThread, confirm: openConfirmAction, folderCount: getCustomMakeFolderCount,
       focusLater: (selector) => window.setTimeout(() => document.querySelector(selector)?.focus(), 0),
@@ -1872,7 +1904,11 @@ function getMakeControllerContext() {
     improve: improvePromptWithBackend,
     recover: (options) => recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), options),
     classifyError: makeMessageModel.classifyMakeError,
-    reportOutcome: (result, durationMs) => modules.observability.reportOutcome({
+    reportStart: startStarterMetric,
+    reportCancel: (mode) => { if (mode === "submit") finishStarterMetric(true); },
+    reportOutcome: (result, durationMs) => {
+      finishStarterMetric();
+      return modules.observability.reportOutcome({
       area: "make",
       action: "improve",
       kind: "result",
@@ -1886,8 +1922,10 @@ function getMakeControllerContext() {
       durationMs,
       requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(result?.requestId),
       client: "web",
-    }),
+      });
+    },
     reportFailure: (error, requestId, durationMs) => {
+      activeStarterMetric = false;
       const failure = makeMessageModel.classifyMakeError(error);
       return modules.observability.report(new Error("Make request failed"), {
         area: "make", action: "improve", kind: failure.kind, code: failure.code,

@@ -1,13 +1,7 @@
 const REDACTED = "[REDACTED]";
 const nativeConsoleWarn = console.warn.bind(console);
 const MAX_MESSAGE_LENGTH = 240;
-
-export const OBSERVABILITY_DATA_POLICY = Object.freeze({
-  externalCollectionEnabled: false,
-  allowedRecordFields: Object.freeze(["name", "message", "area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "client", "requestCorrelation", "timestamp"]),
-  aggregateEventFields: Object.freeze(["area", "action", "kind", "code", "status", "durationMs", "outcome", "level", "retryable", "client", "requestCorrelation", "timestamp"]),
-  prohibitedContent: Object.freeze(["prompt", "generatedPrompt", "history", "token", "requestId", "documentBody", "pageContent", "clipboard"]),
-});
+const AGGREGATE_EVENT_FIELDS = "area,action,kind,code,status,durationMs,outcome,level,retryable,client,requestCorrelation,timestamp".split(",");
 
 function redact(value) {
   const sanitized = String(value ?? "Unknown client error")
@@ -41,7 +35,7 @@ function normalizeClientError(error, context = {}, now = Date.now) {
 
 /** Creates the only payload that an explicitly approved production adapter may receive. */
 function toAggregateObservabilityEvent(record) {
-  return Object.freeze(Object.fromEntries(OBSERVABILITY_DATA_POLICY.aggregateEventFields.map((key) => [key, record[key]])));
+  return Object.freeze(Object.fromEntries(AGGREGATE_EVENT_FIELDS.map((key) => [key, record[key]])));
 }
 
 /**
