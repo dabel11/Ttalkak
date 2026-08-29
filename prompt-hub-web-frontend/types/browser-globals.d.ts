@@ -130,7 +130,7 @@ interface TtalkakModuleRegistry {
   home: { backendStatus: TtalkakCallableModule; model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
   saved: { createMyPageDataModel: Function; createSavedLibraryController: Function };
   discovery: { createDiscoveryController: Function };
-  interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; commentModel: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
   share: { loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule }> };
   modal: { controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
   auth: { session: TtalkakCallableModule; validation: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
@@ -139,11 +139,11 @@ interface TtalkakModuleRegistry {
     loadRuntime(): Promise<{ events: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule }>;
   };
   make: {
-    preview: TtalkakCallableModule;
+    previewUtils: TtalkakCallableModule;
     messageModel: TtalkakCallableModule;
     requestId: { createMakeRequestCorrelation(value: unknown): string };
     state: TtalkakCallableModule;
-    focus: TtalkakCallableModule;
+    focusUtils: TtalkakCallableModule;
     persistence: TtalkakCallableModule;
     threadPolicy: {
       canSplitMakeThread(thread: TtalkakStateEntity | null | undefined, isBackendNumericId: (value: unknown) => boolean): boolean;
@@ -154,7 +154,7 @@ interface TtalkakModuleRegistry {
   bootstrap: TtalkakCallableModule;
   components: TtalkakCallableModule;
   events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule; navigation: TtalkakCallableModule; reportCommentForms: TtalkakCallableModule };
-  effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
+  effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; errorBoundary: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
   runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };

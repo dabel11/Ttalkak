@@ -11,13 +11,13 @@ const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 const terser = require(path.join(webRoot, "node_modules", "terser"));
 const terserVersion = require(path.join(webRoot, "node_modules", "terser", "package.json")).version;
-const productionCompressionPolicy = `ttalkak-terser-${terserVersion}-passes-5-modern`;
+const productionCompressionPolicy = `${terserVersion}/10`;
 const internalContextPropertyPattern = /^(?:reportWarning|isCurrentRequest|canUseDemoFallback|normalizeTag|updateThread|setThinking|canDeleteComment|getCommentMutationContext|classifyError|runMutation|failRequest|requestState|refreshMyPage|refreshThread|queueScroll|hasBackendToken|completeRequest|isBackendNumericId|getBackendThreadId|renderCancellation|setBackendFailure|getPromptMutationContext|normalizeRecentThreads|getReportRecord|mapBackendReportStatus|hydrateComments|renderPreservingScroll|isBackendId|findPromptIdByComment|getStatusLabel|countThreadsInFolder|normalizeText|hasBackendAuthToken|togglePendingUnsave|shouldSync|reportFailure|reportOutcome|applyPendingThread|canSplitMakeThread|scrollLatest|stopInFlight|refreshBackendHomePromptsEffect|normalizeAssistantPromptOutputs|cancelHomeSearch|restoreHomeFocus|hydrateBackendMyPageDataEffect|normalizeResult|formatShortDate|getCommentCount|normalizePersistedLikeCounts|hydrateBackendMakeDataEffect|hydrateBackendHomeDataEffect|findMakeThread|sanitizeMakeBackendMessage|updateBackendHomePageMeta|clearAuthenticatedSession|getMakeInteractionVersion|handleBackendAccessError|reportConcurrencyRefresh|getCustomMakeFolderCount|hydrateBackendAdminData|buildHistory|startRequest|waitForPaint|findEditableMessage|normalizeMakeFolders|discardCurrentScope|getValidSearchScope|applyBackendUnsaved|isOwnedRevisionTarget|syncCommentCount|prepareDemoData|incrementViews|escapeHtml|escapeAttr|showNotice|clearEditing|messageModel|getMessages|parseTags|getIcons|getToken|setDraft|emailValid|phoneValid|appendUser|applyUser|uniquePrompts|getAuthToken|removePrompt|focusAsk|makePreview|addPromptCommentState|getApiFailureMessage|logMessage|applyState|syncThread|getActiveFolderName|getThreadFolderId|searchDebounceMs|applySearchQuery|applyPromptLiked|toggleReplyState|getMakeApiToken|getCommentLikes|toggleEditState|bumpInteraction|appendAssistant|getLikes|normalizeLikes|isMakeThinking|refreshThreads|canTransition|applyIdentity|applyNewSaved|addReplyState|focusRestored|isPromptSaved|clearSession|resetBackend|upsertPrompt|getCreatedAt|applyUnsaved|refreshAdmin|formatNumber|isHiddenDemo|getKnownTags|hydrateMake|removeToken|applyAuthor|keepSession|revisionKey|applySort|applyPage|getAuthor|applyEdit|applyTag|hasToken|isFinal|setMakeComposerDraft|setMakeBackendState|setMakeRecentThreads|setActiveThreadId|render|notice|guard|icons|interactions|effects|runtimeConfig|maxCustomFolders|freeLimit|existingNicknames|existingUserIds|MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView|applyExistingSaved|applyPromptUnliked|toggleCommentLiked|updateCommentState|deleteCommentState|getMutationContext|getRecord|canUseApi|fromBackendStatus|keepQuery|findCommentInList|getActiveThreadId|getRevisionTarget|refreshOnFailure|applyShared|finishEdit|closeState|showStatus|writeToken|clearState|getMakeApi|validScope|isApproved|myBackendStatus|adminBackendStatus|backendStatusMessage|backendStatus|adminUserSearchResults|backendAdminUserActivities|detailHighlightCommentId|detailPromptId|pendingUnsaveIds|openPromptCardMenuId|creatingThreadFolderId|openThreadMenuId|backendLikedPrompts|executeMessageId|executePromptId|editingCommentId|openFolderMenuId|adminUserSearchMessage|adminRequestTargetKey|adminAuditSyncMessage|backendLibraryPrompts|backendLibraryPromptIds|backendAdminPrompts|popularPage|reportCommentId|reportPromptId|backendMyPrompts|backendAdminTags|backendAdminAuditLogs|backendAdminReports|backendAdminReportsLoaded|backendHomePage|backendMyComments|backendMyReports|backendAdminRevisionRequests|backendPopularTags|authView|authDuplicateChecks|editingPromptId|replyingCommentId|savedFilter|shareDraft|adminBlockTarget|expandedComments|savedPage|confirmAction|creatingFolder|isComposingShareTag|shareTagQuery|editingFolderId|isComposingAdminPromptSearch|authUserIdWarning|editingMessageId|isComposingAdminTagSearch|authError|copiedMessageId|pendingMakeImproveThread|isComposingSearch|myPageTab|makeBackendStatus|shareError|searchTipVisible|authDraft|makeBackendMessage|searchTipShown)$/;
 
 const dynamicRendererPropertyPattern = /^(?:MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView)$/;
-const additionalInternalContextPropertyPattern = /^(?:findPrompt|findComment|findPromptById|findCommentById|handleError|callApi|maxFolders|makeState|confirm|userIdError|recover|renderPreservingMakeScroll|openConfirmAction|getFinalPromptText|copyTextToClipboard|makePromptTitle|getMakeMutationStateContext|getPromptMutationStateContext|getCommentMutationStateContext|toggleSavedMakeMessageState|getMakeControllerContext|autosizeTextarea|startNewMakeChatState|makeController|futureDate|demoToken|folderCount|focusLater|openThread|makeRevisionRequestKey|removePromptByIdState|refreshBackendHomePrompts|refreshMyPageDataAfterMutation|hydrateBackendAdminDataIfNeeded|parseSharedTags|stampCurrentUserOwnedPrompts|isDemoAuthToken|applyPublishedSavedPromptState|applyDeletedPromptState|applyUnsharedPromptState|getAdminHydrationEffectContext|getAdminReportRecords|getAdminManagedTags|matchesAdminPromptFilter|matchesAdminPromptQuery|getDisplayPromptAuthor|getPromptAuthorId|getAdminTagStatusLabel|getReportStatusLabel|getAuthorRevisionStatusLabel|getPromptRevisionRequest|getPromptSaveCount|getPromptViewCount)$/;
+const additionalInternalContextPropertyPattern = /^(?:findPrompt|findComment|findPromptById|findCommentById|handleError|callApi|maxFolders|makeState|confirm|userIdError|recover|renderPreservingMakeScroll|renderPreservingScroll|openConfirmAction|getFinalPromptText|copyTextToClipboard|makePromptTitle|getMakeMutationStateContext|getPromptMutationStateContext|getCommentMutationStateContext|toggleSavedMakeMessageState|getMakeControllerContext|autosizeTextarea|startNewMakeChatState|makeController|futureDate|demoToken|folderCount|focusLater|openThread|makeRevisionRequestKey|removePromptByIdState|refreshBackendHomePrompts|refreshMyPageDataAfterMutation|hydrateBackendAdminDataIfNeeded|parseSharedTags|stampCurrentUserOwnedPrompts|isDemoAuthToken|applyPublishedSavedPromptState|applyDeletedPromptState|applyUnsharedPromptState|getAdminHydrationEffectContext|getAdminReportRecords|getAdminManagedTags|matchesAdminPromptFilter|matchesAdminPromptQuery|getDisplayPromptAuthor|getPromptAuthorId|getAdminTagStatusLabel|getReportStatusLabel|getAuthorRevisionStatusLabel|getPromptRevisionRequest|getPromptSaveCount|getPromptViewCount|reportStart|reportCancel|reportRetry|isBusy|isThinking|setPendingScroll|setEditing|runConfirmedAction|refreshConcurrent|refineUnchanged|updatePreview|scheduleTagSearch|schedulePromptSearch|cancelPromptSearch|cancelTagSearch|refreshThreads|updateStarterAttribution|clearStarterAttribution|updateTagQuery|addTag|removeTag|renameFolder|createFolder|createFolderAndMove|moveThread|splitThread|submitComposer|submitPrompt|submitAnswers|submitReport|cancelRequest|openLogin|openSavedMakePrompt|openPromptComments|openReportComment|restoreAuthFocus|toggleTemplates|togglePromptHidden|toggleReplyForm|toggleSavedPrompt|toggleComments|toggleEditComment|toggleLikeComment|toggleLikePrompt|updateAdminUserBlock|updateCommentHidden|updateOwnComment|updateReportStatus|updateUserBlock|deleteOwnComment|addCommentReply|addPromptComment|requestRevision|showComments|newChatFromConflict|retryConcurrent|autosize|updateDraft|closeTop|copy|save|share|execute|resend|searchQuery)$/;
 const productionManglePropertyPattern = new RegExp(
-  `^(?!${dynamicRendererPropertyPattern.source.slice(1, -1)}$)(?:(?:${internalContextPropertyPattern.source.slice(1, -1)})|(?:${additionalInternalContextPropertyPattern.source.slice(1, -1)})|(?:state|savedPrompts|popularPrompts|commentsByPrompt))$`,
+  `^(?!${dynamicRendererPropertyPattern.source.slice(1, -1)}$)(?:(?:${internalContextPropertyPattern.source.slice(1, -1)})|(?:${additionalInternalContextPropertyPattern.source.slice(1, -1)})|(?:state|api|root|refresh|promptTemplates|debounceMs|demoPromptIds|observability|report|recent|sink|limit|allowedRecordFields|aggregateEventFields|prohibitedContent|externalCollectionEnabled|renderers|routing|bootstrap|components|discovery|session|validation|home|auth|admin|modal|saved|utils|effects|interactions|persistence|share|make|selectors|backend|backendStatus|model|navigation|reportCommentForms|makeScroll|app|demo|toBackendStatus|promptOverrides|commentOverrides|messageModel|requestId|threadPolicy|loadRuntime|makeFailureRecovery|makeServerSync|engagement|commentModel|commentView|previewUtils|focusUtils|errorBoundary|savedPrompts|popularPrompts|commentsByPrompt))$`,
 );
 
 async function compressProductionJavaScript(metafile) {
@@ -25,27 +25,33 @@ async function compressProductionJavaScript(metafile) {
   const nameCache = {};
   for (const output of outputs) {
     const source = fs.readFileSync(path.resolve(output), "utf8");
-    const isApplicationEntry = metafile.outputs[output]?.entryPoint?.endsWith("src/app-entry.js") === true;
     const result = await terser.minify(source, {
       module: true,
       ecma: 2023,
       compress: {
         booleans_as_integers: true,
         keep_fargs: false,
-        passes: 5,
+        passes: 10,
         pure_getters: true,
         unsafe: true,
         unsafe_arrows: true,
+        unsafe_comps: true,
+        unsafe_math: true,
         unsafe_methods: true,
         unsafe_proto: true,
         unsafe_undefined: true,
       },
       mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern } },
       nameCache,
-      format: { comments: isApplicationEntry ? /^!/ : false, ecma: 2023, semicolons: false },
+      format: { comments: false, ecma: 2023, semicolons: false },
     });
     if (!result.code) throw new Error(`Terser produced no output for ${output}`);
-    const compressed = `${result.code}\n`;
+    // Terser preserves indentation inside HTML template literals. Production
+    // renderers do not rely on that formatting, so collapse inter-tag lines to
+    // one browser-equivalent space without changing text-node separation.
+    const compressed = result.code
+      .replace(/>\\n\s+/g, "> ")
+      .replace(/\\n\s+(?=[<$])/g, " ");
     fs.writeFileSync(path.resolve(output), compressed, "utf8");
     metafile.outputs[output].bytes = Buffer.byteLength(compressed);
   }
@@ -108,7 +114,6 @@ async function build() {
       sourcemap: false,
       target: ["es2023"],
       define: { "globalThis.TTALKAK_PRODUCTION_BUILD": "true" },
-      banner: { js: `/*! ${productionCompressionPolicy} */` },
       outdir: path.join(outputRoot, "assets"),
       entryNames: "app-[hash]",
       chunkNames: "chunks/[name]-[hash]",
@@ -143,6 +148,7 @@ async function build() {
     path.join(outputRoot, "build-manifest.json"),
     `${JSON.stringify({
       mode: production ? "production" : "development",
+      compressionPolicy: production ? productionCompressionPolicy : null,
       entries: requiredEntries,
       bundle,
       javascript: production

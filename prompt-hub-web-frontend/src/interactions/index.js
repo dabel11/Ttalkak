@@ -5,4 +5,4 @@ import * as comments from "./comment-model.mjs";
 import * as commentView from "./comment-view.mjs";
 import * as workflows from "./prompt-workflows.mjs";
 
-export const interactions = Object.freeze({ engagement, events, comments, commentView, workflows });
+export const interactions = Object.freeze({ engagement, events, commentModel: comments, commentView, workflows });

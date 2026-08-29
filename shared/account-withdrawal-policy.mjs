@@ -1,4 +1,4 @@
-export const ACCOUNT_WITHDRAWAL_POLICY = Object.freeze({
+export const ACCOUNT_WITHDRAWAL_POLICY = /* @__PURE__ */ Object.freeze({
   userIdReusable: false,
   nicknameReusable: true,
   personalDataDisposition: "anonymize-or-delete",

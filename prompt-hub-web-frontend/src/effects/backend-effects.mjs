@@ -42,12 +42,8 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
         return "이미 처리되었거나 중복된 요청입니다.";
       case "INVALID_STATE":
         return "현재 상태에서는 처리할 수 없습니다.";
-      case "REQUEST_TIMEOUT":
-        return "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-      case "RATE_LIMIT_EXCEEDED":
-        return "요청이 많습니다. 잠시 후 다시 시도해주세요.";
       case "FREE_TRIAL_LIMIT_EXCEEDED":
         return "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
       case "REVISION_REQUEST_NOT_EDITABLE":

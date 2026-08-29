@@ -36,7 +36,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /compressProductionJavaScript/);
   assert.match(build, /terser\.minify/);
   assert.match(build, /booleans_as_integers:\s*true/);
-  assert.match(build, /passes:\s*5/);
+  assert.match(build, /passes:\s*10/);
   assert.match(build, /pure_getters:\s*true/);
   assert.match(build, /unsafe:\s*true/);
   assert.match(build, /unsafe_arrows:\s*true/);
@@ -46,9 +46,9 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /keep_quoted:\s*["']strict["']/);
   assert.match(build, /const nameCache = \{\}/);
   assert.match(build, /nameCache,/);
-  assert.match(build, /isApplicationEntry/);
-  assert.match(build, /comments:\s*isApplicationEntry\s*\?\s*\/\^!\//);
-  assert.match(build, /banner:\s*\{\s*js:\s*`\/\*! \$\{productionCompressionPolicy\} \*\/`\s*\}/);
+  assert.match(build, /format:\s*\{\s*comments:\s*false/);
+  assert.match(build, /compressionPolicy: production \? productionCompressionPolicy : null/);
+  assert.match(build, /replace\(\/>\\\\n\\s\+\/g/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
   assert.match(build, /async function writeProductionStyles/);
   assert.match(build, /loader:\s*["']css["']/);

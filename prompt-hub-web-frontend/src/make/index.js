@@ -64,4 +64,4 @@ export function loadMakeRuntime() {
   return runtimePromise;
 }
 
-export const make = Object.freeze({ preview, messageModel, requestId, state: makeState, focus, persistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });
+export const make = Object.freeze({ previewUtils: preview, messageModel, requestId, state: makeState, focusUtils: focus, persistence, threadPolicy: makeThreadPolicy, loadRuntime: loadMakeRuntime });
