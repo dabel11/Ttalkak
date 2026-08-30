@@ -124,19 +124,3 @@ test("actual retry interactions expose no prompt or conversation content", async
   assert.equal(events[0].outcome, "retry");
   assert.equal(JSON.stringify(events[0]).includes("secret"), false);
 });
-
-test("starter usage metrics expose only a static template identifier", async () => {
-  const { createClientErrorReporter, createObservabilityEventSink } = await reporterModule;
-  const { OBSERVABILITY_DATA_POLICY } = await policyModule;
-  const target = new EventTarget();
-  const events = [];
-  target.addEventListener("ttalkak:observability", (event) => events.push(event.detail));
-  const reporter = createClientErrorReporter({ sink: createObservabilityEventSink(target), now: () => 100 });
-  reporter.report(new Error("Make starter interaction"), {
-    area: "make", action: "starter-select", kind: "interaction", code: "STARTER_SELECTED_WRITING",
-    outcome: "success", level: "info", prompt: "private prompt", generatedPrompt: "private result",
-  });
-  assert.deepEqual(Object.keys(events[0]), OBSERVABILITY_DATA_POLICY.aggregateEventFields);
-  assert.equal(events[0].code, "STARTER_SELECTED_WRITING");
-  assert.equal(JSON.stringify(events[0]).includes("private"), false);
-});

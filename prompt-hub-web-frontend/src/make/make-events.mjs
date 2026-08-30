@@ -70,7 +70,6 @@
         }
         const textarea = event.target.closest?.("[data-autosize-textarea]");
         if (!textarea) return;
-        actions.updateStarterAttribution(textarea.value);
         actions.setDraft(textarea.value);
         actions.autosize(textarea);
       },
@@ -115,7 +114,7 @@
         if (closeFolderMenu || closeThreadMenu) actions.render();
         const data = target.dataset;
         const has = (name) => name in data;
-        if (has("template")) actions.applyTemplate(data.template, { starter: Boolean(target.closest(".make-empty-starters")) });
+        if (has("template")) actions.applyTemplate(data.template);
         else if (has("toggleTemplates")) actions.toggleTemplates(target);
         else if (has("cancelMakeRequest")) actions.cancelRequest();
         else if (has("refineUnchanged")) actions.refineUnchanged(data.refineUnchanged);

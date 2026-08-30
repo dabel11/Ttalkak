@@ -378,41 +378,12 @@ test("dense folder lists collapse while keeping the active folder discoverable",
   await expect(overflow.getByRole("button", { name: "보관 폴더 더보기" })).toBeVisible();
 });
 
-test("empty Make state keeps examples close to the composer and settings available", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__starterMetrics = [];
-    window.addEventListener("ttalkak:observability", (event) => window.__starterMetrics.push(event.detail));
-  });
+test("empty Make state relies on field templates and keeps settings available", async ({ page }) => {
   await openMake(page);
   await expect(page.locator(".topbar-settings")).toBeVisible();
-  const starters = page.locator(".make-empty-starters [data-template]");
-  await expect(starters).toHaveCount(4);
-  await starters.first().click();
-  const composer = page.locator("[data-composer] textarea");
-  await expect(composer).toBeFocused();
-  await expect(composer).not.toHaveValue("");
-  await expect(page.locator('.template-list [aria-pressed="true"]')).toContainText("글쓰기");
-  await expect(page.locator(".template-guidance")).toContainText("글의 뼈대를");
-  const starterMetric = await page.evaluate(() => window.__starterMetrics.find((event) => event.action === "starter-select"));
-  expect(starterMetric).toMatchObject({ area: "make", code: "STARTER_SELECTED_WRITING", outcome: "success" });
-  expect(JSON.stringify(starterMetric)).not.toContain(await composer.inputValue());
-});
-
-test("starter attribution resets before a regular template submission", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__starterMetrics = [];
-    window.addEventListener("ttalkak:observability", (event) => window.__starterMetrics.push(event.detail));
-  });
-  await openMake(page);
-  await page.locator('.make-empty-starters [data-template="writing"]').click();
-  await page.locator('.template-list [data-template="summary"]').click();
-  await page.locator("[data-composer]").getByRole("button", { name: "보내기" }).click();
-  await expect(page.locator(".message.assistant")).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__starterMetrics.some((event) => event.code === "DIRECT_COMPLETED"))).toBe(true);
-  const codes = await page.evaluate(() => window.__starterMetrics.map((event) => event.code));
-  expect(codes).toContain("DIRECT_SUBMIT");
-  expect(codes).toContain("DIRECT_COMPLETED");
-  expect(codes).not.toContain("STARTER_SUBMIT_WRITING");
+  await expect(page.locator(".make-empty-starters")).toHaveCount(0);
+  await expect(page.locator(".template-list [data-template]")).toHaveCount(9);
+  await expect(page.locator("[data-composer] textarea")).toHaveValue("");
 });
 
 for (const threadIdentity of [
@@ -598,7 +569,7 @@ test("Make groups turns and keeps one recent-list scrollbar with a labeled field
   await expect(page.getByText("이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다.", { exact: true })).toHaveCount(0);
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
-  await expect(fieldToggle).toContainText("분야");
+  await expect(fieldToggle).toHaveText("‹");
   expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(62);
   const toolbarColumns = await page.locator(".make-template-bar").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").map(Number.parseFloat));
   expect(toolbarColumns[0]).toBeGreaterThanOrEqual(62);

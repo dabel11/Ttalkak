@@ -135,7 +135,6 @@ test("route cancellation leaves a classified non-retryable Make message state", 
     await controller.submitPrompt({
       state, freeLimit: 3, guard: () => false, isBusy: () => false, notice: () => {},
       bumpInteraction: () => {}, buildHistory: () => [], startRequest: () => new AbortController().signal,
-      reportStart: (mode) => calls.push(`metric-start:${mode}`), reportCancel: (mode) => calls.push(`metric-cancel:${mode}`),
       setDraft: () => {}, appendUser: (_threadId, message) => state.messages.push(message),
       setThinking: (value) => calls.push(`thinking:${value}`), updateThread: (id) => calls.push(`update:${id}`),
       render: () => {}, scrollLatest: () => {}, waitForPaint: async () => {},
@@ -151,11 +150,10 @@ test("route cancellation leaves a classified non-retryable Make message state", 
     global.FormData = OriginalFormData;
   }
   assert.equal(state.messages.length, 1);
-  assert.deepEqual(calls.slice(0, 5), ["metric-start:submit", "thinking:true", "update:thread-1", "thinking:false", "stopped"]);
-  assert.equal(calls[5], "metric-cancel:submit");
-  assert.equal(calls[6][1].retryable, false);
-  assert.match(calls[6][0], /^user-/);
-  assert.equal(calls[7], "update:thread-1");
+  assert.deepEqual(calls.slice(0, 4), ["thinking:true", "update:thread-1", "thinking:false", "stopped"]);
+  assert.equal(calls[4][1].retryable, false);
+  assert.match(calls[4][0], /^user-/);
+  assert.equal(calls[5], "update:thread-1");
   assert.doesNotMatch(calls.join(" "), /unexpected/);
 });
 

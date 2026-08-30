@@ -698,46 +698,6 @@
   line-height: 1.45;
 }
 
-.make-empty-starters {
-  display: grid;
-  justify-items: center;
-  gap: 9px;
-  margin-top: 22px;
-}
-
-.make-empty-starters > strong {
-  color: var(--muted-dark);
-  font-size: 12px;
-}
-
-.make-empty-starters > div {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
-.make-empty-starters button {
-  min-height: 34px;
-  padding: 0 13px;
-  border: 1px solid rgba(18, 63, 52, 0.14);
-  border-radius: 999px;
-  background: #f5f9f7;
-  color: var(--brand-green);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast);
-}
-
-.make-empty-starters button:hover,
-.make-empty-starters button:focus-visible {
-  border-color: rgba(18, 63, 52, 0.3);
-  background: #e4f0ea;
-  transform: translateY(-1px);
-}
-
 .composer {
   position: sticky;
   bottom: 0;
@@ -1567,12 +1527,10 @@ h1 {
 @media (max-height: 720px) {
   .make-empty { min-height: 270px; padding-top: 18px; }
   .make-empty .spark-badge { width: 66px; height: 66px; }
-  .make-empty-starters { margin-top: 14px; }
 }
 
 @media (max-width: 760px) {
   .template-guidance { grid-column: 1 / -1; }
-  .make-empty-starters > div { max-width: 360px; }
 }
 .composer.is-restored textarea { animation: make-composer-restored 1.4s ease-out; }
 @keyframes make-composer-restored { 0% { box-shadow: 0 0 0 0 rgba(16, 91, 72, .38); } 45% { box-shadow: 0 0 0 5px rgba(16, 91, 72, .16); } 100% { box-shadow: 0 0 0 0 rgba(16, 91, 72, 0); } }

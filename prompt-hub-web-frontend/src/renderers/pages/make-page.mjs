@@ -51,9 +51,8 @@ import { parts } from "./make-message-parts.mjs";
   }
 
   function MakeFeedView(ctx, data) {
-    const { icons, escapeAttr, escapeHtml } = ctx;
-    const { hasMessages, isThinking, messages, promptTemplates = [], renderMessageBubble, templateBarHtml, threadPolicyNote } = data;
-    const starterTemplates = promptTemplates.filter((template) => template.prompt).slice(0, 4);
+    const { icons, escapeHtml } = ctx;
+    const { hasMessages, isThinking, messages, renderMessageBubble, templateBarHtml, threadPolicyNote } = data;
 
     return `
       <div class="chat-feed">
@@ -66,10 +65,6 @@ import { parts } from "./make-message-parts.mjs";
                 <div class="spark-badge">${icons.make}</div>
                 <h1>프롬프트 첨삭 도우미</h1>
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
-                <div class="make-empty-starters" aria-label="예시 요청으로 시작하기">
-                  <strong>예시로 시작하기</strong>
-                  <div>${starterTemplates.map((template) => `<button type="button" data-template="${escapeAttr(template.id)}" aria-label="${escapeAttr(template.label)} 예시로 시작하기">${escapeHtml(template.label)}</button>`).join("")}</div>
-                </div>
               </div>`
         }
         ${isThinking && (!messages.length || messages.at(-1)?.role !== "user") ? MessageThinkingView() : ""}
@@ -115,7 +110,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 선택 펼치기" : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}"><span aria-hidden="true">${templateCollapsed ? "›" : "‹"}</span><small>분야</small></button>
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 선택 펼치기" : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}"><span aria-hidden="true">${templateCollapsed ? "›" : "‹"}</span></button>
         ${
           templateCollapsed
             ? ""

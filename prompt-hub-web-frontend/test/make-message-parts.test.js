@@ -140,7 +140,7 @@ test("thinking messages expose an accessible request cancellation control", () =
   assert.match(html, /aria-live="polite"/);
 });
 
-test("empty Make state offers focused template starters", () => {
+test("empty Make state relies on the field template bar", () => {
   const html = MakeFeedView({ icons: { make: "make", send: "send" }, escapeAttr, escapeHtml }, {
     hasMessages: false,
     isThinking: false,
@@ -152,9 +152,8 @@ test("empty Make state offers focused template starters", () => {
     renderMessageBubble: () => "",
     templateBarHtml: "",
   });
-  assert.match(html, /make-empty-starters/);
-  assert.match(html, /data-template="writing"/);
-  assert.match(html, /글쓰기 예시로 시작하기/);
+  assert.doesNotMatch(html, /make-empty-starters/);
+  assert.doesNotMatch(html, /예시로 시작하기/);
 });
 
 test("template selection explains its effect and exposes pressed state", () => {
@@ -163,6 +162,7 @@ test("template selection explains its effect and exposes pressed state", () => {
     selectedTemplateId: "writing",
     templateCollapsed: false,
   });
+  assert.doesNotMatch(html, /<small>분야<\/small>/);
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /template-guidance/);
   assert.match(html, /글의 뼈대를 만듭니다/);
