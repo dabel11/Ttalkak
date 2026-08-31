@@ -28,7 +28,6 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await expect(drawerToggle).toBeVisible();
   await expect(drawerToggle).toContainText("대화");
   await expect(drawerToggle.locator("svg")).toHaveCount(1);
-  const closedDrawerBackground = await drawerToggle.evaluate((element) => getComputedStyle(element).backgroundColor);
   const headerButtonSizes = await page.evaluate(() => ({
     drawer: document.querySelector(".make-drawer-toggle").getBoundingClientRect().height,
     menu: document.querySelector(".topbar-mobile-toggle").getBoundingClientRect().height,
@@ -36,7 +35,7 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   expect(headerButtonSizes.drawer).toBe(headerButtonSizes.menu);
   await drawerToggle.click();
   await expect(drawerToggle).toHaveAttribute("aria-expanded", "true");
-  expect(await drawerToggle.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(closedDrawerBackground);
+  await expect(drawerToggle).toHaveCSS("background-color", "rgb(220, 235, 228)");
   await expect(page.locator(".make-side-panel")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".make-side-panel")).toBeHidden();
