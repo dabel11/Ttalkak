@@ -118,7 +118,7 @@ async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
   await mockBackend(page, improveHandler, { threads: extra.backendThreads, threadHandler: extra.threadHandler });
   await gotoApp(page);
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
 }
 
@@ -191,7 +191,7 @@ test("legacy questions migrate, empty messages disappear, and restored data surv
   await expect(page.locator("[data-ask-answer-input]")).toHaveCount(1);
 
   await page.reload();
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await expect(page.locator('[data-message-id="legacy-question"]')).toBeVisible();
   await expect(page.locator('[data-message-id="legacy-empty"]')).toHaveCount(0);
 });
@@ -348,7 +348,7 @@ test("a later user message can be split into a new local conversation", async ({
   await expect(page.locator('[data-message-id="topic-two"]')).toHaveCount(0);
 
   await page.reload();
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
   await expect(page.locator('[data-message-id="topic-one"]')).toBeVisible();
   await expect(page.locator('[data-message-id="topic-two"]')).toHaveCount(0);
@@ -382,7 +382,8 @@ test("empty Make state relies on field templates and keeps settings available", 
   await openMake(page);
   await expect(page.locator(".topbar-settings")).toBeVisible();
   await expect(page.locator(".make-empty-starters")).toHaveCount(0);
-  await expect(page.locator(".template-list [data-template]")).toHaveCount(9);
+  await expect(page.locator(".template-list [data-template]")).toHaveCount(8);
+  await expect(page.locator(".make-template-bar [data-template]")).toHaveCount(9);
   await expect(page.locator("[data-composer] textarea")).toHaveValue("");
 });
 
@@ -432,7 +433,7 @@ test("leaving Make aborts an in-flight request and preserves a non-retryable can
   await expect(page.locator(".home-page")).toBeVisible();
   releaseResponse();
 
-  await page.locator('[data-route="make"]').first().click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await expect(page.locator(".message-failure-status")).toContainText("취소");
   await expect(page.locator(".message-failure-status [data-retry-message]")).toHaveCount(0);
   await expect(page.getByText("This response must be ignored.")).toHaveCount(0);
@@ -559,7 +560,7 @@ function serverThreadFixture(messages) {
   };
 }
 
-test("Make groups turns and keeps one recent-list scrollbar with a labeled field toggle", async ({ page }) => {
+test("Make groups turns and keeps a balanced field grid with an independent toggle", async ({ page }) => {
   const messages = [
     { id: "user-1", role: "user", content: "첫 요청" },
     { id: "assistant-1", role: "assistant", content: "첫 응답", improvedPrompt: "첫 응답", mode: "improve" },
@@ -570,9 +571,19 @@ test("Make groups turns and keeps one recent-list scrollbar with a labeled field
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
   await expect(fieldToggle).toHaveText("‹");
-  expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(62);
-  const toolbarColumns = await page.locator(".make-template-bar").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").map(Number.parseFloat));
-  expect(toolbarColumns[0]).toBeGreaterThanOrEqual(62);
+  expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBe(36);
+  const templateColumns = await page.locator(".template-list").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+  expect([2, 3]).toContain(templateColumns);
+  const templateBounds = await page.locator(".make-template-bar").evaluate((element) => {
+    const list = element.querySelector(".template-list");
+    return {
+      barRight: element.getBoundingClientRect().right,
+      listRight: list?.getBoundingClientRect().right || 0,
+    };
+  });
+  expect(templateBounds.listRight).toBeLessThanOrEqual(templateBounds.barRight);
+  await expect(page.locator(".template-guidance span")).toHaveText("분야를 선택하거나");
+  await expect(page.locator(".template-custom-action")).toHaveText("직접 입력");
   expect(await page.locator(".make-side-panel").evaluate((element) => getComputedStyle(element).overflowY)).toBe("hidden");
   expect(await page.locator(".recent-thread-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
 });
@@ -912,6 +923,7 @@ test.describe("Make component visual regressions", () => {
   });
 
   test("ask question card", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await openMake(page, [askMessage]);
     await stabilizeVisuals(page);
     await expectComponentScreenshot(page.locator('[data-message-id="assistant-ask"] .message'), "make-ask-question-card.png");

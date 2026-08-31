@@ -46,6 +46,15 @@
     updateRecentThreadSearch(input);
     input.focus();
   }
+  function closeMakeDrawer(root, { restoreFocus = false } = {}) {
+    const page = root.querySelector?.(".make-page");
+    if (!page?.classList.contains("drawer-open")) return false;
+    page.classList.remove("drawer-open");
+    const toggle = page.querySelector("[data-toggle-make-drawer]");
+    toggle?.setAttribute("aria-expanded", "false");
+    if (restoreFocus) toggle?.focus();
+    return true;
+  }
   function bindDelegatedMakeEvents(root, handlers) {
     if (!root || boundRoots.has(root)) return;
     boundRoots.add(root);
@@ -74,6 +83,10 @@
         actions.autosize(textarea);
       },
       keydown(event) {
+        if (event.key === "Escape" && closeMakeDrawer(ctx.root || event.currentTarget, { restoreFocus: true })) {
+          event.preventDefault();
+          return;
+        }
         const recentSearch = event.target.closest?.("[data-recent-thread-search]");
         if (recentSearch && event.key === "Escape" && recentSearch.value) {
           event.preventDefault();
@@ -105,6 +118,19 @@
         actions.moveThread(select.dataset.threadFolder, select.value);
       },
       click(event) {
+        const drawerControl = event.target.closest?.("button");
+        if (drawerControl?.dataset && "toggleMakeDrawer" in drawerControl.dataset) {
+          const page = drawerControl.closest?.(".make-page");
+          const willOpen = !page?.classList.contains("drawer-open");
+          page?.classList.toggle("drawer-open", willOpen);
+          drawerControl.setAttribute("aria-expanded", String(willOpen));
+          if (willOpen) page?.querySelector(".make-drawer-close")?.focus?.({ preventScroll: true });
+          return;
+        }
+        if (drawerControl?.dataset && "closeMakeDrawer" in drawerControl.dataset) {
+          closeMakeDrawer(ctx.root || event.currentTarget, { restoreFocus: true });
+          return;
+        }
         const closeFolderMenu = state.openFolderMenuId && !event.target.closest?.("[data-folder-item]");
         const closeThreadMenu = state.openThreadMenuId && !event.target.closest?.("[data-thread-item]");
         if (closeFolderMenu) state.openFolderMenuId = null;

@@ -553,10 +553,9 @@
 }
 
 .make-template-bar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  position: relative;
+  display: block;
   align-items: flex-start;
-  gap: 10px;
   width: calc(100% - 24px);
   margin: 0 12px;
   padding: 0;
@@ -570,11 +569,13 @@
 }
 
 .template-toggle {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 62px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36px;
+  min-width: 36px;
   height: 36px;
-  padding: 0 11px;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: #eef4ef;
@@ -594,20 +595,21 @@
 }
 
 .template-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  width: min(calc(100% - 48px), 256px);
+  margin-left: 48px;
   min-width: 0;
-  max-height: 110px;
-  overflow: hidden;
   transform-origin: top center;
   animation: template-panel-in var(--motion-menu) both;
-  will-change: max-height, opacity, transform;
+  will-change: opacity, transform;
 }
 
 .template-list button {
+  min-width: 0;
   height: 36px;
-  padding: 0 14px;
+  padding: 0 10px;
   border: 1px solid rgba(18, 63, 52, 0.09);
   border-radius: 999px;
   background: #eef4ef;
@@ -615,6 +617,7 @@
   box-shadow: none;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   transition: background 0.16s, color 0.16s, box-shadow 0.16s, transform 0.16s;
 }
 
@@ -2190,8 +2193,7 @@ h1 {
 
 /* Make conversation toolbar and message hierarchy */
 .make-template-bar {
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+  display: block;
 }
 
 .template-toggle {
@@ -2592,19 +2594,79 @@ h1 {
 }
 
 .template-guidance {
-  grid-column: 2;
-  margin: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: min(calc(100% - 48px), 256px);
+  margin: 10px 0 0 48px;
   color: var(--muted-dark);
   font-size: 12px;
   line-height: 1.45;
+  white-space: nowrap;
 }
 
-.template-guidance strong {
-  margin-right: 4px;
+.template-custom-action {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(18, 63, 52, 0.14);
+  border-radius: 999px;
+  background: #fff;
   color: var(--brand-green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.template-custom-action:is(:hover, :focus-visible, .active),
+.template-custom-action[aria-pressed="true"] {
+  border-color: var(--brand-green);
+  background: var(--brand-green);
+  color: #fff;
+}
+
+@media (min-width: 1100px) {
+  .template-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .make-recent-section { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .make-recent-section .recent-thread-list { min-height: 0; padding-right: 7px; overflow-y: auto; scrollbar-gutter: stable; }
 .conversation-turn { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 18px; border-bottom: 1px solid rgba(18, 63, 52, 0.07); }
 .conversation-turn.is-processing { margin: 0 -10px; padding: 12px 10px 18px; border: 0; border-radius: 16px; background: rgba(231, 242, 237, 0.6); }
+
+.make-drawer-toggle,
+.make-drawer-backdrop,
+.make-drawer-close { display: none; }
+
+@media (max-width: 760px) {
+  .make-page { position: relative; grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: calc(100dvh - 60px); overflow: hidden; }
+  .make-drawer-toggle { position: fixed; top: 10px; right: 104px; z-index: 51; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 76px; height: 44px; padding: 0 14px; border: 1px solid #dce6e1; border-radius: 999px; background: #eef4ef; color: var(--brand-green); font-size: 12px; font-weight: 800; cursor: pointer; transition: background var(--motion-menu), border-color var(--motion-menu), box-shadow var(--motion-menu); }
+  .make-drawer-toggle svg { width: 17px; height: 17px; flex: 0 0 auto; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .make-drawer-toggle:is(:hover, :focus-visible) { border-color: rgba(18, 63, 52, 0.24); background: #e5f0eb; box-shadow: 0 6px 18px rgba(5, 40, 31, 0.08); }
+  .make-drawer-toggle[aria-expanded="true"] { border-color: rgba(18, 63, 52, 0.32); background: #dcebe4; box-shadow: inset 0 0 0 1px rgba(18, 63, 52, 0.06); }
+  .make-side-panel { position: fixed; inset: 0 auto 0 0; z-index: 70; width: min(86vw, 320px); height: 100dvh; margin: 0; padding-top: 66px; border-radius: 0 18px 18px 0; box-shadow: 20px 0 50px rgba(5, 40, 31, 0.2); visibility: hidden; transform: translateX(-104%); transition: transform var(--motion-menu), visibility 0s linear var(--motion-menu); }
+  .make-page.drawer-open .make-side-panel { visibility: visible; transform: translateX(0); transition-delay: 0s; }
+  .make-drawer-backdrop { position: fixed; inset: 0; z-index: 65; border: 0; background: rgba(5, 20, 16, 0.32); opacity: 0; pointer-events: none; transition: opacity var(--motion-menu); }
+  .make-page.drawer-open .make-drawer-backdrop { display: block; opacity: 1; pointer-events: auto; }
+  .make-drawer-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #dce6e1; border-radius: 50%; background: #fff; color: var(--brand-green); font-size: 22px; line-height: 1; }
+  .chat-feed { width: 100%; padding: 24px 12px 28px; overscroll-behavior: contain; }
+  .composer { width: calc(100% - 24px); }
+  .make-page.is-empty { grid-template-rows: auto auto; align-content: start; gap: 8px; }
+  .make-page.is-empty .chat-feed { overflow: visible; padding-bottom: 0; }
+  .make-page.is-empty .make-empty { min-height: 0; margin-top: 28px; padding: 8px 0 4px; }
+  .make-page.is-empty .make-empty .spark-badge { width: 50px; height: 50px; margin-bottom: 6px; }
+  .make-page.is-empty .make-empty .spark-badge svg { width: 26px; height: 26px; }
+  .make-page.is-empty .make-empty h1 { margin-bottom: 4px; font-size: 20px; }
+  .make-page.is-empty .make-empty p { font-size: 13px; line-height: 1.4; }
+  .make-page.is-empty .composer { position: relative; bottom: auto; margin: 0 auto 16px; }
+}
+
+@media (max-width: 350px) {
+  .make-drawer-toggle { width: 44px; min-width: 44px; padding: 0; }
+  .make-drawer-toggle-label { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .make-side-panel,
+  .make-drawer-backdrop { transition: none; }
+}

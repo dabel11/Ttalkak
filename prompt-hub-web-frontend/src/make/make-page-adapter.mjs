@@ -6,7 +6,7 @@ export function createMakePageAdapter(ctx) {
     const hasMessages = ctx.state.messages.length > 0;
     return ctx.MakePageView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
-      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), sidePanelHtml: sidePanel() },
+      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), hasMessages, sidePanelHtml: sidePanel() },
     );
   }
 

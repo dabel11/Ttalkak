@@ -91,7 +91,7 @@ test("confirmation modal opens through a real folder workflow and restores focus
     }));
   });
   await gotoApp(page);
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("접근성 폴더");
   await page.locator('[data-folder-create-form] button[type="submit"]').click();
@@ -120,7 +120,7 @@ test("Saved fixture satisfies WCAG A/AA automated rules", async ({ page }) => {
     }));
   });
   await gotoApp(page);
-  await page.locator('[data-route="saved"]').click();
+  await page.locator('.sidebar [data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
   await expectAccessible(page, "Saved");
 });

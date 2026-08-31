@@ -46,8 +46,7 @@ export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus }
 
   return (
     <header className="header">
-      <div className="brand-mark" aria-label="TTALKAK">
-        <span className="brand-dot">T</span>
+      <div className="extension-brand" aria-label="TTALKAK">
         <span className="brand-name">TTALKAK</span>
       </div>
       <div className="header-actions">

@@ -38,12 +38,21 @@ import { parts } from "./make-message-parts.mjs";
     const {
       composerHtml,
       feedHtml,
+      hasMessages,
       sidePanelHtml,
     } = data;
 
     return `
-      <section class="make-page" aria-label="프롬프트 첨삭">
+      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"}" aria-label="프롬프트 첨삭">
+        <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="false">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect>
+            <path d="M9 5v14M12.5 9h4.5M12.5 13h4.5"></path>
+          </svg>
+          <span class="make-drawer-toggle-label">대화</span>
+        </button>
         ${sidePanelHtml}
+        <button class="make-drawer-backdrop" type="button" data-close-make-drawer aria-label="대화 목록 바깥 영역 닫기" tabindex="-1"></button>
         ${feedHtml}
         ${composerHtml}
       </section>
@@ -106,7 +115,8 @@ import { parts } from "./make-message-parts.mjs";
   function MakeTemplateBarView(ctx, data) {
     const { escapeAttr, escapeHtml } = ctx;
     const { promptTemplates, selectedTemplateId, templateCollapsed } = data;
-    const selectedTemplate = promptTemplates.find((template) => template.id === selectedTemplateId);
+    const customTemplate = promptTemplates.find((template) => template.id === "custom");
+    const fieldTemplates = promptTemplates.filter((template) => template.id !== "custom");
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
@@ -115,10 +125,10 @@ import { parts } from "./make-message-parts.mjs";
           templateCollapsed
             ? ""
             : `<div class="template-list">
-                ${promptTemplates.map((template) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}">${escapeHtml(template.label)}</button>`).join("")}
+                ${fieldTemplates.map((template) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}">${escapeHtml(template.label)}</button>`).join("")}
               </div>`
         }
-        ${templateCollapsed ? "" : `<p class="template-guidance" role="status">${selectedTemplate ? `<strong>${escapeHtml(selectedTemplate.label)}</strong> ${escapeHtml(selectedTemplate.description || "입력란에 템플릿을 적용했습니다.")}` : "분야를 선택하면 입력에 필요한 항목과 예시가 준비됩니다."}</p>`}
+        ${templateCollapsed ? "" : `<div class="template-guidance"><span>분야를 선택하거나</span>${customTemplate ? `<button class="template-custom-action ${selectedTemplateId === customTemplate.id ? "active" : ""}" type="button" data-template="${escapeAttr(customTemplate.id)}" aria-pressed="${selectedTemplateId === customTemplate.id ? "true" : "false"}">직접 입력</button>` : ""}</div>`}
       </div>
     `;
   }
@@ -160,7 +170,8 @@ import { parts } from "./make-message-parts.mjs";
     } = data;
 
     return `
-      <aside class="make-side-panel" aria-label="Make 최근 대화">
+      <aside class="make-side-panel" id="make-conversation-drawer" aria-label="Make 최근 대화" tabindex="-1">
+        <button class="make-drawer-close" type="button" data-close-make-drawer aria-label="대화 목록 닫기">&times;</button>
         <section class="make-folder-section">
           <div class="make-side-head">
             <span class="make-side-title"><strong>폴더</strong><small>${visibleFolders.length + 1}</small></span>

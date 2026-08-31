@@ -166,13 +166,11 @@ svg {
 
 @keyframes template-panel-in {
   from {
-    max-height: 0;
     opacity: 0;
     transform: translateY(-5px) scaleY(0.94);
   }
 
   to {
-    max-height: 110px;
     opacity: 1;
     transform: translateY(0) scaleY(1);
   }
@@ -284,6 +282,22 @@ svg {
   min-width: 0;
 }
 
+.topbar-mobile-nav {
+  display: none;
+}
+
+.backend-recovery-notice {
+  width: fit-content;
+  margin: 0 0 12px auto;
+  padding: 8px 12px;
+  border: 1px solid #b8d8cb;
+  border-radius: 999px;
+  background: #eef7f3;
+  color: var(--brand-green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .account-actions {
   display: flex;
   flex-wrap: nowrap;
@@ -380,10 +394,12 @@ svg {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 0;
   flex: 0 1 auto;
   min-width: 0;
+  min-height: 44px;
   max-width: 100%;
+  padding: 0 2px;
   border: 0;
   background: transparent;
   color: var(--brand-green);
@@ -396,18 +412,6 @@ svg {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.brand-mark {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--brand-green);
-  font-size: 18px;
 }
 
 .login-button,
@@ -5015,5 +5019,63 @@ input[type="checkbox"] {
 @media (max-width: 620px) {
   .admin-side-panel {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Compact navigation keeps the primary content first at mobile and zoomed widths. */
+@media (max-width: 760px) {
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    min-height: 60px;
+    padding: 10px 16px 0;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  .topbar-auth {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .topbar-mobile-toggle {
+    min-width: 76px;
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+
+  .topbar-action-menu {
+    right: 0;
+    left: auto;
+  }
+
+  .topbar-action-menu::before {
+    right: 24px;
+    left: auto;
+  }
+
+  .topbar-mobile-nav {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e6ede9;
+  }
+
+  .topbar-mobile-nav button {
+    min-height: 42px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--brand-green);
+    text-align: left;
+    font-weight: 700;
+  }
+
+  .topbar-mobile-nav button:is(:hover, :focus-visible, .active) {
+    background: #eef4ef;
   }
 }

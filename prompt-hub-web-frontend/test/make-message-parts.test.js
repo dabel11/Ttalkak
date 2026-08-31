@@ -156,16 +156,18 @@ test("empty Make state relies on the field template bar", () => {
   assert.doesNotMatch(html, /예시로 시작하기/);
 });
 
-test("template selection explains its effect and exposes pressed state", () => {
+test("template selection uses a compact shared guidance and exposes pressed state", () => {
   const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
-    promptTemplates: [{ id: "writing", label: "글쓰기", description: "글의 뼈대를 만듭니다." }],
+    promptTemplates: [{ id: "writing", label: "글쓰기", description: "글의 뼈대를 만듭니다." }, { id: "custom", label: "직접 입력", description: "직접 작성합니다." }],
     selectedTemplateId: "writing",
     templateCollapsed: false,
   });
   assert.doesNotMatch(html, /<small>분야<\/small>/);
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /template-guidance/);
-  assert.match(html, /글의 뼈대를 만듭니다/);
+  assert.match(html, /분야를 선택하거나/);
+  assert.match(html, /class="template-custom-action/);
+  assert.doesNotMatch(html, /<strong>글쓰기<\/strong>/);
 });
 
 test("folder action names identify their owning folder", () => {
