@@ -36,7 +36,7 @@
             </select>
           </span>
           <input type="search" data-tag-search value="${escapeAttr(state.searchQuery)}" placeholder="${escapeAttr(searchPlaceholder)}" aria-label="프롬프트 검색" />
-          <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
+          <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
             <span>${icons.bulb}</span>
             <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
           </button>

@@ -145,6 +145,7 @@ test("account and development actions use separate menus", () => {
   assert.match(html, /<details class="topbar-account">/);
   assert.match(html, /<div class="topbar-primary-actions">/);
   assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="false"[^>]*>메뉴/);
+  assert.doesNotMatch(html, /search-help expand-left/);
   assert.match(html, /id="topbar-action-menu"/);
   assert.match(html, /account-actions[\s\S]*topbar-account[\s\S]*backend-status[\s\S]*topbar-settings/);
   assert.match(html, /data-reset-demo/);

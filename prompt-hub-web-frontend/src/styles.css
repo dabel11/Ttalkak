@@ -3607,6 +3607,7 @@ input[type="checkbox"] {
   }
 
   .topbar {
+    z-index: 50;
     min-height: 64px;
     padding: 16px 16px 0;
     align-items: flex-start;
@@ -3651,15 +3652,6 @@ input[type="checkbox"] {
     cursor: pointer;
   }
 
-  .topbar-mobile-toggle::after {
-    margin-left: 7px;
-    content: "⌄";
-  }
-
-  .topbar-mobile-toggle[aria-expanded="true"]::after {
-    content: "⌃";
-  }
-
   .topbar-mobile-toggle:focus-visible {
     outline: 3px solid rgba(18, 63, 52, 0.18);
     outline-offset: 2px;
@@ -3667,19 +3659,36 @@ input[type="checkbox"] {
 
   .topbar-action-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 6px);
     left: 0;
-    z-index: 35;
+    z-index: 60;
     display: none;
     align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
     justify-items: stretch;
-    gap: 8px;
-    width: min(300px, calc(100vw - 32px));
-    padding: 12px;
+    gap: 4px;
+    width: min(260px, calc(100vw - 32px));
+    padding: 8px;
     border: 1px solid #dce6e1;
-    border-radius: 16px;
+    border-radius: 14px;
     background: #fff;
-    box-shadow: 0 18px 42px rgba(5, 40, 31, 0.16);
+    box-shadow: 0 16px 36px rgba(5, 40, 31, 0.14);
+    isolation: isolate;
+  }
+
+  .topbar-action-menu::before {
+    position: absolute;
+    top: -6px;
+    left: 28px;
+    z-index: -1;
+    width: 10px;
+    height: 10px;
+    border-top: 1px solid #dce6e1;
+    border-left: 1px solid #dce6e1;
+    background: #fff;
+    content: "";
+    transform: rotate(45deg);
   }
 
   .topbar-primary-actions.compact-open .topbar-action-menu {
@@ -3691,22 +3700,66 @@ input[type="checkbox"] {
     width: 100%;
   }
 
+  .topbar-action-menu > .account-actions {
+    display: grid;
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topbar-action-menu .account-actions > .topbar-account {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+
+  .topbar-action-menu .topbar-account > summary {
+    width: auto;
+    min-width: 0;
+  }
+
   .topbar-action-menu :is(.backend-status-menu, .topbar-settings, .topbar-account) > summary,
   .topbar-action-menu .login-button {
+    display: flex;
+    align-items: center;
     justify-content: flex-start;
     width: 100%;
+    min-height: 42px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--brand-green);
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .topbar-action-menu :is(.backend-status-menu, .topbar-settings, .topbar-account) > summary:hover,
+  .topbar-action-menu :is(.backend-status-menu, .topbar-settings, .topbar-account) > summary:focus-visible,
+  .topbar-action-menu .login-button:hover,
+  .topbar-action-menu .login-button:focus-visible {
+    background: #eef4ef;
+  }
+
+  .topbar-action-menu :is(.backend-status-menu, .topbar-settings, .topbar-account)[open] > summary {
+    background: #e7f0eb;
   }
 
   .topbar-action-menu :is(.backend-status-popover, .topbar-settings-menu, .topbar-account-menu) {
     position: static;
     width: 100%;
-    margin-top: 6px;
+    margin: 2px 0 4px;
+    padding: 10px;
+    border-color: #e6ede9;
+    border-radius: 10px;
+    background: #f7faf8;
     box-shadow: none;
   }
 
   .backend-status {
     max-width: 100%;
-    white-space: normal;
+    white-space: nowrap;
     line-height: 1.35;
   }
 
@@ -3741,6 +3794,7 @@ input[type="checkbox"] {
 
   .search-field input {
     flex: 1 1 220px;
+    padding-left: 34px;
   }
 
   .search-scope-select select {
@@ -3748,7 +3802,22 @@ input[type="checkbox"] {
   }
 
   .search-help .help-text {
-    max-width: min(280px, calc(100vw - 40px));
+    max-width: calc(100vw - 40px);
+    height: 28px;
+    min-height: 28px;
+    padding-block: 0;
+    border-radius: 999px;
+    line-height: 1.2;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .search-help {
+    position: absolute;
+    bottom: 11px;
+    left: 12px;
+    z-index: 2;
   }
 
   .share-title {
@@ -3770,8 +3839,10 @@ input[type="checkbox"] {
   }
 
   .sort-select {
-    width: 100%;
-    justify-content: space-between;
+    align-self: flex-start;
+    width: auto;
+    max-width: 100%;
+    justify-content: flex-start;
   }
 
   .sort-select select {

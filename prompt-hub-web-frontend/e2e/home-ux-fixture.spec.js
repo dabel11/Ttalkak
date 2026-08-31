@@ -1,6 +1,39 @@
 const { test, expect } = require("@playwright/test");
 const { gotoApp } = require("./support/app-ready.js");
 
+test("narrow Home search help expands toward the available right side", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await gotoApp(page);
+  const help = page.getByRole("button", { name: "검색 도움말" });
+  await help.focus();
+  await page.waitForTimeout(250);
+  const positions = await help.evaluate((button) => {
+    const trigger = button.getBoundingClientRect();
+    const tooltipElement = button.querySelector(".help-text");
+    const tooltip = tooltipElement.getBoundingClientRect();
+    return {
+      triggerLeft: trigger.left,
+      tooltipLeft: tooltip.left,
+      tooltipRight: tooltip.right,
+      clippedHorizontally: tooltipElement.scrollWidth > tooltipElement.clientWidth,
+      clippedVertically: tooltipElement.scrollHeight > tooltipElement.clientHeight,
+      height: tooltip.height,
+      whiteSpace: getComputedStyle(tooltipElement).whiteSpace,
+    };
+  });
+  expect(positions.tooltipLeft).toBeGreaterThanOrEqual(positions.triggerLeft - 1);
+  expect(positions.tooltipRight).toBeLessThanOrEqual(390);
+  expect(positions.clippedHorizontally).toBe(false);
+  expect(positions.clippedVertically).toBe(false);
+  expect(positions.height).toBeLessThanOrEqual(30);
+  expect(positions.whiteSpace).toBe("nowrap");
+  await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
+
+  const sort = page.locator(".sort-select");
+  const sortWidth = await sort.evaluate((element) => element.getBoundingClientRect().width);
+  expect(sortWidth).toBeLessThan(200);
+});
+
 test("Home exposes styled sorting and compact backend recovery", async ({ page }) => {
   await page.addInitScript(() => { window.TTALKAK_DEMO_FALLBACK_ENABLED = false; });
   await page.route("http://localhost:8080/**", (route) => route.fulfill({

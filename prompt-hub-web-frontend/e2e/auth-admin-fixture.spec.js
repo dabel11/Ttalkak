@@ -128,6 +128,7 @@ test("narrow screens collapse account, connection and settings into one keyboard
   const toggle = page.locator(".topbar-mobile-toggle");
   const actionMenu = page.locator("#topbar-action-menu");
   await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText("메뉴");
   await expect(actionMenu).toBeHidden();
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -135,6 +136,21 @@ test("narrow screens collapse account, connection and settings into one keyboard
   await expect(actionMenu.locator(".topbar-account")).toBeVisible();
   await expect(actionMenu.locator(".backend-status-menu")).toBeVisible();
   await expect(actionMenu.locator(".topbar-settings")).toBeVisible();
+  const rowBoxes = await actionMenu.evaluate((menu) => [
+    menu.querySelector(":scope > .account-actions > .topbar-account > summary"),
+    menu.querySelector(":scope > .backend-status-menu > summary"),
+    menu.querySelector(":scope > .topbar-settings > summary"),
+  ].map((row) => {
+    const box = row.getBoundingClientRect();
+    const style = getComputedStyle(row);
+    return { width: Math.round(box.width), height: Math.round(box.height), textAlign: style.textAlign };
+  }));
+  expect(rowBoxes).toHaveLength(3);
+  const rowWidths = rowBoxes.map(({ width }) => width);
+  expect(Math.max(...rowWidths) - Math.min(...rowWidths), JSON.stringify(rowBoxes)).toBeLessThanOrEqual(1);
+  expect(rowBoxes.every(({ height, textAlign }) => height >= 42 && textAlign === "left")).toBe(true);
+  const actionMenuWidth = await actionMenu.evaluate((menu) => Math.round(menu.getBoundingClientRect().width));
+  expect(rowBoxes[0].width).toBeGreaterThanOrEqual(actionMenuWidth - 20);
 
   await page.keyboard.press("Escape");
   await expect(actionMenu).toBeHidden();
