@@ -1685,6 +1685,7 @@ function bindMakeEvents() {
 }
 function bindDelegatedMakeEvents() {
   const handlers = makeEventsModule.createDelegatedMakeHandlers({
+    root: document,
     state,
     maxFolders: MAX_CUSTOM_MAKE_FOLDERS,
     actions: {

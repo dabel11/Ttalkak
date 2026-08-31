@@ -147,6 +147,8 @@ test("account and development actions use separate menus", () => {
   assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="false"[^>]*>메뉴/);
   assert.doesNotMatch(html, /search-help expand-left/);
   assert.match(html, /id="topbar-action-menu"/);
+  assert.match(html, /class="topbar-mobile-nav"/);
+  assert.match(html, /data-route="home"/);
   assert.match(html, /account-actions[\s\S]*topbar-account[\s\S]*backend-status[\s\S]*topbar-settings/);
   assert.match(html, /data-reset-demo/);
   assert.match(html, /data-toggle-reported/);
@@ -187,4 +189,23 @@ test("Home retry exposes an actionable compact error state", async () => {
   assert.match(checkingHtml, /프롬프트를 확인하고 있습니다/);
   assert.match(checkingHtml, /aria-busy="true"/);
   assert.doesNotMatch(checkingHtml, /data-retry-home-load/);
+});
+
+test("Home recovery deduplicates reconnects and announces a successful refresh", async () => {
+  let refreshCalls = 0;
+  const state = { backendStatus: "fallback", backendRecoveryNotice: "" };
+  const controller = createHomeController({
+    state,
+    root: { querySelector() { return null; } },
+    document: { activeElement: null, body: {} },
+    debounceMs: 0,
+    validScope: (value) => value,
+    applySearchQuery: () => false,
+    applyScope() {}, applySort() {}, applyPage() {},
+    refresh: async () => { refreshCalls += 1; state.backendStatus = "connected"; },
+    render() {},
+  });
+  await Promise.all([controller.retryHomeLoad(), controller.retryHomeLoad()]);
+  assert.equal(refreshCalls, 1);
+  assert.equal(state.backendRecoveryNotice, "연결이 복구되어 프롬프트 목록을 갱신했습니다.");
 });

@@ -3,6 +3,8 @@
   function createHomeController(ctx) {
     let searchCommitTimer = null;
     let searchTipTimer = null;
+    let recoveryNoticeTimer = null;
+    let retryPromise = null;
 
     function cancelSearchCommit() {
       globalThis.clearTimeout(searchCommitTimer);
@@ -69,10 +71,23 @@
     }
 
     async function retryHomeLoad({ automatic = false } = {}) {
+      if (retryPromise) return retryPromise;
       ctx.state.backendStatus = "checking";
+      ctx.state.backendRecoveryNotice = "";
       ctx.state.backendStatusMessage = automatic ? "서버 연결 복구를 자동으로 확인 중입니다." : "Home 프롬프트를 다시 불러오는 중입니다.";
       ctx.render();
-      await ctx.refresh();
+      retryPromise = Promise.resolve(ctx.refresh()).then(() => {
+        if (ctx.state.backendStatus !== "connected") return;
+        ctx.state.backendRecoveryNotice = "연결이 복구되어 프롬프트 목록을 갱신했습니다.";
+        ctx.render();
+        globalThis.clearTimeout(recoveryNoticeTimer);
+        recoveryNoticeTimer = globalThis.setTimeout(() => {
+          ctx.state.backendRecoveryNotice = "";
+          ctx.render();
+        }, 2400);
+        recoveryNoticeTimer?.unref?.();
+      }).finally(() => { retryPromise = null; });
+      return retryPromise;
     }
 
     return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, retryHomeLoad, scheduleSearchCommit, showSearchTipOnce });

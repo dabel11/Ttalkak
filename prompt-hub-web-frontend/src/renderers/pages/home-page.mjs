@@ -25,6 +25,7 @@
 
     return `
       <section class="home-page" aria-labelledby="popular-heading">
+        ${state.backendRecoveryNotice ? `<p class="backend-recovery-notice" role="status">${escapeHtml(state.backendRecoveryNotice)}</p>` : ""}
         <label class="search-field">
           <span>${icons.search}</span>
           <span class="search-scope-select">
