@@ -31,9 +31,10 @@ export function createMakePageAdapter(ctx) {
 
   function templateBar() {
     const selectedTemplateId = ctx.promptTemplates.find((/** @type {TtalkakStateEntity} */ template) => template.prompt === ctx.state.composerDraft)?.id || "";
+    const compactViewport = typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches;
     return ctx.MakeTemplateBarView(
       { escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
-      { promptTemplates: ctx.promptTemplates, selectedTemplateId, templateCollapsed: ctx.state.templateCollapsed },
+      { promptTemplates: ctx.promptTemplates, selectedTemplateId, templateCollapsed: compactViewport ? !ctx.state.mobileTemplateExpanded : ctx.state.templateCollapsed },
     );
   }
 

@@ -46,8 +46,8 @@ import { parts } from "./make-message-parts.mjs";
       <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"}" aria-label="프롬프트 첨삭">
         <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="false">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-            <rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect>
-            <path d="M9 5v14M12.5 9h4.5M12.5 13h4.5"></path>
+            <path d="M6.5 4.5h11a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H10l-4.5 3v-3.25a3 3 0 0 1-2-2.75v-7a3 3 0 0 1 3-3Z"></path>
+            <path d="M8 9h8M8 13h6"></path>
           </svg>
           <span class="make-drawer-toggle-label">대화</span>
         </button>
@@ -71,7 +71,13 @@ import { parts } from "./make-message-parts.mjs";
           hasMessages
             ? renderConversationTurns(messages, renderMessageBubble, isThinking)
             : `<div class="empty-state make-empty">
-                <div class="spark-badge">${icons.make}</div>
+                <div class="spark-badge" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="m14.5 4.5 1.1 2.9 2.9 1.1-2.9 1.1-1.1 2.9-1.1-2.9-2.9-1.1 2.9-1.1 1.1-2.9Z"></path>
+                    <path d="m8 11 1.5 3.5L13 16l-3.5 1.5L8 21l-1.5-3.5L3 16l3.5-1.5L8 11Z"></path>
+                    <path d="m18.5 14.5.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z"></path>
+                  </svg>
+                </div>
                 <h1>프롬프트 첨삭 도우미</h1>
                 <p>AI 도구에서 최적의 결과를 얻기 위한 프롬프트를 작성해보세요.<br />더 명확하고 효과적인 프롬프트로 개선해드립니다.</p>
               </div>`
@@ -117,10 +123,18 @@ import { parts } from "./make-message-parts.mjs";
     const { promptTemplates, selectedTemplateId, templateCollapsed } = data;
     const customTemplate = promptTemplates.find((template) => template.id === "custom");
     const fieldTemplates = promptTemplates.filter((template) => template.id !== "custom");
+    const selectedTemplate = promptTemplates.find((template) => template.id === selectedTemplateId);
+    const hasSelectedField = Boolean(selectedTemplate && selectedTemplate.id !== "custom");
+    const collapsedLabel = hasSelectedField ? selectedTemplate.label : "분야 선택";
+    const collapsedAriaLabel = hasSelectedField ? `현재 분야: ${collapsedLabel}, 분야 선택 펼치기` : "분야 선택 펼치기";
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? "분야 선택 펼치기" : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}"><span aria-hidden="true">${templateCollapsed ? "›" : "‹"}</span></button>
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? collapsedAriaLabel : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">
+          ${templateCollapsed ? "" : `<span class="template-toggle-mark" aria-hidden="true">‹</span>`}
+          <span class="template-toggle-label">${escapeHtml(templateCollapsed ? collapsedLabel : "분야 선택")}</span>
+          <svg class="template-toggle-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4"></path></svg>
+        </button>
         ${
           templateCollapsed
             ? ""
@@ -140,7 +154,7 @@ import { parts } from "./make-message-parts.mjs";
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
         <span class="sr-only" role="status" aria-live="polite" data-composer-restore-status></span>
-        <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="개선하고 싶은 프롬프트를 입력하세요..." ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
+        <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="프롬프트를 입력하세요…" ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
         <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
       </form>
     `;

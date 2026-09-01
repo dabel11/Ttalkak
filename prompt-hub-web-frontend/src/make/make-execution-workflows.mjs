@@ -122,6 +122,7 @@ export function createMakeExecutionWorkflows(ctx) {
 
       if (startNew) startNewMakeChatState(state);
       makeState.setMakeComposerDraft(state, template.prompt);
+      if (window.matchMedia?.("(max-width: 760px)").matches) state.mobileTemplateExpanded = false;
       render();
       window.setTimeout(() => {
         const textarea = document.querySelector("[data-autosize-textarea]");
@@ -154,7 +155,8 @@ export function createMakeExecutionWorkflows(ctx) {
     }
 
     function toggleTemplateBar() {
-      state.templateCollapsed = !state.templateCollapsed;
+      if (window.matchMedia?.("(max-width: 760px)").matches) state.mobileTemplateExpanded = !state.mobileTemplateExpanded;
+      else state.templateCollapsed = !state.templateCollapsed;
       render();
     }
 

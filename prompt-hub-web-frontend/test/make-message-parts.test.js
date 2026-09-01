@@ -154,6 +154,8 @@ test("empty Make state relies on the field template bar", () => {
   });
   assert.doesNotMatch(html, /make-empty-starters/);
   assert.doesNotMatch(html, /예시로 시작하기/);
+  assert.match(html, /class="spark-badge" aria-hidden="true"/);
+  assert.doesNotMatch(html, /class="plus-mark"/);
 });
 
 test("template selection uses a compact shared guidance and exposes pressed state", () => {
@@ -167,7 +169,32 @@ test("template selection uses a compact shared guidance and exposes pressed stat
   assert.match(html, /template-guidance/);
   assert.match(html, /분야를 선택하거나/);
   assert.match(html, /class="template-custom-action/);
+  assert.match(html, /class="template-toggle-label">분야 선택/);
+  assert.match(html, /class="template-toggle-chevron"/);
   assert.doesNotMatch(html, /<strong>글쓰기<\/strong>/);
+});
+
+test("collapsed template selection names the current field without rendering the grid", () => {
+  const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
+    promptTemplates: [{ id: "writing", label: "글쓰기" }, { id: "custom", label: "직접 입력" }],
+    selectedTemplateId: "writing",
+    templateCollapsed: true,
+  });
+  assert.match(html, /현재 분야: 글쓰기, 분야 선택 펼치기/);
+  assert.match(html, /class="template-toggle-label">글쓰기/);
+  assert.match(html, /class="template-toggle-chevron"/);
+  assert.doesNotMatch(html, /class="template-list"/);
+});
+
+test("collapsed direct input uses the field selection action instead of naming custom input as a field", () => {
+  const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
+    promptTemplates: [{ id: "writing", label: "글쓰기" }, { id: "custom", label: "직접 입력" }],
+    selectedTemplateId: "custom",
+    templateCollapsed: true,
+  });
+  assert.match(html, /aria-label="분야 선택 펼치기"/);
+  assert.match(html, /class="template-toggle-label">분야 선택/);
+  assert.doesNotMatch(html, /현재 분야: 직접 입력/);
 });
 
 test("folder action names identify their owning folder", () => {

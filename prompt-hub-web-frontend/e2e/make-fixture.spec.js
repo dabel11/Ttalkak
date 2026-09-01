@@ -570,7 +570,9 @@ test("Make groups turns and keeps a balanced field grid with an independent togg
   await expect(page.getByText("이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다.", { exact: true })).toHaveCount(0);
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
-  await expect(fieldToggle).toHaveText("‹");
+  await expect(fieldToggle).toHaveAttribute("aria-label", "분야 선택 접기");
+  await expect(fieldToggle.locator(".template-toggle-mark")).toHaveText("‹");
+  await expect(fieldToggle.locator(".template-toggle-label")).toBeHidden();
   expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBe(36);
   const templateColumns = await page.locator(".template-list").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
   expect([2, 3]).toContain(templateColumns);

@@ -594,6 +594,14 @@
   box-shadow: 0 10px 24px rgba(18, 63, 52, 0.16);
 }
 
+.template-toggle-label {
+  display: none;
+}
+
+.template-toggle-chevron {
+  display: none;
+}
+
 .template-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -636,8 +644,8 @@
 }
 
 .make-empty {
-  min-height: clamp(300px, 40vh, 430px);
-  padding: 28px 0 18px;
+  min-height: clamp(240px, 32vh, 340px);
+  padding: 24px 0 12px;
 }
 
 .make-empty .spark-badge {
@@ -671,6 +679,24 @@
   stroke-width: 2.3;
 }
 
+.make-empty .spark-badge {
+  width: 64px;
+  height: 64px;
+  background: #e5f0eb;
+  box-shadow: 0 10px 24px rgba(18, 63, 52, 0.1);
+}
+
+.make-empty .spark-badge svg {
+  width: 30px;
+  height: 30px;
+  color: var(--brand-green);
+  fill: rgba(18, 63, 52, 0.08);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+}
+
 .empty-state h1 {
   color: var(--text);
   font-size: 27px;
@@ -699,6 +725,19 @@
 
 .empty-state.make-empty p {
   line-height: 1.45;
+}
+
+@media (min-width: 761px) {
+  .make-page.is-empty .chat-feed {
+    padding-bottom: 20px;
+  }
+
+  .make-page.is-empty .make-empty {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    min-height: 220px;
+    padding-bottom: 4px;
+  }
 }
 
 .composer {
@@ -2639,8 +2678,11 @@ h1 {
 .make-drawer-close { display: none; }
 
 @media (max-width: 760px) {
-  .make-page { position: relative; grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: calc(100dvh - 60px); overflow: hidden; }
-  .make-drawer-toggle { position: fixed; top: 10px; right: 104px; z-index: 51; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 76px; height: 44px; padding: 0 14px; border: 1px solid #dce6e1; border-radius: 999px; background: #eef4ef; color: var(--brand-green); font-size: 12px; font-weight: 800; cursor: pointer; transition: transform 140ms ease, background 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+  html:has(.make-page) { overflow-y: hidden; scrollbar-gutter: auto; }
+  .main-area:has(.make-page) { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
+  .content-area:has(.make-page) { flex: 1 1 auto; min-height: 0; }
+  .make-page { position: relative; grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; height: 100%; overflow: hidden; }
+  .make-drawer-toggle { position: fixed; top: 12px; right: 104px; z-index: 51; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 76px; height: 44px; padding: 0 14px; border: 1px solid #dce6e1; border-radius: 999px; background: #eef4ef; color: var(--brand-green); font-size: 12px; font-weight: 800; cursor: pointer; transition: transform 140ms ease, background 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
   .make-drawer-toggle svg { width: 17px; height: 17px; flex: 0 0 auto; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1); }
   .make-drawer-toggle:is(:hover, :focus-visible) { border-color: rgba(18, 63, 52, 0.24); background: #e5f0eb; box-shadow: 0 6px 18px rgba(5, 40, 31, 0.08); }
   .make-drawer-toggle:active { transform: scale(0.97); }
@@ -2652,12 +2694,25 @@ h1 {
   .make-page.drawer-open .make-side-panel > :not(.make-drawer-close) { opacity: 1; transform: translateX(0); transition: opacity 180ms ease 40ms, transform 200ms cubic-bezier(0.22, 1, 0.36, 1) 40ms; }
   .make-drawer-backdrop { position: fixed; inset: 0; z-index: 65; display: block; border: 0; background: rgba(5, 20, 16, 0.32); visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 160ms ease, visibility 0s linear 160ms; }
   .make-page.drawer-open .make-drawer-backdrop { visibility: visible; opacity: 1; pointer-events: auto; transition: opacity 200ms ease, visibility 0s; }
-  .make-drawer-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #dce6e1; border-radius: 50%; background: #fff; color: var(--brand-green); font-size: 22px; line-height: 1; }
+  .make-drawer-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 1px solid transparent; border-radius: 50%; background: #e5f0eb; color: var(--brand-green); font-size: 20px; line-height: 1; cursor: pointer; transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+  .make-drawer-close:is(:hover, :focus-visible) { border-color: rgba(18, 63, 52, 0.25); background: #dcebe4; box-shadow: 0 7px 18px rgba(5, 40, 31, 0.1); }
   .chat-feed { width: 100%; padding: 24px 12px 28px; overscroll-behavior: contain; }
   .composer { width: calc(100% - 24px); }
+  .composer textarea { min-height: 44px; padding-block: 11px; }
+  .composer .send-button { width: 44px; height: 44px; }
+  .make-template-bar:not(.collapsed) .template-toggle { position: relative; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; width: auto; min-width: 122px; padding: 0 12px 0 14px; font-size: 13px; }
+  .make-template-bar:not(.collapsed) .template-toggle-mark { display: none; }
+  .make-template-bar:not(.collapsed) .template-toggle-label { display: inline; }
+  .make-template-bar:not(.collapsed) .template-toggle-chevron { display: block; flex: 0 0 auto; width: 15px; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transform: rotate(180deg); }
+  .make-template-bar:not(.collapsed) .template-list { width: 100%; margin: 10px 0 0; }
+  .make-template-bar.collapsed { min-height: 38px; }
+  .make-template-bar.collapsed .template-toggle { position: relative; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; width: auto; min-width: 122px; padding: 0 12px 0 14px; font-size: 13px; }
+  .make-template-bar.collapsed .template-toggle-label { display: inline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .make-template-bar.collapsed .template-toggle-chevron { display: block; flex: 0 0 auto; width: 15px; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform 160ms ease; }
+  .make-template-bar.collapsed .template-toggle:is(:hover, :focus-visible) .template-toggle-chevron { transform: translateY(1px); }
   .make-page.is-empty { grid-template-rows: auto auto; align-content: start; gap: 8px; }
   .make-page.is-empty .chat-feed { overflow: visible; padding-bottom: 0; }
-  .make-page.is-empty .make-empty { min-height: 0; margin-top: 28px; padding: 8px 0 4px; }
+  .make-page.is-empty .make-empty { flex: 0 0 auto; min-height: 0; margin-top: 14px; padding: 8px 0 4px; }
   .make-page.is-empty .make-empty .spark-badge { width: 50px; height: 50px; margin-bottom: 6px; }
   .make-page.is-empty .make-empty .spark-badge svg { width: 26px; height: 26px; }
   .make-page.is-empty .make-empty h1 { margin-bottom: 4px; font-size: 20px; }

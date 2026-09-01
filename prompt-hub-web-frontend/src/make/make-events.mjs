@@ -46,14 +46,56 @@
     updateRecentThreadSearch(input);
     input.focus();
   }
+  function getMakeDrawerBackgroundTargets(page) {
+    const mainArea = page?.closest?.(".main-area");
+    const appShell = page?.closest?.(".app-shell");
+    return [
+      appShell?.querySelector?.(":scope > .sidebar"),
+      mainArea?.querySelector?.(":scope > .topbar"),
+      ...[...(page?.children || [])].filter((element) => !element.matches?.(".make-side-panel, .make-drawer-backdrop")),
+    ].filter(Boolean);
+  }
+  function setMakeDrawerA11yState(page, open) {
+    const panel = page?.querySelector?.(".make-side-panel");
+    if (!page || !panel) return;
+    if (open) {
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+    } else {
+      panel.removeAttribute("role");
+      panel.removeAttribute("aria-modal");
+    }
+    getMakeDrawerBackgroundTargets(page).forEach((element) => element.toggleAttribute("inert", open));
+  }
+  function getMakeDrawerFocusable(panel) {
+    return [...(panel?.querySelectorAll?.("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [href], [tabindex]:not([tabindex='-1'])") || [])]
+      .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true" && element.getClientRects().length > 0);
+  }
+  function trapMakeDrawerFocus(event, page) {
+    if (event.key !== "Tab" || !page?.classList.contains("drawer-open")) return false;
+    const panel = page.querySelector(".make-side-panel");
+    const focusable = getMakeDrawerFocusable(panel);
+    if (!focusable.length) return false;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    const active = panel.ownerDocument.activeElement;
+    if (!panel.contains(active) || (!event.shiftKey && active === last) || (event.shiftKey && active === first)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+      return true;
+    }
+    return false;
+  }
   function closeMakeDrawer(root, { restoreFocus = false } = {}) {
     const page = root.querySelector?.(".make-page");
-    if (!page?.classList.contains("drawer-open")) return false;
+    if (!page) return false;
+    const wasOpen = page.classList.contains("drawer-open");
     page.classList.remove("drawer-open");
+    setMakeDrawerA11yState(page, false);
     const toggle = page.querySelector("[data-toggle-make-drawer]");
     toggle?.setAttribute("aria-expanded", "false");
-    if (restoreFocus) toggle?.focus();
-    return true;
+    if (restoreFocus && wasOpen) toggle?.focus();
+    return wasOpen;
   }
   function bindDelegatedMakeEvents(root, handlers) {
     if (!root || boundRoots.has(root)) return;
@@ -63,6 +105,11 @@
     root.addEventListener("change", (event) => handlers.change?.(event));
     root.addEventListener("submit", (event) => handlers.submit?.(event));
     root.addEventListener("click", (event) => handlers.click?.(event));
+    const rootWindow = root.defaultView || root.ownerDocument?.defaultView;
+    rootWindow?.matchMedia?.("(max-width: 760px)")?.addEventListener?.("change", (event) => {
+      if (!event.matches) closeMakeDrawer(root);
+      handlers.viewportChange?.(event.matches);
+    });
   }
   function createDelegatedMakeHandlers(ctx) {
     const { actions, state } = ctx;
@@ -71,6 +118,10 @@
       return true;
     };
     return {
+      viewportChange() {
+        state.mobileTemplateExpanded = false;
+        actions.render();
+      },
       input(event) {
         const recentSearch = event.target.closest?.("[data-recent-thread-search]");
         if (recentSearch) {
@@ -83,6 +134,8 @@
         actions.autosize(textarea);
       },
       keydown(event) {
+        const makePage = event.target.closest?.(".make-page") || (ctx.root || event.currentTarget).querySelector?.(".make-page");
+        if (trapMakeDrawerFocus(event, makePage)) return;
         if (event.key === "Escape" && closeMakeDrawer(ctx.root || event.currentTarget, { restoreFocus: true })) {
           event.preventDefault();
           return;
@@ -123,6 +176,7 @@
           const page = drawerControl.closest?.(".make-page");
           const willOpen = !page?.classList.contains("drawer-open");
           page?.classList.toggle("drawer-open", willOpen);
+          setMakeDrawerA11yState(page, willOpen);
           drawerControl.setAttribute("aria-expanded", String(willOpen));
           if (willOpen) page?.querySelector(".make-drawer-close")?.focus?.({ preventScroll: true });
           return;
