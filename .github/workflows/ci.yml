@@ -142,6 +142,101 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  integration-smoke:
+    name: Web and Spring backend integration smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ttalkak
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      RAG_SERVER_URL: http://127.0.0.1:8000
+      CORS_ALLOWED_ORIGIN_PATTERNS: http://127.0.0.1:*
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: prompt-hub-web-frontend/package-lock.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install integration browser dependencies
+        working-directory: prompt-hub-web-frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Start deterministic RAG stub and Spring backend
+        run: |
+          node scripts/stub-rag-server.cjs > "$RUNNER_TEMP/stub-rag.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/stub-rag.pid"
+          ./backend/gradlew -p backend bootRun --no-daemon > "$RUNNER_TEMP/backend.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/backend.pid"
+
+      - name: Wait for integration services
+        run: |
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null \
+              && curl --fail --silent http://127.0.0.1:8080/api/prompts >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Integration services did not become ready." >&2
+          exit 1
+
+      - name: Run real backend browser smoke
+        working-directory: prompt-hub-web-frontend
+        run: npm run test:e2e:integration
+
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: integration-smoke-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/stub-rag.log
+            prompt-hub-web-frontend/test-results-integration/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop integration services
+        if: always()
+        run: |
+          test ! -f "$RUNNER_TEMP/backend.pid" || kill "$(cat "$RUNNER_TEMP/backend.pid")" || true
+          test ! -f "$RUNNER_TEMP/stub-rag.pid" || kill "$(cat "$RUNNER_TEMP/stub-rag.pid")" || true
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest

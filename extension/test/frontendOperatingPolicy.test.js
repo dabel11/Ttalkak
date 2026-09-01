@@ -5,6 +5,7 @@ import test from "node:test";
 const policies = fs.readFileSync(new URL("../../docs/FRONTEND_OPERATING_POLICIES.md", import.meta.url), "utf8");
 const releaseChecklist = fs.readFileSync(new URL("../../docs/WEB_STORE_RELEASE_CHECKLIST.md", import.meta.url), "utf8");
 const readme = fs.readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+const releaseWorkflow = fs.readFileSync(new URL("../../.github/workflows/extension-release-smoke.yml", import.meta.url), "utf8");
 
 test("frontend operating policies retain every required decision area", () => {
   for (const heading of [
@@ -28,4 +29,13 @@ test("release documentation remains discoverable and cross-platform", () => {
   assert.match(releaseChecklist, /^## Production smoke$/m);
   assert.match(releaseChecklist, /PowerShell:.*VITE_BACKEND_API_URL/);
   assert.match(releaseChecklist, /POSIX:.*VITE_BACKEND_API_URL/);
+});
+
+test("release checklist requires the live GitHub production smoke before publishing", () => {
+  assert.match(releaseChecklist, /Extension production release smoke/);
+  for (const input of ["backend_api_url", "extension_id", "privacy_policy_url", "support_url", "release_owner"]) {
+    assert.match(releaseWorkflow, new RegExp(`${input}:`));
+  }
+  assert.match(releaseWorkflow, /npm run release:prepare/);
+  assert.match(releaseWorkflow, /extension\/dist-prod\//);
 });

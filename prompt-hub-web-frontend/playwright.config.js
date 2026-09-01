@@ -9,7 +9,7 @@ const e2eBaseURL = `http://127.0.0.1:${e2ePort}`;
 module.exports = defineConfig({
   outputDir: process.env.TTALKAK_E2E_OUTPUT_DIR || "test-results",
   testDir: "./e2e",
-  testIgnore: ["cross-browser-smoke.spec.js", "production-loading.spec.js"],
+  testIgnore: ["cross-browser-smoke.spec.js", "production-loading.spec.js", "live-backend-smoke.spec.js"],
   fullyParallel: false,
   workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 1 : 0,
