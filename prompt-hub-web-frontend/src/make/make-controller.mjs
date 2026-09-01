@@ -98,7 +98,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const userMessageId = `user-${now}`;
     const assistantMessageId = `make-${now}`;
     const history = ctx.buildHistory(ctx.state.messages);
-    const requestId = ctx.shouldSync() && ctx.getBackendThreadId(threadId)
+    const requestId = ctx.shouldSync()
       ? resolveMakeRequestId({ prompt })
       : "";
     const startedAt = Date.now();

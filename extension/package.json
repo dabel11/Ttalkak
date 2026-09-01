@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build:shared": "node ../scripts/build-account-withdrawal-policy.cjs",
-    "check:shared": "node ../scripts/check-account-withdrawal-policy.cjs",
+    "build:shared": "node ../scripts/build-make-api-contract.cjs && node ../scripts/build-account-withdrawal-policy.cjs",
+    "check:shared": "node ../scripts/check-make-api-contract.cjs && node ../scripts/check-account-withdrawal-policy.cjs",
     "test": "npm run test:node && npm run test:behavior",
     "test:node": "node --test test/*.test.js",
     "test:behavior": "vitest run --config vitest.config.js",

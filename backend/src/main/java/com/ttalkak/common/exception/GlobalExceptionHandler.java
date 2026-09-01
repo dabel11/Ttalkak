@@ -1,5 +1,7 @@
 package com.ttalkak.common.exception;
 
+import com.ttalkak.make.MakeApiContract;
+
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,7 +148,7 @@ public class GlobalExceptionHandler {
     ) {
         return build(
                 HttpStatus.CONFLICT,
-                "THREAD_CONCURRENTLY_UPDATED",
+                MakeApiContract.THREAD_CONCURRENTLY_UPDATED,
                 "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.",
                 request
         );

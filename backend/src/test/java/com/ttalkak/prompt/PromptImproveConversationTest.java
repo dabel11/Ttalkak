@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -336,6 +337,45 @@ class PromptImproveConversationTest {
 				response.get("requestId")
 		);
 		assertEquals(false, response.get("replayed"));
+		assertEquals(
+				"request-new-123",
+				captor.getValue().getInitialRequestId()
+		);
+	}
+
+	@Test
+	void repeatedInitialRequestIdReplaysTheCreatedThreadWithoutThreadId()
+			throws Exception {
+		when(authService.currentMemberIdOrNull(AUTHORIZATION))
+				.thenReturn(7L);
+
+		PromptController.ImproveRequest request =
+				new PromptController.ImproveRequest(
+						"첫 요청 응답 유실 복구",
+						"prompt_techniques",
+						null,
+						null,
+						null,
+						"initial-request-123",
+						List.of()
+				);
+
+		Map<String, Object> first = controller.improve(request, AUTHORIZATION);
+		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(MakeThread.class);
+		verify(makeThreadRepository).save(captor.capture());
+		MakeThread created = captor.getValue();
+
+		when(makeThreadRepository.findByMemberIdAndInitialRequestId(
+				7L,
+				"initial-request-123"
+		)).thenReturn(Optional.of(created));
+
+		Map<String, Object> replay = controller.improve(request, AUTHORIZATION);
+
+		assertEquals(first.get("threadId"), replay.get("threadId"));
+		assertEquals(true, replay.get("replayed"));
+		assertEquals("initial-request-123", replay.get("requestId"));
+		verify(makeThreadRepository, times(1)).save(any(MakeThread.class));
 	}
 
 	@Test

@@ -4,7 +4,13 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "make_threads")
+@Table(
+        name = "make_threads",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_make_thread_member_initial_request",
+                columnNames = {"member_id", "initial_request_id"}
+        )
+)
 public class MakeThread {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -13,8 +19,11 @@ public class MakeThread {
     @Column(nullable = false)
     private Long version = 0L;
 
-    @Column(nullable = false)
+    @Column(name = "member_id", nullable = false)
     private Long memberId;
+
+    @Column(name = "initial_request_id", length = MakeApiContract.REQUEST_ID_MAX_LENGTH)
+    private String initialRequestId;
 
     private Long folderId;
     private String title;
@@ -28,15 +37,21 @@ public class MakeThread {
     protected MakeThread() {}
 
     public MakeThread(Long memberId, String title, String messagesJson, Long folderId) {
+        this(memberId, title, messagesJson, folderId, null);
+    }
+
+    public MakeThread(Long memberId, String title, String messagesJson, Long folderId, String initialRequestId) {
         this.memberId = memberId;
         this.title = title;
         this.messagesJson = messagesJson;
         this.folderId = folderId;
+        this.initialRequestId = initialRequestId;
     }
 
     public Long getId() { return id; }
     public Long getVersion() { return version; }
     public Long getMemberId() { return memberId; }
+    public String getInitialRequestId() { return initialRequestId; }
     public Long getFolderId() { return folderId; }
     public String getTitle() { return title; }
     public String getMessagesJson() { return messagesJson; }

@@ -7,4 +7,5 @@ import java.util.Optional;
 public interface MakeThreadRepository extends JpaRepository<MakeThread, Long> {
     List<MakeThread> findByMemberIdOrderByUpdatedAtDesc(Long memberId);
     Optional<MakeThread> findByIdAndMemberId(Long id, Long memberId);
+    Optional<MakeThread> findByMemberIdAndInitialRequestId(Long memberId, String initialRequestId);
 }

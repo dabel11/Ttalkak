@@ -71,6 +71,18 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("a logged-in first request receives an id before the server thread exists", async () => {
+    api.getThreads.mockResolvedValue([]);
+    api.improve.mockResolvedValue({ ...improveResponse("first stored response"), threadId: "42" });
+    const { result } = renderHook(() => useConversation(createProps({ authSession: { accessToken: "token" } })));
+    act(() => result.current.setComposerValue("first authenticated prompt"));
+    await act(async () => { await result.current.submitPrompt(); });
+    const payload = api.improve.mock.calls[0][1];
+    expect(payload.threadId).toBeUndefined();
+    expect(payload.requestId).toBeTruthy();
+    expect(payload.requestId.length).toBeLessThanOrEqual(128);
+  });
+
   test("logged-in follow-up retries reuse one request id without duplicating the user turn", async () => {
     api.getThreads.mockResolvedValue([]);
     const unavailable = Object.assign(new Error("unavailable"), { status: 503, code: "AI_SERVICE_UNAVAILABLE" });

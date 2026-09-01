@@ -146,7 +146,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         if (backendThreadId) payload.threadId = Number(backendThreadId);
         if (messageId) payload.messageId = String(messageId);
         const normalizedRequestId = normalizeMakeRequestId(requestId);
-        if (backendThreadId && normalizedRequestId) payload.requestId = normalizedRequestId;
+        if (normalizedRequestId) payload.requestId = normalizedRequestId;
         if (category) payload.category = String(category);
         return payload;
       }

@@ -3,6 +3,7 @@ import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 import { normalizeImproveResult } from "../utils/normalizeImproveResult";
 import { IMPROVE_API_TIMEOUT_MS } from "../constants";
+import { MAKE_API_PATHS } from "../../../shared/make-api-contract.js";
 
 /**
  * @param {any} config
@@ -13,7 +14,7 @@ export async function requestPromptImprove(config, payload, { signal } = {}) {
   const accessToken = payload?.accessToken || "";
   const sessionUuid = payload?.sessionUuid || "";
   const { accessToken: _accessToken, sessionUuid: _sessionUuid, ...requestPayload } = payload;
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/prompts/improve`, {
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${MAKE_API_PATHS.improve}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

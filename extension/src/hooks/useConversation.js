@@ -233,7 +233,7 @@ export function useConversation({
       retry && authSession?.accessToken && activeServerThreadId
       && retry.prompt === prompt && retry.threadId === String(activeServerThreadId)
     );
-    const requestId = authSession?.accessToken && activeServerThreadId
+    const requestId = authSession?.accessToken
       ? resolveMakeRequestId({
           previousRequestId: retryMatches ? retry.requestId : "",
           previousPrompt: retryMatches ? retry.prompt : "",

@@ -249,6 +249,49 @@ test("web API boundary forwards request ids only with a canonical server thread"
   assert.equal(result.replayed, false);
 });
 
+test("web API boundary forwards a request id for an authenticated first turn", async () => {
+  const payloads = [];
+  const state = { isLoggedIn: true, activeThreadId: "local-1", recentThreads: [{ id: "local-1" }] };
+  const effects = makeServerSyncEffects.createMakeServerSyncEffects({
+    state,
+    getMakeApi: () => ({ improvePrompt: async (payload) => { payloads.push(payload); return { improvedPrompt: "done", threadId: 42, requestId: payload.requestId, replayed: false }; } }),
+    getMakeApiToken: () => "token", hasBackendAuthToken: () => true,
+    isBackendNumericId: (value) => /^\d+$/.test(String(value || "")),
+    makeState: { setMakeBackendState() {} }, polishPrompt: (value) => value,
+    buildMakeImproveHistory: () => [], canUseDemoFallback: () => false,
+  });
+  await effects.improvePromptWithBackend("first prompt", { threadId: "local-1", requestId: "request-first" });
+  assert.deepEqual(payloads[0], { prompt: "first prompt", category: "prompt_techniques", requestId: "request-first" });
+});
+
+test("logged-in first turns create a bounded request id before a server thread exists", async () => {
+  const OriginalFormData = global.FormData;
+  global.FormData = class { get() { return "first authenticated prompt"; } };
+  let requestOptions;
+  try {
+    await makeController.submitPrompt({
+      state: { isLoggedIn: true, activeThreadId: "local-1", messages: [] }, freeLimit: 3,
+      guard: () => false, isBusy: () => false, notice: () => {}, bumpInteraction: () => {},
+      buildHistory: () => [], startRequest: () => new AbortController().signal, setDraft: () => {},
+      appendUser: () => {}, setThinking: () => {}, updateThread: () => {}, render: () => {},
+      scrollLatest: () => {}, waitForPaint: async () => {}, shouldSync: () => true,
+      getBackendThreadId: () => "", improve: async (_prompt, options) => {
+        requestOptions = options;
+        return { mode: "improve", improvedPrompt: "done", threadId: "42", requestId: options.requestId };
+      },
+      isCurrentRequest: () => true, completeRequest: () => {}, reportOutcome: () => {},
+      appendAssistant: () => {}, applyPendingThread: () => {}, refreshThread: async () => true,
+      syncThread: () => {}, focusAsk: () => {}, recover: async () => false, stopInFlight: () => {},
+      failRequest: () => {}, classifyError: (error) => error, setBackendFailure: () => {}, handleError: () => {},
+    }, {});
+  } finally {
+    global.FormData = OriginalFormData;
+  }
+  assert.ok(requestOptions.requestId);
+  assert.ok(requestOptions.requestId.length <= 128);
+  assert.equal(requestOptions.threadId, "local-1");
+});
+
 test("logged-in server follow-ups attach one request id and preserve replay metadata", async () => {
   const OriginalFormData = global.FormData;
   global.FormData = class { get() { return "ask follow-up answer"; } };

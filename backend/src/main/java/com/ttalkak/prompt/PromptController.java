@@ -7,9 +7,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.make.MakeApiContract;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -494,11 +496,11 @@ public class PromptController {
 
         String normalized = requestId.trim();
 
-        if (normalized.length() > 128) {
+        if (normalized.length() > MakeApiContract.REQUEST_ID_MAX_LENGTH) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
-                    "REQUEST_ID_INVALID",
-                    "requestId는 128자 이하여야 합니다."
+                    MakeApiContract.REQUEST_ID_INVALID,
+                    "requestId는 " + MakeApiContract.REQUEST_ID_MAX_LENGTH + "자 이하여야 합니다."
             );
         }
 
@@ -534,7 +536,7 @@ public class PromptController {
             )) {
                 throw new ApiException(
                         HttpStatus.CONFLICT,
-                        "REQUEST_ID_REUSED",
+                        MakeApiContract.REQUEST_ID_REUSED,
                         "같은 requestId를 다른 요청에 사용할 수 없습니다."
                 );
             }
@@ -752,6 +754,30 @@ public class PromptController {
     String requestId =
         normalizeRequestId(request.requestId());
 
+    if (requestedThreadId == null
+            && memberId != null
+            && requestId != null) {
+        MakeThread initialThread = makeThreadRepository
+                .findByMemberIdAndInitialRequestId(memberId, requestId)
+                .orElse(null);
+        if (initialThread != null) {
+            Map<String, Object> previousResponse = findIdempotentResponse(
+                    readMessages(initialThread.getMessagesJson()),
+                    requestId,
+                    prompt
+            );
+            if (previousResponse != null) {
+                return replayResponse(
+                        previousResponse,
+                        initialThread,
+                        requestId,
+                        messageId,
+                        editingMessage
+                );
+            }
+        }
+    }
+
 	if (requestedThreadId != null) {
 		thread = makeThreadRepository
 				.findByIdAndMemberId(
@@ -776,28 +802,13 @@ public class PromptController {
         );
 
     if (previousResponse != null) {
-        previousResponse.put(
-                "conversationId",
-                thread.getId()
+        return replayResponse(
+                previousResponse,
+                thread,
+                requestId,
+                messageId,
+                editingMessage
         );
-        previousResponse.put(
-                "threadId",
-                thread.getId()
-        );
-        previousResponse.put(
-                "requestId",
-                requestId
-        );
-        previousResponse.put("replayed", true);
-
-        if (editingMessage) {
-            previousResponse.put(
-                    "editedMessageId",
-                    messageId
-            );
-        }
-
-        return previousResponse;
     }
 
 		if (editingMessage) {
@@ -910,17 +921,44 @@ public class PromptController {
                         memberId,
                         makeThreadTitle(prompt),
                         messagesJson,
-                        null
+                        null,
+                        requestId
                 );
+                try {
+                    thread = makeThreadRepository.save(thread);
+                    makeThreadRepository.flush();
+                } catch (DataIntegrityViolationException exception) {
+                    if (requestId != null) {
+                        MakeThread existingThread = makeThreadRepository
+                                .findByMemberIdAndInitialRequestId(memberId, requestId)
+                                .orElse(null);
+                        if (existingThread != null) {
+                            Map<String, Object> previousResponse = findIdempotentResponse(
+                                    readMessages(existingThread.getMessagesJson()),
+                                    requestId,
+                                    prompt
+                            );
+                            if (previousResponse != null) {
+                                return replayResponse(
+                                        previousResponse,
+                                        existingThread,
+                                        requestId,
+                                        messageId,
+                                        editingMessage
+                                );
+                            }
+                        }
+                    }
+                    throw exception;
+                }
             } else {
                 thread.update(
                         thread.getTitle(),
                         messagesJson,
                         thread.getFolderId()
                 );
+                thread = makeThreadRepository.save(thread);
             }
-
-            thread = makeThreadRepository.save(thread);
             savedThreadId = thread.getId();
         }
 
@@ -934,6 +972,23 @@ public class PromptController {
 		}
 
         return body;
+    }
+
+    private Map<String, Object> replayResponse(
+            Map<String, Object> previousResponse,
+            MakeThread thread,
+            String requestId,
+            String messageId,
+            boolean editingMessage
+    ) {
+        previousResponse.put("conversationId", thread.getId());
+        previousResponse.put("threadId", thread.getId());
+        previousResponse.put("requestId", requestId);
+        previousResponse.put("replayed", true);
+        if (editingMessage) {
+            previousResponse.put("editedMessageId", messageId);
+        }
+        return previousResponse;
     }
 
     private Map<String, Object> buildNoEvidenceResponse(

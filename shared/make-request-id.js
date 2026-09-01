@@ -1,4 +1,6 @@
-const MAX_REQUEST_ID_LENGTH = 128;
+import { MAKE_ERROR_CODES, MAKE_REQUEST_ID_MAX_LENGTH } from "./make-api-contract.js";
+
+const MAX_REQUEST_ID_LENGTH = MAKE_REQUEST_ID_MAX_LENGTH;
 
 function normalizeText(value) {
   // The backend trims the submitted prompt but otherwise compares it exactly.
@@ -28,11 +30,11 @@ export function resolveMakeRequestId({ previousRequestId = "", previousPrompt = 
 }
 
 export function isRequestIdReusedError(error) {
-  return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === "REQUEST_ID_REUSED";
+  return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === MAKE_ERROR_CODES.requestIdReused;
 }
 
 export function isThreadConcurrencyError(error) {
-  return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === "THREAD_CONCURRENTLY_UPDATED";
+  return String(error?.payload?.code || error?.code || "").trim().toUpperCase() === MAKE_ERROR_CODES.threadConcurrentlyUpdated;
 }
 
 export function createMakeRequestCorrelation(value) {
