@@ -97,6 +97,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     shareError: "",
     shareTagQuery: "",
     notice: "",
+    compactHeaderOpen: false,
     expandedComments: {},
     replyingCommentId: null,
     editingCommentId: null,

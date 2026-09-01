@@ -79,8 +79,8 @@
           <span>TTALKAK</span>
         </button>
         <div class="topbar-auth">
-          <div class="topbar-primary-actions">
-            <button class="topbar-mobile-toggle" type="button" aria-expanded="false" aria-controls="topbar-action-menu">메뉴</button>
+          <div class="topbar-primary-actions${state.compactHeaderOpen ? " compact-open" : ""}">
+            <button class="topbar-mobile-toggle" type="button" aria-expanded="${state.compactHeaderOpen ? "true" : "false"}" aria-controls="topbar-action-menu">메뉴</button>
             <div class="topbar-action-menu" id="topbar-action-menu">
               <nav class="topbar-mobile-nav" aria-label="모바일 주요 메뉴">
                 <button class="${state.route === "home" ? "active" : ""}" type="button" data-route="home">Home</button>

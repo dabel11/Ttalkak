@@ -22,6 +22,14 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await page.locator('#topbar-action-menu [data-route="make"]').click();
   const composer = page.locator('[data-composer] textarea[name="prompt"]');
   await expect(composer).toBeVisible();
+  const sendButton = page.locator('[data-composer] button[type="submit"]');
+  await expect(sendButton).toBeDisabled();
+  await composer.fill("   ");
+  await expect(sendButton).toBeDisabled();
+  await composer.fill("전송할 프롬프트");
+  await expect(sendButton).toBeEnabled();
+  await composer.fill("");
+  await expect(sendButton).toBeDisabled();
   const composerControlSizes = await page.evaluate(() => ({
     input: document.querySelector('[data-composer] textarea[name="prompt"]').getBoundingClientRect().height,
     send: document.querySelector('[data-composer] button[type="submit"]').getBoundingClientRect().height,
@@ -74,6 +82,7 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await page.locator(".template-list [data-template]").first().click();
   await expect(page.locator("[data-toggle-templates]")).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator('[data-composer] textarea[name="prompt"]')).not.toHaveValue("");
+  await expect(page.locator('[data-composer] button[type="submit"]')).toBeEnabled();
   await page.locator("[data-toggle-templates]").click();
   await page.locator(".template-custom-action").click();
   await expect(page.locator("[data-toggle-templates]")).toHaveAttribute("aria-expanded", "false");

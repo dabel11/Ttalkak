@@ -182,6 +182,35 @@ test("compact header state resets when crossing the desktop viewport boundary", 
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
+test("compact header stays open across background Home hydration and still honors navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page);
+  let releaseHome;
+  const homeReleased = new Promise((resolve) => { releaseHome = resolve; });
+  let markHomeRequested;
+  const homeRequested = new Promise((resolve) => { markHomeRequested = resolve; });
+  await mockBackend(page, async (route, request) => {
+    if (new URL(request.url()).pathname !== "/api/prompts" || request.method() !== "GET") return false;
+    markHomeRequested();
+    await homeReleased;
+    await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) });
+    return true;
+  });
+  await gotoApp(page);
+  await homeRequested;
+
+  const toggle = page.locator(".topbar-mobile-toggle");
+  await toggle.click();
+  await expect(page.locator(".topbar-primary-actions")).toHaveClass(/compact-open/);
+  releaseHome();
+  await expect(page.locator(".topbar-primary-actions")).toHaveClass(/compact-open/);
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  await page.locator('#topbar-action-menu [data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.locator(".topbar-primary-actions")).not.toHaveClass(/compact-open/);
+});
+
 test("withdrawal explains the policy, discards the account scope, and preserves local conversations", async ({ page }) => {
   await seed(page, {
     isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token",

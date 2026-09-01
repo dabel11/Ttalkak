@@ -150,12 +150,13 @@ import { parts } from "./make-message-parts.mjs";
   function MakeComposerView(ctx, data) {
     const { icons, escapeHtml } = ctx;
     const { composerDraft, hasMessages, isThinking } = data;
+    const canSubmit = !isThinking && Boolean(String(composerDraft || "").trim());
 
     return `
       <form class="composer ${hasMessages ? "has-newchat" : ""}" data-composer>
         <span class="sr-only" role="status" aria-live="polite" data-composer-restore-status></span>
         <textarea name="prompt" rows="1" data-autosize-textarea aria-label="개선할 프롬프트" placeholder="프롬프트를 입력하세요…" ${isThinking ? "disabled" : ""}>${escapeHtml(composerDraft)}</textarea>
-        <button class="send-button" type="submit" aria-label="보내기" ${isThinking ? "disabled" : ""}>${icons.send}</button>
+        <button class="send-button" type="submit" aria-label="보내기" ${canSubmit ? "" : "disabled"}>${icons.send}</button>
       </form>
     `;
   }

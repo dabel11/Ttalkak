@@ -4,12 +4,12 @@ const fixtures = require("./fixtures/make-responses.js");
 const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
 const messageModel = require("../src/utils/make-message-model.js");
 
-let MessageQuestionsView; let MakeFeedView; let MakeFolderButtonView; let MakeTemplateBarView; let MessageBubbleView;
+let MessageQuestionsView; let MakeComposerView; let MakeFeedView; let MakeFolderButtonView; let MakeTemplateBarView; let MessageBubbleView;
 test.before(async () => {
   const { parts } = await import("../src/renderers/pages/make-message-parts.mjs");
   const { renderers } = await import("../src/renderers/pages/make-page.mjs");
   ({ MessageQuestionsView } = parts);
-  ({ MakeFeedView, MakeFolderButtonView, MakeTemplateBarView, MessageBubbleView } = renderers);
+  ({ MakeComposerView, MakeFeedView, MakeFolderButtonView, MakeTemplateBarView, MessageBubbleView } = renderers);
 });
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
@@ -156,6 +156,16 @@ test("empty Make state relies on the field template bar", () => {
   assert.doesNotMatch(html, /예시로 시작하기/);
   assert.match(html, /class="spark-badge" aria-hidden="true"/);
   assert.doesNotMatch(html, /class="plus-mark"/);
+});
+
+test("composer enables submission only for a non-empty draft outside processing", () => {
+  const render = (composerDraft, isThinking = false) => MakeComposerView({ icons: { send: "send" }, escapeHtml }, {
+    composerDraft, hasMessages: false, isThinking,
+  });
+  assert.match(render(""), /aria-label="보내기" disabled/);
+  assert.match(render("   "), /aria-label="보내기" disabled/);
+  assert.doesNotMatch(render("작성할 내용"), /aria-label="보내기" disabled/);
+  assert.match(render("작성할 내용", true), /aria-label="보내기" disabled/);
 });
 
 test("template selection uses a compact shared guidance and exposes pressed state", () => {

@@ -5,11 +5,12 @@ export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModa
   const compactHeader = root.querySelector(".topbar-primary-actions");
   const compactToggle = compactHeader?.querySelector(".topbar-mobile-toggle");
   const closeCompactHeader = ({ restoreFocus = false } = {}) => {
-    if (!compactHeader?.classList.contains("compact-open")) return false;
-    compactHeader.classList.remove("compact-open");
+    const wasOpen = Boolean(state.compactHeaderOpen || compactHeader?.classList.contains("compact-open"));
+    state.compactHeaderOpen = false;
+    compactHeader?.classList.remove("compact-open");
     compactToggle?.setAttribute("aria-expanded", "false");
-    if (restoreFocus) compactToggle?.focus();
-    return true;
+    if (restoreFocus && wasOpen) compactToggle?.focus();
+    return wasOpen;
   };
   const closeTopbarMenus = ({ restoreFocus = false } = {}) => {
     const openMenus = topbarMenus.filter((menu) => menu.open);
@@ -33,6 +34,7 @@ export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModa
   compactToggle?.addEventListener("click", () => {
     const willOpen = !compactHeader.classList.contains("compact-open");
     closeTopbarMenus();
+    state.compactHeaderOpen = willOpen;
     compactHeader.classList.toggle("compact-open", willOpen);
     compactToggle.setAttribute("aria-expanded", String(willOpen));
   });
@@ -59,5 +61,9 @@ export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModa
     }
     closeTopModal();
   };
-  root.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => navigateTo(button.dataset.route)));
+  root.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => {
+    closeTopbarMenus();
+    closeCompactHeader();
+    navigateTo(button.dataset.route);
+  }));
 }

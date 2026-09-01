@@ -132,6 +132,8 @@
         if (!textarea) return;
         actions.setDraft(textarea.value);
         actions.autosize(textarea);
+        const submitButton = textarea.closest?.("[data-composer]")?.querySelector?.('button[type="submit"]');
+        if (submitButton) submitButton.disabled = !textarea.value.trim() || textarea.disabled;
       },
       keydown(event) {
         const makePage = event.target.closest?.(".make-page") || (ctx.root || event.currentTarget).querySelector?.(".make-page");
@@ -150,6 +152,7 @@
         const form = event.target.closest?.("[data-composer], [data-edit-message-form]");
         if (!form) return;
         event.preventDefault();
+        if (form.matches("[data-composer]") && !String(event.target.value || "").trim()) return;
         actions.submitComposer(form);
       },
       submit(event) {

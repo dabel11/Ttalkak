@@ -170,6 +170,17 @@ test("screen settings remain available outside prompt-list routes", () => {
   assert.doesNotMatch(html, /data-toggle-reported/);
 });
 
+test("compact header open state survives shell rendering", () => {
+  const html = HeaderView({
+    icons: {},
+    state: { compactHeaderOpen: true, isLoggedIn: false, route: "home", hideReportedPrompts: false },
+    escapeHtml: String,
+    BackendStatusBadge: () => '<span class="backend-status">확인 중</span>',
+  }, { adminAccessButton: "", authButton: "로그인", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: true });
+  assert.match(html, /class="topbar-primary-actions compact-open"/);
+  assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="true"/);
+});
+
 test("Home retry exposes an actionable compact error state", async () => {
   const calls = [];
   const state = { backendStatus: "fallback", backendStatusMessage: "failed" };
