@@ -55,9 +55,14 @@ jobs:
             BUNDLE_BASE_SHA="$(git rev-parse HEAD^)"
           fi
           git worktree add --detach "$RUNNER_TEMP/ttalkak-bundle-base" "$BUNDLE_BASE_SHA"
-          npm ci --prefix "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
-          npm run build:prod --prefix "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
-          node scripts/create-web-bundle-reference.cjs --dist "$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend/dist" --output "$RUNNER_TEMP/web-bundle-reference.json" --commit "$BUNDLE_BASE_SHA"
+          BASE_WEB_ROOT="$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
+          if [[ -f "$BASE_WEB_ROOT/package-lock.json" ]]; then
+            npm ci --prefix "$BASE_WEB_ROOT"
+            npm run build:prod --prefix "$BASE_WEB_ROOT"
+            node scripts/create-web-bundle-reference.cjs --dist "$BASE_WEB_ROOT/dist" --output "$RUNNER_TEMP/web-bundle-reference.json" --commit "$BUNDLE_BASE_SHA"
+          else
+            cp prompt-hub-web-frontend/bundle-reference.json "$RUNNER_TEMP/web-bundle-reference.json"
+          fi
 
       - name: Clean automatic base-branch bundle worktree
         if: always()
