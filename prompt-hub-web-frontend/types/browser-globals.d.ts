@@ -1,9 +1,8 @@
 type TtalkakId = string | number;
+declare var TTALKAK_PRODUCTION_BUILD: boolean | undefined;
 type TtalkakToken = string | undefined;
 type TtalkakPayload = Record<string, unknown>;
 type TtalkakCallableModule = Record<string, Function>;
-type TtalkakGlobal = typeof globalThis & { TtalkakStateDomains?: Record<string, TtalkakCallableModule> };
-declare function require(path: string): unknown;
 type TtalkakStateModule = TtalkakCallableModule & {
   STORAGE_KEY: string;
   AUTH_TOKEN_KEY: string;
@@ -12,6 +11,10 @@ type TtalkakStateModule = TtalkakCallableModule & {
 type TtalkakRecord = Record<string, unknown>;
 interface TtalkakPromptRecord {
   id: TtalkakId;
+  author?: string;
+  owner?: string;
+  tags?: string[];
+  likes?: number;
   source?: string;
   saves?: number;
   views?: number;
@@ -106,26 +109,58 @@ interface TtalkakStateContext {
   getAdminUserActivity(nickname: string): TtalkakStateEntity;
   normalizeAdminSearchText(value: string): string;
 }
+interface TtalkakApiContractModule {
+  assertApiContract(api: unknown): TtalkakApi;
+  assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
+  assertCollectionResponse(value: unknown, operation?: string): unknown[];
+  validateApiResponse(method: string, value: unknown): unknown;
+  wrapApiResponses(api: TtalkakApi): TtalkakApi;
+}
 interface TtalkakModuleRegistry {
+  demo: {
+    fallbackPopularTags?: string[];
+    promptOverrides?: Record<string, Partial<TtalkakPromptRecord>>;
+    popularPromptMetrics?: Record<string, number[]>;
+    savedPrompts?: TtalkakPromptRecord[];
+    existingNicknames?: string[];
+    existingUserIds?: string[];
+    commentOverrides?: Record<string, TtalkakStateEntity[]>;
+  } | null;
   utils: TtalkakCallableModule;
-  home: { model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
-  saved: { createSavedLibraryController: Function };
+  home: { backendStatus: TtalkakCallableModule; model: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  saved: { createMyPageDataModel: Function; createSavedLibraryController: Function };
   discovery: { createDiscoveryController: Function };
-  interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; comments: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
-  share: { controller: TtalkakCallableModule; events: TtalkakCallableModule };
+  interactions: { engagement: TtalkakCallableModule; events: TtalkakCallableModule; commentModel: TtalkakCallableModule; commentView: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  share: { loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule }> };
   modal: { controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
   auth: { session: TtalkakCallableModule; validation: TtalkakCallableModule; controller: TtalkakCallableModule; events: TtalkakCallableModule; view: TtalkakCallableModule };
-  admin: { events: TtalkakCallableModule; selectors: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule };
-  make: { preview: TtalkakCallableModule; messageModel: TtalkakCallableModule; state: TtalkakCallableModule; controller: TtalkakCallableModule; focus: TtalkakCallableModule; persistence: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule };
+  admin: {
+    selectors: TtalkakCallableModule;
+    loadRuntime(): Promise<{ events: TtalkakCallableModule; controller: TtalkakCallableModule; view: TtalkakCallableModule }>;
+  };
+  make: {
+    previewUtils: TtalkakCallableModule;
+    messageModel: TtalkakCallableModule;
+    requestId: { createMakeRequestCorrelation(value: unknown): string };
+    state: TtalkakCallableModule;
+    focusUtils: TtalkakCallableModule;
+    persistence: TtalkakCallableModule;
+    threadPolicy: {
+      canSplitMakeThread(thread: TtalkakStateEntity | null | undefined, isBackendNumericId: (value: unknown) => boolean): boolean;
+      findMakeThread(threads: TtalkakStateEntity[], threadId: unknown): TtalkakStateEntity | null;
+    };
+    loadRuntime(): Promise<{ controller: TtalkakCallableModule; events: TtalkakCallableModule; workflows: TtalkakCallableModule; pageAdapter: { createMakePageAdapter(context: Record<string, unknown>): { render(): string } } }>;
+  };
   bootstrap: TtalkakCallableModule;
   components: TtalkakCallableModule;
-  events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule };
-  effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; error: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
+  events: { app: TtalkakCallableModule; makeScroll: TtalkakCallableModule; navigation: TtalkakCallableModule; reportCommentForms: TtalkakCallableModule };
+  effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; errorBoundary: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
+  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
   api: TtalkakApi;
-  apiContract: Window["TtalkakApiContract"];
-  observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
+  apiContract: TtalkakApiContractModule;
+  observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
   state: { api: TtalkakStateModule; domains: Readonly<Record<string, TtalkakCallableModule>> };
 }
 interface TtalkakSavedState {
@@ -192,7 +227,7 @@ interface TtalkakApiNormalizers {
   normalizeImproveResult(...values: unknown[]): TtalkakRecord;
 }
 interface TtalkakApiCore {
-  request(path: string, options?: RequestInit & { token?: string }): Promise<TtalkakRecord | TtalkakRecord[] | null>;
+  request(path: string, options?: RequestInit & { token?: string; timeoutMs?: number }): Promise<TtalkakRecord | TtalkakRecord[] | null>;
   unwrapItems(payload: unknown): TtalkakRecord[];
   unwrapPageMeta(payload: unknown): Record<string, unknown>;
 }
@@ -218,7 +253,7 @@ interface TtalkakApi {
   searchTags(options?: TtalkakPayload): Promise<unknown>;
   proposeTag(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   viewPrompt(promptId: TtalkakId): Promise<unknown>;
-  improvePrompt(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  improvePrompt(payload: TtalkakPayload, token: TtalkakToken, options?: { signal?: AbortSignal }): Promise<unknown>;
   savePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   unsavePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   likePrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
@@ -285,80 +320,9 @@ interface Window {
   __API_BASE_URL__?: string;
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
-  TTALKAK_API_CORE: TtalkakApiCore;
-  TTALKAK_API_NORMALIZERS: TtalkakApiNormalizers;
-  TTALKAK_AUTH_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_PROMPT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_COMMENT_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_MYPAGE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_MAKE_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TTALKAK_ADMIN_API: (context: TtalkakApiContext) => TtalkakCallableModule;
-  TtalkakMakeMessageModel: TtalkakCallableModule;
-  TTALKAK_API: TtalkakApi;
-  TtalkakApiContract: {
-    assertApiContract(api: unknown): TtalkakApi;
-    assertRecordResponse(value: unknown, operation?: string): Record<string, unknown>;
-    assertCollectionResponse(value: unknown, operation?: string): unknown[];
-    validateApiResponse(method: string, value: unknown): unknown;
-    wrapApiResponses(api: TtalkakApi): TtalkakApi;
-  };
+  TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
-  TtalkakUtils: TtalkakCallableModule;
-  TtalkakHomeSearchModel: TtalkakCallableModule;
-  TtalkakHomeController: TtalkakCallableModule;
-  TtalkakHomeEvents: TtalkakCallableModule;
-  TtalkakSavedLibraryController: TtalkakCallableModule;
-  TtalkakDiscoveryController: TtalkakCallableModule;
-  TtalkakPromptEngagementController: TtalkakCallableModule;
-  TtalkakPromptEngagementEvents: TtalkakCallableModule;
-  TtalkakCommentModel: TtalkakCallableModule;
-  TtalkakCommentView: TtalkakCallableModule;
-  TtalkakPromptWorkflows: TtalkakCallableModule;
-  TtalkakShareController: TtalkakCallableModule;
-  TtalkakShareEvents: TtalkakCallableModule;
-  TtalkakModalController: TtalkakCallableModule;
-  TtalkakModalEvents: TtalkakCallableModule;
-  TtalkakModalView: TtalkakCallableModule;
-  TtalkakAuthSession: TtalkakCallableModule;
-  TtalkakAuthValidation: TtalkakCallableModule;
-  TtalkakAuthController: TtalkakCallableModule;
-  TtalkakAuthEvents: TtalkakCallableModule;
-  TtalkakAuthView: TtalkakCallableModule;
-  TtalkakAdminEvents: TtalkakCallableModule;
-  TtalkakAdminSelectors: TtalkakCallableModule;
-  TtalkakAdminController: TtalkakCallableModule;
-  TtalkakAdminView: TtalkakCallableModule;
-  TtalkakAppBootstrap: TtalkakCallableModule;
-  TtalkakMakeController: TtalkakCallableModule;
-  TtalkakMakeEvents: TtalkakCallableModule;
-  TtalkakMakeFocus: TtalkakCallableModule;
-  TtalkakMakePersistence: TtalkakCallableModule;
-  TtalkakMakeState: TtalkakCallableModule;
-  TtalkakMakeWorkflows: TtalkakCallableModule;
-  TtalkakMakeSyncWorkflows: TtalkakCallableModule;
-  TtalkakMakeFolderWorkflows: TtalkakCallableModule;
-  TtalkakMakeExecutionWorkflows: TtalkakCallableModule;
-  TtalkakMakeRecentWorkflows: TtalkakCallableModule;
-  TtalkakMakePreview: TtalkakCallableModule;
-  TtalkakMakeFailureRecoveryEffects: TtalkakCallableModule;
-  TtalkakMakeServerSyncEffects: TtalkakCallableModule;
-  TtalkakComponents: TtalkakCallableModule;
-  TtalkakEvents: TtalkakCallableModule;
-  TtalkakMakeScrollEvents: TtalkakCallableModule;
-  TtalkakBackendEffects: TtalkakCallableModule;
-  TtalkakAdminEffects: TtalkakCallableModule;
-  TtalkakErrorEffects: TtalkakCallableModule;
-  TtalkakState: TtalkakStateModule;
-  TtalkakStateDomains?: Record<string, TtalkakCallableModule>;
-  TtalkakRenderers: TtalkakCallableModule;
-  TtalkakRouting: TtalkakCallableModule;
-  TtalkakMakeMessageParts: TtalkakCallableModule;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
-  TTALKAK_DEMO_COPY?: {
-    fallbackPopularTags?: string[];
-    promptOverrides?: Record<string, string>;
-    commentOverrides?: Record<string, string>;
-  };
 }
 
 interface EventTarget {

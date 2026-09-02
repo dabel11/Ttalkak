@@ -2,9 +2,18 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const model = require("../src/home/home-search-model.js");
-const { createHomeController } = require("../src/home/home-controller.js");
-const { bindHomeEvents } = require("../src/home/home-events.js");
+let model;
+let createHomeController;
+let bindHomeEvents;
+let HomePageView;
+let HeaderView;
+test.before(async () => {
+  ({ HomeSearchModel: model } = await import("../src/home/home-search-model.mjs"));
+  ({ createHomeController } = await import("../src/home/home-controller.mjs"));
+  ({ bindHomeEvents } = await import("../src/home/home-events.mjs"));
+  ({ renderers: { HomePageView } } = await import("../src/renderers/pages/home-page.mjs"));
+  ({ renderers: { HeaderView } } = await import("../src/renderers/shell-navigation.mjs"));
+});
 
 const normalize = (value) => String(value || "").replace(/^#+/, "").trim().toLowerCase();
 const prompts = [
@@ -66,7 +75,7 @@ test("browser loads the Home model and app delegates extracted search logic", ()
   const appSource = fs.readFileSync(path.join(frontendRoot, "src", "app.js"), "utf8");
 
   assert.match(entry, /home\/index\.js/);
-  assert.match(homeEntry, /home-search-model\.js/);
+  assert.match(homeEntry, /home-search-model\.mjs/);
   assert.match(homeEntry, /export const home/);
   assert.match(appSource, /modules\.home\.model/);
   assert.doesNotMatch(appSource, /window\.TtalkakHomeSearchModel/);
@@ -106,12 +115,108 @@ test("Home event binder delegates controls to the controller", () => {
   const scope = element("scope", "author");
   const sort = element("sort", "latest");
   const page = element("page"); page.dataset.page = "2";
-  const nodes = { "[data-tag-search]": search, "[data-search-scope]": scope, "[data-popular-sort]": sort };
+  const retry = element("retry");
+  const nodes = { "[data-tag-search]": search, "[data-search-scope]": scope, "[data-popular-sort]": sort, "[data-retry-home-load]": retry };
   const calls = [];
   bindHomeEvents({ querySelector: (selector) => nodes[selector] || null, querySelectorAll: (selector) => selector === "[data-page]" ? [page] : [] }, {
     showSearchTipOnce() {}, cancelSearchCommit() {}, scheduleSearchCommit() {}, commitSearchQuery() {},
-    changeScope: (value) => calls.push(`scope:${value}`), changeSort: (value) => calls.push(`sort:${value}`), changePage: (value) => calls.push(`page:${value}`),
+    changeScope: (value) => calls.push(`scope:${value}`), changeSort: (value) => calls.push(`sort:${value}`), changePage: (value) => calls.push(`page:${value}`), retryHomeLoad: () => calls.push("retry"),
   }, {});
-  listeners["scope:change"](); listeners["sort:change"](); listeners["page:click"]();
-  assert.deepEqual(calls, ["scope:author", "sort:latest", "page:2"]);
+  listeners["scope:change"](); listeners["sort:change"](); listeners["retry:click"](); listeners["page:click"]();
+  assert.deepEqual(calls, ["scope:author", "sort:latest", "retry", "page:2"]);
+});
+
+test("account and development actions use separate menus", () => {
+  const html = HeaderView({
+    icons: {},
+    state: { isLoggedIn: true, currentUser: "Fixture", route: "home", hideReportedPrompts: false },
+    escapeHtml: (value) => String(value),
+    BackendStatusBadge: () => '<span class="backend-status">연결됨</span>',
+  }, {
+    adminAccessButton: "",
+    authButton: "",
+    freeMakeLimit: 3,
+    hasReportedPrompts: true,
+    remaining: 3,
+    showPromptTools: true,
+  });
+
+  assert.match(html, /<details class="topbar-settings">/);
+  assert.match(html, /<details class="topbar-account">/);
+  assert.match(html, /<div class="topbar-primary-actions">/);
+  assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="false"[^>]*>메뉴/);
+  assert.doesNotMatch(html, /search-help expand-left/);
+  assert.match(html, /id="topbar-action-menu"/);
+  assert.match(html, /class="topbar-mobile-nav"/);
+  assert.match(html, /data-route="home"/);
+  assert.match(html, /account-actions[\s\S]*topbar-account[\s\S]*backend-status[\s\S]*topbar-settings/);
+  assert.match(html, /data-reset-demo/);
+  assert.match(html, /data-toggle-reported/);
+  assert.match(html, /data-open-auth="withdraw"/);
+  assert.match(html, /data-logout>로그아웃/);
+  assert.doesNotMatch(html, /님 · 로그아웃/);
+  assert.doesNotMatch(html, /Backend 오류[^<]*데모 초기화/);
+});
+
+test("screen settings remain available outside prompt-list routes", () => {
+  const html = HeaderView({
+    icons: {},
+    state: { isLoggedIn: true, currentUser: "Fixture", route: "make", hideReportedPrompts: false },
+    escapeHtml: (value) => String(value),
+    BackendStatusBadge: () => '<span class="backend-status">연결됨</span>',
+  }, { adminAccessButton: "", authButton: "", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: false });
+  assert.match(html, /<details class="topbar-settings">/);
+  assert.match(html, /data-reset-demo/);
+  assert.doesNotMatch(html, /data-toggle-reported/);
+});
+
+test("compact header open state survives shell rendering", () => {
+  const html = HeaderView({
+    icons: {},
+    state: { compactHeaderOpen: true, isLoggedIn: false, route: "home", hideReportedPrompts: false },
+    escapeHtml: String,
+    BackendStatusBadge: () => '<span class="backend-status">확인 중</span>',
+  }, { adminAccessButton: "", authButton: "로그인", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: true });
+  assert.match(html, /class="topbar-primary-actions compact-open"/);
+  assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="true"/);
+});
+
+test("Home retry exposes an actionable compact error state", async () => {
+  const calls = [];
+  const state = { backendStatus: "fallback", backendStatusMessage: "failed" };
+  const controller = createHomeController({ state, root: { querySelector() { return null; } }, document: { activeElement: null, body: {} }, debounceMs: 0, validScope: (value) => value, applySearchQuery: () => false, applyScope() {}, applySort() {}, applyPage() {}, refresh: async () => calls.push("refresh"), render: () => calls.push("render") });
+  await controller.retryHomeLoad();
+  assert.equal(state.backendStatus, "checking");
+  assert.deepEqual(calls, ["render", "refresh"]);
+
+  const option = (value, label) => `<option value="${value}">${label}</option>`;
+  const html = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "fallback", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
+  assert.match(html, /프롬프트를 불러오지 못했습니다/);
+  assert.match(html, /data-retry-home-load/);
+  assert.match(html, />정렬</);
+  assert.match(html, />저장순</);
+
+  const checkingHtml = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "checking", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
+  assert.match(checkingHtml, /프롬프트를 확인하고 있습니다/);
+  assert.match(checkingHtml, /aria-busy="true"/);
+  assert.doesNotMatch(checkingHtml, /data-retry-home-load/);
+});
+
+test("Home recovery deduplicates reconnects and announces a successful refresh", async () => {
+  let refreshCalls = 0;
+  const state = { backendStatus: "fallback", backendRecoveryNotice: "" };
+  const controller = createHomeController({
+    state,
+    root: { querySelector() { return null; } },
+    document: { activeElement: null, body: {} },
+    debounceMs: 0,
+    validScope: (value) => value,
+    applySearchQuery: () => false,
+    applyScope() {}, applySort() {}, applyPage() {},
+    refresh: async () => { refreshCalls += 1; state.backendStatus = "connected"; },
+    render() {},
+  });
+  await Promise.all([controller.retryHomeLoad(), controller.retryHomeLoad()]);
+  assert.equal(refreshCalls, 1);
+  assert.equal(state.backendRecoveryNotice, "연결이 복구되어 프롬프트 목록을 갱신했습니다.");
 });

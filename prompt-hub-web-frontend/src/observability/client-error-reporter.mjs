@@ -1,10 +1,15 @@
 const REDACTED = "[REDACTED]";
 const nativeConsoleWarn = console.warn.bind(console);
+const MAX_MESSAGE_LENGTH = 240;
+const AGGREGATE_EVENT_FIELDS = "area,action,kind,code,status,durationMs,outcome,level,retryable,client,requestCorrelation,timestamp".split(",");
 
 function redact(value) {
-  return String(value ?? "Unknown client error")
+  const sanitized = String(value ?? "Unknown client error")
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, `Bearer ${REDACTED}`)
-    .replace(/([?&](?:token|access_token|refresh_token)=)[^&\s]+/gi, `$1${REDACTED}`);
+    .replace(/([?&](?:token|access_token|refresh_token|code)=)[^&\s]+/gi, `$1${REDACTED}`)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, REDACTED)
+    .replace(/(?:\+?82[-\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, REDACTED);
+  return sanitized.length <= MAX_MESSAGE_LENGTH ? sanitized : `${sanitized.slice(0, MAX_MESSAGE_LENGTH)}…`;
 }
 
 /** @param {unknown} error @param {Record<string, unknown>} context @param {() => number} now */
@@ -15,11 +20,34 @@ function normalizeClientError(error, context = {}, now = Date.now) {
     message: redact(source.message),
     area: String(context.area || "application"),
     action: String(context.action || "unknown"),
+    kind: String(context.kind || (context.code === "REQUEST_ABORTED" ? "cancel" : context.code === "AI_INVALID_RESPONSE" ? "contract" : "network")),
     code: context.code == null ? null : String(context.code),
-    level: context.level === "warning" ? "warning" : "error",
+    status: Number.isFinite(Number(context.status)) ? Number(context.status) : null,
+    durationMs: Number.isFinite(Number(context.durationMs)) ? Math.max(0, Math.round(Number(context.durationMs))) : null,
+    outcome: ["success", "failure", "retry", "cancel"].includes(String(context.outcome)) ? String(context.outcome) : "failure",
+    level: ["info", "warning"].includes(String(context.level)) ? String(context.level) : "error",
     retryable: Boolean(context.retryable),
+    client: String(context.client || "web"),
+    requestCorrelation: String(context.requestCorrelation || ""),
     timestamp: now(),
   });
+}
+
+/** Creates the only payload that an explicitly approved production adapter may receive. */
+function toAggregateObservabilityEvent(record) {
+  return Object.freeze(Object.fromEntries(AGGREGATE_EVENT_FIELDS.map((key) => [key, record[key]])));
+}
+
+/**
+ * Provides an in-page integration boundary without performing network I/O.
+ * A deployment-owned adapter may listen only after its destination and consent policy are approved.
+ */
+function createObservabilityEventSink(target = globalThis.window) {
+  return (record) => {
+    try {
+      target?.dispatchEvent?.(new CustomEvent("ttalkak:observability", { detail: toAggregateObservabilityEvent(record) }));
+    } catch { /* Observability must never affect product behavior. */ }
+  };
 }
 
 /** @param {{sink?: (record: ReturnType<typeof normalizeClientError>) => void, now?: () => number, limit?: number}} options */
@@ -35,7 +63,9 @@ function createClientErrorReporter({ sink = () => {}, now = Date.now, limit = 50
   }
   /** @param {string} area @param {string} action @param {unknown} error */
   const reportWarning = (area, action, error) => report(error, { area, action, level: "warning" });
-  return Object.freeze({ report, reportWarning, recent: () => records.slice() });
+  /** @param {Record<string, unknown>} context */
+  const reportOutcome = (context = {}) => report(new Error("Client outcome"), { ...context, outcome: "success", level: "info", retryable: false });
+  return Object.freeze({ report, reportOutcome, reportWarning, recent: () => records.slice() });
 }
 
 /** @param {Window | EventTarget} target @param {ReturnType<typeof createClientErrorReporter>} reporter */
@@ -51,8 +81,12 @@ function installGlobalErrorObservers(target, reporter) {
 }
 
 /** @param {{warn: (...args: unknown[]) => void}} targetConsole @param {ReturnType<typeof createClientErrorReporter>} reporter */
+const browserEventSink = createObservabilityEventSink(globalThis.window);
 const clientErrorReporter = createClientErrorReporter({
-  sink: (record) => nativeConsoleWarn("[TTALKAK client error]", record),
+  sink: (record) => {
+    if (record.level !== "info") nativeConsoleWarn("[TTALKAK client error]", record);
+    browserEventSink(record);
+  },
 });
 
-export { clientErrorReporter, createClientErrorReporter, installGlobalErrorObservers, normalizeClientError };
+export { clientErrorReporter, createClientErrorReporter, createObservabilityEventSink, installGlobalErrorObservers, normalizeClientError, toAggregateObservabilityEvent };

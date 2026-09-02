@@ -1,4 +1,4 @@
-import { getDefaultBackendApiUrl } from "./config/backendConfig";
+import { getDefaultBackendApiUrl } from "./config/backendConfig.js";
 
 export const STORAGE = {
   SAVED: "pp_saved_prompts",
@@ -14,6 +14,7 @@ export const DEFAULT_RAG_CONFIG = {
 };
 
 export const API_TIMEOUT_MS = 60000;
+export const IMPROVE_API_TIMEOUT_MS = 90000;
 
 export const PRIVACY_POLICY_URL =
   "https://docs.google.com/document/d/e/2PACX-1vQtMHg_T33kpcCY1-5RApEsv3Wvg0KEnF_v5zfqBjnQMvwoLqBt2vRAhby39YGx2-2eIqlCrBhucIyK/pub";

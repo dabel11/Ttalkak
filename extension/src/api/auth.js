@@ -1,6 +1,8 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 
+/** @typedef {{ method?: string, body?: any, accessToken?: string }} JsonRequestOptions */
+
 function normalizeAuthSession(payload) {
   const data = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
   const user = data.user || {};
@@ -21,6 +23,7 @@ function normalizeAuthSession(payload) {
   };
 }
 
+/** @param {any} config @param {string} path @param {JsonRequestOptions} [options] */
 async function requestJson(config, path, { method = "POST", body, accessToken } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
@@ -33,6 +36,7 @@ async function requestJson(config, path, { method = "POST", body, accessToken } 
   const responseBody = await res.json().catch(() => null);
 
   if (!res.ok) {
+    /** @type {Error & { status?: number, code?: string, payload?: any }} */
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";

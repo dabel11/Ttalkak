@@ -1,6 +1,8 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 
+/** @typedef {{ accessToken?: string, filter?: string, page?: number, size?: number }} SavedPromptOptions */
+
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.content)) return payload.content;
@@ -42,6 +44,7 @@ function normalizeSavedPrompt(item, index = 0) {
   };
 }
 
+/** @param {any} config @param {SavedPromptOptions} [options] */
 export async function requestSavedPrompts(config, { accessToken, filter = "all", page = 1, size = 50 } = {}) {
   if (!accessToken) return [];
   const query = new URLSearchParams({ filter, page: String(page), size: String(size), pageSize: String(size) });
@@ -51,6 +54,7 @@ export async function requestSavedPrompts(config, { accessToken, filter = "all",
   const responseBody = await res.json().catch(() => null);
 
   if (!res.ok) {
+    /** @type {Error & { status?: number, code?: string, payload?: any }} */
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";
@@ -77,6 +81,7 @@ async function requestPromptSaveState(config, promptId, accessToken, method) {
   const responseBody = await res.json().catch(() => null);
 
   if (!res.ok) {
+    /** @type {Error & { status?: number, code?: string, payload?: any }} */
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";

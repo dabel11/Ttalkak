@@ -30,6 +30,17 @@ test("structured and legacy questions are deduplicated", () => {
   assert.equal(questions[0].importance, "required");
 });
 
+test("idempotent replay metadata survives Extension response normalization", () => {
+  const result = normalizeImproveResult({
+    mode: "improve",
+    improvedPrompt: "저장된 결과",
+    requestId: "request-123",
+    replayed: true,
+  });
+  assert.equal(result.requestId, "request-123");
+  assert.equal(result.replayed, true);
+});
+
 test("ask hides copy and execute while improve keeps both actions", () => {
   assert.deepEqual(
     getMessageActionVisibility({ role: "assistant", mode: "ask", executablePrompt: "실행 금지" }),
@@ -38,6 +49,20 @@ test("ask hides copy and execute while improve keeps both actions", () => {
   assert.deepEqual(
     getMessageActionVisibility({ role: "assistant", mode: "improve", executablePrompt: "개선된 프롬프트" }),
     { copy: true, save: true, execute: true },
+  );
+});
+
+test("cancelled status messages never expose assistant actions", () => {
+  assert.deepEqual(
+    getMessageActionVisibility({ role: "assistant", isCancelled: true, content: "cancelled" }),
+    { copy: false, save: false, execute: false },
+  );
+});
+
+test("unchanged no-evidence messages never expose assistant actions", () => {
+  assert.deepEqual(
+    getMessageActionVisibility({ role: "assistant", mode: "improve", isUnchanged: true, executablePrompt: null }),
+    { copy: false, save: false, execute: false },
   );
 });
 

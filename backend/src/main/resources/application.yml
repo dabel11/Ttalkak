@@ -21,7 +21,7 @@ rag:
   response-timeout: ${RAG_RESPONSE_TIMEOUT:75s}
 ttalkak:
   cors:
-    allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}"
+    allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,chrome-extension://djbhhlahjhaeccghbnajnhmbcdilccmn}"
 
   admin:
     seed-enabled: "${ADMIN_SEED_ENABLED:false}"

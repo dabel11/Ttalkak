@@ -1,10 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 
 const repoRoot = path.resolve(__dirname, "..");
 const frontendRoot = path.join(repoRoot, "prompt-hub-web-frontend");
 const apiDir = path.join(frontendRoot, "src", "api");
-const contract = require(path.join(apiDir, "api-contract.js"));
 
 function sorted(values) {
   return [...new Set(values)].sort();
@@ -15,8 +15,10 @@ function difference(left, right) {
   return left.filter((value) => !rightSet.has(value));
 }
 
+async function main() {
+const contract = await import(pathToFileURL(path.join(apiDir, "api-contract.mjs")));
 const implementationMethods = [];
-for (const file of fs.readdirSync(apiDir).filter((name) => name.endsWith("-api.js") && name !== "core-api.js")) {
+for (const file of fs.readdirSync(apiDir).filter((name) => /-api\.(?:js|mjs)$/.test(name) && !/^core-api\./.test(name))) {
   const source = fs.readFileSync(path.join(apiDir, file), "utf8");
   for (const match of source.matchAll(/^\s{6}(?:async\s+)?([A-Za-z][A-Za-z0-9_]*)\s*\(/gm)) implementationMethods.push(match[1]);
   for (const match of source.matchAll(/^\s{4}async function ([A-Za-z][A-Za-z0-9_]*)\s*\(/gm)) implementationMethods.push(match[1]);
@@ -45,3 +47,6 @@ if (failures.length) {
 } else {
   console.log(`Web API contracts are complete: ${implemented.length} public methods.`);
 }
+}
+
+if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1; });

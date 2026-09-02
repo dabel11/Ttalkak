@@ -1,11 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-require("../src/make/make-sync-workflows.js");
-require("../src/make/make-folder-workflows.js");
-require("../src/make/make-execution-workflows.js");
-require("../src/make/make-recent-workflows.js");
-const { createMakeWorkflows } = require("../src/make/make-workflows.js");
-const { createPromptWorkflows } = require("../src/interactions/prompt-workflows.js");
+let createPromptWorkflows;
+let threadPolicy;
+let createMakeWorkflows;
+test.before(async () => {
+  ({ createPromptWorkflows } = await import("../src/interactions/prompt-workflows.mjs"));
+  threadPolicy = await import("../src/make/make-thread-policy.mjs");
+  ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
+});
 
 function makeContext(overrides = {}) {
   const notices = [];
@@ -36,6 +38,8 @@ function makeContext(overrides = {}) {
     getMakeApi: () => ({}),
     getMakeApiToken: () => "token",
     isBackendNumericId: (value) => /^\d+$/.test(String(value || "")),
+    canSplitMakeThread: threadPolicy.canSplitMakeThread,
+    findMakeThread: threadPolicy.findMakeThread,
     handleMakeBackendSyncError() {},
     hasBackendAuthToken: () => true,
     handleBackendAccessError() {},
@@ -59,6 +63,22 @@ test("folder creation rejects duplicate and maximum folder counts", async () => 
   assert.match(maximum.notices.at(-1), /최대 5개/);
 });
 
+test("thread split policy uses the same server identity rules for UI and workflows", async () => {
+  const { canSplitMakeThread, findMakeThread } = threadPolicy;
+  const isBackendNumericId = (value) => /^\d+$/.test(String(value || ""));
+  const local = { id: "local-thread", serverId: "" };
+  const synchronized = { id: "local-shell", serverId: "42" };
+  const legacyServer = { id: 42 };
+  const threads = [local, synchronized, legacyServer];
+
+  assert.equal(findMakeThread(threads, "local-thread"), local);
+  assert.equal(findMakeThread(threads, "42"), synchronized);
+  assert.equal(canSplitMakeThread(local, isBackendNumericId), true);
+  assert.equal(canSplitMakeThread(synchronized, isBackendNumericId), false);
+  assert.equal(canSplitMakeThread(legacyServer, isBackendNumericId), false);
+  assert.equal(canSplitMakeThread(null, isBackendNumericId), false);
+});
+
 test("folder creation rolls local state back after backend failure", async () => {
   const ctx = makeContext({
     getMakeApi: () => ({ createMakeFolder: async () => { throw new Error("offline"); } }),
@@ -80,6 +100,31 @@ test("thread deletion treats backend 404 as an idempotent success", async () => 
   assert.deepEqual(ctx.state.recentThreads, []);
   assert.equal(refreshed, 1);
   assert.match(ctx.notices.at(-1), /이미 삭제/);
+});
+
+test("message splitting rejects server threads even when called outside the UI", () => {
+  const messages = [
+    { id: "first", role: "user", content: "First topic" },
+    { id: "answer", role: "assistant", content: "First answer" },
+    { id: "second", role: "user", content: "Second topic" },
+  ];
+  for (const thread of [
+    { id: "server-thread", serverId: "77", messages: messages.map((item) => ({ ...item })) },
+    { id: 77, messages: messages.map((item) => ({ ...item })) },
+  ]) {
+    const ctx = makeContext({
+      state: {
+        activeThreadId: thread.id,
+        messages: messages.map((item) => ({ ...item })),
+        recentThreads: [thread],
+      },
+    });
+    const before = JSON.parse(JSON.stringify(ctx.state));
+
+    assert.equal(createMakeWorkflows(ctx).splitThreadFromMessage("second"), false);
+    assert.deepEqual(ctx.state, before);
+    assert.deepEqual(ctx.notices, []);
+  }
 });
 
 test("execution helpers detect placeholders and keep supported targets fixed", () => {
@@ -121,8 +166,7 @@ function promptContext(overrides = {}) {
 
 test("prompt reporting validates content and does not mutate after API failure", async () => {
   let applied = 0;
-  global.window = { TTALKAK_API: { reportPrompt: async () => { throw new Error("offline"); } } };
-  const ctx = promptContext({ applyPromptReportedState: () => { applied += 1; } });
+  const ctx = promptContext({ api: { reportPrompt: async () => { throw new Error("offline"); } }, applyPromptReportedState: () => { applied += 1; } });
   const workflows = createPromptWorkflows(ctx);
   await workflows.reportPrompt("7", "   ");
   assert.match(ctx.notices.at(-1), /사유/);

@@ -2,19 +2,22 @@ const { test, expect } = require("@playwright/test");
 const { gotoApp } = require("./support/app-ready.js");
 
 function routeChunkRequested(requests, route) {
-  return requests.some((url) => new RegExp(`/assets/chunks/${route}-[A-Z0-9]+\\.js$`).test(new URL(url).pathname));
+  return requests.some((url) => new RegExp(`/assets/chunks/${route}-runtime-[A-Z0-9]+\\.js$`).test(new URL(url).pathname));
 }
 
 test("Home defers Share and Make chunks until their routes are opened", async ({ page }) => {
   const scripts = [];
+  const styles = [];
   page.on("request", (request) => {
     if (request.resourceType() === "script") scripts.push(request.url());
+    if (request.resourceType() === "stylesheet") styles.push(request.url());
   });
 
   await gotoApp(page);
   expect(routeChunkRequested(scripts, "share")).toBe(false);
   expect(routeChunkRequested(scripts, "make")).toBe(false);
   expect(routeChunkRequested(scripts, "admin")).toBe(false);
+  expect(styles.some((url) => new URL(url).pathname.endsWith("/assets/styles/make.css"))).toBe(false);
 
   await page.locator('[data-route="share"]').first().click();
   await expect(page.locator(".share-page")).toBeVisible();
@@ -23,6 +26,7 @@ test("Home defers Share and Make chunks until their routes are opened", async ({
   await page.locator('[data-route="make"]').first().click();
   await expect(page.locator(".make-page")).toBeVisible();
   expect(routeChunkRequested(scripts, "make")).toBe(true);
+  expect(styles.some((url) => new URL(url).pathname.endsWith("/assets/styles/make.css"))).toBe(true);
   expect(routeChunkRequested(scripts, "admin")).toBe(false);
 });
 
@@ -46,7 +50,7 @@ test("an administrator session loads the Admin chunk on demand", async ({ page }
 });
 
 test("a route chunk failure renders an actionable status instead of a blank page", async ({ page }) => {
-  await page.route(/\/assets\/chunks\/make-[A-Z0-9]+\.js$/, (route) => route.abort("failed"));
+  await page.route(/\/assets\/chunks\/make-runtime-[A-Z0-9]+\.js$/, (route) => route.abort("failed"));
   await gotoApp(page);
   await page.locator('[data-route="make"]').first().click();
   const failure = page.locator('[data-route-module-error="make"]');

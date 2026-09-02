@@ -34,12 +34,17 @@ dependencies {
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+    useJUnitPlatform()
+    systemProperty(
+            'spring.profiles.active',
+            System.getProperty('spring.profiles.active', 'test')
+    )
 }
 tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'

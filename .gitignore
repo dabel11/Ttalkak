@@ -23,6 +23,9 @@ bin/
 # ── Node (extension) ────────────────────────────────────────
 extension/node_modules/
 extension/dist/
+extension/dist-dev/
+extension/dist-prod/
+extension/dist-verify/
 extension/.npm-cache/
 prompt-hub-web-frontend/node_modules/
 prompt-hub-web-frontend/dist/
@@ -43,12 +46,21 @@ rag-server/data/
 rag-server/eval/.uplift_cache.json
 rag-server/eval/.gen_cache*.json
 rag-server/eval/.example_ab_cache*.json
+rag-server/eval/.multi_turn_*cache.json
+rag-server/eval/.multi_turn_result.json
 rag-server/eval/.temp_*.log
 
 # ── 계약 문서 (git 미포함 · 백엔드/프론트 담당에게 별도 공유) ──
 rag-server/CONTRACT_*.md
 
-docs/
+docs/*
+!docs/prompt-improve-contract.schema.json
+!docs/FRONTEND_OPERATING_POLICIES.md
+!docs/WEB_STORE_RELEASE_CHECKLIST.md
+!docs/WEB_STORE_RELEASE_RECORD_TEMPLATE.md
+!docs/ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md
+!docs/smoke-results/
+!docs/smoke-results/*.md
 .gitignore
 
 extension/.env.production.local

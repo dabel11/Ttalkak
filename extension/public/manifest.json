@@ -3,6 +3,7 @@
   "name": "Ttalkak",
   "description": "TTALKAK Chrome side panel for improving prompts and sending them to AI tools.",
   "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzb0wSt37H4iJh5u6NG9ZhDOefZcgESINP0hGnTmwfP0uT71bCzCX4lnvwlU8ChnPtBqKTC913mCdqAxIUPSMZAQezUDHO//lZuFe3NicXO29P3gRmRjCXFjW7pkYAqcxBFadVV0vQeUyDJON5e/EbUS3eyNUi7Pt7iP5UDDCFMiktJses5Nbyf0cgqJDAF4dV60FS1UYanhvLNPw9Wh0yKzTHlQ0C8dSzpf9sChVPnFv7gnB/R9Lj9+UmIvyXzKjC9jNazrIm7Gk84D9ijLrbHkY8rNtKlqp4FvhfnI3avnN0lDDgU5OuJe/yx4w1c0M3Q8K+xibOxFo47ciK1ZTSwIDAQAB",
   "permissions": ["sidePanel", "scripting", "activeTab", "tabs", "clipboardWrite", "debugger", "storage"],
   "host_permissions": [
     "https://chatgpt.com/*",

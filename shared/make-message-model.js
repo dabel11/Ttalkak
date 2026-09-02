@@ -1,6 +1,62 @@
 export const SCHEMA_VERSION = 2;
 const text = (value) => String(value || "").trim();
 const key = (value) => text(value).replace(/\s+/g, " ").toLocaleLowerCase();
+export const UNCHANGED_NO_EVIDENCE_MESSAGE = "적용할 수 있는 변경 사항을 찾지 못했습니다. 내용을 구체화해서 다시 요청해 주세요.";
+export const MAKE_PROGRESS_STAGES = Object.freeze([
+  Object.freeze({ afterMs: 0, label: "요청을 분석하고 있습니다" }),
+  Object.freeze({ afterMs: 8000, label: "참고 자료를 확인하고 있습니다" }),
+  Object.freeze({ afterMs: 25000, label: "평소보다 시간이 걸리고 있습니다" }),
+]);
+export function getMakeProgressStatus(elapsedMs = 0) {
+  const safeElapsed = Math.max(0, Number(elapsedMs) || 0);
+  const stage = [...MAKE_PROGRESS_STAGES].reverse().find((item) => safeElapsed >= item.afterMs) || MAKE_PROGRESS_STAGES[0];
+  return { ...stage, elapsedSeconds: Math.floor(safeElapsed / 1000) };
+}
+export function getMakeFailureAction(failure = {}) {
+  if (failure.requiresLogin || failure.kind === "auth") return { id: "login", label: "로그인" };
+  if (failure.kind === "concurrency_refresh") return { id: "reload-thread", label: "최신 대화 불러오기" };
+  if (failure.kind === "concurrency") return { id: "retry-after-refresh", label: failure.retryMode === "edit" ? "수정한 내용 다시 보내기" : "다시 보내기" };
+  if (failure.retryable) return { id: "retry", label: failure.kind === "network" ? "연결 확인 후 다시 시도" : "잠시 후 다시 시도" };
+  return null;
+}
+export function getMakeFailurePresentation(failure = {}) {
+  if (failure.kind === "concurrency_refresh") return {
+    title: failure.repeated ? "대화가 계속 업데이트되고 있습니다" : "다른 곳에서 대화가 업데이트됐습니다",
+    description: failure.repeated
+      ? "다른 창의 요청이 끝난 뒤 최신 대화를 다시 불러오거나 새 대화에서 계속해 주세요."
+      : "최신 대화를 불러온 뒤 입력한 내용을 다시 보낼 수 있습니다.",
+    tone: "refresh",
+  };
+  if (failure.kind === "concurrency") return {
+    title: failure.repeated ? "최신 대화를 다시 불러왔습니다" : "최신 대화를 불러왔습니다",
+    description: failure.retryMode === "edit"
+      ? "수정한 내용은 입력란에 복원되어 있습니다. 서버의 최신 메시지를 확인한 뒤 다시 보내 주세요."
+      : "입력한 내용은 입력란에 복원되어 있습니다.",
+    tone: "recovered",
+  };
+  return { title: failure.message || "요청을 처리하지 못했습니다.", description: "", tone: "error" };
+}
+export function getMakeRecentDateGroup(value, nowValue = Date.now()) {
+  const date = new Date(value);
+  const now = new Date(nowValue);
+  if (!Number.isFinite(date.getTime())) return "이전";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const difference = Math.round((today - target) / 86400000);
+  return difference <= 0 ? "오늘" : difference === 1 ? "어제" : "이전";
+}
+
+export function normalizePromptForComparison(value) {
+  return String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+
+export function isUnchangedNoEvidence(sourcePrompt, result) {
+  const ragStatus = String(result?.ragStatus || result?.rag_status || result?.status || "").toLowerCase();
+  if (ragStatus !== "no_evidence") return false;
+  const source = normalizePromptForComparison(sourcePrompt);
+  const candidate = normalizePromptForComparison(result?.executablePrompt || result?.finalPrompt || result?.final_prompt || result?.improvedPrompt || result?.improved_prompt || result?.text || result?.answer);
+  return Boolean(source && candidate && source === candidate);
+}
 
 export function normalizeQuestions(value) {
   if (!Array.isArray(value)) return [];
@@ -11,6 +67,7 @@ export function normalizeQuestions(value) {
     const question = text(source.question || source.text || source.content || source.label);
     if (!question) return null;
     const field = text(source.field || source.key || source.name || `question_${index + 1}`);
+    if (/\(\s*예\s*$/u.test(field) && /\)\s*$/u.test(question)) return null;
     return { field, question, reason: text(source.reason || source.description || source.effect || source.helpText), importance: String(source.importance || source.priority || "recommended").toLowerCase() === "required" ? "required" : "recommended" };
   }).filter((item) => {
     if (!item) return false;
@@ -51,7 +108,8 @@ export function parseLegacyQuestions(value) {
   const questions = [];
   let found = false;
   source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
-    const pair = line.match(/^(?:[-*•]|\d+[.)])?\s*([^:：]{1,48})[:：]\s*(.+)$/);
+    const pair = line.match(/^(?:[-*•]|\d+[.)])\s+([^:：?？()]{1,24})[:：]\s*(.+)$/)
+      || line.match(/^([^:：?？()*]{1,24})[:：]\s*(.+[?？])$/);
     const bullet = line.match(/^(?:[-*•]|\d+[.)])\s*(.+[?？])$/);
     if (pair || bullet) {
       found = true;
@@ -69,8 +127,11 @@ export function normalizeImproveResponse(payload, fallbackPrompt = "") {
   const legacy = parseLegacyQuestions(answer);
   const rawQuestions = result.questions || result.followUpQuestions || result.additionalQuestions;
   const questions = normalizeQuestions([...(Array.isArray(rawQuestions) ? rawQuestions : []), ...legacy.questions]);
-  const improvedPrompt = mode === "ask" ? "" : text(result.improvedPrompt || result.improved_prompt || result.finalPrompt || result.final_prompt || fallbackPrompt);
-  return { mode, answer: legacy.leadText || answer, summary: text(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus: String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase(), ragMessage: text(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || "") };
+  const rawImprovedPrompt = mode === "ask" ? "" : text(result.improvedPrompt || result.improved_prompt || result.finalPrompt || result.final_prompt || fallbackPrompt);
+  const ragStatus = String(result.ragStatus || result.rag_status || result.status || "ok").toLowerCase();
+  const isUnchanged = mode !== "ask" && isUnchangedNoEvidence(fallbackPrompt, { ...result, improvedPrompt: rawImprovedPrompt, ragStatus });
+  const improvedPrompt = isUnchanged ? "" : rawImprovedPrompt;
+  return { mode, answer: legacy.leadText || answer, summary: text(result.summary), improvedPrompt, text: mode === "ask" ? legacy.leadText || answer : isUnchanged ? UNCHANGED_NO_EVIDENCE_MESSAGE : improvedPrompt || answer, questions, fields: normalizeFields(result.fields || result.fieldState || result.missingFields), changes: normalizeChanges(result.changes || result.assumptions || result.assumedChanges), techniques: normalizeTechniques(result.techniques || result.techniquesApplied || result.techniques_applied), sources: result.sources || result.references || result.documents || [], ragStatus, ragMessage: text(result.ragMessage || result.rag_message), threadId: String(result.threadId || payload?.threadId || ""), requestId: text(result.requestId || payload?.requestId), replayed: result.replayed === true, ...(ragStatus === "no_evidence" ? { excludeFromHistory: true } : {}), ...(isUnchanged ? { isUnchanged: true } : {}) };
 }
 
 export const migrateV0ToV1 = (/** @type {Record<string, *>} */ raw = {}) => ({ ...raw, schemaVersion: 1, mode: String(raw.mode || raw.type || "").toLowerCase() === "question" ? "ask" : raw.mode });
@@ -92,14 +153,14 @@ export function migrateMakeMessage(/** @type {Record<string, *>} */ input = {}, 
 export function isRenderableMessage(message) { const value = migrateMakeMessage(message); return Boolean(text(value.content || value.answer || value.summary || value.improvedPrompt) || [value.questions, value.fields, value.changes, value.techniques].some((items) => items.length)); }
 export function migrateMakeMessages(messages) { return (Array.isArray(messages) ? messages : []).map(migrateMakeMessage).filter(isRenderableMessage); }
 export function migratePersistedMakeState(/** @type {Record<string, *>} */ state = {}) { state.messages = migrateMakeMessages(state.messages); state.recentThreads = (Array.isArray(state.recentThreads) ? state.recentThreads : []).map((thread) => ({ ...thread, messages: migrateMakeMessages(thread?.messages) })); return state; }
-export function buildImproveHistory(messages) { return migrateMakeMessages(messages).filter((message) => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role, content: text(message.role === "assistant" ? message.answer || message.content : message.content) })).filter((message) => message.content); }
+export function buildImproveHistory(messages) { return migrateMakeMessages(messages).filter((message) => { const value = /** @type {Record<string, *>} */ (message); return !value.excludeFromHistory && !value.isCancelled && !value.isError && (value.role === "user" || value.role === "assistant"); }).map((message) => ({ role: message.role, content: text(message.role === "assistant" ? message.answer || message.content : message.content) })).filter((message) => message.content); }
 const NON_EXECUTABLE_PROMPT_FRAGMENTS = ["관련 프롬프트 기법 근거를 찾지 못했습니다", "관련 기법 근거 없이", "개선안을 만들 수 없", "확인이 필요"];
 const ASK_ONLY_PATTERNS = [/확인이\s*필요/i, /답변이\s*필요/i, /추가\s*정보가\s*필요/i, /정보를\s*보완해\s*주세요/i, /개선안을?\s*만들\s*수\s*없/i, /만들\s*수\s*없어/i, /아래\s*정보를\s*알려주시면/i, /어떤\s*주제/i, /무엇에\s*대한\s*글/i];
 function isUtilityOnlyPrompt(value) { const normalized = text(value).replace(/\s+/g, " "); return !normalized || NON_EXECUTABLE_PROMPT_FRAGMENTS.some((fragment) => normalized.includes(fragment)); }
 function isAskOnlyResponse(value) { const normalized = text(value); return !normalized || isUtilityOnlyPrompt(normalized) || ASK_ONLY_PATTERNS.some((pattern) => pattern.test(normalized)); }
-export function isExecutableMessage(message) { const value = migrateMakeMessage(message); const prompt = text(message?.executablePrompt || message?.finalPrompt || value.improvedPrompt || value.content); return value.mode !== "ask" && !(value.questions.length && !value.improvedPrompt) && Boolean(prompt) && !isUtilityOnlyPrompt(prompt) && !isAskOnlyResponse(prompt); }
+export function isExecutableMessage(message) { const value = migrateMakeMessage(message); const prompt = text(message?.executablePrompt || message?.finalPrompt || value.improvedPrompt || value.content); return !message?.isCancelled && !message?.isError && !message?.isThinking && !message?.isUnchanged && value.mode !== "ask" && !(value.questions.length && !value.improvedPrompt) && Boolean(prompt) && !isUtilityOnlyPrompt(prompt) && !isAskOnlyResponse(prompt); }
 export function composeAskAnswers(questions, values = {}) { const normalized = normalizeQuestions(questions); const missingFields = normalized.filter((item) => item.importance === "required" && !text(values[item.field])).map((item) => item.field); const lines = normalized.map((item) => text(values[item.field]) ? `- ${item.question}: ${text(values[item.field])}` : "").filter(Boolean); return { missingFields, message: lines.length ? `추가 정보:\n${lines.join("\n")}` : "" }; }
-export function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_TIMEOUT") return result("network", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
+export function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (status === 401 || code.includes("AUTH") || code.includes("TOKEN")) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "THREAD_CONCURRENTLY_UPDATED") return result("concurrency", "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.", false); if (code === "REQUEST_ID_REUSED") return result("conflict", "요청 식별자가 다른 내용에 사용되었습니다. 서버 대화를 새로고침한 뒤 다시 요청해주세요.", false); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_ABORTED") return result("cancelled", "요청이 취소되었습니다.", false); if (code === "REQUEST_TIMEOUT") return result("timeout", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
 
-const MakeMessageModel = Object.freeze({ SCHEMA_VERSION, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
+const MakeMessageModel = /* @__PURE__ */ Object.freeze({ SCHEMA_VERSION, UNCHANGED_NO_EVIDENCE_MESSAGE, MAKE_PROGRESS_STAGES, getMakeProgressStatus, getMakeFailureAction, getMakeFailurePresentation, getMakeRecentDateGroup, normalizePromptForComparison, isUnchangedNoEvidence, normalizeQuestions, normalizeFields, normalizeChanges, normalizeTechniques, normalizeImproveResponse, parseLegacyQuestions, migrateV0ToV1, migrateV1ToV2, runMessageMigrations, migrateMakeMessage, migrateMakeMessages, migratePersistedMakeState, isRenderableMessage, isExecutableMessage, buildImproveHistory, classifyMakeError, composeAskAnswers });
 export default MakeMessageModel;

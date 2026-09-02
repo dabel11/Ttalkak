@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { REQUIRED_METHODS, RESPONSE_CONTRACTS, assertApiContract, assertRecordResponse, assertCollectionResponse, validateApiResponse, wrapApiResponses } = require("../src/api/api-contract.js");
+let REQUIRED_METHODS; let RESPONSE_CONTRACTS; let assertApiContract; let assertRecordResponse; let assertCollectionResponse; let validateApiResponse; let wrapApiResponses;
+test.before(async () => ({ REQUIRED_METHODS, RESPONSE_CONTRACTS, assertApiContract, assertRecordResponse, assertCollectionResponse, validateApiResponse, wrapApiResponses } = await import("../src/api/api-contract.mjs")));
 
 function validApi() {
   return Object.fromEntries(REQUIRED_METHODS.map((name) => [name, async () => ({})]));

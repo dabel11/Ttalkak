@@ -1,6 +1,11 @@
 import { fetchWithTimeout, getBackendBaseUrl } from "./client";
 import { getApiErrorMessage } from "../utils/apiErrors";
 import { migrateMakeMessage } from "../../../shared/make-message-model.js";
+import { MAKE_API_PATHS } from "../../../shared/make-api-contract.js";
+
+function threadPath(threadId) {
+  return MAKE_API_PATHS.thread.replace("{threadId}", encodeURIComponent(String(threadId)));
+}
 
 function unwrapItems(payload) {
   if (Array.isArray(payload)) return payload;
@@ -35,6 +40,7 @@ export function normalizeMakeThread(item, index = 0) {
 async function parseResponse(res) {
   const responseBody = await res.json().catch(() => null);
   if (!res.ok) {
+    /** @type {Error & { status?: number, code?: string, payload?: any }} */
     const error = new Error(getApiErrorMessage(res.status, responseBody));
     error.status = res.status;
     error.code = responseBody?.code || "";
@@ -44,19 +50,21 @@ async function parseResponse(res) {
   return responseBody;
 }
 
-export async function requestMakeThreads(config, accessToken) {
+export async function requestMakeThreads(config, accessToken, options = {}) {
   if (!accessToken) return [];
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads`, {
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${MAKE_API_PATHS.threads}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: options.signal,
   });
   const responseBody = await parseResponse(res);
   return unwrapItems(responseBody).map(normalizeMakeThread);
 }
 
-export async function requestMakeThread(config, threadId, accessToken) {
+export async function requestMakeThread(config, threadId, accessToken, options = {}) {
   if (!accessToken || !threadId) return null;
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads/${threadId}`, {
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${threadPath(threadId)}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: options.signal,
   });
   const responseBody = await parseResponse(res);
   return normalizeMakeThread(responseBody?.data || responseBody);
@@ -64,7 +72,7 @@ export async function requestMakeThread(config, threadId, accessToken) {
 
 export async function createMakeThread(config, payload, accessToken) {
   if (!accessToken) return null;
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads`, {
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${MAKE_API_PATHS.threads}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -78,7 +86,7 @@ export async function createMakeThread(config, payload, accessToken) {
 
 export async function deleteMakeThread(config, threadId, accessToken) {
   if (!accessToken || !threadId) return;
-  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}/api/make/threads/${threadId}`, {
+  const res = await fetchWithTimeout(`${getBackendBaseUrl(config)}${threadPath(threadId)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });

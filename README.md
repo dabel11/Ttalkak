@@ -402,10 +402,12 @@ The frontend removes reprocess/undo buttons for final report states and treats r
 
 The extension code lives in the repository root `extension` folder. It calls Spring Boot `POST /api/prompts/improve` and does not call FastAPI `/query` directly.
 
-Remaining extension checks:
+Extension notes and remaining checks:
 
-- Confirm real `chrome-extension://...` origin requests are allowed by backend CORS/security settings.
-- Confirm AI/RAG no-evidence, timeout, unavailable, and rate-limit response codes once backend/AI policies are final.
+- Backend CORS/security settings were verified to allow requests from the configured `chrome-extension://...` origin.
+- AI/RAG response policies are confirmed: no-evidence returns a successful fallback response, timeout and unavailable return `503 / AI_SERVICE_UNAVAILABLE`, and rate-limit returns `AI_RATE_LIMIT_EXCEEDED`.
+- Logged-in follow-up requests may include a client-generated `requestId` of up to 128 characters. When the same `threadId`, `requestId`, and prompt are sent again after the turn has been saved, the backend returns the stored response with `replayed: true` instead of calling RAG again or appending a duplicate turn. Reusing the same `requestId` with different prompt content returns `409 / REQUEST_ID_REUSED`. Requests without `requestId` retain the existing behavior.
+- Make threads use optimistic locking. A stale concurrent update returns `409 / THREAD_CONCURRENTLY_UPDATED` instead of overwriting newer messages. Clients must reload `GET /api/make/threads/{threadId}` before offering a retry.
 - Saved prompts and recent items are currently extension-local unless a later server sync scope is defined.
 
 #### Run
@@ -492,7 +494,7 @@ npm run build:dev
 Load the built extension in Chrome:
 
 ```text
-extension/dist
+extension/dist-dev
 ```
 
 Chrome loading steps:
@@ -500,7 +502,19 @@ Chrome loading steps:
 1. Open `chrome://extensions`
 2. Enable Developer mode
 3. Click "Load unpacked"
-4. Select the `extension/dist` folder
+4. Select the `extension/dist-dev` folder
+
+`npm run verify` writes its disposable production-like bundle to `extension/dist-verify`, so verification never overwrites the unpacked development extension. `npm run build:prod` writes only to `extension/dist-prod`.
+
+The development manifest contains a public key that keeps the unpacked Extension ID stable across machines and paths:
+
+```text
+djbhhlahjhaeccghbnajnhmbcdilccmn
+```
+
+This public key is not a secret. Never commit a matching private key. The Spring Boot development CORS default allows only this fixed Extension origin in addition to localhost web origins.
+
+Because Chrome isolates extension storage by Extension ID, conversations and settings created with a pre-stable development ID are not migrated automatically. This affects development data only; the Chrome Web Store production Extension ID and its storage are separate.
 
 #### Structure
 
@@ -538,17 +552,18 @@ The previous direct RAG URL setting is no longer the intended frontend path.
 `public/manifest.json` is the development manifest and keeps localhost permissions for local testing.
 `manifest.production.example.json` is the production manifest template and is used by `npm run build:prod`.
 See `docs/WEB_STORE_RELEASE_CHECKLIST.md` for the Chrome Web Store release checklist and backend CORS handoff steps.
+Frontend-wide deployment configuration, API change, response fixture, user copy, privacy, and support policies are documented in `docs/FRONTEND_OPERATING_POLICIES.md`.
 
 For production packaging:
 
 1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL.
-2. Replace `https://SPRING_BOOT_PRODUCTION_HOST/*` in `manifest.production.example.json` with the same production host.
-3. Use the production manifest content for the packaged `manifest.json`.
+2. The build replaces `https://SPRING_BOOT_PRODUCTION_HOST/*` in the production manifest template with the same production host.
+3. Package the generated `extension/dist-prod` directory.
 4. Do not include `http://localhost:8080/*` or `http://127.0.0.1:8080/*` in the production manifest.
 5. Keep ChatGPT, Gemini, and Claude host permissions while Execute is supported.
 6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
 
-Production builds fail fast when `VITE_BACKEND_API_URL` is missing, so a package with an empty Backend API URL is not created by mistake.
+Production builds fail fast when `VITE_BACKEND_API_URL` is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development always targets `http://localhost:8080` in `dist-dev` even if a production URL remains in the shell environment.
 
 #### Production Extension ID
 

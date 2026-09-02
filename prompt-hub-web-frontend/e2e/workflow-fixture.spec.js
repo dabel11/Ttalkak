@@ -83,7 +83,7 @@ test("folder lifecycle persists through reload and deletes through confirmation"
   });
 
   await gotoApp(page);
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("업무");
   await page.locator('[data-folder-create-form] button[type="submit"]').click();
@@ -98,7 +98,7 @@ test("folder lifecycle persists through reload and deletes through confirmation"
   await expect(page.locator("[data-folder-item]").filter({ hasText: "프로젝트" })).toBeVisible();
 
   await page.reload();
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   const restored = page.locator("[data-folder-item]").filter({ hasText: "프로젝트" });
   await expect(restored).toBeVisible();
   await restored.hover();
@@ -147,7 +147,7 @@ test("thread folder move rolls back on failure and recent conversation restores 
   });
 
   await gotoApp(page);
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   const row = page.locator('[data-open-thread="7"]').locator("..");
   await row.locator('[data-thread-menu="7"]').click();
   const select = page.locator('[data-thread-folder="7"]');
@@ -159,7 +159,7 @@ test("thread folder move rolls back on failure and recent conversation restores 
   await expect(page.locator(".toast")).toContainText("변경했습니다");
 
   await page.reload();
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await page.locator('[data-open-thread="7"]').click();
   await expect(page.getByText("복원된 개선안")).toBeVisible();
 });
@@ -169,7 +169,7 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   await seed(page, { savedPrompts: [prompt], popularPrompts: [prompt] });
   await mockBackend(page);
   await gotoApp(page);
-  await page.locator('[data-route="saved"]').click();
+  await page.locator('.sidebar [data-route="saved"]').click();
 
   let card = page.locator('[data-open-prompt="fixture-prompt"]');
   await card.locator("[data-prompt-card-menu]").click();
@@ -186,7 +186,7 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   await expect(card).toContainText("비공개");
 
   await page.reload();
-  await page.locator('[data-route="saved"]').click();
+  await page.locator('.sidebar [data-route="saved"]').click();
   card = page.locator('[data-open-prompt="fixture-prompt"]');
   await expect(card).toContainText("수정된 제목");
   await expect(card).toContainText("비공개");

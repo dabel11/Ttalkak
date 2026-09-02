@@ -1,6 +1,7 @@
 import { Bookmark, BookmarkCheck, X } from "lucide-react";
+import { getMakeRecentDateGroup } from "../../../shared/make-message-model.js";
 
-export function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSavePrompt, onDelete }) {
+export function PromptList({ items, emptyText, mode, isSaved = (_item) => false, onOpenPrompt, onSavePrompt = (_item) => {}, onDelete = (_id) => {} }) {
   if (items.length === 0) return <p className="empty-list">{emptyText}</p>;
 
   return (
@@ -61,14 +62,27 @@ export function PromptList({ items, emptyText, mode, isSaved, onOpenPrompt, onSa
   );
 }
 
-export function RecentList({ items, onOpenThread, onDelete }) {
+export function RecentList({ items, activeId, onOpenThread, onDelete }) {
   if (items.length === 0) return <p className="empty-list">최근 대화가 없습니다.</p>;
+  const groups = items.reduce((result, item) => {
+    const label = getMakeRecentDateGroup(item.createdAt || item.updatedAt || item.time);
+    const group = result.find((entry) => entry.label === label);
+    if (group) group.items.push(item);
+    else result.push({ label, items: [item] });
+    return result;
+  }, []);
 
   return (
     <div className="recent-list" aria-label="최근 대화 목록">
-      {items.map((item) => (
+      {groups.map((group) => <section className="recent-group" key={group.label} aria-label={group.label}>
+        <h3>{group.label}</h3>
+        {group.items.map((item) => {
+          const normalizedActiveId = String(activeId || "");
+          const isActive = Boolean(normalizedActiveId) && [item.id, item.serverId]
+            .some((value) => String(value || "") === normalizedActiveId);
+          return (
         <div className="saved-item-wrap" key={item.id}>
-          <button className="recent-item" type="button" onClick={() => onOpenThread(item)}>
+          <button className={`recent-item ${isActive ? "active" : ""}`} type="button" aria-current={isActive ? "true" : undefined} onClick={() => onOpenThread(item)}>
             <strong>{item.title}</strong>
             <span>{item.time}</span>
           </button>
@@ -85,7 +99,9 @@ export function RecentList({ items, onOpenThread, onDelete }) {
             <X size={11} />
           </button>
         </div>
-      ))}
+          );
+        })}
+      </section>)}
     </div>
   );
 }

@@ -1,7 +1,11 @@
 // @ts-check
-import "./admin-events.js";
-import "./admin-selectors.js";
-import "./admin-controller.js";
-import "./admin-view.js";
+import * as selectors from "./admin-selectors.mjs";
 
-export const admin = Object.freeze({ events: window.TtalkakAdminEvents, selectors: window.TtalkakAdminSelectors, controller: window.TtalkakAdminController, view: window.TtalkakAdminView });
+let runtimePromise;
+export function loadAdminRuntime() {
+  runtimePromise ||= import("./admin-runtime.mjs")
+    .then(({ events, controller, view }) => Object.freeze({ events, controller, view }));
+  return runtimePromise;
+}
+
+export const admin = Object.freeze({ selectors, loadRuntime: loadAdminRuntime });

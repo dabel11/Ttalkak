@@ -1,0 +1,157 @@
+// @ts-check
+
+/** @param {Record<string, any>} ctx */
+export function createMakePageAdapter(ctx) {
+  function render() {
+    const hasMessages = ctx.state.messages.length > 0;
+    return ctx.MakePageView(
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
+      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), hasMessages, sidePanelHtml: sidePanel() },
+    );
+  }
+
+  /** @param {boolean} hasMessages */
+  function feed(hasMessages) {
+    const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
+    return ctx.MakeFeedView(
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
+      {
+        hasMessages,
+        isThinking: ctx.isThinking(),
+        messages: ctx.state.messages,
+        promptTemplates: ctx.promptTemplates,
+        renderMessageBubble: messageBubble,
+        templateBarHtml: templateBar(),
+        threadPolicyNote: activeThread && !ctx.canSplitMakeThread(activeThread, ctx.isBackendNumericId)
+          ? "이 대화는 서버에 저장되어 메시지를 분리할 수 없습니다."
+          : "",
+      },
+    );
+  }
+
+  function templateBar() {
+    const selectedTemplateId = ctx.promptTemplates.find((/** @type {TtalkakStateEntity} */ template) => template.prompt === ctx.state.composerDraft)?.id || "";
+    const compactViewport = typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches;
+    return ctx.MakeTemplateBarView(
+      { escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
+      { promptTemplates: ctx.promptTemplates, selectedTemplateId, templateCollapsed: compactViewport ? !ctx.state.mobileTemplateExpanded : ctx.state.templateCollapsed },
+    );
+  }
+
+  /** @param {boolean} hasMessages */
+  function composer(hasMessages) {
+    return ctx.MakeComposerView(
+      { icons: ctx.icons, escapeHtml: ctx.escapeHtml },
+      {
+        composerDraft: ctx.state.composerDraft,
+        hasMessages,
+        isThinking: ctx.isThinking() || ctx.requestState.inFlight,
+      },
+    );
+  }
+
+  function sidePanel() {
+    const uncategorizedCount = ctx.countThreadsInFolder("uncategorized");
+    const visibleFolders = ctx.state.makeFolders.filter((/** @type {TtalkakStateEntity} */ folder) => folder.id !== "uncategorized" || uncategorizedCount > 0);
+    const customFolderCount = ctx.getCustomMakeFolderCount();
+    const canManageFolders = ctx.state.isLoggedIn;
+    const canCreateFolder = canManageFolders && customFolderCount < ctx.maxCustomFolders;
+    if (ctx.state.activeFolderId === "uncategorized" && uncategorizedCount === 0) ctx.state.activeFolderId = "all";
+    const visibleThreads = ctx.state.activeFolderId === "all"
+      ? ctx.state.recentThreads
+      : ctx.state.recentThreads.filter((/** @type {TtalkakStateEntity} */ thread) => (thread.folderId || "uncategorized") === ctx.state.activeFolderId);
+    const previewThreads = visibleThreads.map((/** @type {TtalkakStateEntity} */ thread) => ({
+      ...thread,
+      preview: ctx.makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
+      dateGroup: ctx.messageModel.getMakeRecentDateGroup(thread.createdAt),
+    }));
+
+    return ctx.MakeSidePanelView(
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml, formatShortDate: ctx.formatShortDate },
+      {
+        activeFolderName: ctx.getActiveFolderName(),
+        activeFolderId: ctx.state.activeFolderId,
+        activeThreadId: ctx.state.activeThreadId,
+        canCreateFolder,
+        canManageFolders,
+        canStartThreadFolderCreate: canManageFolders && customFolderCount < ctx.maxCustomFolders,
+        creatingFolder: ctx.state.creatingFolder,
+        creatingThreadFolderId: ctx.state.creatingThreadFolderId,
+        customFolderCount,
+        folders: ctx.state.makeFolders,
+        getThreadFolderId: ctx.getThreadFolderId,
+        makeBackendMessage: ctx.sanitizeMakeBackendMessage(ctx.state.makeBackendMessage),
+        maxCustomFolders: ctx.maxCustomFolders,
+        openThreadMenuId: ctx.state.openThreadMenuId,
+        renderFolderButton: folderButton,
+        threadCount: ctx.state.recentThreads.length,
+        visibleFolders: visibleFolders.map((/** @type {TtalkakStateEntity} */ folder) => ({ ...folder, threadCount: ctx.countThreadsInFolder(folder.id) })),
+        visibleThreads: previewThreads,
+      },
+    );
+  }
+
+  /** @param {TtalkakId} folderId @param {string} name @param {number} count */
+  function folderButton(folderId, name, count) {
+    const isUserFolder = folderId !== "all" && folderId !== "uncategorized";
+    const canManage = ctx.state.isLoggedIn && isUserFolder;
+    return ctx.MakeFolderButtonView(
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml, formatNumber: ctx.formatNumber },
+      {
+        canManage,
+        count,
+        folderId,
+        isActive: ctx.state.activeFolderId === folderId,
+        isEditing: canManage && ctx.state.editingFolderId === folderId,
+        isMenuOpen: canManage && ctx.state.openFolderMenuId === folderId,
+        isUserFolder,
+        name,
+      },
+    );
+  }
+
+  /** @param {TtalkakStateEntity} message */
+  function messageBubble(message) {
+    const isAssistant = message.role === "assistant";
+    const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
+    const failure = !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure : null;
+    const failurePresentation = failure ? ctx.messageModel.getMakeFailurePresentation(failure) : null;
+    return ctx.MessageBubbleView(
+      { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
+      {
+        content: message.content,
+        answer: message.answer || "",
+        changes: message.changes || [],
+        fields: message.fields || [],
+        hasExecutablePrompt: isAssistant && ctx.messageModel.isExecutableMessage(message),
+        id: message.id,
+        canSplit: !isAssistant && ctx.canSplitMakeThread(activeThread, ctx.isBackendNumericId)
+          && ctx.state.messages.findIndex((/** @type {TtalkakStateEntity} */ item) => item.id === message.id) > 0,
+        improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
+        isCopied: ctx.state.copiedMessageId === message.id,
+        isEditing: !isAssistant && ctx.state.editingMessageId === message.id,
+        failureTitle: failurePresentation?.title || "",
+        failureMessage: failurePresentation?.description || failurePresentation?.title || "",
+        failureTone: failurePresentation?.tone || "",
+        failureKind: failure?.kind || "",
+        failureRetryable: Boolean(failure?.retryable),
+        failureAction: failure ? ctx.messageModel.getMakeFailureAction(failure) : null,
+        failureRepeated: Boolean(failure?.repeated || message.concurrencyRepeated),
+        recoveryAction: ctx.requestState.recoveryMessageId === String(message.id || "") ? ctx.requestState.recoveryAction : "",
+        retryMode: message.retryMode || failure?.retryMode || "",
+        retryTargetContent: message.retryTargetContent || "",
+        isSaved: isAssistant && ctx.isPromptSaved(message.id),
+        isThinking: ctx.isThinking() || ctx.requestState.inFlight,
+        isUnchanged: Boolean(message.isUnchanged),
+        mode: message.mode || "improve",
+        questions: message.questions || [],
+        ragStatus: message.ragStatus || "",
+        role: message.role,
+        summary: message.summary || "",
+        techniques: message.techniques || [],
+      },
+    );
+  }
+
+  return Object.freeze({ render });
+}

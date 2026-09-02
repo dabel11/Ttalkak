@@ -54,8 +54,9 @@ test("login accepts a valid auth contract and rejects a malformed response", asy
   await page.locator('[data-auth-form] input[name="userId"]').fill("fixture");
   await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
   await page.locator('[data-auth-form]').getByRole("button", { name: "로그인", exact: true }).click();
-  await expect(page.locator(".login-button.logged-in")).toContainText("Fixture User");
+  await expect(page.locator(".topbar-account > summary")).toContainText("Fixture User");
 
+  await page.locator(".topbar-account > summary").click();
   await page.locator("[data-logout]").click();
   await page.locator("[data-confirm-action]").click();
   await page.locator('[data-open-auth="login"]').click();
@@ -83,6 +84,165 @@ test("an expired authenticated session returns to the login state", async ({ pag
   await gotoApp(page);
   await page.locator('[data-save-prompt="88"]').click();
   await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
+});
+
+test("topbar menus switch exclusively and close with outside click or Escape", async ({ page }) => {
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const settings = page.locator(".topbar-settings");
+  const account = page.locator(".topbar-account");
+  const backend = page.locator(".backend-status-menu");
+  const primaryActions = page.locator(".topbar-primary-actions");
+  await expect(primaryActions).toBeVisible();
+  const actionCenters = await primaryActions.locator(".topbar-action-menu > :not(.topbar-mobile-nav)").evaluateAll((elements) => elements.map((element) => {
+    const rect = element.getBoundingClientRect();
+    return Math.round(rect.top + rect.height / 2);
+  }));
+  expect(Math.max(...actionCenters) - Math.min(...actionCenters)).toBeLessThanOrEqual(1);
+  await backend.locator("summary").click();
+  await expect(backend).toHaveJSProperty("open", true);
+  await account.locator("summary").click();
+  await expect(account).toHaveJSProperty("open", true);
+  await expect(backend).toHaveJSProperty("open", false);
+  await settings.locator("summary").click();
+  await expect(settings).toHaveJSProperty("open", true);
+  await expect(account).toHaveJSProperty("open", false);
+
+  await page.keyboard.press("Escape");
+  await expect(settings).toHaveJSProperty("open", false);
+  await expect(settings.locator("summary")).toBeFocused();
+
+  await settings.locator("summary").click();
+  await page.getByRole("heading", { name: "인기 프롬프트" }).click();
+  await expect(settings).toHaveJSProperty("open", false);
+});
+
+test("narrow screens collapse account, connection and settings into one keyboard-safe menu", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const toggle = page.locator(".topbar-mobile-toggle");
+  const actionMenu = page.locator("#topbar-action-menu");
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText("메뉴");
+  await expect(actionMenu).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(actionMenu).toBeVisible();
+  await expect(actionMenu.locator(".topbar-account")).toBeVisible();
+  await expect(actionMenu.locator(".backend-status-menu")).toBeVisible();
+  await expect(actionMenu.locator(".topbar-settings")).toBeVisible();
+  const rowBoxes = await actionMenu.evaluate((menu) => [
+    menu.querySelector(":scope > .account-actions > .topbar-account > summary"),
+    menu.querySelector(":scope > .backend-status-menu > summary"),
+    menu.querySelector(":scope > .topbar-settings > summary"),
+  ].map((row) => {
+    const box = row.getBoundingClientRect();
+    const style = getComputedStyle(row);
+    return { width: Math.round(box.width), height: Math.round(box.height), textAlign: style.textAlign };
+  }));
+  expect(rowBoxes).toHaveLength(3);
+  const rowWidths = rowBoxes.map(({ width }) => width);
+  expect(Math.max(...rowWidths) - Math.min(...rowWidths), JSON.stringify(rowBoxes)).toBeLessThanOrEqual(1);
+  expect(rowBoxes.every(({ height, textAlign }) => height >= 42 && textAlign === "left")).toBe(true);
+  const actionMenuWidth = await actionMenu.evaluate((menu) => Math.round(menu.getBoundingClientRect().width));
+  expect(rowBoxes[0].width).toBeGreaterThanOrEqual(actionMenuWidth - 20);
+
+  await page.keyboard.press("Escape");
+  await expect(actionMenu).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("compact header state resets when crossing the desktop viewport boundary", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page, { isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token" }, "token");
+  await mockBackend(page);
+  await gotoApp(page);
+
+  const toggle = page.locator(".topbar-mobile-toggle");
+  const primaryActions = page.locator(".topbar-primary-actions");
+  const account = page.locator(".topbar-account");
+  await toggle.click();
+  await account.locator("summary").click();
+  await expect(primaryActions).toHaveClass(/compact-open/);
+  await expect(account).toHaveJSProperty("open", true);
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(primaryActions).not.toHaveClass(/compact-open/);
+  await expect(account).toHaveJSProperty("open", false);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+  await page.setViewportSize({ width: 620, height: 800 });
+  await expect(page.locator("#topbar-action-menu")).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("compact header stays open across background Home hydration and still honors navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 800 });
+  await seed(page);
+  let releaseHome;
+  const homeReleased = new Promise((resolve) => { releaseHome = resolve; });
+  let markHomeRequested;
+  const homeRequested = new Promise((resolve) => { markHomeRequested = resolve; });
+  await mockBackend(page, async (route, request) => {
+    if (new URL(request.url()).pathname !== "/api/prompts" || request.method() !== "GET") return false;
+    markHomeRequested();
+    await homeReleased;
+    await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) });
+    return true;
+  });
+  await gotoApp(page);
+  await homeRequested;
+
+  const toggle = page.locator(".topbar-mobile-toggle");
+  await toggle.click();
+  await expect(page.locator(".topbar-primary-actions")).toHaveClass(/compact-open/);
+  releaseHome();
+  await expect(page.locator(".topbar-primary-actions")).toHaveClass(/compact-open/);
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+  await page.locator('#topbar-action-menu [data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.locator(".topbar-primary-actions")).not.toHaveClass(/compact-open/);
+});
+
+test("withdrawal explains the policy, discards the account scope, and preserves local conversations", async ({ page }) => {
+  await seed(page, {
+    isLoggedIn: true, currentUser: "Member", currentUserId: "7", authToken: "token", token: "token",
+    accountScopes: { "user:7": { userLibraryPromptIds: ["private"] } },
+    recentThreads: [{ id: "local-thread", title: "로컬 대화", messages: [] }],
+  }, "token");
+  await mockBackend(page, async (route, request) => {
+    if (new URL(request.url()).pathname === "/api/auth/withdraw" && request.method() === "DELETE") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) });
+      return true;
+    }
+    return false;
+  });
+
+  await gotoApp(page);
+  await page.locator(".topbar-account > summary").click();
+  await page.locator('[data-open-auth="withdraw"]').click();
+  await expect(page.locator(".auth-helper")).toContainText("사용한 아이디는 재가입에 사용할 수 없습니다");
+  await expect(page.locator(".auth-helper")).toContainText("기존 닉네임은 다른 계정에서 다시 사용할 수 있습니다");
+  await expect(page.locator(".auth-helper")).toContainText("이 기기에만 저장된 대화와 보관함은 유지됩니다");
+  await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
+  await page.locator('[data-auth-form]').getByRole("button", { name: "회원탈퇴", exact: true }).click();
+  await page.locator("[data-confirm-action]").click();
+  await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
+
+  const persisted = await page.evaluate(({ storageKey, tokenKey }) => ({
+    payload: JSON.parse(localStorage.getItem(storageKey) || "{}"),
+    token: localStorage.getItem(tokenKey),
+  }), { storageKey: STORAGE_KEY, tokenKey: TOKEN_KEY });
+  expect(persisted.token).toBeNull();
+  expect(persisted.payload.state.recentThreads).toHaveLength(1);
+  expect(persisted.payload.state.accountScopes["user:7"]).toBeUndefined();
 });
 
 test("administrator report and tag mutations update through fixture APIs", async ({ page }) => {
@@ -159,4 +319,36 @@ test("administrator user block failure rolls back and a retry succeeds", async (
   await page.locator('[data-admin-user-block-form] textarea[name="reason"]').fill("fixture reason");
   await page.locator('[data-admin-user-block-form] button[type="submit"]').click();
   await expect(page.locator('[data-admin-user-unblock="5"]')).toBeVisible();
+});
+
+test("administrator views anonymize withdrawn users and hide account mutations", async ({ page }) => {
+  await seed(page, { isLoggedIn: true, currentUser: "Admin", currentUserId: "1", currentUserRole: "admin", adminMode: true, route: "admin", adminTab: "users", authToken: "admin-token", token: "admin-token" }, "admin-token");
+  await mockBackend(page, async (route, request) => {
+    const url = new URL(request.url());
+    if (["/api/admin/reports", "/api/admin/tags", "/api/admin/prompts", "/api/admin/revision-requests", "/api/admin/audit-logs"].includes(url.pathname)) {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) }); return true;
+    }
+    if (url.pathname === "/api/admin/users" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [{ id: 9, nickname: "withdrawn_user_9", active: false }] }) }); return true;
+    }
+    if (url.pathname === "/api/admin/users/9/activity" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ member: { id: 9, nickname: "withdrawn_user_9", active: false }, activities: [] }) }); return true;
+    }
+    if (/^\/api\/admin\/users\/9\/(prompts|comments|replies|reports\/submitted|reports\/received)$/.test(url.pathname)) {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ items: [] }) }); return true;
+    }
+    return false;
+  });
+
+  await gotoApp(page);
+  const search = page.locator("[data-admin-user-search-form]");
+  await search.locator('input[name="nickname"]').fill("withdrawn");
+  await search.locator('button[type="submit"]').click();
+  await expect(page.locator('[data-admin-user-select="9"]')).toContainText("탈퇴한 사용자");
+  await expect(page.locator('[data-admin-user-select="9"]')).not.toContainText("withdrawn_user_9");
+  await page.locator('[data-admin-user-select="9"]').click();
+  await expect(page.locator(".admin-user-activity-result")).toContainText("탈퇴한 사용자");
+  await expect(page.locator(".admin-user-activity-result")).toContainText("탈퇴한 사용자는 차단 상태를 변경할 수 없습니다");
+  await expect(page.locator('[data-admin-user-block="9"]')).toHaveCount(0);
+  await expect(page.locator('[data-admin-user-unblock="9"]')).toHaveCount(0);
 });

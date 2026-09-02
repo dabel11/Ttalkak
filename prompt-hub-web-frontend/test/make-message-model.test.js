@@ -17,6 +17,19 @@ function loadCanonicalSharedModel() {
   return context.__model;
 }
 
+test("shared UX policy keeps progress, failure actions, and recent groups identical", () => {
+  assert.equal(model.getMakeProgressStatus(0).label, "요청을 분석하고 있습니다");
+  assert.equal(model.getMakeProgressStatus(9000).label, "참고 자료를 확인하고 있습니다");
+  assert.equal(model.getMakeProgressStatus(30000).label, "평소보다 시간이 걸리고 있습니다");
+  assert.deepEqual(model.getMakeFailureAction({ kind: "auth", requiresLogin: true }), { id: "login", label: "로그인" });
+  assert.deepEqual(model.getMakeFailureAction({ kind: "network", retryable: true }), { id: "retry", label: "연결 확인 후 다시 시도" });
+  assert.deepEqual(model.getMakeFailureAction({ kind: "concurrency", retryMode: "edit" }), { id: "retry-after-refresh", label: "수정한 내용 다시 보내기" });
+  assert.equal(model.getMakeFailurePresentation({ kind: "concurrency_refresh" }).title, "다른 곳에서 대화가 업데이트됐습니다");
+  assert.match(model.getMakeFailurePresentation({ kind: "concurrency_refresh", repeated: true }).description, /새 대화/);
+  assert.equal(model.getMakeFailurePresentation({ kind: "concurrency", retryMode: "edit" }).tone, "recovered");
+  assert.equal(model.getMakeRecentDateGroup("2026-08-15T09:00:00+09:00", new Date("2026-08-15T12:00:00+09:00").getTime()), "오늘");
+});
+
 test("question aliases migrate to ask and disable executable prompt", () => {
   const message = model.migrateMakeMessage({ type: "question", improvedPrompt: "실행 금지", questions: ["목적은 무엇인가요?"] });
   assert.equal(message.mode, "ask");
@@ -53,6 +66,15 @@ test("legacy answer questions migrate into structured ask data", () => {
   assert.equal(message.content, "추가 정보가 필요합니다.");
 });
 
+test("example colons inside a question do not create fake legacy questions", () => {
+  const source = "무엇에 대한 캡션을 작성하고 싶으신가요? (예: 여행, 음식, 제품)";
+  const parsed = model.parseLegacyQuestions(source);
+  assert.equal(parsed.questions.length, 0);
+  assert.equal(parsed.leadText, source);
+  assert.equal(model.normalizeQuestions([{ field: "무엇을 작성할까요? (예", question: "여행, 음식, 제품)" }]).length, 0);
+  assert.equal(model.parseLegacyQuestions("**대상**: 일반인에게 설명하기 위해").questions.length, 0);
+});
+
 test("question duplicates and history are normalized", () => {
   assert.equal(model.normalizeQuestions([{ field: "purpose", question: "목적은?" }, { field: " purpose ", question: " 목적은? " }]).length, 1);
   assert.deepEqual(model.buildImproveHistory([{ role: "user", content: "글 써줘" }, { role: "assistant", mode: "ask", answer: "목적은?" }]), [{ role: "user", content: "글 써줘" }, { role: "assistant", content: "목적은?" }]);
@@ -66,6 +88,13 @@ test("errors are separated into actionable states", () => {
   assert.equal(model.classifyMakeError({ status: 401 }).kind, "auth");
   assert.equal(model.classifyMakeError({ status: 500 }).kind, "server");
   assert.equal(model.classifyMakeError({}).kind, "network");
+});
+
+test("user cancellation is not reported as a retryable timeout", () => {
+  const failure = model.classifyMakeError({ code: "REQUEST_ABORTED" });
+  assert.equal(failure.kind, "cancelled");
+  assert.equal(failure.retryable, false);
+  assert.match(failure.message, /취소/);
 });
 
 test("executable policy rejects ask-only and utility-only responses", () => {
@@ -115,4 +144,44 @@ test("shared response normalization covers fields changes techniques and executa
   assert.deepEqual(result.changes, ["구체화"]);
   assert.equal(result.techniques[0].name, "역할 부여");
   assert.equal(model.isExecutableMessage(result), true);
+});
+
+test("shared no-evidence policy marks unchanged results as non-executable", () => {
+  const result = model.normalizeImproveResponse({
+    mode: "improve",
+    improvedPrompt: "신규   서비스 안내문",
+    ragStatus: "NO_EVIDENCE",
+  }, "  신규 서비스 안내문  ");
+
+  assert.equal(result.ragStatus, "no_evidence");
+  assert.equal(result.isUnchanged, true);
+  assert.equal(result.excludeFromHistory, true);
+  assert.equal(result.improvedPrompt, "");
+  assert.equal(result.text, model.UNCHANGED_NO_EVIDENCE_MESSAGE);
+  assert.equal(model.isExecutableMessage(result), false);
+  assert.deepEqual(model.buildImproveHistory([
+    { role: "user", content: "신규 서비스 안내문" },
+    { role: "assistant", ...result, content: result.text },
+  ]), [{ role: "user", content: "신규 서비스 안내문" }]);
+});
+
+test("shared compatibility fixtures normalize consistently in the web client", () => {
+  for (const name of ["missingOptionalFields", "unknownAdditionalField", "emptyCollections", "noEvidence"]) {
+    const result = model.normalizeImproveResponse(fixtures[name]);
+    assert.equal(result.mode, "improve");
+    assert.ok(result.improvedPrompt);
+  }
+
+  assert.equal(model.normalizeImproveResponse(fixtures.noEvidence).ragStatus, "no_evidence");
+  assert.equal(model.classifyMakeError(fixtures.aiUnavailable).kind, "ai");
+  assert.equal(model.classifyMakeError(fixtures.timeout).kind, "timeout");
+
+  const cancelled = model.migrateMakeMessage(fixtures.cancelled);
+  assert.equal(cancelled.isCancelled, true);
+  assert.equal(cancelled.isError, false);
+  assert.equal(cancelled.excludeFromHistory, true);
+  assert.equal(model.isExecutableMessage(cancelled), false);
+
+  const legacy = model.migrateMakeMessage(fixtures.legacyAssistant);
+  assert.match(legacy.content, /구형 저장 응답/);
 });

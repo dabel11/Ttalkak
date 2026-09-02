@@ -1,1 +1,1 @@
-export { clientErrorReporter, createClientErrorReporter, installGlobalErrorObservers, normalizeClientError } from "./client-error-reporter.mjs";
+export { clientErrorReporter, createClientErrorReporter, createObservabilityEventSink, installGlobalErrorObservers, normalizeClientError, toAggregateObservabilityEvent } from "./client-error-reporter.mjs";

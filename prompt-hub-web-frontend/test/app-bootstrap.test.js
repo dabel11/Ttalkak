@@ -2,22 +2,24 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createAppBootstrap } = require("../src/bootstrap/app-bootstrap.js");
+let createAppBootstrap;
+test.before(async () => {
+  ({ createAppBootstrap } = await import("../src/bootstrap/app-bootstrap.mjs"));
+});
 
 test("bootstrap runs persistence normalization render and home hydration in order", async () => {
   const calls = [];
   const bootstrap = createAppBootstrap({
     state: {},
     loadPersistedState: () => calls.push("load"),
-    normalizeDemoCopy: () => calls.push("demo"),
+    prepareDemoData: () => calls.push("demo"),
     normalizeAssistantPromptOutputs: () => calls.push("messages"),
     normalizeRecentThreads: () => calls.push("threads"),
-    ensureDemoComments: () => calls.push("comments"),
     render: () => calls.push("render"),
     hydrateBackendHomeDataEffect: () => calls.push("home"),
   });
   await bootstrap.bootstrap();
-  assert.deepEqual(calls, ["load", "demo", "messages", "threads", "comments", "render", "home"]);
+  assert.deepEqual(calls, ["load", "demo", "messages", "threads", "render", "home"]);
 });
 
 test("Make hydration is skipped while a request is thinking", async () => {

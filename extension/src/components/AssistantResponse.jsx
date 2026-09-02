@@ -15,19 +15,28 @@ export function AssistantResponse({ message, isAsk }) {
   const questions = mergeImproveQuestions(message.questions, parsed.questions);
   const changes = mergeLists(message.changes, parsed.changes);
   const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
+  const detailCount = [message.fields, changes, techniques].reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
 
   return (
     <>
       {!isAsk && <EvidenceNotice ragStatus={message.ragStatus} />}
       {content && (
-        <p style={{ whiteSpace: "pre-wrap" }}>
+        <p className="assistant-result-prompt" style={{ whiteSpace: "pre-wrap" }}>
           <PromptText text={content} />
         </p>
       )}
-      <FieldList fields={message.fields} />
-      <ChangeList changes={changes} />
-      <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
-      <TechniqueList techniques={techniques} />
+      {isAsk ? (
+        <div className="assistant-details ask-details">
+          <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
+        </div>
+      ) : detailCount > 0 ? (
+        <details className="assistant-details response-details">
+          <summary>세부 정보 <em>{detailCount}</em></summary>
+          <FieldList fields={message.fields} />
+          <ChangeList changes={changes} />
+          <TechniqueList techniques={techniques} />
+        </details>
+      ) : null}
     </>
   );
 }
@@ -133,10 +142,15 @@ function QuestionList({ questions, mode, summary }) {
   return (
     <div className="ask-message">
       <strong>{isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요."}</strong>
+      {isAsk && <p className="ask-guidance">아래 질문을 확인한 뒤 하단 입력란에 답변해 주세요.</p>}
       {summary && !isAsk && <p>{summary}</p>}
       <ol>
         {normalizedQuestions.map((item, index) => (
-          <li className={item.importance === "required" ? "required" : "recommended"} key={`${item.field || "question"}-${index}`}>
+          <li
+            className={item.importance === "required" ? "required" : "recommended"}
+            key={`${item.field || "question"}-${index}`}
+            aria-label={`${item.importance === "required" ? "필수 질문" : "선택 질문"}: ${item.question}`}
+          >
             <span>{item.question}</span>
             <em>{item.importance === "required" ? "필수 정보" : "선택 정보"}</em>
             {item.reason && <small>{item.reason}</small>}

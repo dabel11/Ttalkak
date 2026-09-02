@@ -1,0 +1,383 @@
+{
+  "collection": "prompt_techniques",
+  "note": "다중 턴 대화에서 문맥 유지, 최신 조건 우선, 주제 분리, 답변 반영, 사실 충실도를 평가한다. must_include와 must_not_include는 보조적인 문자열 지표이며 최종 의미 평가는 LLM judge가 담당한다. gold_techniques는 오라클(이상적 근거) 조건에 주입할 정답 기법 카드다.",
+  "items": [
+    {
+      "id": "context_retention_01",
+      "category": "context_retention",
+      "history": [
+        {
+          "role": "user",
+          "content": "대학생 대상 시간 관리 워크숍 홍보 글을 만드는 프롬프트를 작성해줘."
+        },
+        {
+          "role": "assistant",
+          "content": "워크숍의 진행 방식과 원하는 글의 형식을 알려주세요."
+        },
+        {
+          "role": "user",
+          "content": "온라인으로 진행하고 인스타그램 카드뉴스용이야."
+        },
+        {
+          "role": "assistant",
+          "content": "원하는 분위기나 분량이 있나요?"
+        }
+      ],
+      "query": "친근한 분위기로 5장 분량이면 돼.",
+      "expected_mode": "improve",
+      "must_include": [
+        "대학생",
+        "시간 관리",
+        "온라인",
+        "인스타그램",
+        "5장",
+        "친근"
+      ],
+      "must_not_include": [
+        "오프라인",
+        "직장인"
+      ],
+      "gold_techniques": [
+        "Audience Prompting",
+        "Tone Prompting",
+        "Explicit Output Length Control",
+        "Output Format Prompting",
+        "Context Prompting"
+      ],
+      "note": "여러 이전 턴에 분산된 대상, 주제, 진행 방식, 형식이 최종 개선안에 유지되는지 평가한다."
+    },
+    {
+      "id": "context_retention_02",
+      "category": "context_retention",
+      "history": [
+        {
+          "role": "user",
+          "content": "초보자를 위한 홈트레이닝 안내문을 만드는 프롬프트가 필요해."
+        },
+        {
+          "role": "assistant",
+          "content": "운동 시간, 사용 가능한 도구, 출력 형식을 알려주세요."
+        },
+        {
+          "role": "user",
+          "content": "하루 20분이고 별도 운동기구는 없어."
+        },
+        {
+          "role": "assistant",
+          "content": "특별히 강조할 조건이 있나요?"
+        }
+      ],
+      "query": "동작별 주의사항까지 표로 정리하게 해줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "초보자",
+        "홈트레이닝",
+        "20분",
+        "운동기구",
+        "주의사항",
+        "표"
+      ],
+      "must_not_include": [
+        "덤벨",
+        "헬스장"
+      ],
+      "gold_techniques": [
+        "Audience Prompting",
+        "Constraint Prompting",
+        "Markdown Tables",
+        "Specify Output Structure",
+        "Context Prompting"
+      ],
+      "note": "현재 요청에 직접 반복되지 않은 운동 시간과 무도구 조건을 유지하는지 평가한다."
+    },
+    {
+      "id": "latest_override_01",
+      "category": "latest_override",
+      "history": [
+        {
+          "role": "user",
+          "content": "중학생 대상 환경 보호 발표 대본을 만드는 프롬프트를 작성해줘. 발표 시간은 10분이야."
+        },
+        {
+          "role": "assistant",
+          "content": "중학생이 이해할 수 있는 표현으로 10분 발표 대본을 만들도록 개선할 수 있습니다."
+        }
+      ],
+      "query": "계획이 바뀌었어. 대상은 초등학교 5학년이고 발표 시간은 5분으로 수정해줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "초등학교 5학년",
+        "5분",
+        "환경 보호"
+      ],
+      "must_not_include": [
+        "중학생",
+        "10분"
+      ],
+      "gold_techniques": [
+        "Instruction Conflict Resolution",
+        "Instruction Hierarchy Prompting",
+        "Audience Prompting",
+        "Explicit Output Length Control"
+      ],
+      "note": "최신 턴에서 수정된 대상과 시간이 이전 조건을 완전히 덮어쓰는지 평가한다."
+    },
+    {
+      "id": "latest_override_02",
+      "category": "latest_override",
+      "history": [
+        {
+          "role": "user",
+          "content": "신규 앱 소개 이메일을 격식 있는 문체로 작성하게 하는 프롬프트를 만들어줘."
+        },
+        {
+          "role": "assistant",
+          "content": "격식 있는 비즈니스 이메일 형식으로 개선하겠습니다."
+        }
+      ],
+      "query": "격식체 말고 기존 고객에게 보내는 친근한 문체로 바꿔줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "신규 앱",
+        "기존 고객",
+        "친근"
+      ],
+      "must_not_include": [
+        "격식 있는",
+        "격식체"
+      ],
+      "gold_techniques": [
+        "Instruction Conflict Resolution",
+        "Tone Prompting",
+        "Style Imitation Prompting",
+        "Negative Constraint Prompting"
+      ],
+      "note": "사용자가 폐기한 문체가 남지 않고 최신 문체가 적용되는지 평가한다."
+    },
+    {
+      "id": "topic_isolation_01",
+      "category": "topic_isolation",
+      "history": [
+        {
+          "role": "user",
+          "content": "반려식물 관리 방법을 설명하는 블로그 글 프롬프트를 만들어줘."
+        },
+        {
+          "role": "assistant",
+          "content": "식물 종류와 독자 수준을 알려주시면 더 구체화할 수 있습니다."
+        },
+        {
+          "role": "user",
+          "content": "다육식물이고 완전 초보자 대상이야."
+        },
+        {
+          "role": "assistant",
+          "content": "초보자를 위한 다육식물 관리 글로 구성하겠습니다."
+        }
+      ],
+      "query": "새로운 요청이야. 파이썬 입문자가 리스트와 튜플의 차이를 이해하도록 설명하는 프롬프트를 만들어줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "파이썬",
+        "입문자",
+        "리스트",
+        "튜플",
+        "차이"
+      ],
+      "must_not_include": [
+        "다육식물",
+        "반려식물",
+        "물주기"
+      ],
+      "gold_techniques": [
+        "Task Framing Prompting",
+        "Negative Constraint Prompting",
+        "Context Prompting",
+        "Audience Prompting"
+      ],
+      "note": "명시적인 새 요청에서 과거 식물 관리 주제가 섞이지 않는지 평가한다."
+    },
+    {
+      "id": "topic_isolation_02",
+      "category": "topic_isolation",
+      "history": [
+        {
+          "role": "user",
+          "content": "카페 신메뉴 홍보 문구를 만드는 프롬프트를 작성해줘."
+        },
+        {
+          "role": "assistant",
+          "content": "메뉴 종류와 홍보 채널을 알려주세요."
+        },
+        {
+          "role": "user",
+          "content": "과일 음료이고 매장 포스터용이야."
+        },
+        {
+          "role": "assistant",
+          "content": "과일 음료 매장 포스터 문구로 개선하겠습니다."
+        }
+      ],
+      "query": "그건 끝났고, 이번에는 팀 회의록에서 결정사항과 담당자를 표로 추출하는 프롬프트를 만들어줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "회의록",
+        "결정사항",
+        "담당자",
+        "표"
+      ],
+      "must_not_include": [
+        "카페",
+        "과일 음료",
+        "포스터"
+      ],
+      "gold_techniques": [
+        "Task Framing Prompting",
+        "Data Extraction Prompting",
+        "Markdown Tables",
+        "Specify Output Structure"
+      ],
+      "note": "이전 작업이 종료된 뒤 시작된 회의록 요청을 독립적으로 처리하는지 평가한다."
+    },
+    {
+      "id": "answer_integration_01",
+      "category": "answer_integration",
+      "history": [
+        {
+          "role": "user",
+          "content": "교육 프로그램 소개 글을 써주는 프롬프트를 만들어줘."
+        },
+        {
+          "role": "assistant",
+          "content": "프로그램의 대상, 주제, 출력 형식을 알려주세요."
+        }
+      ],
+      "query": "대상은 취업 준비생이고 주제는 면접 준비야. 대학 홈페이지 공지문 형식으로 작성하면 돼.",
+      "expected_mode": "improve",
+      "must_include": [
+        "취업 준비생",
+        "면접 준비",
+        "대학 홈페이지",
+        "공지문"
+      ],
+      "must_not_include": [
+        "재직자",
+        "초등학생"
+      ],
+      "gold_techniques": [
+        "Context Prompting",
+        "Audience Prompting",
+        "Output Format Prompting",
+        "Template Filling Prompting"
+      ],
+      "note": "질문 모드에서 요구한 핵심 정보에 사용자가 답한 뒤 개선 모드로 전환되는지 평가한다."
+    },
+    {
+      "id": "answer_integration_02",
+      "category": "answer_integration",
+      "history": [
+        {
+          "role": "user",
+          "content": "제품 비교 글을 만드는 프롬프트가 필요해."
+        },
+        {
+          "role": "assistant",
+          "content": "비교할 제품 유형, 주요 기준, 원하는 형식을 알려주세요."
+        }
+      ],
+      "query": "무선 키보드 두 제품을 가격, 무게, 연결 방식 기준으로 비교하고 마지막에 표를 넣게 해줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "무선 키보드",
+        "가격",
+        "무게",
+        "연결 방식",
+        "표"
+      ],
+      "must_not_include": [
+        "유선 마우스",
+        "스마트폰"
+      ],
+      "gold_techniques": [
+        "Comparative Analysis Prompting",
+        "Markdown Tables",
+        "Specify Output Structure",
+        "Constraint Prompting"
+      ],
+      "note": "직전 질문에 대한 답변을 빠짐없이 통합하고 불필요한 재질문 없이 개선안을 생성하는지 평가한다."
+    },
+    {
+      "id": "faithfulness_01",
+      "category": "faithfulness",
+      "history": [
+        {
+          "role": "user",
+          "content": "새로 출시할 텀블러의 제품 소개 글을 만드는 프롬프트를 작성해줘."
+        },
+        {
+          "role": "assistant",
+          "content": "확정된 제품 특징과 소개 글의 용도를 알려주세요."
+        }
+      ],
+      "query": "확정된 특징은 재사용 가능하다는 것뿐이야. 온라인 상품 페이지용으로 작성하되, 없는 스펙은 추측하지 않게 해줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "텀블러",
+        "재사용",
+        "온라인 상품 페이지",
+        "추측하지"
+      ],
+      "must_not_include": [
+        "500ml",
+        "24시간",
+        "스테인리스",
+        "29,900원"
+      ],
+      "gold_techniques": [
+        "Abstention Prompting",
+        "Give the Model an Out",
+        "Uncertainty Prompting",
+        "Negative Constraint Prompting",
+        "Grounded Refusal Prompting"
+      ],
+      "note": "제공되지 않은 용량, 보온 시간, 소재, 가격 등의 구체 스펙을 창작하지 않는지 평가한다."
+    },
+    {
+      "id": "faithfulness_02",
+      "category": "faithfulness",
+      "history": [
+        {
+          "role": "user",
+          "content": "지역 문화 행사를 홍보하는 보도자료 작성 프롬프트를 만들어줘."
+        },
+        {
+          "role": "assistant",
+          "content": "확정된 행사 정보와 아직 정해지지 않은 정보를 구분해서 알려주세요."
+        }
+      ],
+      "query": "가족이 함께 참여하는 행사라는 점만 확정됐어. 날짜, 장소, 참가비, 주최 기관은 빈칸으로 남겨줘.",
+      "expected_mode": "improve",
+      "must_include": [
+        "가족",
+        "날짜",
+        "장소",
+        "참가비",
+        "주최 기관",
+        "빈칸"
+      ],
+      "must_not_include": [
+        "2026년 9월 1일",
+        "시민공원",
+        "무료",
+        "문화재단"
+      ],
+      "gold_techniques": [
+        "Variable Slot Prompting",
+        "Template Filling Prompting",
+        "Abstention Prompting",
+        "Missing Information Detection"
+      ],
+      "note": "미확정 정보를 임의의 날짜, 장소, 비용, 기관명으로 채우지 않고 명시적인 빈칸으로 보존하는지 평가한다."
+    }
+  ]
+}

@@ -3,12 +3,26 @@ const { gotoApp } = require("./support/app-ready.js");
 const AxeBuilder = require("@axe-core/playwright").default;
 
 async function expectAccessible(page, label) {
+  await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
+  });
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const violations = result.violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map((node) => node.target.join(" ")) }));
   expect(violations, `${label} accessibility violations`).toEqual([]);
 }
 
+async function reachByTab(page, locator, { direction = "forward", maxTabs = 40 } = {}) {
+  const key = direction === "backward" ? "Shift+Tab" : "Tab";
+  if (await locator.evaluate((element) => element === document.activeElement)) return;
+  for (let index = 0; index < maxTabs; index += 1) {
+    await page.keyboard.press(key);
+    if (await locator.evaluate((element) => element === document.activeElement)) return;
+  }
+  throw new Error(`Element was not reachable with ${key} after ${maxTabs} attempts`);
+}
+
 test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA automated rules", async ({ page }) => {
+  test.setTimeout(60_000);
   await gotoApp(page);
   await expectAccessible(page, "Home");
 
@@ -16,18 +30,42 @@ test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA a
   await expect(page.locator("[data-auth-form]")).toBeVisible();
   await expectAccessible(page, "Login");
 
+  await page.locator("[data-close-auth]").first().click();
+  await expect(page.locator('[data-open-auth="login"]').first()).toBeFocused();
+
+  await page.locator('[data-open-auth="login"]').first().click();
   await page.locator('[data-open-auth="signup"]').click();
   await expect(page.locator('[data-auth-form] input[name="nickname"]')).toBeVisible();
   await expectAccessible(page, "Signup");
   await page.locator("[data-close-auth]").first().click();
 
   await page.locator('[data-route="share"]').first().click();
-  await expect(page.locator(".share-page")).toBeVisible();
+  await expect(page.locator(".share-page")).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page, "Share");
 
   await page.locator('[data-route="make"]').first().click();
-  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.locator(".make-page")).toBeVisible({ timeout: 15_000 });
   await expectAccessible(page, "Make");
+});
+
+test("keyboard operation opens and closes authentication and enters Make with focus preserved", async ({ page }) => {
+  await gotoApp(page);
+  const login = page.locator('[data-open-auth="login"]').first();
+  await reachByTab(page, login);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-auth-form]")).toBeVisible();
+  await expect(page.locator("[data-close-auth]").first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(login).toBeFocused();
+
+  const make = page.locator('[data-route="make"]').first();
+  await reachByTab(page, make, { direction: "backward" });
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".make-page")).toBeVisible({ timeout: 15_000 });
+  const composer = page.locator('[data-composer] textarea[name="prompt"]');
+  await reachByTab(page, composer);
+  await page.keyboard.type("키보드 접근성 확인");
+  await expect(composer).toHaveValue("키보드 접근성 확인");
 });
 
 test("confirmation modal opens through a real folder workflow and restores focus", async ({ page }) => {
@@ -53,7 +91,7 @@ test("confirmation modal opens through a real folder workflow and restores focus
     }));
   });
   await gotoApp(page);
-  await page.locator('[data-route="make"]').click();
+  await page.locator('.sidebar [data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("접근성 폴더");
   await page.locator('[data-folder-create-form] button[type="submit"]').click();
@@ -82,7 +120,7 @@ test("Saved fixture satisfies WCAG A/AA automated rules", async ({ page }) => {
     }));
   });
   await gotoApp(page);
-  await page.locator('[data-route="saved"]').click();
+  await page.locator('.sidebar [data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
   await expectAccessible(page, "Saved");
 });
