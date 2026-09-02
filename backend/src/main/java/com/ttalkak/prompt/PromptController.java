@@ -734,7 +734,7 @@ public class PromptController {
 					"메시지를 수정하려면 threadId가 필요합니다."
 			);
         }
-		
+
 		if (editingMessage && memberId == null) {
 			throw new ApiException(
 					HttpStatus.UNAUTHORIZED,

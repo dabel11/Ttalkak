@@ -94,7 +94,7 @@ public class CommentController {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."));
         requireViewablePrompt(comment.getPromptId(), authorization);
-        
+
         if (!canManage(comment, authorization)) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
