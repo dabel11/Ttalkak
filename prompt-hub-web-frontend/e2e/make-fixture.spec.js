@@ -280,6 +280,24 @@ test("long-running request status advances while the cancel action remains avail
   await page.locator('[data-composer] button[type="submit"]').click();
   await started;
   await expect(page.locator("[data-make-progress-label]")).toHaveText("요청을 분석하고 있습니다");
+  const progressLayout = await page.locator("[data-make-thinking-indicator]").evaluate((indicator) => {
+    const bar = indicator.querySelector(".thinking-message");
+    const dots = indicator.querySelector(".thinking-dots").getBoundingClientRect();
+    const label = indicator.querySelector("[data-make-progress-label]").getBoundingClientRect();
+    const elapsed = indicator.querySelector("[data-make-progress-elapsed]").getBoundingClientRect();
+    const cancel = indicator.querySelector("[data-cancel-make-request]").getBoundingClientRect();
+    const turn = indicator.closest(".conversation-turn");
+    return {
+      direction: getComputedStyle(bar).flexDirection,
+      height: bar.getBoundingClientRect().height,
+      ordered: dots.right <= label.left && label.right <= elapsed.left && elapsed.right <= cancel.left,
+      turnBackground: getComputedStyle(turn).backgroundColor,
+    };
+  });
+  expect(progressLayout.direction).toBe("row");
+  expect(progressLayout.height).toBeLessThanOrEqual(48);
+  expect(progressLayout.ordered).toBe(true);
+  expect(progressLayout.turnBackground).toBe("rgba(0, 0, 0, 0)");
   await page.clock.fastForward(9_000);
   await expect(page.locator("[data-make-progress-label]")).toHaveText("참고 자료를 확인하고 있습니다");
   await expect(page.locator("[data-make-progress-elapsed]")).toHaveText("9초");
@@ -571,9 +589,9 @@ test("Make groups turns and keeps a balanced field grid with an independent togg
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
   await expect(fieldToggle).toHaveAttribute("aria-label", "분야 선택 접기");
-  await expect(fieldToggle.locator(".template-toggle-mark")).toHaveText("‹");
-  await expect(fieldToggle.locator(".template-toggle-label")).toBeHidden();
-  expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBe(36);
+  await expect(fieldToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
+  await expect(fieldToggle.locator(".template-toggle-chevron")).toBeVisible();
+  expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(122);
   const templateColumns = await page.locator(".template-list").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
   expect([2, 3]).toContain(templateColumns);
   const templateBounds = await page.locator(".make-template-bar").evaluate((element) => {

@@ -53,8 +53,10 @@ import { parts } from "./make-message-parts.mjs";
         </button>
         ${sidePanelHtml}
         <button class="make-drawer-backdrop" type="button" data-close-make-drawer aria-label="대화 목록 바깥 영역 닫기" tabindex="-1"></button>
-        ${feedHtml}
-        ${composerHtml}
+        <div class="make-main">
+          ${feedHtml}
+          ${composerHtml}
+        </div>
       </section>
     `;
   }
@@ -109,9 +111,9 @@ import { parts } from "./make-message-parts.mjs";
     return `
       <div class="message-group assistant-group make-thinking-indicator make-message-enter" data-make-thinking-indicator>
         <article class="message assistant thinking-message" aria-live="polite">
+          <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
           <span class="thinking-label" data-make-progress-label>요청을 분석하고 있습니다</span>
           <small class="thinking-elapsed" data-make-progress-elapsed>0초</small>
-          <span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>
           <button class="make-request-cancel" type="button" data-cancel-make-request aria-label="요청 취소">취소</button>
         </article>
       </div>
@@ -131,7 +133,6 @@ import { parts } from "./make-message-parts.mjs";
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
         <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? collapsedAriaLabel : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">
-          ${templateCollapsed ? "" : `<span class="template-toggle-mark" aria-hidden="true">‹</span>`}
           <span class="template-toggle-label">${escapeHtml(templateCollapsed ? collapsedLabel : "분야 선택")}</span>
           <svg class="template-toggle-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4"></path></svg>
         </button>

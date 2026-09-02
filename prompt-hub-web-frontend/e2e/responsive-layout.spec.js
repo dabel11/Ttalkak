@@ -9,6 +9,32 @@ async function expectNoDocumentOverflow(page) {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 }
 
+test("wide Make layout keeps every field on one horizontal row", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await gotoApp(page);
+  await page.locator('[data-route="make"]').first().click();
+
+  const layout = await page.locator(".make-template-bar:not(.collapsed)").evaluate((bar) => {
+    const toggle = bar.querySelector("[data-toggle-templates]");
+    const label = toggle.querySelector(".template-toggle-label");
+    const buttons = [...bar.querySelectorAll(".template-list [data-template]")];
+    const guidance = bar.querySelector(".template-guidance");
+    return {
+      display: getComputedStyle(bar).display,
+      fieldRows: [...new Set(buttons.map((button) => Math.round(button.getBoundingClientRect().top)))],
+      label: getComputedStyle(label, "::before").content,
+      fieldsBottom: Math.max(...buttons.map((button) => button.getBoundingClientRect().bottom)),
+      guidanceTop: guidance.getBoundingClientRect().top,
+    };
+  });
+
+  expect(layout.display).toBe("grid");
+  expect(layout.fieldRows).toHaveLength(1);
+  expect(layout.label).toBe('"부분 선택"');
+  expect(layout.guidanceTop).toBeGreaterThanOrEqual(layout.fieldsBottom);
+  await expectNoDocumentOverflow(page);
+});
+
 test("desktop content remains usable at a 200 percent zoom equivalent viewport", async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 720 });
   await gotoApp(page);
@@ -59,8 +85,7 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await expect(drawer).toBeVisible();
   await expect(drawer).toHaveAttribute("role", "dialog");
   await expect(drawer).toHaveAttribute("aria-modal", "true");
-  await expect(page.locator(".chat-feed")).toHaveAttribute("inert", "");
-  await expect(page.locator(".composer")).toHaveAttribute("inert", "");
+  await expect(page.locator(".make-main")).toHaveAttribute("inert", "");
   await expect(page.getByRole("button", { name: "대화 목록 닫기" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(drawer.locator(":focus")).toHaveCount(1);
@@ -70,14 +95,14 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await expect(drawer).toBeHidden();
   await expect(drawerToggle).toBeFocused();
   await expect(drawer).not.toHaveAttribute("role", "dialog");
-  await expect(page.locator(".chat-feed")).not.toHaveAttribute("inert", "");
+  await expect(page.locator(".make-main")).not.toHaveAttribute("inert", "");
   const templateToggle = page.locator("[data-toggle-templates]");
   await expect(templateToggle).toHaveAttribute("aria-expanded", "false");
   await expect(templateToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
   await templateToggle.click();
   await expect(templateToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
   await expect(templateToggle.locator(".template-toggle-chevron")).toBeVisible();
-  await expect(templateToggle.locator(".template-toggle-mark")).toBeHidden();
+  await expect(templateToggle.locator(".template-toggle-mark")).toHaveCount(0);
   await expect(page.locator(".template-list [data-template]")).toHaveCount(8);
   await page.locator(".template-list [data-template]").first().click();
   await expect(page.locator("[data-toggle-templates]")).toHaveAttribute("aria-expanded", "false");
@@ -116,6 +141,93 @@ test("conversation drawer keeps its accessible name at a very narrow width", asy
   await expectNoDocumentOverflow(page);
 });
 
+test("mobile Home keeps search and sorting controls in compact single rows", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page);
+
+  const layout = await page.evaluate(() => {
+    const search = document.querySelector(".search-field").getBoundingClientRect();
+    const scope = document.querySelector("[data-search-scope]").getBoundingClientRect();
+    const query = document.querySelector("[data-tag-search]").getBoundingClientRect();
+    const help = document.querySelector("[data-search-help]").getBoundingClientRect();
+    const heading = document.querySelector("#popular-heading").getBoundingClientRect();
+    const sort = document.querySelector("[data-popular-sort]").getBoundingClientRect();
+    return {
+      searchHeight: search.height,
+      controlCenters: [scope, query, help].map((rect) => rect.top + rect.height / 2),
+      titleCenters: [heading, sort].map((rect) => rect.top + rect.height / 2),
+    };
+  });
+
+  expect(layout.searchHeight).toBeLessThanOrEqual(53);
+  expect(Math.max(...layout.controlCenters) - Math.min(...layout.controlCenters)).toBeLessThanOrEqual(3);
+  expect(Math.max(...layout.titleCenters) - Math.min(...layout.titleCenters)).toBeLessThanOrEqual(6);
+  await expect(page.locator(".section-icon")).toHaveCount(0);
+  await expectNoDocumentOverflow(page);
+});
+
+test("mobile Share and My Page keep the primary action and empty state nearby", async ({ page }) => {
+  await page.route("http://localhost:8080/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, body: "" });
+    return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ items: [] }) });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem("ttalkak_access_token", "responsive-fixture-token");
+    localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({
+      popularPrompts: [], savedPrompts: [],
+      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "responsive-fixture-token", token: "responsive-fixture-token", myPageTab: "library" },
+    }));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page);
+
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="share"]').click();
+  await expect(page.locator('.share-form textarea[name="prompt"]')).toBeVisible();
+  const shareLayout = await page.evaluate(() => {
+    const textarea = document.querySelector('.share-form textarea[name="prompt"]').getBoundingClientRect();
+    const submit = document.querySelector('.share-form button[type="submit"]').getBoundingClientRect();
+    const title = document.querySelector(".share-title");
+    const icon = title.querySelector(":scope > span").getBoundingClientRect();
+    const heading = title.querySelector("h1").getBoundingClientRect();
+    return {
+      textareaHeight: textarea.height,
+      submitBottom: submit.bottom,
+      titleDisplay: getComputedStyle(title).display,
+      titleCenterDelta: Math.abs((icon.top + icon.height / 2) - (heading.top + heading.height / 2)),
+    };
+  });
+  expect(shareLayout.textareaHeight).toBeLessThanOrEqual(160);
+  expect(shareLayout.submitBottom).toBeLessThanOrEqual(844);
+  expect(shareLayout.titleDisplay).toBe("flex");
+  expect(shareLayout.titleCenterDelta).toBeLessThanOrEqual(2);
+
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="saved"]').click();
+  await expect(page.getByRole("heading", { name: "My page" })).toBeVisible();
+  await expect(page.locator(".saved-empty")).toBeVisible();
+  const savedLayout = await page.evaluate(() => {
+    const filters = document.querySelector(".filter-groups").getBoundingClientRect();
+    const empty = document.querySelector(".saved-empty").getBoundingClientRect();
+    const titles = [...document.querySelectorAll(".saved-page .page-title")];
+    return {
+      gap: empty.top - filters.bottom,
+      height: empty.height,
+      titleDisplays: titles.map((title) => getComputedStyle(title).display),
+      titleCenterDeltas: titles.map((title) => {
+        const icon = title.querySelector(":scope > span").getBoundingClientRect();
+        const heading = title.querySelector("h1").getBoundingClientRect();
+        return Math.abs((icon.top + icon.height / 2) - (heading.top + heading.height / 2));
+      }),
+    };
+  });
+  expect(savedLayout.gap).toBeLessThanOrEqual(24);
+  expect(savedLayout.height).toBeLessThanOrEqual(230);
+  expect(savedLayout.titleDisplays.every((display) => display === "flex")).toBe(true);
+  expect(Math.max(...savedLayout.titleCenterDeltas)).toBeLessThanOrEqual(2);
+  await expectNoDocumentOverflow(page);
+});
+
 test("conversation drawer clears modal state when the viewport becomes desktop-sized", async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 720 });
   await gotoApp(page);
@@ -131,7 +243,7 @@ test("conversation drawer clears modal state when the viewport becomes desktop-s
   await page.setViewportSize({ width: 900, height: 720 });
   await expect(drawer).not.toHaveAttribute("role", "dialog");
   await expect(drawer).not.toHaveAttribute("aria-modal", "true");
-  await expect(page.locator(".chat-feed")).not.toHaveAttribute("inert", "");
+  await expect(page.locator(".make-main")).not.toHaveAttribute("inert", "");
   await expect(page.locator(".make-page")).not.toHaveClass(/drawer-open/);
   await expect(page.locator("[data-toggle-templates]")).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".template-list")).toBeVisible();

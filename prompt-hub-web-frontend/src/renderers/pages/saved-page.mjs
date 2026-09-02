@@ -12,7 +12,7 @@
             <h1 id="my-page-heading">My page</h1>
           </div>
         </div>
-        <nav class="my-page-tabs" aria-label="My page tabs">
+        <nav class="my-page-tabs" aria-label="My page 메뉴">
           ${tabs
             .map(
               (tab) => `
@@ -72,7 +72,7 @@
           filtered.length
             ? `<div class="prompt-grid saved-grid">${pagePrompts.map(PromptCard).join("")}</div>
                ${SavedPagination(totalPages, currentPage)}`
-            : `<div class="empty-state saved-empty">
+            : `<div class="empty-state content-empty-state saved-empty">
                 <span>${state.savedFilter.liked ? icons.heart : icons.bookmark}</span>
                 <p>${SavedEmptyMessage()}</p>
               </div>`
@@ -96,7 +96,7 @@
         ${
           prompts.length
             ? `<div class="prompt-grid saved-grid">${prompts.map(PromptCard).join("")}</div>`
-            : `<div class="empty-state saved-empty"><span>${icons.edit}</span><p>아직 직접 만든 프롬프트가 없습니다.</p></div>`
+            : `<div class="empty-state content-empty-state saved-empty"><span>${icons.edit}</span><p>아직 직접 만든 프롬프트가 없습니다.</p></div>`
         }
       </div>
     `;
@@ -154,7 +154,7 @@
                   )
                   .join("")}
               </div>`
-            : `<div class="empty-state saved-empty"><span>${icons.comment}</span><p>작성한 댓글이 아직 없습니다.</p></div>`
+            : `<div class="empty-state content-empty-state saved-empty"><span>${icons.comment}</span><p>작성한 댓글이 아직 없습니다.</p></div>`
         }
       </div>
     `;
@@ -201,7 +201,7 @@
                   )
                   .join("")}
               </div>`
-            : `<div class="empty-state saved-empty"><span>${icons.flag}</span><p>신고 내역이 아직 없습니다.</p></div>`
+            : `<div class="empty-state content-empty-state saved-empty"><span>${icons.flag}</span><p>신고 내역이 아직 없습니다.</p></div>`
         }
       </div>
     `;

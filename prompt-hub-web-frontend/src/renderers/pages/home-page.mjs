@@ -47,7 +47,6 @@
         </div>
         <div class="section-title">
           <div class="section-title-main">
-            <span class="section-icon">↗</span>
             <h1 id="popular-heading">${isSearching ? "검색 결과" : "인기 프롬프트"}</h1>
           </div>
           <label class="sort-select">
@@ -66,19 +65,19 @@
             ? `<div class="prompt-grid" aria-label="인기 프롬프트 목록">${pagePrompts.map((prompt) => PromptCard(prompt, { showStatus: false })).join("")}</div>
                ${Pagination(totalPages, currentPage)}`
             : state.backendStatus === "checking"
-              ? `<div class="empty-state search-empty search-checking" role="status" aria-live="polite" aria-busy="true">
+              ? `<div class="empty-state content-empty-state search-empty search-checking" role="status" aria-live="polite" aria-busy="true">
                   <span class="empty-state-icon">${icons.search}</span>
                   <h2>프롬프트를 확인하고 있습니다</h2>
                   <p>서버 연결 상태를 확인한 뒤 목록을 자동으로 표시합니다.</p>
                 </div>`
               : state.backendStatus === "fallback" && !canShowDemoFallback
-              ? `<div class="empty-state search-empty search-error" role="alert">
+              ? `<div class="empty-state content-empty-state search-empty search-error" role="alert">
                   <span class="empty-state-icon">${icons.search}</span>
                   <h2>프롬프트를 불러오지 못했습니다</h2>
                   <p>연결을 확인한 뒤 다시 시도해 주세요. 연결이 복구되면 목록을 자동으로 갱신합니다.</p>
                   <button type="button" data-retry-home-load>다시 불러오기</button>
                 </div>`
-              : `<div class="empty-state search-empty">
+              : `<div class="empty-state content-empty-state search-empty">
                   <span class="empty-state-icon">${icons.search}</span>
                   <h2>${isSearching ? "검색 결과가 없습니다" : "아직 표시할 프롬프트가 없습니다"}</h2>
                   <p>${isSearching ? "검색어나 검색 대상을 바꿔보세요." : "새로운 프롬프트가 등록되면 이곳에 표시됩니다."}</p>

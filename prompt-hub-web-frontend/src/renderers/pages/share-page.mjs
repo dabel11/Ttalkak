@@ -33,7 +33,7 @@
             </label>
             <label>
               <span>프롬프트</span>
-              <textarea name="prompt" rows="8" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요...">${escapeHtml(draft.text || "")}</textarea>
+              <textarea name="prompt" rows="6" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요...">${escapeHtml(draft.text || "")}</textarea>
             </label>
             <div class="share-field-block">
               <div class="share-label-with-help">

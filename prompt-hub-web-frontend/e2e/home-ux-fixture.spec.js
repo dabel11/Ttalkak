@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { gotoApp } = require("./support/app-ready.js");
 
-test("narrow Home search help expands toward the available right side", async ({ page }) => {
+test("narrow Home search help expands left without leaving the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await gotoApp(page);
   const help = page.getByRole("button", { name: "검색 도움말" });
@@ -21,7 +21,8 @@ test("narrow Home search help expands toward the available right side", async ({
       whiteSpace: getComputedStyle(tooltipElement).whiteSpace,
     };
   });
-  expect(positions.tooltipLeft).toBeGreaterThanOrEqual(positions.triggerLeft - 1);
+  expect(positions.tooltipLeft).toBeGreaterThanOrEqual(0);
+  expect(positions.tooltipRight).toBeLessThanOrEqual(positions.triggerLeft + 25);
   expect(positions.tooltipRight).toBeLessThanOrEqual(390);
   expect(positions.clippedHorizontally).toBe(false);
   expect(positions.clippedVertically).toBe(false);
