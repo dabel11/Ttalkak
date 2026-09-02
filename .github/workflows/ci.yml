@@ -1,0 +1,288 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop-integrated
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: |
+            extension/package-lock.json
+            prompt-hub-web-frontend/package-lock.json
+
+      - name: Check pull request whitespace errors
+        if: github.event_name == 'pull_request'
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+
+      - name: Check pushed commit whitespace errors
+        if: github.event_name == 'push'
+        run: git diff --check "${{ github.event.before }}" "${{ github.sha }}"
+
+      - name: Install web dependencies
+        working-directory: prompt-hub-web-frontend
+        run: npm ci
+
+      - name: Build automatic base-branch bundle reference
+        env:
+          BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BUNDLE_BASE_SHA" || "$BUNDLE_BASE_SHA" =~ ^0+$ ]]; then
+            BUNDLE_BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git worktree add --detach "$RUNNER_TEMP/ttalkak-bundle-base" "$BUNDLE_BASE_SHA"
+          BASE_WEB_ROOT="$RUNNER_TEMP/ttalkak-bundle-base/prompt-hub-web-frontend"
+          if [[ -f "$BASE_WEB_ROOT/package-lock.json" ]]; then
+            npm ci --prefix "$BASE_WEB_ROOT"
+            npm run build:prod --prefix "$BASE_WEB_ROOT"
+            node scripts/create-web-bundle-reference.cjs --dist "$BASE_WEB_ROOT/dist" --output "$RUNNER_TEMP/web-bundle-reference.json" --commit "$BUNDLE_BASE_SHA"
+          else
+            cp prompt-hub-web-frontend/bundle-reference.json "$RUNNER_TEMP/web-bundle-reference.json"
+          fi
+
+      - name: Clean automatic base-branch bundle worktree
+        if: always()
+        run: git worktree remove --force "$RUNNER_TEMP/ttalkak-bundle-base" || true
+
+      - name: Verify and build web frontend
+        working-directory: prompt-hub-web-frontend
+        env:
+          TTALKAK_BUNDLE_REFERENCE_PATH: ${{ runner.temp }}/web-bundle-reference.json
+        run: npm run verify
+
+      - name: Upload web bundle analysis
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-bundle-analysis-${{ github.run_attempt }}
+          path: |
+            prompt-hub-web-frontend/dist/bundle-analysis.json
+            prompt-hub-web-frontend/dist/bundle-analysis.md
+            prompt-hub-web-frontend/dist/bundle-metafile.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Verify extension
+        working-directory: extension
+        env:
+          VITE_BACKEND_API_URL: ${{ vars.VITE_BACKEND_API_URL || 'https://api.example.invalid' }}
+        run: npm run verify
+
+      - name: Verify development Extension identity
+        working-directory: extension
+        run: npm run build:dev && npm run check:dev-identity
+
+  web-e2e:
+    name: Web fixture browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: prompt-hub-web-frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: prompt-hub-web-frontend/package-lock.json
+
+      - name: Install web test dependencies
+        run: npm ci
+
+      - name: Install browsers for E2E tests
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Run fixture browser E2E tests
+        run: npm run test:e2e
+
+      - name: Run Firefox desktop smoke test
+        run: npm run test:e2e:firefox
+
+      - name: Build production browser bundle
+        run: npm run build:prod
+
+      - name: Run production browser smoke test
+        run: npm run test:e2e:prod
+
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-test-results-${{ github.run_attempt }}
+          path: prompt-hub-web-frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  integration-smoke:
+    name: Web and Spring backend integration smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ttalkak
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      RAG_SERVER_URL: http://127.0.0.1:8000
+      CORS_ALLOWED_ORIGIN_PATTERNS: http://127.0.0.1:*
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: prompt-hub-web-frontend/package-lock.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install integration browser dependencies
+        working-directory: prompt-hub-web-frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Start deterministic RAG stub and Spring backend
+        run: |
+          node scripts/stub-rag-server.cjs > "$RUNNER_TEMP/stub-rag.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/stub-rag.pid"
+          ./backend/gradlew -p backend bootRun --no-daemon > "$RUNNER_TEMP/backend.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/backend.pid"
+
+      - name: Wait for integration services
+        run: |
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null \
+              && curl --fail --silent http://127.0.0.1:8080/api/prompts >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Integration services did not become ready." >&2
+          exit 1
+
+      - name: Run real backend browser smoke
+        working-directory: prompt-hub-web-frontend
+        run: npm run test:e2e:integration
+
+      - name: Upload integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: integration-smoke-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/stub-rag.log
+            prompt-hub-web-frontend/test-results-integration/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop integration services
+        if: always()
+        run: |
+          test ! -f "$RUNNER_TEMP/backend.pid" || kill "$(cat "$RUNNER_TEMP/backend.pid")" || true
+          test ! -f "$RUNNER_TEMP/stub-rag.pid" || kill "$(cat "$RUNNER_TEMP/stub-rag.pid")" || true
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: ttalkak
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run backend tests
+        run: ./gradlew test --no-daemon

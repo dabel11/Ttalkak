@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko" data-make-style-href="./src/styles/make.css?v=20260812-make-ui-hierarchy">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TTALKAK</title>
+    <link rel="stylesheet" href="./src/styles.css?v=20260812-make-sidebar-compact" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // 개발 중 API 실패 시 데모 데이터를 보고 싶을 때만 true로 바꾸세요.
+      // 통합 테스트와 시연 환경에서는 false를 유지해 실제 서버 연동 실패가 드러나게 합니다.
+      window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+    </script>
+    <script type="module" src="./src/app-entry.js"></script>
+  </body>
+</html>

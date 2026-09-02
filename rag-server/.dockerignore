@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+spring-integration-example/
+.env
+# 런타임에 불필요 — 오프라인 적재/평가 자산은 이미지에서 제외(이미지 경량화)
+data/
+eval/
+ingestion/

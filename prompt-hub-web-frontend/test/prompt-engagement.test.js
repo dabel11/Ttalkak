@@ -1,0 +1,101 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+let createPromptEngagementController;
+let bindPromptEngagementEvents;
+let commentModel;
+test.before(async () => {
+  ({ createPromptEngagementController } = await import("../src/interactions/prompt-engagement-controller.mjs"));
+  ({ bindPromptEngagementEvents } = await import("../src/interactions/prompt-engagement-events.mjs"));
+  commentModel = await import("../src/interactions/comment-model.mjs");
+});
+
+function createContext(overrides = {}) {
+  const calls = [];
+  const state = { isLoggedIn: true, likedPromptIds: new Set(), likedCommentIds: new Set(), pendingUnsaveIds: new Set(), route: "home" };
+  return {
+    calls,
+    ctx: {
+      state, savedPrompts: [], guard: () => false, notice: (message) => calls.push(`notice:${message}`), render: () => calls.push("render"),
+      findPrompt: (id) => ({ id }), findComment: () => null, findPromptIdByComment: () => "", getCommentLikes: () => 0, canDeleteComment: () => false,
+      getPromptMutationContext: () => ({}), getCommentMutationContext: () => ({}), runMutation: async (action) => { calls.push(action); return true; },
+      isHiddenDemoPrompt: () => false, isBackendId: () => false, refreshMyPage: () => calls.push("refresh"), callApi: () => Promise.resolve(), hasBackendToken: () => false,
+      hydrateComments() {}, revisionKey: () => "revision", applyExistingSaved() {}, applyBackendUnsaved() {}, togglePendingUnsave() {}, applyUnsaved() {}, applyNewSaved() {},
+      applyPromptLiked: () => calls.push("liked"), applyPromptUnliked: () => calls.push("unliked"), toggleCommentLiked() {}, addPromptCommentState() {}, addReplyState() {},
+      toggleReplyState() {}, toggleEditState() {}, updateCommentState: () => false, ...overrides,
+    },
+  };
+}
+
+test("prompt like controller performs backend mutation and state transition", async () => {
+  const { ctx, calls } = createContext();
+  await createPromptEngagementController(ctx).toggleLikePrompt("42");
+  assert.deepEqual(calls.slice(0, 3), ["likePrompt", "liked", "refresh"]);
+});
+test("app delegates comment and reply rendering", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createCommentView/); ["CommentItem", "ReplyItem"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`))); });
+test("app delegates prompt CRUD and report workflows", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createPromptWorkflows/); ["openReportPrompt", "reportPrompt", "deleteOwnPrompt", "publishSavedPrompt", "updateOwnPrompt", "performDeletePrompt"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
+
+test("engagement controller redirects guests before mutations", async () => {
+  const { ctx, calls } = createContext();
+  ctx.state.isLoggedIn = false;
+  await createPromptEngagementController(ctx).toggleSavedPrompt("42");
+  assert.equal(ctx.state.authView, "login");
+  assert.equal(calls.some((item) => item === "savePrompt"), false);
+});
+
+test("engagement event binder delegates save and like controls", () => {
+  const listeners = {};
+  const button = (name, dataset) => ({ dataset, addEventListener(type, handler) { listeners[`${name}:${type}`] = handler; } });
+  const save = button("save", { savePrompt: "1" });
+  const like = button("like", { likePrompt: "2" });
+  const calls = [];
+  bindPromptEngagementEvents({ querySelectorAll(selector) { return selector === "[data-save-prompt]" ? [save] : selector === "[data-like-prompt]" ? [like] : []; } }, {
+    toggleSavedPrompt: (id) => calls.push(`save:${id}`), toggleLikePrompt: (id) => calls.push(`like:${id}`),
+  });
+  const event = { preventDefault() {}, stopPropagation() {} };
+  listeners["save:click"](event); listeners["like:click"](event);
+  assert.deepEqual(calls, ["save:1", "like:2"]);
+});
+
+test("app delegates engagement workflows without duplicate controller functions", () => {
+  const frontendRoot = path.resolve(__dirname, "..");
+  const appSource = fs.readFileSync(path.join(frontendRoot, "src", "app.js"), "utf8");
+  const entry = fs.readFileSync(path.join(frontendRoot, "src", "app-entry.js"), "utf8");
+  const interactionEntry = fs.readFileSync(path.join(frontendRoot, "src", "interactions", "index.js"), "utf8");
+  assert.match(entry, /interactions\/index\.js/);
+  assert.match(interactionEntry, /prompt-engagement-controller\.mjs/);
+  assert.match(interactionEntry, /export const interactions/);
+  assert.match(appSource, /createPromptEngagementController/);
+  ["toggleSavedPrompt", "toggleLikePrompt", "toggleLikeComment", "addPromptComment", "addCommentReply", "updateOwnComment"].forEach((name) => {
+    assert.doesNotMatch(appSource, new RegExp(`function ${name}\\s*\\(`));
+  });
+});
+
+test("comment model recursively finds, counts and stably sorts threads", () => {
+  const comments = [{ id: "a", likes: 1, replies: [{ id: "b", likes: 3 }] }, { id: "c", likes: 3 }, { id: "d", deleted: true }];
+  assert.equal(commentModel.findCommentInList(comments, "b").id, "b");
+  assert.equal(commentModel.countCommentThread(comments), 3);
+  assert.deepEqual(commentModel.sortComments(comments).map((item) => item.id), ["c", "a", "d"]);
+});
+
+test("comment model synchronizes counts across prompt collections", () => {
+  const shared = { id: "p" };
+  const other = { id: "p" };
+  const count = commentModel.syncPromptCommentCount("p", [{ id: "a", replies: [{ id: "b" }] }], [[shared], [other]]);
+  assert.equal(count, 2);
+  assert.equal(shared.commentCount, 2);
+  assert.equal(other.comments, 2);
+});
+
+test("comment repository binds thread data without app-level adapters", () => {
+  const groups = { p: [{ id: "a", likes: 2, replies: [{ id: "b" }] }] };
+  const prompt = { id: "p" };
+  const repository = commentModel.createCommentRepository({ state: { isLoggedIn: true, currentUser: "me" }, commentsByPrompt: groups, promptLists: [[prompt]] });
+  assert.equal(repository.findById("b").id, "b");
+  assert.equal(repository.getPromptCommentCount(prompt), 2);
+  repository.syncCount("p");
+  assert.equal(prompt.comments, 2);
+  const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
+  ["findCommentById", "getSortedPromptComments", "countCommentThread", "canDeleteComment"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`)));
+});

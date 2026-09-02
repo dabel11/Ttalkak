@@ -1,0 +1,2417 @@
+import { createDeferredMethodFacade, createLazyRuntimeFacade, createMethodFacade } from "./runtime/lazy-runtime-facade.mjs";
+import { createAppStaticData } from "./runtime/app-static-data.mjs";
+import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
+import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
+import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
+/** @param {TtalkakModuleRegistry} modules */
+export function startApp(modules) {
+const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
+if (!modules) throw moduleLoadError("application");
+const toWarningError = (...args) => {
+  const error = args.find((value) => value instanceof Error) || new Error(args.map(String).join(" "));
+  return error;
+};
+const reportWarning = (area, action, error) => modules.observability.reportWarning(area, action, error);
+let authFocusReturnView = "login";
+function restoreAuthFocus() {
+  window.requestAnimationFrame(() => document.querySelector(`[data-open-auth="${authFocusReturnView}"]`)?.focus());
+}
+const runtimeConfig = modules.runtimeConfig;
+const {
+  normalizeSearchText,
+  normalizeTag,
+  isValidPhone,
+  isFutureDate,
+  escapeHtml,
+  escapeAttr,
+  getFinalPromptText,
+  formatNumber,
+  formatShortDate,
+  parseTimestamp,
+} = modules.utils;
+const {
+  collectPopularTags,
+  getValidSearchScope,
+  parsePromptSearchQuery,
+  selectVisiblePrompts,
+  sortPrompts,
+  uniquePrompts,
+} = modules.home.model;
+const getUniquePrompts = uniquePrompts;
+const { createHomeController } = modules.home.controller;
+const { bindHomeEvents } = modules.home.events;
+const { createBackendRecoveryMonitor, getBackendStatusPresentation } = modules.home.backendStatus;
+const { createSavedLibraryController } = modules.saved;
+const { createMyPageDataModel } = modules.saved;
+const { createDiscoveryController } = modules.discovery;
+const { createPromptEngagementController } = modules.interactions.engagement;
+const { bindPromptEngagementEvents } = modules.interactions.events;
+const {
+  canDeleteComment: canDeleteCommentModel,
+  countCommentThread: countCommentThreadModel,
+  createCommentRepository,
+  findCommentById: findCommentByIdModel,
+  findCommentInList,
+  findPromptIdByCommentId: findPromptIdByCommentIdModel,
+  getCommentLikes: getCommentLikesModel,
+  sortComments: sortCommentsModel,
+  syncPromptCommentCount: syncPromptCommentCountModel,
+} = modules.interactions.commentModel;
+const { createCommentView } = modules.interactions.commentView;
+const { createPromptWorkflows } = modules.interactions.workflows;
+const loadShareRuntime = modules.share.loadRuntime;
+const { createModalController } = modules.modal.controller;
+const { bindModalEvents } = modules.modal.events;
+const { createModalView } = modules.modal.view;
+const { createAuthSession, normalizeAuthResult } = modules.auth.session;
+const { getUserIdValidationMessage, isValidEmail } = modules.auth.validation;
+const { createAuthController } = modules.auth.controller;
+const { bindAuthControlEvents: bindAuthControls, bindAuthFormEvents: bindAuthForm } = modules.auth.events;
+const { createAuthView } = modules.auth.view;
+const { createAdminSelectors } = modules.admin.selectors;
+const loadAdminRuntime = modules.admin.loadRuntime;
+const { createAppBootstrap } = modules.bootstrap;
+const {
+  makePreview,
+  sanitizeMakeBackendMessage,
+} = modules.make.previewUtils;
+const {
+  recoverActiveMakeThreadAfterFailure,
+} = modules.effects.makeFailureRecovery;
+const {
+  createMakeServerSyncEffects,
+} = modules.effects.makeServerSync;
+const loadMakeRuntime = modules.make.loadRuntime;
+const apiClient = modules.api;
+let makeControllerModule = null;
+let makeEventsModule = null;
+const makeFocusModule = modules.make.focusUtils;
+const makeMessageModel = modules.make.messageModel;
+const makeRequestIdModule = modules.make.requestId;
+const makePersistenceModule = modules.make.persistence;
+const makeStateModule = modules.make.state;
+const { canSplitMakeThread, findMakeThread } = modules.make.threadPolicy;
+if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
+  [
+    normalizeSearchText,
+    normalizeTag,
+    isValidPhone,
+    isFutureDate,
+    getFinalPromptText,
+    formatNumber,
+    formatShortDate,
+    parseTimestamp,
+    collectPopularTags,
+    getValidSearchScope,
+    parsePromptSearchQuery,
+    selectVisiblePrompts,
+    sortPrompts,
+    uniquePrompts,
+    createHomeController,
+    bindHomeEvents,
+    createSavedLibraryController,
+    createMyPageDataModel,
+    createDiscoveryController,
+    createPromptEngagementController,
+    bindPromptEngagementEvents,
+    canDeleteCommentModel,
+    countCommentThreadModel,
+    createCommentRepository,
+    findCommentByIdModel,
+    findCommentInList,
+    findPromptIdByCommentIdModel,
+    getCommentLikesModel,
+    sortCommentsModel,
+    syncPromptCommentCountModel,
+    createCommentView,
+    createPromptWorkflows,
+    loadShareRuntime,
+    createModalController,
+    bindModalEvents,
+    createModalView,
+    createAuthSession,
+    normalizeAuthResult,
+    getUserIdValidationMessage,
+    isValidEmail,
+    createAuthController,
+    bindAuthControls,
+    bindAuthForm,
+    createAuthView,
+    createAdminSelectors,
+    loadAdminRuntime,
+    createAppBootstrap,
+    makePreview,
+    sanitizeMakeBackendMessage,
+    recoverActiveMakeThreadAfterFailure,
+    createMakeServerSyncEffects,
+    loadMakeRuntime,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("공통 유틸");
+}
+const {
+  AdminUserBlockDialog,
+  ConfirmDialog,
+  Pagination: BasePagination,
+} = modules.components;
+if (
+  globalThis.TTALKAK_PRODUCTION_BUILD !== true &&
+  [AdminUserBlockDialog, ConfirmDialog, BasePagination].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("공통 컴포넌트");
+}
+const { bindAppEvents } = modules.events.app;
+const { bindGlobalMenuAndRouteEvents } = modules.events.navigation;
+const { bindReportAndCommentFormEvents: bindReportCommentForms } = modules.events.reportCommentForms;
+if ([bindAppEvents, bindGlobalMenuAndRouteEvents, bindReportCommentForms].some((fn) => typeof fn !== "function")) {
+  throw moduleLoadError("이벤트 바인더");
+}
+const {
+  bindMakeFeedScrollEvents,
+  queueLatestMakeScroll,
+  renderWithPreservedMakeScroll,
+  scheduleMakeLatestScroll: scheduleMakeLatestScrollEffect,
+  scrollToMakeLatestMessage,
+  scrollToPendingLatestMakeMessage,
+} = modules.events.makeScroll;
+if (
+  [
+    bindMakeFeedScrollEvents,
+    queueLatestMakeScroll,
+    renderWithPreservedMakeScroll,
+    scheduleMakeLatestScrollEffect,
+    scrollToMakeLatestMessage,
+    scrollToPendingLatestMakeMessage,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("Make scroll events");
+}
+const {
+  applyBackendHomePromptsResult,
+  applyBackendHomeTagsResult,
+  applyLikedLibraryResult,
+  applyMakeFoldersResult,
+  applyMakeThreadsResult,
+  applyMyCommentsResult,
+  applyMyLibraryResult,
+  applyMyPromptsResult,
+  applyMyReportsResult,
+  getBackendErrorCode,
+  getBackendErrorCodeMessage,
+  getBackendErrorMessage,
+  hydrateBackendHomeDataEffect,
+  hydrateBackendMakeDataEffect,
+  hydrateBackendMyPageDataEffect,
+  refreshBackendHomePromptsEffect,
+} = modules.effects.backend;
+if (
+  [
+    applyBackendHomePromptsResult,
+    applyBackendHomeTagsResult,
+    applyLikedLibraryResult,
+    applyMakeFoldersResult,
+    applyMakeThreadsResult,
+    applyMyCommentsResult,
+    applyMyLibraryResult,
+    applyMyPromptsResult,
+    applyMyReportsResult,
+    getBackendErrorCode,
+    getBackendErrorCodeMessage,
+    getBackendErrorMessage,
+    hydrateBackendHomeDataEffect,
+    hydrateBackendMakeDataEffect,
+    hydrateBackendMyPageDataEffect,
+    refreshBackendHomePromptsEffect,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("백엔드 후처리 헬퍼");
+}
+const {
+  canTransitionAdminTagStatus,
+  getAdminTagStatusClass,
+  getAdminTagStatusLabel,
+  getAdminTagStatusOrder,
+  hydrateBackendAdminData,
+  normalizeAdminSearchText,
+  refreshAdminAfterMutationEffect,
+  refreshAdminAuditLogsEffect,
+  resolveAdminTagStatus,
+} = modules.effects.admin;
+if (
+  [
+    canTransitionAdminTagStatus,
+    getAdminTagStatusClass,
+    getAdminTagStatusLabel,
+    getAdminTagStatusOrder,
+    hydrateBackendAdminData,
+    normalizeAdminSearchText,
+    refreshAdminAfterMutationEffect,
+    refreshAdminAuditLogsEffect,
+    resolveAdminTagStatus,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("admin effects");
+}
+const { handleBackendAccessErrorEffect } = modules.effects.errorBoundary;
+if (typeof handleBackendAccessErrorEffect !== "function") {
+  throw moduleLoadError("error effects");
+}
+const {
+  STORAGE_KEY,
+  AUTH_TOKEN_KEY,
+  DEMO_AUTH_TOKEN,
+  addCommentReplyState,
+  addPromptCommentState,
+  applyAdminPromptHiddenState,
+  applyAdminReportStatusState,
+  applyAdminRevisionRequestState,
+  applyAdminTagDecisionState,
+  applyAdminUserActivityRefreshState,
+  applyAdminUserBlockActivityState,
+  applyBackendPromptUnsavedState,
+  applyAuthenticatedIdentityState,
+  applyCommentReportedState,
+  applyHomeAuthorSearchState,
+  applyHomePageState,
+  applyHomeSearchQueryState,
+  applyHomeSearchScopeState,
+  applyHomeSortState,
+  applyHomeTagSearchState,
+  toggleReportedVisibilityState,
+  applyDeletedPromptState,
+  applyEditedPromptState,
+  deleteCommentState,
+  applyExistingPromptSavedState,
+  applyNewPromptSavedState,
+  applyPendingUnsavesState,
+  applyPublishedSavedPromptState,
+  applySharedPromptState,
+  applyPromptLikedState,
+  applyPromptReportedState,
+  applyPromptUnlikedState,
+  applyPromptUnsavedState,
+  applyUnsharedPromptState,
+  toggleCommentLikedState,
+  toggleEditCommentState,
+  toggleReplyCommentState,
+  appendMakeAssistantMessageState,
+  appendMakeUserMessageState,
+  applyEditedMakeMessageState,
+  clearAuthenticatedIdentityState,
+  clearAuthenticatedSessionState,
+  createInitialState,
+  closeTopModalState,
+  clearPersistedPayload,
+  clearSessionBackendDataState,
+  clearTransientSessionUiState: clearTransientSessionUiStateValue,
+  createLocalMakeFolderState,
+  deleteMakeFolderState,
+  deleteMakeThreadState,
+  finishAdminRevisionRequestState,
+  finishEditedMakeMessageState,
+  loadPersistedAppState,
+  openRecentMakeThreadState,
+  openSavedMakePromptState,
+  readStorageItem,
+  removeStorageItem,
+  removePromptByIdState,
+  removeLocalMakeFolderState,
+  restoreMakeThreadFolderState,
+  normalizeSavedPageState,
+  persistAppState,
+  resetSessionBackendState: resetSessionBackendStateValue,
+  resetHomeViewState,
+  startNewMakeChatState,
+  togglePendingUnsaveState,
+  toggleSavedMakeMessageState,
+  updateOwnCommentState,
+  updateRecentMakeThreadState,
+  writeStorageItem,
+} = modules.state.api;
+if (
+  !STORAGE_KEY ||
+  !AUTH_TOKEN_KEY ||
+  !DEMO_AUTH_TOKEN ||
+  [
+    createInitialState,
+    addCommentReplyState,
+    addPromptCommentState,
+    applyAdminPromptHiddenState,
+    applyAdminReportStatusState,
+    applyAdminRevisionRequestState,
+    applyAdminTagDecisionState,
+    applyAdminUserActivityRefreshState,
+    applyAdminUserBlockActivityState,
+    applyBackendPromptUnsavedState,
+    applyAuthenticatedIdentityState,
+    applyCommentReportedState,
+    applyHomeAuthorSearchState,
+    applyHomePageState,
+    applyHomeSearchQueryState,
+    applyHomeSearchScopeState,
+    applyHomeSortState,
+    applyHomeTagSearchState,
+    toggleReportedVisibilityState,
+    applyDeletedPromptState,
+    applyEditedPromptState,
+    deleteCommentState,
+    applyExistingPromptSavedState,
+    applyNewPromptSavedState,
+    applyPendingUnsavesState,
+    applyPublishedSavedPromptState,
+    applySharedPromptState,
+    applyPromptLikedState,
+    applyPromptReportedState,
+    applyPromptUnlikedState,
+    applyPromptUnsavedState,
+    applyUnsharedPromptState,
+    toggleCommentLikedState,
+    toggleEditCommentState,
+    toggleReplyCommentState,
+    appendMakeAssistantMessageState,
+    appendMakeUserMessageState,
+    applyEditedMakeMessageState,
+    clearAuthenticatedIdentityState,
+    clearAuthenticatedSessionState,
+    closeTopModalState,
+    clearPersistedPayload,
+    clearSessionBackendDataState,
+    clearTransientSessionUiStateValue,
+    createLocalMakeFolderState,
+    deleteMakeFolderState,
+    deleteMakeThreadState,
+    finishAdminRevisionRequestState,
+    finishEditedMakeMessageState,
+    loadPersistedAppState,
+    openRecentMakeThreadState,
+    openSavedMakePromptState,
+    readStorageItem,
+    removeStorageItem,
+    removePromptByIdState,
+    removeLocalMakeFolderState,
+    restoreMakeThreadFolderState,
+    normalizeSavedPageState,
+    persistAppState,
+    resetSessionBackendStateValue,
+    resetHomeViewState,
+    startNewMakeChatState,
+    togglePendingUnsaveState,
+    toggleSavedMakeMessageState,
+    updateOwnCommentState,
+    updateRecentMakeThreadState,
+    writeStorageItem,
+  ].some((fn) => typeof fn !== "function")
+) {
+  throw moduleLoadError("상태 헬퍼");
+}
+const {
+  AdminAuditPanelView,
+  AdminPromptsPanelView,
+  AdminRevisionRequestModalView,
+  AdminReportsPanelView,
+  AdminPageView,
+  AdminTagsPanelView,
+  AdminUsersPanelView,
+  AuthModalView,
+  ExecuteModalView,
+  HomePageView,
+  MakeComposerView,
+  MakeFeedView,
+  MakeFolderButtonView,
+  MakePageView,
+  MakeSidePanelView,
+  MakeTemplateBarView,
+  MessageBubbleView,
+  MyCommentsPanelView,
+  MyPromptsPanelView,
+  MyReportsPanelView,
+  PromptCardView,
+  PromptDetailModalView,
+  PromptEditModalView,
+  ReportModalView,
+  SavedLibraryPanelView,
+  SavedPageView,
+  SharePageView,
+  HeaderView,
+  SidebarView,
+  renderAppShell,
+} = modules.renderers;
+if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+  throw moduleLoadError("렌더러");
+}
+const { resolvePageView } = modules.routing;
+if (typeof resolvePageView !== "function") {
+  throw moduleLoadError("라우팅 헬퍼");
+}
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
+const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
+let pendingMessageScrollId = null;
+let isMakeThinking = false;
+const makeRequestState = makeStateModule.createMakeRequestState();
+let activeMakeRequestController = null;
+let makeProgressStartedAt = 0;
+let makeProgressTimerId = null;
+let makeInteractionVersion = 0;
+let makeServerSyncEffects = null;
+let appBootstrap = null;
+const getBackendDataEffectContext = (...args) => appBootstrap.getBackendDataEffectContext(...args);
+const getBackendHydrationEffectContext = (...args) => appBootstrap.getBackendHydrationEffectContext(...args);
+const hydrateBackendMakeDataIfNeeded = (...args) => appBootstrap.hydrateBackendMakeDataIfNeeded(...args);
+const refreshMyPageDataAfterMutation = (...args) => appBootstrap.refreshMyPageDataAfterMutation(...args);
+const hydrateBackendMyPageDataIfNeeded = (...args) => appBootstrap.hydrateBackendMyPageDataIfNeeded(...args);
+const getAdminHydrationEffectContext = (...args) => appBootstrap.getAdminHydrationEffectContext(...args);
+const hydrateBackendAdminDataIfNeeded = (...args) => appBootstrap.hydrateBackendAdminDataIfNeeded(...args);
+const hydrateBackendHomeData = (...args) => appBootstrap.hydrateBackendHomeData(...args);
+const refreshBackendHomePrompts = (...args) => appBootstrap.refreshBackendHomePrompts(...args);
+const homeController = createHomeController({
+  state,
+  root: document,
+  document,
+  debounceMs: SEARCH_DEBOUNCE_MS,
+  validScope: getValidSearchScope,
+  applySearchQuery: (value) => applyHomeSearchQueryState(state, value),
+  applyScope: (value) => applyHomeSearchScopeState(state, value),
+  applySort: (value) => applyHomeSortState(state, value),
+  applyPage: (value) => applyHomePageState(state, value),
+  refresh: refreshBackendHomePrompts,
+  render,
+});
+const backendRecoveryMonitor = createBackendRecoveryMonitor({
+  getStatus: () => state.backendStatus,
+  retry: (options) => homeController.retryHomeLoad(options),
+  browserWindow: window,
+  browserDocument: document,
+});
+const savedLibraryController = createSavedLibraryController({
+  state,
+  savedPrompts,
+  popularPrompts,
+  demoPromptIds: DEMO_LIBRARY_PROMPT_IDS,
+  uniquePrompts: getUniquePrompts,
+  canUseDemoFallback,
+  getLikes: getPromptLikes,
+  getCommentCount: (...args) => getPromptCommentCount(...args),
+});
+normalizeSavedPromptOwnership();
+const discoveryController = createDiscoveryController({
+  state,
+  document,
+  searchDebounceMs: SEARCH_DEBOUNCE_MS,
+  cancelHomeSearch: () => homeController.cancelSearchCommit(),
+  applyTag: applyHomeTagSearchState,
+  applyAuthor: applyHomeAuthorSearchState,
+  refresh: refreshBackendHomePrompts,
+  render,
+  restoreHomeFocus: () => homeController.restoreSearchFocus(),
+});
+const commentRepository = createCommentRepository({ state, commentsByPrompt, promptLists: [popularPrompts, savedPrompts] });
+const promptEngagementController = createPromptEngagementController({
+  state,
+  savedPrompts,
+  guard: guardAdminUserAction,
+  notice: showNotice,
+  render,
+  findPrompt: findPromptById,
+  findComment: commentRepository.findById,
+  findPromptIdByComment: commentRepository.findPromptId,
+  getCommentLikes: commentRepository.getLikes,
+  canDeleteComment: commentRepository.canDelete,
+  getPromptMutationContext: getPromptMutationStateContext,
+  getCommentMutationContext: getCommentMutationStateContext,
+  runMutation: runPromptStateMutation,
+  isHiddenDemoPrompt: isHiddenDemoLibraryPrompt,
+  isBackendId: isBackendNumericId,
+  refreshMyPage: refreshMyPageDataAfterMutation,
+  callApi: callBackendApi,
+  hasBackendToken: hasBackendAuthToken,
+  hydrateComments: (...args) => promptEngagementController.hydratePromptComments(...args),
+  revisionKey: (...args) => makeRevisionRequestKey(...args),
+  applyExistingSaved: applyExistingPromptSavedState,
+  applyBackendUnsaved: applyBackendPromptUnsavedState,
+  togglePendingUnsave: togglePendingUnsaveState,
+  applyUnsaved: applyPromptUnsavedState,
+  applyNewSaved: applyNewPromptSavedState,
+  applyPromptLiked: applyPromptLikedState,
+  applyPromptUnliked: applyPromptUnlikedState,
+  toggleCommentLiked: toggleCommentLikedState,
+  addPromptCommentState,
+  addReplyState: addCommentReplyState,
+  toggleReplyState: toggleReplyCommentState,
+  toggleEditState: toggleEditCommentState,
+  updateCommentState: updateOwnCommentState,
+  commentsByPrompt,
+  api: apiClient,
+  getToken: getAuthToken,
+  warn: (...args) => reportWarning("prompt-engagement", "controller-warning", toWarningError(...args)),
+  incrementViews: incrementPromptViews,
+  syncCommentCount: commentRepository.syncCount,
+  findCommentInList: commentRepository.findInList,
+  confirm: (...args) => modalController.openConfirm(...args),
+  deleteCommentState,
+  refreshAdmin: (options) => adminRuntime.call("controller", "refreshAdminAfterMutation", undefined, [options], { defer: true }),
+});
+const hydratePromptComments = promptEngagementController.hydratePromptComments;
+const syncPromptCommentCount = commentRepository.syncCount;
+const findPromptIdByCommentId = commentRepository.findPromptId;
+const getPromptComments = commentRepository.getPromptComments;
+const getSortedPromptComments = commentRepository.getSortedPromptComments;
+const findCommentContextById = (commentId) => {
+  const context = commentRepository.findContext(commentId);
+  return context ? { ...context, prompt: findPromptById(context.promptId) } : null;
+};
+const getSortedCommentReplies = commentRepository.getSortedReplies;
+const findCommentById = commentRepository.findById;
+const countCommentThread = commentRepository.countThread;
+const getCommentLikes = commentRepository.getLikes;
+const getPromptCommentCount = commentRepository.getPromptCommentCount;
+const canDeleteComment = commentRepository.canDelete;
+const commentView = createCommentView({
+  state, canDeleteComment, canShowReportedState, escapeAttr, escapeHtml, formatNumber, formatShortDate,
+  getCommentLikes, getSortedCommentReplies, getIcons: () => icons,
+});
+const { CommentItem, ReplyItem } = commentView;
+const adminSelectors = createAdminSelectors({
+  state, popularPrompts, savedPrompts, commentsByPrompt, getUniquePrompts, normalizeTag, normalizeSearchText,
+  parseTimestamp, getDisplayPromptAuthor, getPromptAuthorId, getPromptComments, getSortedPromptComments,
+  getPromptCommentCount, findPromptById, findCommentInList, normalizeAdminSearchText, getKnownTags,
+  getAdminTagStatusOrder, getPromptCreatedAt, makePreview, findCommentById, findCommentContextById,
+  resolveAdminTagStatus,
+});
+const {
+  getAdminManagedTags, getAdminPromptsByTag, getTagStats, getAdminUserActivity, getReportRecord,
+  mapBackendReportStatus, mapFrontendReportStatus, makeRevisionRequestKey, getPromptRevisionRequest,
+  getRevisionRequestTarget, isRevisionTargetOwnedByCurrentUser, getAdminReportRecords, getReportStatusLabel,
+  isFinalReportStatus, getAuthorRevisionStatusLabel, matchesAdminPromptQuery, matchesAdminPromptFilter,
+  getAdminTagStatus,
+} = adminSelectors;
+const myPageDataModel = createMyPageDataModel({ state, savedPrompts, commentsByPrompt, canUseDemoFallback, isHiddenDemo: isHiddenDemoLibraryPrompt, uniquePrompts: getUniquePrompts, findPrompt: findPromptById, findComment: commentRepository.findById, mapBackendReportStatus, getReportRecord, getRevisionTarget: getRevisionRequestTarget, isOwnedRevisionTarget: isRevisionTargetOwnedByCurrentUser });
+const shareRuntime = createLazyRuntimeFacade({
+  name: "Share", load: loadShareRuntime,
+  initialize(runtime) {
+    const { createShareController, getShareTagSuggestions } = runtime.controller || {};
+    const bindShareEvents = runtime.events?.bindShareEvents || null;
+    if (typeof createShareController !== "function" || typeof getShareTagSuggestions !== "function" || typeof bindShareEvents !== "function") throw moduleLoadError("Share");
+    const controller = createShareController({
+      state, root: document, savedPrompts, popularPrompts, parseTags: parseSharedTags, normalizeTag, getKnownTags,
+      escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
+      hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: promptWorkflows.removePromptById,
+      handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
+      applyShared: applySharedPromptState, notice: showNotice,
+    });
+    return { controller, events: { bindShareEvents }, model: { getShareTagSuggestions } };
+  }, onError(error) {
+    reportWarning("share", "load-runtime", error);
+    showNotice("공유 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+  },
+});
+const ensureShareRuntime = shareRuntime.ensure;
+const modalController = createModalController({ state, root: document, closeState: closeTopModalState, render, renderPreservingScroll: renderPreservingMakeScroll });
+const authSession = createAuthSession({ state, applyIdentity: applyAuthenticatedIdentityState, resetBackend: resetSessionBackendStateValue, clearState: clearAuthenticatedSessionState, normalizeLikes: normalizePersistedLikeCounts, writeToken: (token) => writeStorageItem(AUTH_TOKEN_KEY, token), removeToken: () => removeStorageItem(AUTH_TOKEN_KEY) });
+const getCurrentAccountScopeKey = authSession.key;
+const saveCurrentAccountScope = authSession.saveScope;
+const restoreCurrentAccountScope = authSession.restoreScope;
+const applyAuthenticatedUser = authSession.applyUser;
+const clearAuthenticatedSession = authSession.clear;
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
+const { AuthModal } = authView;
+const adminRuntime = createLazyRuntimeFacade({
+  name: "Admin", load: loadAdminRuntime,
+  initialize(runtime) {
+    const { createAdminController } = runtime.controller || {};
+    const { createAdminView } = runtime.view || {};
+    const bindAdminEvents = runtime.events?.bindAdminEvents || null;
+    if (typeof createAdminController !== "function" || typeof createAdminView !== "function" || typeof bindAdminEvents !== "function") {
+      throw moduleLoadError("Admin");
+    }
+    const controller = createAdminController({
+      state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice,
+      normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, popularPrompts, savedPrompts, getUniquePrompts,
+      applyAdminUserActivityRefreshState, applyAdminUserBlockActivityState, applyAdminTagDecisionState, applyAdminReportStatusState,
+      applyAdminRevisionRequestState, applyAdminPromptHiddenState, canTransitionAdminTagStatus, getAdminTagStatus,
+      resolveAdminTagStatus, normalizeTag, getReportRecord, mapFrontendReportStatus, mapBackendReportStatus, isFinalReportStatus,
+      makeRevisionRequestKey, getRevisionRequestTarget, isRevisionTargetOwnedByCurrentUser,
+      refreshAdminAfterMutationEffect, refreshAdminAuditLogsEffect, hydratePromptComments, isBackendNumericId,
+      refreshBackendHomePrompts, getPromptMutationStateContext, normalizeAdminSearchText, getAdminUserActivity,
+      hydrateBackendAdminDataIfNeeded, finishAdminRevisionRequestState, getBackendErrorCode, getSortedPromptComments,
+      getAdminReportRecords, getAdminTagStatusLabel, getReportStatusLabel, getAuthorRevisionStatusLabel,
+      commentsByPrompt, findCommentInList: commentRepository.findInList, findPromptById, getAdminHydrationEffectContext,
+      reportWarning,
+    });
+    const view = createAdminView({
+      state, popularPrompts, savedPrompts, getUniquePrompts, getAdminReportRecords, getAdminManagedTags,
+      matchesAdminPromptFilter, matchesAdminPromptQuery, canUseDemoFallback, formatNumber, getReportStatusLabel,
+      escapeHtml, escapeAttr, getAdminTagStatusLabel, getTagStats, getAdminPromptsByTag, PromptCard,
+      normalizeSearchText, getDisplayPromptAuthor, getPromptAuthorId, getSortedPromptComments,
+      normalizeAdminSearchText, getAdminUserActivity, getAdminKnownMemberId: controller.getAdminKnownMemberId,
+      getIcons: () => icons, getRevisionRequestTarget, getAuthorRevisionStatusLabel,
+      AdminRevisionRequestModalView, truncateText, AdminUserBlockDialog, formatShortDate,
+      getAdminTagStatusClass, getPromptCommentCount, getPromptCreatedAt, getPromptLikes,
+      getPromptRevisionRequest, getPromptSaveCount, getPromptViewCount, isFinalReportStatus, makePreview,
+      renderAdminInlineAuthorControl, AdminPageView, AdminReportsPanelView, AdminPromptsPanelView,
+      AdminTagsPanelView, AdminUsersPanelView, AdminAuditPanelView,
+    });
+    return { controller, view, events: { bindAdminEvents } };
+  }, onError(error) {
+    reportWarning("admin", "load-runtime", error);
+    showNotice("관리자 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+  },
+});
+const ensureAdminRuntime = adminRuntime.ensure;
+const adminViewFacade = createMethodFacade(adminRuntime, "view", {
+  getAdminTabs: () => [], getAdminCanShowData: false, getAdminReportFilters: () => [], getAdminPromptFilters: () => [], getAdminTagFilters: () => [],
+  getActiveAdminPanel: "", AdminRevisionRequestModal: "", AdminUserBlockModal: "", getAdminPanelRendererContext: () => ({}),
+  AdminPage: '<section class="route-module-status" role="status">관리자 기능을 불러오는 중입니다.</section>', AdminTagPromptUsagePanel: "",
+  getAdminAuditActionLabel: "", getAdminAuditTargetLabel: "", getAdminModeNotice: "", AdminUserActivitySummary: "",
+});
+const { getAdminTabs, getAdminCanShowData, getAdminReportFilters, getAdminPromptFilters, getAdminTagFilters, getActiveAdminPanel, AdminRevisionRequestModal, AdminUserBlockModal, getAdminPanelRendererContext, AdminPage, AdminTagPromptUsagePanel, getAdminAuditActionLabel, getAdminAuditTargetLabel, getAdminModeNotice, AdminUserActivitySummary } = adminViewFacade;
+const modalView = createModalView({
+  state, findPromptById, PromptDetailModalView, PromptEditModalView, ReportModalView, ConfirmDialog,
+  ExecuteModalView, getDisplayPromptAuthor, getPromptCommentCount, getPromptLikes, getPromptSaveCount,
+  getPromptViewCount, getSortedPromptComments, CommentItem, escapeAttr, escapeHtml, formatNumber,
+  formatShortDate, getPromptRevisionRequest, getIcons: () => icons, makePreview,
+  renderAdminInlineAuthorControl, renderAuthorSearchControl, isPromptSaved, isPromptPendingUnsave,
+  canShowReportedState, getPromptCreatedAt, findCommentById, getFinalPromptText,
+});
+const { PromptDetailModal, PromptEditModal, ReportModal, ConfirmModal, ExecuteModal } = modalView;
+const adminControllerFacade = createMethodFacade(adminRuntime, "controller", {
+  searchAdminUserCandidates: undefined, openAdminUserActivity: undefined, getAdminKnownMemberId: null, updateAdminUserBlockState: undefined,
+  updateAdminTagDecision: undefined, updateReportRecordStatus: undefined, requestPromptRevision: undefined, updateAuthorRevisionRequest: undefined,
+  updateAdminCommentHiddenState: undefined, toggleAdminPromptHidden: undefined, refreshAdminAuditLogs: undefined, refreshAdminAfterMutation: undefined,
+}, { defer: true });
+const { searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs } = adminControllerFacade;
+const openAuth = authController.open;
+const closeTopModal = modalController.closeTop;
+const focusActiveModal = modalController.focusActive;
+const openConfirmAction = modalController.openConfirm;
+let makeWorkflows = null;
+let makePageAdapter = null;
+let makeRuntimePromise = null;
+async function ensureMakeRuntime() {
+  if (makeWorkflows && makeControllerModule && makeEventsModule) {
+    document.documentElement.dataset.routeRuntime = "make:ready";
+    return true;
+  }
+  document.documentElement.dataset.routeRuntime = "make:loading";
+  makeRuntimePromise ||= loadMakeRuntime().then((runtime) => {
+    const { createMakeWorkflows } = runtime.workflows || {};
+    makeControllerModule = runtime.controller || null;
+    makeEventsModule = runtime.events || null;
+    if (typeof createMakeWorkflows !== "function" || typeof runtime.pageAdapter?.createMakePageAdapter !== "function" || !makeControllerModule || !makeEventsModule) throw moduleLoadError("Make");
+    makeWorkflows = createMakeWorkflows({
+      state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
+      showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
+      copyTextToClipboard, makePromptTitle, normalizeSearchText, persistState, getMakeApi, getMakeApiToken,
+      handleMakeBackendSyncError, getMakeThreadById, getMakeBackendThreadId, isBackendNumericId,
+      normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
+      getMakeServerSyncContext, getMakeControllerContext, submitMakePrompt, openAuth, deleteMakeThreadState,
+      createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState,
+      MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext,
+      toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
+      openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
+      handleBackendAccessError, reportWarning,
+      canSplitMakeThread, findMakeThread,
+    });
+    makePageAdapter = runtime.pageAdapter.createMakePageAdapter({
+      state, icons, escapeAttr, escapeHtml, formatNumber, formatShortDate, promptTemplates,
+      isThinking: () => isMakeThinking, requestState: makeRequestState, messageModel: makeMessageModel,
+      MakePageView, MakeFeedView, MakeTemplateBarView, MakeComposerView, MakeSidePanelView,
+      MakeFolderButtonView, MessageBubbleView, findMakeThread, canSplitMakeThread, isBackendNumericId,
+      countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
+      makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
+    });
+    document.documentElement.dataset.routeRuntime = "make:ready";
+    return true;
+  }).catch((error) => {
+    makeRuntimePromise = null;
+    document.documentElement.dataset.routeRuntime = "make:error";
+    reportWarning("make", "load-runtime", error);
+    showNotice("Make 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+    return false;
+  });
+  return makeRuntimePromise;
+}
+const makeWorkflowFacade = createDeferredMethodFacade(
+  { get: () => makeWorkflows, ensure: ensureMakeRuntime },
+  {
+    performDeleteThread: undefined, guardMakeFolderMutation: true,
+    normalizeMakeFolderName: (...args) => String(args[0] || "").trim(), hasMakeFolderName: false,
+    createLocalMakeFolder: null, removeLocalMakeFolder: undefined, restoreThreadFolder: undefined,
+    createMakeFolder: undefined, createMakeFolderAndMoveThread: undefined, getCustomMakeFolderCount: 0,
+    renameMakeFolder: undefined, performDeleteFolder: undefined, moveThreadToFolder: undefined,
+    moveThreadToFolderOnBackend: false, performTemplateApply: false, splitThreadFromMessage: false,
+    countThreadsInFolder: 0, getThreadFolderId: "uncategorized", getActiveFolderName: "최근 대화",
+    copyMakeMessage: undefined, saveMakeMessage: undefined, resendEditedMessage: undefined,
+    openShareFromMakeMessage: undefined, openExecuteModal: undefined, openPromptExecuteModal: undefined,
+    confirmPlaceholderExecution: false, hasPromptPlaceholders: false, executeMakeMessage: undefined,
+    getExecuteTarget: null, updateRecentThread: undefined, openRecentThread: undefined,
+    openSavedMakePrompt: undefined, startNewChat: undefined, getRecentThreadKeyFromThread: "",
+    getRecentThreadKey: "", applyTemplate: undefined, toggleTemplateBar: undefined,
+    createBackendMakeFolder: "", updateBackendMakeFolderName: false, deleteBackendMakeFolder: false,
+    createBackendMakeThread: "", ensureBackendMakeThreadId: "", getBackendFolderId: null,
+    syncMakeThreadWithBackend: undefined, refreshMakeThreadsFromBackend: false,
+    refreshActiveMakeThreadFromBackend: false,
+  },
+);
+const {
+  performDeleteThread, guardMakeFolderMutation, normalizeMakeFolderName, hasMakeFolderName,
+  createLocalMakeFolder, removeLocalMakeFolder, restoreThreadFolder, createMakeFolder,
+  createMakeFolderAndMoveThread, getCustomMakeFolderCount, renameMakeFolder, performDeleteFolder,
+  moveThreadToFolder, moveThreadToFolderOnBackend, performTemplateApply, splitThreadFromMessage,
+  countThreadsInFolder, getThreadFolderId, getActiveFolderName, copyMakeMessage, saveMakeMessage,
+  resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal,
+  confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget,
+  updateRecentThread, openRecentThread, openSavedMakePrompt, startNewChat, getRecentThreadKeyFromThread,
+  getRecentThreadKey, applyTemplate, toggleTemplateBar, createBackendMakeFolder,
+  updateBackendMakeFolderName, deleteBackendMakeFolder, createBackendMakeThread,
+  ensureBackendMakeThreadId, getBackendFolderId, syncMakeThreadWithBackend,
+  refreshMakeThreadsFromBackend, refreshActiveMakeThreadFromBackend,
+} = makeWorkflowFacade;
+const promptWorkflows = createPromptWorkflows({
+  api: apiClient, state, savedPrompts, popularPrompts, commentsByPrompt, render, showNotice, openAuth, openConfirmAction,
+  findPromptById, findCommentById, findCommentContextById, guardAdminUserAction, isBackendNumericId,
+  hasBackendAuthToken, callBackendApi, handleBackendAccessError, getAuthToken, getPromptMutationStateContext,
+  getCommentMutationStateContext, applyPromptReportedState, applyCommentReportedState, applyEditedPromptState,
+  makeRevisionRequestKey, removePromptByIdState,
+  refreshBackendHomePrompts, refreshMyPageDataAfterMutation, hydrateBackendAdminDataIfNeeded, normalizeTag,
+  parseSharedTags, stampCurrentUserOwnedPrompts, isDemoAuthToken, applyPublishedSavedPromptState,
+  applyDeletedPromptState, applyUnsharedPromptState, SAVED_PAGE_SIZE,
+});
+const {
+  openReportPrompt, openReportComment, submitReport, reportPrompt, reportComment, deleteOwnPrompt,
+  unshareOwnPrompt, publishSavedPrompt, updateOwnPrompt, performDeletePrompt, performUnsharePrompt,
+  removePromptById,
+} = promptWorkflows;
+const confirmActionHandlers = {
+  "apply-template-new-chat": (action) => performTemplateApply(action.targetId, true),
+  "apply-template-current-chat": (action) => performTemplateApply(action.targetId, false),
+  "delete-prompt": (action) => performDeletePrompt(action.targetId),
+  "unshare-prompt": (action) => performUnsharePrompt(action.targetId),
+  "delete-comment": (action) => promptEngagementController.performDeleteComment(action.targetId),
+  "delete-thread": (action) => performDeleteThread(action.targetId),
+  "delete-folder": (action) => performDeleteFolder(action.targetId),
+  "admin-tag-status": (action) => updateAdminTagDecision(action.targetId, action.value),
+  logout: () => {
+    stampCurrentUserOwnedPrompts();
+    const wasAdminMode = state.adminMode;
+    clearAuthenticatedSession();
+    showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
+  },
+  withdraw: authController.withdraw,
+  "reset-demo": () => { resetDemoState(); return false; },
+};
+const icons = {
+  home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
+  make: `<svg viewBox="0 0 24 24"><circle class="nav-fill" cx="12" cy="12" r="8"/><path class="plus-mark" d="M12 8v8M8 12h8"/></svg>`,
+  save: `<svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-3.8L6 21z"/></svg>`,
+  share: `<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>`,
+  search: `<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>`,
+  bulb: `<svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M8.5 14.5A6 6 0 1 1 15.5 14c-.9.7-1.5 1.8-1.5 3h-4c0-1.1-.6-2-1.5-2.5z"/></svg>`,
+  eye: `<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+  eyeOff: `<svg viewBox="0 0 24 24"><path d="m3 3 18 18"/><path d="M10.6 10.6A2 2 0 0 0 12 14a2 2 0 0 0 1.4-.6"/><path d="M9.9 4.3A9.8 9.8 0 0 1 12 4c6.5 0 10 8 10 8a17.8 17.8 0 0 1-2.3 3.4"/><path d="M6.1 6.1C3.5 7.9 2 12 2 12s3.5 8 10 8a9.6 9.6 0 0 0 5.9-2.1"/></svg>`,
+  check: `<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`,
+  comment: `<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6.5A8 8 0 1 1 21 12z"/></svg>`,
+  heart: `<svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`,
+  flag: `<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-1 5 1 5H5"/></svg>`,
+  user: `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.8-4 4.5-6 8-6s6.2 2 8 6"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  siren: `<svg viewBox="0 0 24 24"><path d="M7 15v-4a5 5 0 0 1 10 0v4"/><path d="M5 15h14l1 5H4z"/><path d="M12 2v3M4.5 5.5l2 2M19.5 5.5l-2 2"/></svg>`,
+  hash: `<svg viewBox="0 0 24 24"><path d="M8 3 6 21M18 3l-2 18M4 9h17M3 15h17"/></svg>`,
+  bookmark: `<svg viewBox="0 0 24 24"><path d="M6 4h12v17l-6-3.8L6 21z"/></svg>`,
+  send: `<svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`,
+  play: `<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>`,
+  edit: `<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  more: `<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>`,
+  close: `<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+};
+function render() {
+  return renderAppShell({
+    state,
+    escapeHtml,
+    persistState,
+    Sidebar,
+    Header,
+    Page,
+    PromptDetailModal,
+    PromptEditModal,
+    AdminRevisionRequestModal,
+    AuthModal,
+    ReportModal,
+    ExecuteModal,
+    ConfirmModal,
+    AdminUserBlockModal,
+    bindEvents,
+    focusActiveModal,
+    restorePendingMessageScroll,
+    scrollToPendingLatestMessage,
+    scrollToHighlightedComment,
+    hydrateBackendMakeDataIfNeeded,
+    hydrateBackendMyPageDataIfNeeded,
+    hydrateBackendAdminDataIfNeeded,
+  });
+}
+document.addEventListener("ttalkak:route-renderers-changed", (event) => {
+  if (!(event instanceof CustomEvent)) return;
+  if (event.detail?.route === "overlays" || event.detail?.route === state.route || (event.detail?.route === "admin" && state.adminMode)) render();
+});
+function renderPreservingMakeScroll() {
+  renderWithPreservedMakeScroll(render);
+}
+function scrollToHighlightedComment() {
+  if (!state.detailHighlightCommentId) return;
+  window.setTimeout(() => {
+    document.querySelector(`[data-comment-id="${CSS.escape(state.detailHighlightCommentId)}"]`)?.scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
+  }, 40);
+}
+function restorePendingMessageScroll() {
+  if (!pendingMessageScrollId) return;
+  const messageId = pendingMessageScrollId;
+  pendingMessageScrollId = null;
+  requestAnimationFrame(() => {
+    const safeId = String(messageId).replace(/"/g, '\\"');
+    const target = document.querySelector(`[data-message-id="${safeId}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    const textarea = target.querySelector("textarea");
+    if (textarea) {
+      textarea.focus({ preventScroll: true });
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    }
+  });
+}
+function scrollToPendingLatestMessage() {
+  scrollToPendingLatestMakeMessage(state, {
+    behavior: "smooth",
+    hasPendingMessageScroll: () => Boolean(pendingMessageScrollId),
+  });
+}
+function scheduleMakeLatestScroll({ behavior = "smooth" } = {}) {
+  scheduleMakeLatestScrollEffect(state, { behavior });
+}
+function waitForThinkingIndicatorPaint() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 120);
+  });
+}
+function navigateTo(route) {
+  if (route === "admin" && !adminRuntime.isReady()) {
+    ensureAdminRuntime().then((loaded) => { if (loaded && state.route === "admin") render(); });
+  }
+  if (route === "share" && !shareRuntime.isReady()) {
+    ensureShareRuntime().then((loaded) => { if (loaded && state.route === "share") render(); });
+  }
+  if (route === "make" && !makeWorkflows) {
+    ensureMakeRuntime().then((loaded) => { if (loaded && state.route === "make") render(); });
+  }
+  if (state.route === "make" && route !== "make" && activeMakeRequestController) {
+    activeMakeRequestController.abort();
+  }
+  if (state.adminMode && route !== "admin") {
+    state.route = "admin";
+    render();
+    return;
+  }
+  if (isAdminAccount() && !["home", "admin"].includes(route)) {
+    state.route = "home";
+    showNotice("관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.");
+    render();
+    return;
+  }
+  if (isAdminAccount() && route === "admin") {
+    state.adminMode = true;
+  }
+  if (route === "home" && state.route === "home") {
+    resetHomeView();
+    render();
+    return;
+  }
+  if (state.route === route) return;
+  const content = document.querySelector(".content-area");
+  if (!content) {
+    commitPendingUnsaves(route);
+    state.route = route;
+    if (route === "home") resetHomeView();
+    render();
+    return;
+  }
+  content.classList.add("is-leaving");
+  window.setTimeout(() => {
+    commitPendingUnsaves(route);
+    state.route = route;
+    if (route === "home") resetHomeView();
+    render();
+  }, 90);
+}
+function resetHomeView() {
+  homeController.cancelSearchCommit();
+  resetHomeViewState(state);
+  if (state.backendStatus === "connected") refreshBackendHomePrompts();
+}
+function Sidebar() {
+  return SidebarView(
+    { icons, state, escapeAttr, escapeHtml, formatNumber },
+    {
+      adminTabs: state.adminMode ? getAdminTabs() : [],
+      isAdminAccount: isAdminAccount(),
+    },
+  );
+}
+function Header() {
+  const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
+  const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
+  const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
+  const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
+  const adminAccessButton = isAdminAccount()
+    ? `<button class="topbar-tool ${state.adminMode ? "active" : ""}" type="button" data-toggle-admin-view title="${state.adminMode ? "일반 화면을 읽기 전용으로 확인합니다." : "관리자 운영 화면으로 이동합니다."}" aria-label="관리자 화면 전환">${state.adminMode ? "사용자 화면 보기" : "관리자 화면"}</button>`
+    : "";
+  return HeaderView(
+    { icons, state, escapeHtml, BackendStatusBadge },
+    {
+      adminAccessButton,
+      authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
+      freeMakeLimit: FREE_MAKE_LIMIT,
+      hasReportedPrompts,
+      remaining,
+      showPromptTools,
+    },
+  );
+}
+function Page() {
+  return resolvePageView(getPageRouteContext());
+}
+function getPageRouteContext() {
+  return {
+    state,
+    isAdminAccount,
+    AdminPage,
+    HomePage,
+    MakePage,
+    SavedPage,
+    SharePage,
+  };
+}
+function HomePage() {
+  const isBackendHome = state.backendStatus === "connected";
+  const canShowDemoHome = !isBackendHome && canUseDemoFallback();
+  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : canShowDemoHome ? getVisiblePopularPrompts() : []);
+  const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(uniquePrompts(popularPrompts))));
+  const displayTags = isBackendHome ? state.backendPopularTags : canShowDemoHome ? popularTags.length ? popularTags : fallbackPopularTags : [];
+  const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);
+  const totalPages = isBackendHome ? getBackendHomeTotalPages() : getPopularTotalPages(prompts.length);
+  const currentPage = Math.min(state.popularPage, totalPages);
+  const pagePrompts = isBackendHome ? prompts : prompts.slice((currentPage - 1) * HOME_PAGE_SIZE, currentPage * HOME_PAGE_SIZE);
+  const isSearching = state.searchQuery.trim().length > 0;
+  const searchPlaceholder = getSearchPlaceholder(state.searchScope);
+  return HomePageView(
+    {
+      icons,
+      state,
+      escapeAttr,
+      escapeHtml,
+      normalizeTag,
+      SearchScopeOption,
+      SortOption,
+      PromptCard,
+      Pagination,
+    },
+    {
+      displayTags,
+      searchCriteria,
+      totalPages,
+      currentPage,
+      pagePrompts,
+      isSearching,
+      searchPlaceholder,
+      canShowDemoFallback: canShowDemoHome,
+    },
+  );
+}
+function SortOption(value, label) {
+  return `<option value="${escapeAttr(value)}" ${state.popularSort === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+}
+function SearchScopeOption(value, label) {
+  return `<option value="${escapeAttr(value)}" ${state.searchScope === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+}
+function Pagination(totalPages, currentPage) {
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-page", ariaLabel: "인기 프롬프트 페이지" });
+}
+function normalizeSavedPromptOwnership() {
+  savedLibraryController.normalizeOwnership();
+}
+function isPromptSaved(promptId) {
+  return savedLibraryController.isSaved(promptId);
+}
+function isHiddenDemoLibraryPrompt(prompt) {
+  return savedLibraryController.isHiddenDemoLibraryPrompt(prompt);
+}
+function getPromptSaveCount(prompt) {
+  return savedLibraryController.getSaveCount(prompt);
+}
+function normalizeSavedCounts() {
+  savedLibraryController.normalizeSavedCounts();
+}
+function isPromptPendingUnsave(promptId) {
+  return state.pendingUnsaveIds.has(promptId);
+}
+function commitPendingUnsaves(nextRoute = state.route, nextMyPageTab = state.myPageTab) {
+  const promptIds = applyPendingUnsavesState(getPromptMutationStateContext(), {
+    nextRoute,
+    nextMyPageTab,
+    pageSize: SAVED_PAGE_SIZE,
+  });
+  promptIds.forEach((promptId) => {
+    if (isBackendNumericId(promptId)) callBackendApi("unsavePrompt", promptId).then(refreshMyPageDataAfterMutation);
+  });
+}
+function PromptCard(prompt, options = {}) {
+  return PromptCardView(
+    {
+      state,
+      icons,
+      escapeAttr,
+      escapeHtml,
+      formatNumber,
+      canShowReportedState,
+      isPromptSaved,
+      isPromptPendingUnsave,
+      getPromptRevisionRequest,
+      getPromptCommentCount,
+      getPromptCardPreviewTags,
+      getPromptLikes,
+      getPromptSaveCount,
+      getPromptViewCount,
+      renderAuthorSearchControl,
+    },
+    prompt,
+    options,
+  );
+}
+function BackendStatusBadge() {
+  const status = state.backendStatus || "checking";
+  const isUnavailable = status === "fallback";
+  const { label, message, title } = getBackendStatusPresentation(status, { apiEnvironment: runtimeConfig.apiEnvironment, demoFallbackEnabled: canUseDemoFallback() });
+  return `<details class="backend-status-menu">
+    <summary class="backend-status backend-status-${status}" aria-label="${escapeHtml(title)}">
+      <span class="backend-status-dot" aria-hidden="true"></span><span>${label}</span>
+    </summary>
+    <div class="backend-status-popover" role="status">
+      <strong>${title}</strong>
+      <span>${escapeHtml(message)}</span>
+      ${isUnavailable ? `<button type="button" data-retry-home-load>다시 연결</button>` : ""}
+    </div>
+  </details>`;
+}
+function canUseDemoFallback() {
+  return DEMO_FALLBACK_ENABLED;
+}
+function getApiFailureMessage(areaLabel = "API") {
+  void areaLabel;
+  return "서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.";
+}
+function getPromptCardPreviewTags(tags) {
+  const normalizedTags = Array.isArray(tags) ? tags : [];
+  return {
+    visibleTags: normalizedTags.slice(0, 3),
+    hiddenCount: Math.max(0, normalizedTags.length - 3),
+  };
+}
+function MakePage() {
+  if (!makeWorkflows || !makePageAdapter) {
+    if (document.documentElement.dataset.routeRuntime === "make:error") {
+      return '<section class="route-module-status route-module-error" role="alert" data-route-module-error="make">화면을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</section>';
+    }
+    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="make">Make 기능을 불러오는 중입니다.</section>';
+  }
+  return makePageAdapter.render();
+}
+function SavedPage() {
+  const tabs = [
+    { id: "library", label: "내 보관함", count: getSavedPagePrompts().length },
+    { id: "mine", label: "내가 만든 프롬프트", count: getMyPrompts().length },
+    { id: "comments", label: "댓글 관리", count: getMyComments().length },
+    { id: "reports", label: "신고 내역", count: getMyReports().length },
+  ];
+  return SavedPageView(
+    { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel },
+    { tabs },
+  );
+}
+function DemoLibraryPrompt() {
+  if (state.myBackendStatus === "connected") {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 응답 우선 + 최근 활동 즉시 반영</strong>
+          <p>백엔드 API 응답을 우선 반영하고, 방금 저장·댓글·신고한 활동은 즉시 함께 표시합니다.</p>
+        </div>
+      </div>
+    `;
+  }
+  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) {
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>현재: 서버 응답 실패</strong>
+          <p>서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.</p>
+        </div>
+      </div>
+    `;
+  }
+  const isSeeded = state.libraryDemoSeeded;
+  return `
+    <div class="demo-library-prompt">
+      <div>
+        <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
+        <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
+      </div>
+      ${canUseDemoFallback() ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
+    </div>
+  `;
+}
+function MyPagePanel() {
+  if (state.myPageTab === "mine") return MyPromptsPanel();
+  if (state.myPageTab === "comments") return MyCommentsPanel();
+  if (state.myPageTab === "reports") return MyReportsPanel();
+  return SavedLibraryPanel();
+}
+function SavedLibraryPanel() {
+  const savedPagePrompts = getSavedPagePrompts();
+  const filtered = applyReportedVisibility(savedPagePrompts)
+    .filter((prompt) => matchesSavedFilter(prompt))
+    .sort(getSavedSorter());
+  const pendingUnsaveCount = filtered.filter((prompt) => state.pendingUnsaveIds.has(prompt.id)).length;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SAVED_PAGE_SIZE));
+  if (state.savedPage > totalPages) state.savedPage = totalPages;
+  const currentPage = state.savedPage;
+  const pagePrompts = filtered.slice((currentPage - 1) * SAVED_PAGE_SIZE, currentPage * SAVED_PAGE_SIZE);
+  return SavedLibraryPanelView(
+    { icons, state, PromptCard, SavedPagination, SavedEmptyMessage },
+    { filtered, pagePrompts, pendingUnsaveCount, totalPages, currentPage },
+  );
+}
+function SavedPagination(totalPages, currentPage) {
+  return BasePagination({ totalPages, currentPage, pageAttribute: "data-saved-page", ariaLabel: "저장한 프롬프트 페이지" });
+}
+function MyPromptsPanel() {
+  const prompts = getMyPrompts().sort(getSavedSorter());
+  return MyPromptsPanelView(
+    { icons, PromptCard },
+    { prompts },
+  );
+}
+function MyCommentsPanel() {
+  const comments = getMyComments().map((item) => ({
+    item,
+    isEditing: state.editingCommentId === item.comment.id,
+    revisionRequest: state.adminPromptRevisionRequests[makeRevisionRequestKey("comment", item.comment.id)],
+  }));
+  return MyCommentsPanelView(
+    { icons, escapeAttr, escapeHtml },
+    { comments },
+  );
+}
+function MyReportsPanel() {
+  const reports = getMyReports();
+  return MyReportsPanelView(
+    { icons, escapeAttr, escapeHtml, formatShortDate, getReportStatusLabel },
+    { reports },
+  );
+}
+function SavedEmptyMessage() {
+  if (state.savedFilter.liked) return "좋아요를 누른 프롬프트가 아직 없습니다.";
+  if (!state.savedFilter.community && !state.savedFilter.mine) return "표시할 필터를 선택해주세요.";
+  return "저장한 프롬프트나 내 프롬프트가 아직 없습니다.";
+}
+function SharePage() {
+  if (!shareRuntime.isReady()) {
+    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="share">Share 기능을 불러오는 중입니다.</section>';
+  }
+  const draft = state.shareDraft || {};
+  const draftTags = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
+  const selectedTags = parseSharedTags(draftTags);
+  const suggestedTags = getShareTagSuggestions(state.shareTagQuery, selectedTags);
+  return SharePageView(
+    { icons, escapeAttr, escapeHtml },
+    {
+      isLoggedIn: state.isLoggedIn,
+      draft,
+      draftTags,
+      selectedTags,
+      suggestedTags,
+      shareTagQuery: state.shareTagQuery,
+      shareError: state.shareError,
+    },
+  );
+}
+function getPromptMutationStateContext() {
+  return {
+    findPromptById,
+    getSavedFilteredCount,
+    makePreview,
+    popularPrompts,
+    savedPrompts,
+    state,
+    updatePromptField,
+    upsertPrompt,
+  };
+}
+function getCommentMutationStateContext() {
+  return {
+    commentsByPrompt,
+    getSavedFilteredCount,
+    popularPrompts,
+    savedPrompts,
+    state,
+    upsertPrompt,
+  };
+}
+function getSavedFilteredCount() {
+  return getSavedPagePrompts().filter((prompt) => matchesSavedFilter(prompt)).length;
+}
+function getMakeMutationStateContext() {
+  return {
+    makePreview,
+    makePromptTitle,
+    savedPrompts,
+    state,
+    updateRecentThread,
+  };
+}
+function bindEvents() {
+  bindAppEvents({
+    bindCoreEvents,
+    bindMakeEvents,
+  });
+}
+function bindCoreEvents() {
+  bindGlobalNavigationEvents();
+  bindDiscoveryEvents();
+  bindAuthControls(document, authController);
+  bindModalControlEvents();
+  bindPromptInteractionEvents();
+  bindPromptEditAndExecuteEvents();
+  bindPromptEngagementEvents(document, promptEngagementController);
+  bindHomeSearchEvents();
+  adminRuntime.get("events")?.bindAdminEvents?.(document, { state, actions: {
+    togglePromptHidden: toggleAdminPromptHidden,
+    cancelPromptSearch: () => discoveryController.cancelAdminPromptSearch(),
+    schedulePromptSearch: scheduleAdminPromptSearchCommit,
+    cancelTagSearch: () => discoveryController.cancelAdminTagSearch(),
+    scheduleTagSearch: scheduleAdminTagSearchCommit,
+    updateReportStatus: updateReportRecordStatus,
+    updateTag: updateAdminTagDecision,
+    updateUserBlock: updateAdminUserBlockState,
+    confirm: openConfirmAction,
+    render,
+  } });
+  bindFormSubmitEvents();
+}
+function bindGlobalNavigationEvents() {
+  bindGlobalMenuAndRouteEvents(document, { state, render, closeTopModal, navigateTo });
+  bindGlobalActionEvents();
+}
+function bindGlobalActionEvents() {
+  document.querySelectorAll("[data-toggle-reported]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleReportedVisibilityState(state);
+      render();
+    });
+  });
+  document.querySelectorAll("[data-reset-demo]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openConfirmAction({
+        type: "reset-demo",
+        title: "데모 초기화",
+        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 화면 상태를 모두 초기화할까요? 서버 DB 데이터는 삭제하지 않습니다.",
+        confirmLabel: "초기화",
+        danger: true,
+      });
+    });
+  });
+  document.querySelectorAll("[data-toggle-library-demo]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleLibraryDemoData();
+    });
+  });
+  document.querySelectorAll("[data-open-auth]").forEach((button) => {
+    button.addEventListener("click", () => {
+      authFocusReturnView = button.dataset.openAuth || "login";
+      state.authView = button.dataset.openAuth;
+      state.authUserIdWarning = "";
+      state.authError = "";
+      render();
+    });
+  });
+  document.querySelectorAll("[data-logout]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openConfirmAction({
+        type: "logout",
+        title: "로그아웃",
+        message: "정말 로그아웃할까요?",
+        confirmLabel: "로그아웃",
+      });
+    });
+  });
+  document.querySelectorAll("[data-toggle-admin-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!state.isLoggedIn) {
+        state.adminMode = false;
+        state.route = state.route === "admin" ? "home" : state.route;
+        showNotice("Admin 페이지는 로그인 후 사용할 수 있습니다.");
+        return;
+      }
+      state.adminMode = !state.adminMode;
+      state.route = state.adminMode ? "admin" : "home";
+      if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); });
+      showNotice(state.adminMode ? "관리자 운영 화면으로 이동했습니다." : "사용자 화면을 읽기 전용으로 확인합니다.");
+    });
+  });
+}
+function bindDiscoveryEvents() {
+  document.querySelectorAll("[data-popular-tag]").forEach((button) => {
+    button.addEventListener("click", () => {
+      searchByTag(button.dataset.popularTag);
+    });
+  });
+  document.querySelectorAll("[data-search-tag]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      searchByTag(button.dataset.searchTag);
+    });
+  });
+  document.querySelectorAll("[data-search-author]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const author = button.dataset.searchAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      searchByAuthor(author);
+    });
+  });
+  document.querySelectorAll("[data-admin-user-author]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const author = button.dataset.adminUserAuthor;
+      if (isWithdrawnAuthorName(author)) return;
+      openAdminUserActivity(author, { memberId: button.dataset.adminUserId });
+    });
+  });
+  const adminUserSearchForm = document.querySelector("[data-admin-user-search-form]");
+  const adminUserSearchInput = adminUserSearchForm?.querySelector('input[name="nickname"]');
+  adminUserSearchInput?.addEventListener("input", () => {
+    const nickname = String(adminUserSearchInput.value || "").trim();
+    const previousSelectedNickname = state.adminUserActivityNickname;
+    const hadSearchResults = state.adminUserSearchResults.length > 0;
+    state.adminUserQuery = adminUserSearchInput.value;
+    state.adminUserSearchMessage = "";
+    if (hadSearchResults) {
+      state.adminUserSearchResults = [];
+    }
+    if (!nickname || normalizeAdminSearchText(nickname) !== normalizeAdminSearchText(previousSelectedNickname)) {
+      state.adminUserActivityNickname = "";
+    }
+    if (!nickname || previousSelectedNickname || hadSearchResults) {
+      state.adminUserSearchResults = [];
+      render();
+    }
+  });
+  adminUserSearchForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nickname = String(new FormData(/** @type {HTMLFormElement} */ (adminUserSearchForm)).get("nickname") || "").trim();
+    if (!nickname) {
+      state.adminUserQuery = "";
+      state.adminUserActivityNickname = "";
+      state.adminUserSearchResults = [];
+      state.adminUserSearchMessage = "";
+      render();
+      return;
+    }
+    searchAdminUserCandidates(nickname);
+  });
+  document.querySelectorAll("[data-admin-user-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const memberId = String(button.dataset.adminUserSelect || "").trim();
+      const nickname = String(button.dataset.adminUserName || "").trim();
+      if (!memberId) {
+        showNotice("회원 ID를 확인할 수 없어 활동 조회를 열 수 없습니다.");
+        return;
+      }
+      openAdminUserActivity(nickname, { memberId, keepQuery: true });
+    });
+  });
+}
+function bindModalControlEvents() {
+  bindModalEvents(document, { ...modalController, render, restoreAuthFocus, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
+}
+function bindPromptInteractionEvents() {
+  document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const promptId = button.dataset.promptCardMenu;
+      state.openPromptCardMenuId = state.openPromptCardMenuId === promptId ? null : promptId;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-open-prompt]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea, [role='button'], [role='menuitem']")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openPromptDetail(card.dataset.openPrompt, { highlightCommentId: card.dataset.highlightComment || null });
+    });
+  });
+  document.querySelectorAll("[data-open-prompt-trigger]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPromptDetail(button.dataset.openPromptTrigger);
+    });
+  });
+  document.querySelectorAll("[data-filter]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      state.savedFilter[checkbox.dataset.filter] = checkbox.checked;
+      state.savedPage = 1;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-my-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextTab = button.dataset.myTab || "library";
+      commitPendingUnsaves(state.route, nextTab);
+      state.myPageTab = nextTab;
+      state.savedPage = 1;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-saved-sort]").forEach((select) => {
+    select.addEventListener("change", () => {
+      state.savedSort = select.value;
+      state.savedPage = 1;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-report-prompt]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openReportPrompt(button.dataset.reportPrompt);
+    });
+  });
+  document.querySelectorAll("[data-share-saved]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openPromptCardMenuId = null;
+      publishSavedPrompt(button.dataset.shareSaved);
+    });
+  });
+  document.querySelectorAll("[data-unshare-prompt]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openPromptCardMenuId = null;
+      unshareOwnPrompt(button.dataset.unsharePrompt);
+    });
+  });
+  document.querySelectorAll("[data-open-make-history]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openSavedMakePrompt(button.dataset.openMakeHistory);
+    });
+  });
+  document.querySelectorAll("[data-delete-prompt]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openPromptCardMenuId = null;
+      deleteOwnPrompt(button.dataset.deletePrompt);
+    });
+  });
+}
+function bindHomeSearchEvents() {
+  bindHomeEvents(document, homeController, state);
+  backendRecoveryMonitor.sync();
+  document.querySelectorAll("[data-saved-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.savedPage = Number(button.dataset.savedPage);
+      render();
+    });
+  });
+}
+function bindPromptEditAndExecuteEvents() {
+  document.querySelectorAll("[data-edit-prompt]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.openPromptCardMenuId = null;
+      const prompt = findPromptById(button.dataset.editPrompt);
+      if (!state.isLoggedIn || prompt?.source !== "mine") {
+        state.authView = "login";
+        showNotice("로그인 후 본인 프롬프트만 수정할 수 있습니다.");
+        return;
+      }
+      state.editingPromptId = prompt.id;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-execute-prompt]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openPromptExecuteModal(button.dataset.executePrompt);
+    });
+  });
+  document.querySelectorAll("[data-execute-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      executeMakeMessage(state.executeMessageId, button.dataset.executeTarget);
+    });
+  });
+}
+function bindFormSubmitEvents() {
+  bindAuthForm(document, authController, state);
+  bindShareFormEvents();
+  bindReportAndCommentFormEvents();
+}
+function bindShareFormEvents() {
+  if (shareRuntime.isReady()) shareRuntime.get("events")?.bindShareEvents?.(document, shareRuntime.get("controller"), state);
+}
+function bindReportAndCommentFormEvents() {
+  bindReportCommentForms(document, {
+    submitReport, updateAdminUserBlock: updateAdminUserBlockState, updatePrompt: updateOwnPrompt, requestRevision: requestPromptRevision,
+    toggleComments: (id) => { state.expandedComments[id] = !state.expandedComments[id]; render(); },
+    showComments: (id) => { state.expandedComments[id] = true; render(); },
+    updateCommentHidden: updateAdminCommentHiddenState, openReportComment,
+  });
+}
+function getShareTagSuggestions(query, selectedTags = []) {
+  return shareRuntime.get("model")?.getShareTagSuggestions?.(query, selectedTags, getKnownTags(), normalizeTag) || [];
+}
+function updatePromptField(promptId, field, delta) {
+  const updated = new Set();
+  for (const list of [popularPrompts, savedPrompts]) {
+    const prompt = list.find((item) => item.id === promptId);
+    if (!prompt || updated.has(prompt)) continue;
+    const currentValue = field === "likes" ? getPromptLikes(prompt) : prompt[field] || 0;
+    prompt[field] = Math.max(0, currentValue + delta);
+    updated.add(prompt);
+  }
+}
+function openPromptDetail(promptId, options = {}) {
+  incrementPromptViews(promptId);
+  state.detailPromptId = promptId;
+  state.detailHighlightCommentId = options.highlightCommentId || null;
+  if (state.detailHighlightCommentId || shouldOpenCommentsByDefault()) {
+    state.expandedComments[promptId] = true;
+  }
+  hydratePromptComments(promptId);
+  render();
+}
+function shouldOpenCommentsByDefault() {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(min-width: 900px)").matches;
+}
+function incrementPromptViews(promptId) {
+  const updated = new Set();
+  for (const list of [popularPrompts, savedPrompts]) {
+    const prompt = list.find((item) => item.id === promptId);
+    if (!prompt || updated.has(prompt)) continue;
+    prompt.views = getPromptViewCount(prompt) + 1;
+    updated.add(prompt);
+  }
+}
+function getDisplayPromptAuthor(prompt) {
+  return resolveDisplayPromptAuthor(prompt, { currentUser: state.currentUser, isLoggedIn: state.isLoggedIn, normalizeAuthor: normalizeDisplayAuthorName, withdrawnLabel: WITHDRAWN_AUTHOR_LABEL });
+}
+function isWithdrawnAuthorName(value) {
+  return matchesWithdrawnAuthorName(value, WITHDRAWN_AUTHOR_LABEL);
+}
+function renderAuthorSearchControl(prompt, options = {}) {
+  const author = getDisplayPromptAuthor(prompt);
+  return renderAuthorControl(prompt, { admin: options.admin, author, authorId: getPromptAuthorId(prompt), withdrawn: isWithdrawnAuthorName(author), escapeHtml, escapeAttr });
+}
+function renderAdminInlineAuthorControl(prompt) {
+  const author = getDisplayPromptAuthor(prompt);
+  return renderAuthorControl(prompt, { inlineAdmin: true, author, authorId: getPromptAuthorId(prompt), withdrawn: isWithdrawnAuthorName(author), escapeHtml, escapeAttr });
+}
+function getPromptAuthorId(prompt) {
+  return resolvePromptAuthorId(prompt);
+}
+function stampCurrentUserOwnedPrompts() {
+  const currentUser = String(state.currentUser || "").trim();
+  if (!currentUser) return;
+  [popularPrompts, savedPrompts].forEach((list) => {
+    list.forEach((prompt) => {
+      if (prompt.source !== "mine") return;
+      if (!prompt.owner || prompt.owner === "나") prompt.owner = currentUser;
+      if (!prompt.author || prompt.author === "나") prompt.author = currentUser;
+    });
+  });
+}
+function resetDemoState() {
+  try {
+    clearPersistedPayload();
+    removeStorageItem(AUTH_TOKEN_KEY);
+  } catch (_error) {
+    // Ignore storage failures in preview mode.
+  }
+  window.location.reload();
+}
+function toggleLibraryDemoData() {
+  if (!canUseDemoFallback()) {
+    showNotice("현재 환경에서는 데모 데이터 fallback이 비활성화되어 있습니다.");
+    return;
+  }
+  state.libraryDemoSeeded = !state.libraryDemoSeeded;
+  state.savedPage = 1;
+  showNotice(state.libraryDemoSeeded ? "보관함 데모 데이터를 표시합니다." : "보관함 데모 데이터를 숨겼습니다.");
+  render();
+}
+function bindMakeEvents() {
+  if (!makeEventsModule) return;
+  bindDelegatedMakeEvents();
+  bindMakeFeedScrollEvents({ state });
+  document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
+  document.querySelectorAll("[data-ask-answer-input]").forEach((input) => makeEventsModule.updateAskProgress(input));
+}
+function bindDelegatedMakeEvents() {
+  const handlers = makeEventsModule.createDelegatedMakeHandlers({
+    root: document,
+    state,
+    maxFolders: MAX_CUSTOM_MAKE_FOLDERS,
+    actions: {
+      guard: guardAdminUserAction, notice: showNotice, render,
+      setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value),
+      setEditing: (id) => makeStateModule.setMakeEditingMessage(state, id),
+      setPendingScroll: (id) => { pendingMessageScrollId = id; },
+      autosize: autosizeTextarea, submitComposer: submitMakeComposer, submitPrompt: submitMakePrompt,
+      cancelRequest: cancelActiveMakeRequest,
+      refineUnchanged: (messageId) => {
+        const message = state.messages.find((item) => item.id === messageId && item.role === "assistant" && item.isUnchanged);
+        const prompt = String(message?.sourcePrompt || "").trim();
+        if (!prompt) return;
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        render();
+        window.setTimeout(() => {
+          const input = document.querySelector('[data-composer] textarea[name="prompt"]');
+          input?.focus();
+          input?.setSelectionRange?.(prompt.length, prompt.length);
+        }, 0);
+      },
+      submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
+      retryConcurrent: (message) => {
+        const prompt = String(message?.content || "").trim();
+        const retryMessageId = message?.retryMode === "edit" ? String(message.retryMessageId || "") : "";
+        if (!prompt || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "retry")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
+        window.setTimeout(() => {
+          state.messages = state.messages.filter((item) => item.id !== message.id);
+          makeStateModule.completeMakeRequest(makeRequestState);
+          makeStateModule.setMakeComposerDraft(state, prompt);
+          updateRecentThread(state.activeThreadId);
+          renderPreservingMakeScroll();
+          if (retryMessageId) {
+            resendEditedMessage(retryMessageId, prompt);
+            return;
+          }
+          const composer = document.querySelector("[data-composer]");
+          if (composer) submitMakePrompt(composer);
+        }, 80);
+      },
+      newChatFromConflict: (message) => {
+        const prompt = String(message?.content || "").trim();
+        startNewChat();
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        render();
+        focusRestoredMakeComposer(prompt);
+      },
+      refreshConcurrent: async (message) => {
+        const prompt = String(message?.content || "").trim();
+        const threadId = String(state.activeThreadId || "");
+        if (!prompt || !threadId || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "refresh")) return;
+        pendingMessageScrollId = message.id;
+        renderPreservingMakeScroll();
+        const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true });
+        modules.observability.report(new Error("Make concurrency refresh"), {
+          area: "make", action: "refresh-thread", kind: "concurrency",
+          code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+          status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+          level: refreshed ? "info" : "error", retryable: false, client: "web",
+          requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
+        });
+        makeStateModule.setMakeComposerDraft(state, prompt);
+        if (!refreshed) {
+          makeStateModule.finishMakeRecovery(makeRequestState);
+          showNotice("연결을 확인한 뒤 최신 대화를 다시 불러와 주세요.");
+          pendingMessageScrollId = message.id;
+          renderPreservingMakeScroll();
+          return;
+        }
+        const retryMessageId = String(message.retryMessageId || "");
+        const retryTargetContent = retryMessageId
+          ? String(state.messages.find((item) => String(item.id || "") === retryMessageId)?.content || "")
+          : "";
+        const messageId = String(message.id || `concurrency-${Date.now()}`);
+        appendMakeUserMessageState(state, threadId, {
+          id: messageId, role: "user", content: prompt, requestId: message.requestId,
+          excludeFromHistory: true, retryMode: message.retryMode || "follow-up",
+          retryMessageId, retryTargetContent, concurrencyRepeated: Boolean(message?.concurrencyRepeated),
+        });
+        makeStateModule.finishMakeRecovery(makeRequestState);
+        makeStateModule.failMakeRequest(makeRequestState, messageId, {
+          ...makeMessageModel.classifyMakeError({ status: 409, code: "THREAD_CONCURRENTLY_UPDATED" }),
+          retryMode: message.retryMode || "follow-up", repeated: Boolean(message?.concurrencyRepeated),
+        });
+        updateRecentThread(threadId);
+        pendingMessageScrollId = messageId;
+        renderPreservingMakeScroll();
+        focusRestoredMakeComposer(prompt);
+      },
+      reportRetry: (message) => modules.observability.report(new Error("User retried Make request"), {
+        area: "make", action: "improve", kind: "interaction", code: "USER_RETRY",
+        status: 0, durationMs: 0, outcome: "retry", level: "info", retryable: false,
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
+      }),
+      openLogin: () => { state.authView = "login"; render(); },
+      createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
+      renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
+      applyTemplate,
+      toggleTemplates: toggleTemplateBar, copy: copyMakeMessage, save: saveMakeMessage,
+      share: openShareFromMakeMessage, execute: openExecuteModal,
+      newChat: startNewChat,
+      splitThread: splitThreadFromMessage,
+      openThread: openRecentThread, confirm: openConfirmAction, folderCount: getCustomMakeFolderCount,
+      focusLater: (selector) => window.setTimeout(() => document.querySelector(selector)?.focus(), 0),
+    },
+  });
+  makeEventsModule.bindDelegatedMakeEvents(document.getElementById("app"), handlers);
+}
+function submitMakeComposer(composer) {
+  if (typeof composer.requestSubmit === "function") {
+    composer.requestSubmit();
+    return;
+  }
+  composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+async function submitMakePrompt(composer) {
+  return makeControllerModule.submitPrompt(getMakeControllerContext(), composer);
+}
+function updateMakeProgressStatus() {
+  if (!makeProgressStartedAt) return;
+  const progress = makeMessageModel.getMakeProgressStatus(Date.now() - makeProgressStartedAt);
+  const label = document.querySelector("[data-make-progress-label]");
+  const elapsed = document.querySelector("[data-make-progress-elapsed]");
+  if (label) label.textContent = progress.label;
+  if (elapsed) elapsed.textContent = `${progress.elapsedSeconds}초`;
+}
+function startMakeProgressStatus() {
+  stopMakeProgressStatus();
+  makeProgressStartedAt = Date.now();
+  window.setTimeout(updateMakeProgressStatus, 0);
+  makeProgressTimerId = window.setInterval(updateMakeProgressStatus, 1000);
+}
+function stopMakeProgressStatus() {
+  if (makeProgressTimerId) window.clearInterval(makeProgressTimerId);
+  makeProgressTimerId = null;
+  makeProgressStartedAt = 0;
+}
+function cancelActiveMakeRequest() {
+  if (!activeMakeRequestController) return false;
+  activeMakeRequestController.abort();
+  return true;
+}
+function getMakeControllerContext() {
+  return {
+    state,
+    freeLimit: FREE_MAKE_LIMIT,
+    guard: guardAdminUserAction,
+    isBusy: () => isMakeThinking || makeRequestState.inFlight,
+    notice: showNotice,
+    bumpInteraction: () => { makeInteractionVersion += 1; },
+    renderPreservingScroll: renderPreservingMakeScroll,
+    buildHistory: buildMakeImproveHistory,
+    startRequest: () => {
+      activeMakeRequestController?.abort();
+      activeMakeRequestController = new AbortController();
+      makeStateModule.startMakeRequest(makeRequestState);
+      startMakeProgressStatus();
+      return activeMakeRequestController.signal;
+    },
+    isCurrentRequest: (signal) => !signal || activeMakeRequestController?.signal === signal,
+    completeRequest: (signal) => {
+      if (signal && activeMakeRequestController?.signal !== signal) return false;
+      activeMakeRequestController = null;
+      stopMakeProgressStatus();
+      makeStateModule.completeMakeRequest(makeRequestState);
+      return true;
+    },
+    failRequest: (id, failure) => makeStateModule.failMakeRequest(makeRequestState, id, failure),
+    stopInFlight: (signal) => {
+      if (signal && activeMakeRequestController?.signal !== signal) return false;
+      activeMakeRequestController = null;
+      stopMakeProgressStatus();
+      makeRequestState.inFlight = false;
+      return true;
+    },
+    setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value),
+    appendUser: (threadId, message) => appendMakeUserMessageState(state, threadId, message),
+    appendAssistant: (message) => appendMakeAssistantMessageState(state, message),
+    setThinking: (value) => { isMakeThinking = value; },
+    updateThread: updateRecentThread,
+    render,
+    focusRestored: focusRestoredMakeComposer,
+    scrollLatest: () => scheduleMakeLatestScroll({ behavior: "auto" }),
+    waitForPaint: waitForThinkingIndicatorPaint,
+    improve: improvePromptWithBackend,
+    recover: (options) => recoverActiveMakeThreadAfterFailure(getMakeFailureRecoveryContext(), options),
+    classifyError: makeMessageModel.classifyMakeError,
+    reportOutcome: (result, durationMs) => {
+      return modules.observability.reportOutcome({
+      area: "make",
+      action: "improve",
+      kind: "result",
+      code: result?.replayed === true
+        ? "REPLAYED"
+        : result?.isUnchanged
+        ? "UNCHANGED_NO_EVIDENCE"
+        : String(result?.ragStatus || "").toLowerCase() === "no_evidence"
+          ? "NO_EVIDENCE"
+          : result?.mode === "ask" ? "ASK" : "IMPROVED",
+      durationMs,
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(result?.requestId),
+      client: "web",
+      });
+    },
+    reportFailure: (error, requestId, durationMs) => {
+      const failure = makeMessageModel.classifyMakeError(error);
+      return modules.observability.report(new Error("Make request failed"), {
+        area: "make", action: "improve", kind: failure.kind, code: failure.code,
+        status: failure.status, durationMs, outcome: "failure", level: "error",
+        retryable: failure.retryable, client: "web",
+        requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
+      });
+    },
+    reportConcurrencyRefresh: (requestId, refreshed) => modules.observability.report(new Error("Make concurrency refresh"), {
+      area: "make", action: "refresh-thread", kind: "concurrency",
+      code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
+      status: refreshed ? 200 : 0, durationMs: 0, outcome: refreshed ? "success" : "failure",
+      level: refreshed ? "info" : "error", retryable: false, client: "web",
+      requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(requestId),
+    }),
+    setBackendFailure: () => makeStateModule.setMakeBackendFailure(state, getApiFailureMessage("Make 개선 API")),
+    handleError: handleBackendAccessError,
+    renderCancellation: () => {
+      if (state.route !== "make") return;
+      render();
+      window.setTimeout(() => document.querySelector('[data-composer] textarea[name="prompt"]')?.focus(), 0);
+    },
+    applyPendingThread: applyPendingImproveThreadId,
+    shouldSync: shouldUseImproveThreadSync,
+    refreshThread: (threadId) => refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true }),
+    syncThread: syncMakeThreadWithBackend,
+    focusAsk: focusLatestAskAnswer,
+    findEditableMessage: (messageId) => state.messages.findIndex((message) => message.id === messageId && message.role === "user"),
+    getMessages: () => state.messages,
+    getActiveThreadId: () => state.activeThreadId,
+    getBackendThreadId: getMakeBackendThreadId,
+    clearEditing: () => makeStateModule.setMakeEditingMessage(state),
+    refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
+    applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
+    finishEdit: finishEditedMakeMessageState,
+    queueScroll: (messageId) => queueLatestMakeScroll(messageId, { mode: "immediate" }),
+    messages: {
+      busy: "이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.",
+      missingThread: "서버 대화 정보를 찾을 수 없습니다. 최근 대화를 다시 열어주세요.",
+      edited: "수정한 메시지로 다시 개선했습니다.",
+      editFailed: "수정 실패: 잠시 후 다시 시도해주세요.",
+      improveFailed: "프롬프트 개선 요청에 실패했습니다.",
+    },
+  };
+}
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_error) {
+    return fallbackCopyText(text);
+  }
+}
+function fallbackCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  return copied;
+}
+function makePromptTitle(text) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return "Make에서 저장한 프롬프트";
+  return clean.length > 26 ? `${clean.slice(0, 26)}...` : clean;
+}
+const restoreSearchFocus = () => homeController.restoreSearchFocus();
+const getSavedPagePrompts = () => savedLibraryController.getPagePrompts();
+const matchesSavedFilter = (prompt) => savedLibraryController.matchesFilter(prompt);
+const getSavedSorter = () => savedLibraryController.getSorter();
+function scheduleAdminPromptSearchCommit(value) {
+  discoveryController.scheduleAdminPromptSearch(value);
+}
+function scheduleAdminTagSearchCommit(value) {
+  discoveryController.scheduleAdminTagSearch(value);
+}
+function searchByTag(tag) {
+  discoveryController.searchByTag(tag);
+}
+function searchByAuthor(author) {
+  discoveryController.searchByAuthor(author);
+}
+function findPromptById(promptId) {
+  return getUniquePrompts([
+    ...state.backendMyPrompts,
+    ...state.backendLibraryPrompts,
+    ...state.backendLikedPrompts,
+    ...state.backendAdminPrompts,
+    ...savedPrompts,
+    ...popularPrompts,
+  ]).find((item) => item.id === promptId);
+}
+function getVisiblePopularPrompts() {
+  return selectVisiblePrompts({
+    prompts: popularPrompts,
+    query: state.searchQuery,
+    scope: state.searchScope,
+    sort: state.popularSort,
+    normalizeTag,
+    normalizeText: normalizeSearchText,
+    getAuthor: getDisplayPromptAuthor,
+    metrics: getHomeSortMetrics(),
+  });
+}
+function getPopularTags(prompts) {
+  return collectPopularTags(prompts, {
+    normalizeTag,
+    getCreatedAt: getPromptCreatedAt,
+    isApproved: (tag) => getAdminTagStatus(tag) === "approved",
+    limit: 8,
+  });
+}
+function getKnownTags() {
+  const tags = new Map();
+  fallbackPopularTags.forEach((tag) => {
+    const key = normalizeTag(tag);
+    if (key && !tags.has(key)) tags.set(key, tag);
+  });
+  [...popularPrompts, ...savedPrompts].forEach((prompt) => {
+    (prompt.tags || []).forEach((tag) => {
+      const key = normalizeTag(tag);
+      if (key && !tags.has(key)) tags.set(key, tag);
+    });
+  });
+  return [...tags.values()].sort((a, b) => a.localeCompare(b, "ko-KR"));
+}
+function getMyPrompts() {
+  return myPageDataModel.getPrompts();
+}
+function getMyComments() {
+  return myPageDataModel.getComments();
+}
+function getMyReports() {
+  return myPageDataModel.getReports();
+}
+function sortPopularPrompts(prompts) {
+  return sortPrompts(prompts, state.popularSort, getHomeSortMetrics());
+}
+function getHomeSortMetrics() {
+  return {
+    views: getPromptViewCount,
+    saves: getPromptSaveCount,
+    comments: getPromptCommentCount,
+    likes: getPromptLikes,
+    createdAt: getPromptCreatedAt,
+  };
+}
+function getPromptLikes(prompt) {
+  const likes = Number(prompt?.likes);
+  return Number.isFinite(likes) ? likes : Math.round(getPromptSaveCount(prompt) / 3);
+}
+function getPromptViewCount(prompt) {
+  const views = Number(prompt?.views);
+  return Number.isFinite(views) ? views : 0;
+}
+function getPromptCreatedAt(prompt) {
+  const createdAt = parseTimestamp(prompt?.createdAt || prompt?.updatedAt || prompt?.publishedAt);
+  if (createdAt) return createdAt;
+  const sharedTimestamp = String(prompt.id || "").match(/^shared-(\d+)$/)?.[1];
+  if (sharedTimestamp) return Number(sharedTimestamp);
+  const demoIndex = popularPrompts.findIndex((item) => item.id === prompt.id);
+  return demoIndex >= 0 ? popularPrompts.length - demoIndex : 0;
+}
+function applyReportedVisibility(prompts) {
+  return prompts.filter((prompt) => {
+    if (state.adminHiddenPromptIds.has(prompt.id)) return false;
+    if (canShowReportedState() && state.hideReportedPrompts && state.reportedPromptIds.has(prompt.id)) return false;
+    return true;
+  });
+}
+function canShowReportedState() {
+  return state.isLoggedIn || state.adminMode;
+}
+function getPopularTotalPages(count) {
+  return getTotalPages(count, HOME_PAGE_SIZE);
+}
+function getBackendHomeTotalPages() {
+  return getBackendTotalPages(state.backendHomePage);
+}
+function updateBackendHomePageMeta(payload = {}, fallbackPage = state.popularPage) {
+  state.backendHomePage = normalizeBackendPageMeta(payload, { fallbackPage, pageSize: HOME_PAGE_SIZE, itemCount: popularPrompts.length });
+  state.popularPage = state.backendHomePage.page;
+}
+function polishPrompt(prompt) {
+  return `역할: 당신은 해당 분야의 전문 어시스턴트입니다.\n\n목표: ${prompt}\n\n요구사항:\n- 요청의 목적을 먼저 파악하고 필요한 경우 합리적인 가정을 명시하세요.\n- 구체적인 단계, 출력 형식, 확인 기준을 포함해 답변하세요.\n- 모호한 표현은 명확한 기준과 예시로 바꿔 설명하세요.\n- 바로 사용할 수 있는 형태로 결과물을 작성하세요.\n\n출력 형식:\n1. 최종 답변\n2. 핵심 근거\n3. 필요 시 다음 액션`;
+}
+let noticeTimer = 0;
+function showNotice(message) {
+  state.notice = message;
+  window.clearTimeout(noticeTimer);
+  if (state.route === "make") {
+    renderPreservingMakeScroll();
+  } else {
+    render();
+  }
+  noticeTimer = window.setTimeout(() => {
+    state.notice = "";
+    if (state.route === "make") {
+      renderPreservingMakeScroll();
+    } else {
+      render();
+    }
+  }, 1700);
+}
+function getAuthToken() {
+  const storedToken = readStorageItem(AUTH_TOKEN_KEY);
+  return String(state.authToken || state.token || storedToken || "").trim();
+}
+function isDemoAuthToken(token = getAuthToken()) {
+  return String(token || "").trim() === DEMO_AUTH_TOKEN;
+}
+function hasBackendAuthToken() {
+  const token = getAuthToken();
+  return Boolean(token) && !isDemoAuthToken(token);
+}
+function handleBackendAccessError(error, fallbackMessage = "요청을 처리하지 못했습니다.", options = {}) {
+  return handleBackendAccessErrorEffect(getBackendAccessErrorContext(), error, fallbackMessage, options);
+}
+function getBackendAccessErrorContext() {
+  return {
+    clearAuthenticatedSession,
+    getAuthToken,
+    getBackendErrorCode,
+    getBackendErrorMessage,
+    isDemoAuthToken,
+    showNotice,
+    state,
+  };
+}
+function isAdminAccount() {
+  return state.isLoggedIn && String(state.currentUserRole || "").toLowerCase() === "admin";
+}
+function guardAdminUserAction() {
+  if (!isAdminAccount() || state.adminMode) return false;
+  showNotice("관리자 계정은 운영 기능만 사용할 수 있습니다.");
+  return true;
+}
+function callBackendApi(action, ...args) {
+  const api = apiClient;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return Promise.resolve(null);
+  const token = getAuthToken();
+  if (!token || isDemoAuthToken(token)) {
+    console.info(`[TTALKAK] ${action} API 호출은 실제 인증 토큰이 없어 건너뜁니다.`);
+    return Promise.resolve(null);
+  }
+  return Promise.resolve(handler(...args, token || undefined)).catch((error) => {
+    handleBackendAccessError(
+      error,
+      canUseDemoFallback()
+        ? "백엔드 요청에 실패해 화면의 임시 상태만 유지합니다."
+        : "백엔드 요청에 실패했습니다.",
+    );
+    reportWarning("backend-api", action, error);
+    return null;
+  });
+}
+async function runPromptStateMutation(action, promptId, fallbackMessage) {
+  if (!isBackendNumericId(promptId) || state.backendStatus !== "connected") return true;
+  const api = apiClient;
+  const handler = api?.[action];
+  if (typeof handler !== "function") return true;
+  const token = getAuthToken();
+  if (!token || isDemoAuthToken(token)) {
+    openAuth("login");
+    showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
+    return false;
+  }
+  try {
+    await handler(promptId, token || undefined);
+    return true;
+  } catch (error) {
+    handleBackendAccessError(error, fallbackMessage);
+    await Promise.allSettled([refreshBackendHomePrompts(), refreshMyPageDataAfterMutation()]);
+    render();
+    return false;
+  }
+}
+function getMakeApi() {
+  return apiClient || {};
+}
+function getMakeApiToken() {
+  return getAuthToken() || undefined;
+}
+function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
+  handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
+  if (logMessage) reportWarning("make-sync", "backend-sync-failure", error);
+}
+function isBackendNumericId(value) {
+  return value !== null && value !== undefined && /^\d+$/.test(String(value));
+}
+function buildMakeImproveHistory(messages = state.messages) {
+  return makeMessageModel.buildImproveHistory(messages);
+}
+function submitAskAnswerForm(form) {
+  return makeControllerModule.submitAskAnswers({ model: makeMessageModel, root: document, setDraft: (value) => makeStateModule.setMakeComposerDraft(state, value), submit: submitMakeComposer }, form);
+}
+function focusLatestAskAnswer() {
+  makeFocusModule.focusLatestAskAnswer(document);
+}
+function getMakeThreadById(threadId = state.activeThreadId) {
+  return getMakeServerSyncEffects().getMakeThreadById(threadId);
+}
+function getMakeBackendThreadId(threadId = state.activeThreadId) {
+  return getMakeServerSyncEffects().getMakeBackendThreadId(threadId);
+}
+function applyPendingImproveThreadId(threadId) {
+  return getMakeServerSyncEffects().applyPendingImproveThreadId(threadId);
+}
+function shouldUseImproveThreadSync() {
+  return getMakeServerSyncEffects().shouldUseImproveThreadSync();
+}
+/** @param {*} prompt @param {{ history?: Array<*>, threadId?: *, messageId?: string, category?: string, requestId?: string, signal?: AbortSignal }} [options] */
+async function improvePromptWithBackend(prompt, {
+  history = buildMakeImproveHistory(),
+  threadId = state.activeThreadId,
+  messageId = "",
+  category = "",
+  requestId = "",
+  signal,
+} = {}) {
+  return getMakeServerSyncEffects().improvePromptWithBackend(prompt, { history, threadId, messageId, category, requestId, signal });
+}
+function focusRestoredMakeComposer(prompt) {
+  window.setTimeout(() => {
+    const input = document.querySelector('[data-composer] textarea[name="prompt"]');
+    const composer = input?.closest?.("[data-composer]");
+    if (!input || !composer) return;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange?.(prompt.length, prompt.length);
+    composer.classList.add("is-restored");
+    const status = composer.querySelector("[data-composer-restore-status]");
+    if (status) status.textContent = "입력 내용이 복원되었습니다.";
+    window.setTimeout(() => composer.classList.remove("is-restored"), 1400);
+  }, 0);
+}
+function queueLatestMakeThreadScroll(thread) {
+  const messages = Array.isArray(thread?.messages) ? thread.messages : state.messages;
+  const latestMessage = [...messages].reverse().find((message) => message?.id);
+  if (latestMessage?.id) {
+    queueLatestMakeScroll(latestMessage.id, { mode: "final" });
+  }
+}
+function getMakeFailureRecoveryContext() {
+  return {
+    getMakeBackendThreadId,
+    refreshActiveMakeThreadFromBackend,
+    shouldUseImproveThreadSync,
+    state,
+  };
+}
+function getMakeServerSyncEffects() {
+  if (!makeServerSyncEffects) {
+    makeServerSyncEffects = createMakeServerSyncEffects(getMakeServerSyncContext());
+  }
+  return makeServerSyncEffects;
+}
+function getMakeServerSyncContext() {
+  return {
+    applyMakeThreadsResult,
+    buildMakeImproveHistory,
+    canUseDemoFallback,
+    getApiFailureMessage,
+    getBackendDataEffectContext,
+    getBackendFolderId,
+    getMakeApi,
+    getMakeApiToken,
+    handleBackendAccessError,
+    handleMakeBackendSyncError,
+    hasBackendAuthToken,
+    isBackendNumericId,
+    makeState: makeStateModule,
+    makePreview,
+    makePromptTitle,
+    normalizeRecentThreads,
+    openRecentMakeThreadState,
+    polishPrompt,
+    queueLatestMakeThreadScroll,
+    render,
+    renderPreservingMakeScroll,
+    scrollToMakeLatestMessage,
+    state,
+    reportWarning,
+  };
+}
+function persistState() {
+  try {
+    persistAppState({
+      commentsByPrompt,
+      popularPrompts,
+      saveCurrentAccountScope,
+      savedPrompts,
+      state,
+    });
+  } catch (_error) {
+    // Local preview can still run if browser storage is blocked.
+  }
+}
+function loadPersistedState() {
+  try {
+    loadPersistedAppState({
+      commentsByPrompt,
+      getCurrentAccountScopeKey,
+      getValidSearchScope,
+      normalizeMakeFolders,
+      normalizePersistedLikeCounts,
+      normalizeSavedPromptOwnership,
+      popularPrompts,
+      restoreCurrentAccountScope,
+      savedPrompts,
+      state,
+    });
+  } catch (_error) {
+    clearPersistedPayload();
+  }
+}
+function normalizeMakeFolders(folders) {
+  const base = [{ id: "uncategorized", name: "미분류" }];
+  const extra = Array.isArray(folders)
+    ? folders.filter((folder) => folder?.id && folder?.name && folder.id !== "uncategorized" && folder.id !== "all")
+    : [];
+  return [...base, ...extra];
+}
+function normalizePersistedLikeCounts() {
+  const normalized = new Set();
+  for (const list of [popularPrompts, savedPrompts]) {
+    list.forEach((prompt) => {
+      if (!prompt || normalized.has(prompt.id)) return;
+      const baseLikes = Math.round((prompt.saves || 0) / 3);
+      const minimumLikes = baseLikes + (state.likedPromptIds.has(prompt.id) ? 1 : 0);
+      if (prompt.likes == null || prompt.likes < minimumLikes) {
+        prompt.likes = minimumLikes;
+      }
+      normalized.add(prompt.id);
+    });
+  }
+}
+function normalizeRecentThreads() {
+  makePersistenceModule.normalizeAndPersistMakeState(
+    state,
+    makeMessageModel,
+    makeStateModule,
+    persistState,
+  );
+}
+function normalizeAssistantPromptOutputs() {
+  state.messages.forEach((message) => {
+    if (message.role === "assistant") {
+      message.content = getFinalPromptText(message);
+    }
+  });
+  state.recentThreads.forEach((thread) => {
+    thread.messages?.forEach((message) => {
+      if (message.role === "assistant") {
+        message.content = getFinalPromptText(message);
+      }
+    });
+  });
+}
+function prepareDemoData() {
+  if (globalThis.TTALKAK_PRODUCTION_BUILD === true || !DEMO_FALLBACK_ENABLED) return;
+  const promptOverrides = modules.demo?.promptOverrides || {};
+  const commentOverrides = modules.demo?.commentOverrides || {};
+  for (const list of [popularPrompts, savedPrompts]) {
+    list.forEach((prompt) => {
+      const override = promptOverrides[prompt.id];
+      if (override) Object.assign(prompt, override);
+    });
+  }
+  Object.entries(commentOverrides).forEach(([promptId, comments]) => {
+    commentsByPrompt[promptId] = comments.map((comment) => ({ ...comment }));
+  });
+  Object.entries(demoCommentBackfill).forEach(([promptId, comments]) => {
+    const currentComments = commentsByPrompt[promptId] || [];
+    const existingIds = new Set(currentComments.map((comment) => comment.id));
+    const missingComments = comments.filter((comment) => !existingIds.has(comment.id));
+    if (currentComments.length === 0 || missingComments.length > 0) {
+      commentsByPrompt[promptId] = [...currentComments, ...missingComments];
+    }
+  });
+}
+appBootstrap = createAppBootstrap({
+  api: apiClient, state, popularPrompts, savedPrompts, isBackendNumericId, makePreview, normalizeMakeFolders,
+  makeState: makeStateModule,
+  normalizePersistedLikeCounts, normalizeRecentThreads, updateBackendHomePageMeta, upsertPrompt,
+  canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken,
+  hasBackendAuthToken, getMakeApi, getMakeApiToken, getMakeInteractionVersion: () => makeInteractionVersion,
+  getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render,
+  isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,
+  formatShortDate, getReportRecord, mapBackendReportStatus, hydrateBackendAdminData,
+  reportWarning,
+  hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, prepareDemoData,
+  normalizeAssistantPromptOutputs,
+});
+const bootstrapResult = appBootstrap.bootstrap();
+const needsAdminRuntime = state.adminMode || state.route === "admin";
+const needsShareRuntime = state.route === "share";
+const needsMakeRuntime = state.route === "make";
+const routeRuntime = needsAdminRuntime
+  ? ensureAdminRuntime()
+  : needsShareRuntime
+    ? ensureShareRuntime()
+    : needsMakeRuntime
+      ? ensureMakeRuntime()
+      : Promise.resolve(true);
+const routeReady = routeRuntime.then((loaded) => {
+  if (loaded) render();
+  return loaded;
+});
+const hydration = Promise.all([Promise.resolve(bootstrapResult), routeReady]).then(([result]) => result);
+const markApplicationReady = () => {
+  document.documentElement.dataset.ttalkakReady = "true";
+  document.dispatchEvent(new CustomEvent("ttalkak:ready"));
+};
+if (needsAdminRuntime || needsShareRuntime || needsMakeRuntime) routeReady.finally(markApplicationReady);
+else markApplicationReady();
+return hydration;
+}

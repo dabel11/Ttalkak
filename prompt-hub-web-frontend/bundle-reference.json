@@ -1,0 +1,12 @@
+{
+  "commit": "ee49734",
+  "javascript": {
+    "files": 9,
+    "rawBytes": 340963,
+    "gzipBytes": 108302
+  },
+  "initialJavascript": {
+    "rawBytes": 207886,
+    "gzipBytes": 65449
+  }
+}

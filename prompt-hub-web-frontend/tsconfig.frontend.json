@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "types/browser-globals.d.ts",
+    "src/api.js",
+    "src/api/*.js",
+    "src/home/*.js",
+    "src/interactions/*.js",
+    "src/share/*.js",
+    "src/modal/*.js",
+    "src/auth/*.js",
+    "src/admin/*.js",
+    "src/bootstrap/*.js",
+    "src/make/*.js",
+    "src/state/*.js",
+    "src/effects/*.js",
+    "src/renderers/*.js",
+    "src/renderers/pages/*.js",
+    "src/events/*.js",
+    "src/routing/*.js",
+    "src/observability/*.mjs",
+    "src/components.js",
+    "src/app.js"
+  ]
+}

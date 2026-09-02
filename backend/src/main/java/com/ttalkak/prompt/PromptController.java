@@ -1,0 +1,1400 @@
+package com.ttalkak.prompt;
+
+import com.ttalkak.auth.AuthService;
+import com.ttalkak.member.Member;
+import com.ttalkak.common.exception.ApiException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ttalkak.make.MakeThread;
+import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.make.MakeApiContract;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+
+import java.util.*;
+import java.time.LocalDateTime;
+import java.time.Duration;
+
+@RestController
+@RequestMapping("/api/prompts")
+public class PromptController {
+    private final PromptRepository promptRepository;
+    private final PromptSaveRepository saveRepository;
+    private final PromptLikeRepository likeRepository;
+    private final TagRepository tagRepository;
+    private final AuthService authService;
+    private final WebClient webClient;
+    private final MakeThreadRepository makeThreadRepository;
+    private final ObjectMapper objectMapper;
+    private final Duration ragResponseTimeout;
+
+    @Value("${rag.server-url:http://localhost:8000}")
+    private String ragServerUrl;
+
+    public PromptController(PromptRepository promptRepository,
+                            PromptSaveRepository saveRepository,
+                            PromptLikeRepository likeRepository,
+                            TagRepository tagRepository,
+                            AuthService authService,
+                            MakeThreadRepository makeThreadRepository,
+                            ObjectMapper objectMapper,
+                            WebClient.Builder webClientBuilder,
+                            // application.yml 의 rag.response-timeout 을 주입한다("75s" → Duration).
+                            // @Value 가 없으면 Spring 이 Duration 타입 빈을 찾다 실패해 기동이 막힌다
+                            // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
+                            @Value("${rag.response-timeout:75s}")
+                            Duration ragResponseTimeout) {
+        this.promptRepository = promptRepository;
+        this.saveRepository = saveRepository;
+        this.likeRepository = likeRepository;
+        this.tagRepository = tagRepository;
+        this.authService = authService;
+        this.makeThreadRepository = makeThreadRepository;
+        this.objectMapper = objectMapper;
+        this.webClient = webClientBuilder.build();
+		this.ragResponseTimeout = ragResponseTimeout;
+    }
+
+    @GetMapping
+    public Map<String, Object> list(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                    @RequestParam(required = false) String tags,
+                                    @RequestParam(required = false) String scope,
+                                    @RequestParam(required = false) String query,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(required = false) String author,
+                                    @RequestParam(defaultValue = "popular") String sort,
+                                    @RequestParam(defaultValue = "1") int page,
+                                    @RequestParam(required = false) Integer size,
+                                    @RequestParam(required = false) Integer pageSize) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        List<String> tagTokens = tags == null || tags.isBlank()
+                ? List.of()
+                : Arrays.stream(tags.split(",")).map(Tag::normalize).filter(s -> !s.isBlank()).toList();
+
+        List<PromptPost> filtered = promptRepository.findByDeletedFalseAndSharedTrue().stream()
+                .filter(prompt -> tagTokens.isEmpty() || PromptMapper.splitTags(prompt.getTagsCsv()).containsAll(tagTokens))
+                .filter(prompt -> matchesSearch(prompt, scope, query, keyword, author))
+                .sorted(comparator(sort))
+                .toList();
+
+        return pageResponse(filtered, page, resolvedSize, memberId);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> detail(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        }
+        return ResponseEntity.ok(
+                PromptMapper.toPromptResponse(
+                        prompt,
+                        memberId,
+                        isSaved(id, memberId),
+                        isLiked(id, memberId)
+                )
+        );
+    }
+
+    @PostMapping
+    public ResponseEntity<?> share(@RequestBody SharePromptRequest request,
+                                   @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        String nickname = authService.currentNickname(authorization);
+        String tagsCsv = PromptMapper.joinTags(request.tags());
+        PromptPost prompt = new PromptPost(memberId, nickname, request.title(), request.text(), tagsCsv, true);
+        promptRepository.save(prompt);
+        increaseTagUsage(request.tags());
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, false, false));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @RequestBody SharePromptRequest request,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        if (!canManage(prompt, authorization)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 수정할 수 있습니다."
+            );
+        }
+        prompt.update(request.title(), request.text(), PromptMapper.joinTags(request.tags()));
+        promptRepository.save(prompt);
+        increaseTagUsage(request.tags());
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId)));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        if (!canManage(prompt, authorization)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 삭제할 수 있습니다."
+            );
+        }
+        prompt.delete();
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(Map.of("deleted", true, "id", id));
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<?> visibility(@PathVariable Long id,
+                                        @RequestBody VisibilityRequest request,
+                                        @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        if (!canManage(prompt, authorization)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "OWNER_ONLY",
+                    "작성자만 공유 상태를 변경할 수 있습니다."
+            );
+        }
+        prompt.changeVisibility(Boolean.TRUE.equals(request.isShared()));
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(PromptMapper.toPromptResponse(prompt, memberId, isSaved(id, memberId), isLiked(id, memberId)));
+    }
+
+    @PostMapping("/{id}/view")
+    public ResponseEntity<?> view(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        prompt.increaseViews();
+        promptRepository.save(prompt);
+        return ResponseEntity.ok(Map.of("id", id, "views", prompt.getViews()));
+    }
+
+    @PostMapping("/{id}/save")
+    public ResponseEntity<?> save(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        if (!saveRepository.existsByPromptIdAndMemberId(id, memberId)) {
+            saveRepository.save(new PromptSave(id, memberId));
+            prompt.increaseSaves();
+            promptRepository.save(prompt);
+        }
+        return ResponseEntity.ok(Map.of("id", id, "saves", prompt.getSaves(), "isSaved", true));
+    }
+
+    @DeleteMapping("/{id}/save")
+    public ResponseEntity<?> unsave(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        saveRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(save -> {
+            saveRepository.delete(save);
+            prompt.decreaseSaves();
+            promptRepository.save(prompt);
+        });
+        return ResponseEntity.ok(Map.of("id", id, "saves", prompt.getSaves(), "isSaved", false));
+    }
+
+    @PostMapping("/{id}/like")
+    public ResponseEntity<?> like(@PathVariable Long id,
+                                  @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        if (!likeRepository.existsByPromptIdAndMemberId(id, memberId)) {
+            likeRepository.save(new PromptLike(id, memberId));
+            prompt.increaseLikes();
+            promptRepository.save(prompt);
+        }
+        return ResponseEntity.ok(Map.of("id", id, "likes", prompt.getLikes(), "isLiked", true));
+    }
+
+    @DeleteMapping("/{id}/like")
+    public ResponseEntity<?> unlike(@PathVariable Long id,
+                                    @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Long memberId = requireMemberId(authorization);
+        PromptPost prompt = promptRepository.findById(id).orElse(null);
+        if (prompt == null || !canView(prompt, authorization)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.");
+        likeRepository.findByPromptIdAndMemberId(id, memberId).ifPresent(like -> {
+            likeRepository.delete(like);
+            prompt.decreaseLikes();
+            promptRepository.save(prompt);
+        });
+        return ResponseEntity.ok(Map.of("id", id, "likes", prompt.getLikes(), "isLiked", false));
+    }
+
+    @GetMapping("/my")
+    public Map<String, Object> myPrompts(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                         @RequestParam(defaultValue = "all") String filter,
+                                         @RequestParam(defaultValue = "1") int page,
+                                         @RequestParam(required = false) Integer size,
+                                         @RequestParam(required = false) Integer pageSize) {
+        int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
+        Long memberId = requireMemberId(authorization);
+        List<Long> savedIds = saveRepository.findByMemberId(memberId).stream().map(PromptSave::getPromptId).toList();
+        List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
+        List<PromptPost> prompts = promptRepository.findAll().stream()
+                .filter(prompt -> !prompt.isDeleted())
+                .filter(prompt -> switch (filter) {
+                    case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
+                    case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
+                    case "liked" -> likedIds.contains(prompt.getId());
+                    default -> savedIds.contains(prompt.getId()) || likedIds.contains(prompt.getId()) || Objects.equals(prompt.getAuthorId(), memberId);
+                })
+                .sorted(comparator("latest"))
+                .toList();
+        return pageResponse(prompts, page, resolvedSize, memberId);
+    }
+
+    private List<Map<String, Object>> copyHistory(
+            List<Map<String, String>> history
+    ) {
+        List<Map<String, Object>> copied =
+                new ArrayList<>();
+
+        if (history == null) {
+            return copied;
+        }
+
+        for (Map<String, String> item : history) {
+            if (item == null) {
+                continue;
+            }
+
+            String role = item.get("role");
+            String content = item.get("content");
+
+            if (role == null || content == null) {
+                continue;
+            }
+
+            Map<String, Object> message =
+                    new LinkedHashMap<>();
+
+            message.put("role", role);
+            message.put("content", content);
+
+            copied.add(message);
+        }
+
+        return copied;
+    }
+
+    private List<Map<String, String>> toRagHistory(
+            List<Map<String, Object>> messages
+    ) {
+        List<Map<String, String>> history =
+                new ArrayList<>();
+
+        for (Map<String, Object> message : messages) {
+            Object role = message.get("role");
+            Object content = message.get("content");
+
+            if (role == null || content == null) {
+                continue;
+            }
+
+            history.add(
+                    Map.of(
+                            "role", String.valueOf(role),
+                            "content", String.valueOf(content)
+                    )
+            );
+        }
+
+        return history;
+    }
+
+	private int findEditableUserMessageIndex(
+			List<Map<String, Object>> messages,
+			String messageId
+	) {
+		for (int index = 0;
+			index < messages.size();
+			index++) {
+
+			Map<String, Object> message =
+					messages.get(index);
+
+			Object storedId = message.get("id");
+
+			if (!Objects.equals(
+					messageId,
+					storedId == null
+							? null
+							: String.valueOf(storedId)
+			)) {
+				continue;
+			}
+
+			String role = message.get("role") == null
+					? ""
+					: String.valueOf(
+							message.get("role")
+					);
+
+			if (!"user".equalsIgnoreCase(role)) {
+				throw new ApiException(
+						HttpStatus.BAD_REQUEST,
+						"MESSAGE_NOT_EDITABLE",
+						"사용자 메시지만 수정할 수 있습니다."
+				);
+			}
+
+			return index;
+		}
+
+		throw new ApiException(
+				HttpStatus.NOT_FOUND,
+				"MESSAGE_NOT_FOUND",
+				"수정할 메시지를 찾을 수 없습니다."
+		);
+	}
+
+    private void replaceMessageAndAppendResponse(
+            List<Map<String, Object>> messages,
+            int messageIndex,
+            String prompt,
+            String requestId,
+            Map<String, Object> response
+    ) {
+		Map<String, Object> editedMessage =
+				new LinkedHashMap<>(
+						messages.get(messageIndex)
+				);
+
+		String now = LocalDateTime.now().toString();
+
+		editedMessage.put("content", prompt);
+		editedMessage.put("editedAt", now);
+        putRequestId(editedMessage, requestId);
+
+		while (messages.size() > messageIndex) {
+			messages.remove(messages.size() - 1);
+		}
+
+		messages.add(editedMessage);
+
+		Map<String, Object> assistantMessage =
+				new LinkedHashMap<>();
+
+		assistantMessage.put(
+				"id",
+				"assistant-" + UUID.randomUUID()
+		);
+		assistantMessage.put("role", "assistant");
+		assistantMessage.put(
+				"content",
+				response.get("answer")
+		);
+		assistantMessage.put(
+				"improvedPrompt",
+				response.get("improvedPrompt")
+		);
+		assistantMessage.put(
+				"sources",
+				response.get("sources")
+		);
+		assistantMessage.put(
+				"ragStatus",
+				response.get("ragStatus")
+		);
+		copyImproveContractFields(assistantMessage, response);
+		assistantMessage.put("createdAt", now);
+
+		messages.add(assistantMessage);
+	}
+
+    private void appendMessages(
+            List<Map<String, Object>> messages,
+            String prompt,
+            String requestId,
+            Map<String, Object> response
+    ) {
+        String now = LocalDateTime.now().toString();
+
+        Map<String, Object> userMessage =
+                new LinkedHashMap<>();
+
+        userMessage.put(
+                "id",
+                "user-" + UUID.randomUUID()
+        );
+        userMessage.put("role", "user");
+        userMessage.put("content", prompt);
+        userMessage.put("createdAt", now);
+        putRequestId(userMessage, requestId);
+
+        Map<String, Object> assistantMessage =
+                new LinkedHashMap<>();
+
+        assistantMessage.put(
+                "id",
+                "assistant-" + UUID.randomUUID()
+        );
+        assistantMessage.put("role", "assistant");
+        assistantMessage.put(
+                "content",
+                response.get("answer")
+        );
+        assistantMessage.put(
+                "improvedPrompt",
+                response.get("improvedPrompt")
+        );
+        assistantMessage.put(
+                "sources",
+                response.get("sources")
+        );
+        assistantMessage.put(
+                "ragStatus",
+                response.get("ragStatus")
+        );
+        copyImproveContractFields(assistantMessage, response);
+        assistantMessage.put("createdAt", now);
+
+        messages.add(userMessage);
+        messages.add(assistantMessage);
+    }
+
+    private void copyImproveContractFields(
+            Map<String, Object> target,
+            Map<String, Object> response
+    ) {
+        for (String field : List.of(
+                "mode",
+                "answer",
+                "summary",
+                "questions",
+                "fields",
+                "changes",
+                "techniquesApplied",
+                "score"
+        )) {
+            target.put(field, response.get(field));
+        }
+    }
+
+    private String normalizeRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return null;
+        }
+
+        String normalized = requestId.trim();
+
+        if (normalized.length() > MakeApiContract.REQUEST_ID_MAX_LENGTH) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    MakeApiContract.REQUEST_ID_INVALID,
+                    "requestId는 " + MakeApiContract.REQUEST_ID_MAX_LENGTH + "자 이하여야 합니다."
+            );
+        }
+
+        return normalized;
+    }
+
+    private Map<String, Object> findIdempotentResponse(
+            List<Map<String, Object>> messages,
+            String requestId,
+            String prompt
+    ) {
+        if (requestId == null) {
+            return null;
+        }
+
+        for (int index = 0; index < messages.size(); index++) {
+            Map<String, Object> message = messages.get(index);
+
+            if (!"user".equalsIgnoreCase(stringValue(message.get("role")))) {
+                continue;
+            }
+
+            if (!Objects.equals(
+                    requestId,
+                    stringValue(message.get("requestId"))
+            )) {
+                continue;
+            }
+
+            if (!Objects.equals(
+                    prompt,
+                    stringValue(message.get("content"))
+            )) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        MakeApiContract.REQUEST_ID_REUSED,
+                        "같은 requestId를 다른 요청에 사용할 수 없습니다."
+                );
+            }
+
+            if (index + 1 >= messages.size()) {
+                return null;
+            }
+
+            Map<String, Object> assistantMessage =
+                    messages.get(index + 1);
+
+            if (!"assistant".equalsIgnoreCase(
+                    stringValue(assistantMessage.get("role"))
+            )) {
+                return null;
+            }
+
+            Map<String, Object> response =
+                    new LinkedHashMap<>();
+
+            copyImproveContractFields(
+                    response,
+                    assistantMessage
+            );
+
+            response.put(
+                    "improvedPrompt",
+                    assistantMessage.get("improvedPrompt")
+            );
+            response.put(
+                    "sources",
+                    assistantMessage.getOrDefault(
+                            "sources",
+                            List.of()
+                    )
+            );
+            response.put(
+                    "ragStatus",
+                    assistantMessage.get("ragStatus")
+            );
+
+            return response;
+        }
+
+        return null;
+    }
+
+    private String stringValue(Object value) {
+        return value == null
+                ? null
+                : String.valueOf(value);
+    }
+
+    private void putRequestId(
+            Map<String, Object> message,
+            String requestId
+    ) {
+        if (requestId == null) {
+            message.remove("requestId");
+            return;
+        }
+
+        message.put("requestId", requestId);
+    }
+
+    private List<Map<String, Object>> readMessages(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+
+        try {
+            return objectMapper.readValue(
+                    json,
+                    new TypeReference<List<Map<String, Object>>>() {}
+            );
+        } catch (Exception e) {
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "THREAD_DATA_CORRUPTED",
+                    "저장된 대화 내용을 불러올 수 없습니다."
+            );
+        }
+    }
+
+    private String writeMessages(
+            List<Map<String, Object>> messages
+    ) {
+        try {
+            return objectMapper.writeValueAsString(messages);
+        } catch (Exception e) {
+            throw new ApiException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "THREAD_SAVE_FAILED",
+                    "대화 내용을 저장할 수 없습니다."
+            );
+        }
+    }
+
+    private String normalizeCategory(String category) {
+        return category == null || category.isBlank()
+                ? "prompt_techniques"
+                : category.trim();
+    }
+
+	private Long resolveRequestedThreadId(ImproveRequest request) {
+		Long conversationId = request.conversationId();
+		Long threadId = request.threadId();
+
+		if (conversationId != null
+				&& threadId != null
+				&& !Objects.equals(conversationId, threadId)) {
+			throw new ApiException(
+					HttpStatus.BAD_REQUEST,
+					"THREAD_ID_MISMATCH",
+					"conversationId와 threadId가 서로 일치하지 않습니다."
+			);
+		}
+
+		return conversationId != null ? conversationId : threadId;
+	}
+
+    private String makeThreadTitle(String prompt) {
+        String normalized =
+                prompt.replaceAll("\\s+", " ").trim();
+
+        if (normalized.length() <= 30) {
+            return normalized;
+        }
+
+        return normalized.substring(0, 30) + "...";
+    }
+
+    private String firstNonBlank(
+            Map<?, ?> source,
+            String... keys
+    ) {
+        if (source == null) {
+            return null;
+        }
+
+        for (String key : keys) {
+            Object value = source.get(key);
+
+            if (value == null) {
+                continue;
+            }
+
+            String text = String.valueOf(value).trim();
+
+            if (!text.isBlank()) {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    @PostMapping("/improve")
+    public Map<String, Object> improve(
+            @RequestBody ImproveRequest request,
+            @RequestHeader(value = "Authorization", required = false)
+            String authorization
+    ) {
+        String prompt = request.prompt() == null
+                ? ""
+                : request.prompt().trim();
+
+        if (prompt.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "PROMPT_REQUIRED",
+                    "개선할 프롬프트를 입력해 주세요."
+            );
+        }
+
+        Long memberId =
+                authService.currentMemberIdOrNull(authorization);
+
+	Long requestedThreadId = resolveRequestedThreadId(request);
+
+        String messageId = request.messageId() == null
+                ? null
+                : request.messageId().trim();
+
+        boolean editingMessage =
+                messageId != null && !messageId.isBlank();
+
+        if (editingMessage && requestedThreadId == null) {
+			throw new ApiException(
+					HttpStatus.BAD_REQUEST,
+					"THREAD_ID_REQUIRED",
+					"메시지를 수정하려면 threadId가 필요합니다."
+			);
+        }
+
+		if (editingMessage && memberId == null) {
+			throw new ApiException(
+					HttpStatus.UNAUTHORIZED,
+					"LOGIN_REQUIRED",
+					"로그인이 필요합니다."
+			);
+		}
+
+        if (requestedThreadId != null && memberId == null) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "저장된 대화를 이어가려면 로그인이 필요합니다."
+            );
+        }
+
+	MakeThread thread = null;
+	List<Map<String, Object>> messages;
+	int editedMessageIndex = -1;
+    String requestId =
+        normalizeRequestId(request.requestId());
+
+    if (requestedThreadId == null
+            && memberId != null
+            && requestId != null) {
+        MakeThread initialThread = makeThreadRepository
+                .findByMemberIdAndInitialRequestId(memberId, requestId)
+                .orElse(null);
+        if (initialThread != null) {
+            Map<String, Object> previousResponse = findIdempotentResponse(
+                    readMessages(initialThread.getMessagesJson()),
+                    requestId,
+                    prompt
+            );
+            if (previousResponse != null) {
+                return replayResponse(
+                        previousResponse,
+                        initialThread,
+                        requestId,
+                        messageId,
+                        editingMessage
+                );
+            }
+        }
+    }
+
+	if (requestedThreadId != null) {
+		thread = makeThreadRepository
+				.findByIdAndMemberId(
+						requestedThreadId,
+						memberId
+				)
+				.orElseThrow(() -> new ApiException(
+						HttpStatus.NOT_FOUND,
+						"THREAD_NOT_FOUND",
+						"대화를 찾을 수 없습니다."
+				));
+
+		messages = readMessages(
+				thread.getMessagesJson()
+		);
+
+    Map<String, Object> previousResponse =
+        findIdempotentResponse(
+                messages,
+                requestId,
+                prompt
+        );
+
+    if (previousResponse != null) {
+        return replayResponse(
+                previousResponse,
+                thread,
+                requestId,
+                messageId,
+                editingMessage
+        );
+    }
+
+		if (editingMessage) {
+			editedMessageIndex =
+					findEditableUserMessageIndex(
+							messages,
+							messageId
+					);
+		}
+	} else {
+		messages = copyHistory(request.history());
+	}
+
+	List<Map<String, String>> ragHistory;
+
+	if (editingMessage) {
+		ragHistory = toRagHistory(
+				new ArrayList<>(
+						messages.subList(
+								0,
+								editedMessageIndex
+						)
+				)
+		);
+	} else {
+		ragHistory = toRagHistory(messages);
+	}
+
+        Map<String, Object> body;
+
+        try {
+            Map<String, Object> ragRequest =
+                    new LinkedHashMap<>();
+
+            ragRequest.put("query", prompt);
+            ragRequest.put(
+                    "collection_name",
+                    normalizeCategory(request.category())
+            );
+            ragRequest.put("top_k", 5);
+            ragRequest.put("history", ragHistory);
+
+            Map<?, ?> response = webClient.post()
+                    .uri(ragServerUrl + "/query")
+                    .bodyValue(ragRequest)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(ragResponseTimeout);
+
+            if (response == null) {
+                throw new ApiException(
+                        HttpStatus.BAD_GATEWAY,
+                        "AI_INVALID_RESPONSE",
+                        "AI 서비스에서 올바른 응답을 받지 못했습니다."
+                );
+            }
+
+            body = buildImproveResponse(response);
+        } catch (WebClientResponseException.NotFound e) {
+            body = buildNoEvidenceResponse(prompt);
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode().value() == 429
+                    || isRateLimitError(e)) {
+                throw new ApiException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "AI_RATE_LIMIT_EXCEEDED",
+                        "AI 서비스 사용 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
+                );
+            }
+
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_SERVICE_UNAVAILABLE",
+                    "AI 서비스를 일시적으로 사용할 수 없습니다."
+            );
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_SERVICE_UNAVAILABLE",
+                    "AI 서비스를 일시적으로 사용할 수 없습니다."
+            );
+        }
+
+        Long savedThreadId = null;
+
+		if (memberId != null) {
+			if (editingMessage) {
+				replaceMessageAndAppendResponse(
+						messages,
+						editedMessageIndex,
+						prompt,
+                        requestId,
+						body
+				);
+			} else {
+				appendMessages(
+						messages,
+						prompt,
+                        requestId,
+						body
+				);
+			}
+
+			String messagesJson = writeMessages(messages);
+
+            if (thread == null) {
+                thread = new MakeThread(
+                        memberId,
+                        makeThreadTitle(prompt),
+                        messagesJson,
+                        null,
+                        requestId
+                );
+                try {
+                    thread = makeThreadRepository.save(thread);
+                    makeThreadRepository.flush();
+                } catch (DataIntegrityViolationException exception) {
+                    if (requestId != null) {
+                        MakeThread existingThread = makeThreadRepository
+                                .findByMemberIdAndInitialRequestId(memberId, requestId)
+                                .orElse(null);
+                        if (existingThread != null) {
+                            Map<String, Object> previousResponse = findIdempotentResponse(
+                                    readMessages(existingThread.getMessagesJson()),
+                                    requestId,
+                                    prompt
+                            );
+                            if (previousResponse != null) {
+                                return replayResponse(
+                                        previousResponse,
+                                        existingThread,
+                                        requestId,
+                                        messageId,
+                                        editingMessage
+                                );
+                            }
+                        }
+                    }
+                    throw exception;
+                }
+            } else {
+                thread.update(
+                        thread.getTitle(),
+                        messagesJson,
+                        thread.getFolderId()
+                );
+                thread = makeThreadRepository.save(thread);
+            }
+            savedThreadId = thread.getId();
+        }
+
+        body.put("conversationId", savedThreadId);
+        body.put("threadId", savedThreadId);
+        body.put("requestId", requestId);
+        body.put("replayed", false);
+
+		if (editingMessage) {
+			body.put("editedMessageId", messageId);
+		}
+
+        return body;
+    }
+
+    private Map<String, Object> replayResponse(
+            Map<String, Object> previousResponse,
+            MakeThread thread,
+            String requestId,
+            String messageId,
+            boolean editingMessage
+    ) {
+        previousResponse.put("conversationId", thread.getId());
+        previousResponse.put("threadId", thread.getId());
+        previousResponse.put("requestId", requestId);
+        previousResponse.put("replayed", true);
+        if (editingMessage) {
+            previousResponse.put("editedMessageId", messageId);
+        }
+        return previousResponse;
+    }
+
+    private Map<String, Object> buildNoEvidenceResponse(
+            String prompt
+    ) {
+        Map<String, Object> body =
+                new LinkedHashMap<>();
+
+        body.put(
+                "answer",
+                "관련 프롬프트 기법 근거를 찾지 못했습니다."
+        );
+        body.put("mode", "improve");
+        body.put("summary", "");
+        body.put("improvedPrompt", prompt);
+        body.put("sources", List.of());
+        body.put("ragStatus", "no_evidence");
+        body.put("techniquesApplied", List.of());
+        body.put("changes", List.of());
+        body.put("questions", List.of());
+        body.put("fields", List.of());
+        body.put("score", null);
+
+        return body;
+    }
+
+    private Map<String, Object> buildImproveResponse(
+            Map<?, ?> ragResponse
+    ) {
+        String mode = firstNonBlank(
+                ragResponse,
+                "mode",
+                "type"
+        );
+
+        boolean askMode =
+                "ask".equalsIgnoreCase(mode)
+                        || "question".equalsIgnoreCase(mode);
+
+        String summary = firstNonBlank(
+                ragResponse,
+                "summary"
+        );
+
+        List<?> questions = firstList(
+                ragResponse,
+                "questions",
+                "followUpQuestions",
+                "additionalQuestions"
+        );
+
+        if (askMode && questions.isEmpty()) {
+            questions = List.of(
+                    Map.of(
+                            "field", "details",
+                            "question", "원하는 결과를 더 정확히 만들기 위해 어떤 정보를 추가할 수 있나요?",
+                            "reason", "질문 모드 응답에 구체적인 후속 질문이 없어 기본 확인 질문을 제공합니다.",
+                            "importance", "required"
+                    )
+            );
+        }
+
+        String improvedPrompt = firstNonBlank(
+                ragResponse,
+                "improvedPrompt",
+                "improved_prompt",
+                "result",
+                "response",
+                "answer"
+        );
+
+        String answer = firstNonBlank(
+                ragResponse,
+                "answer",
+                "response",
+                "result"
+        );
+
+        if (askMode && answer == null) {
+            answer = summary == null || summary.isBlank()
+                    ? "정확한 프롬프트를 만들기 위해 추가 정보가 필요합니다."
+                    : summary;
+        }
+
+        if (!askMode && improvedPrompt == null && answer == null) {
+            throw new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "AI_INVALID_RESPONSE",
+                    "AI 서비스에서 올바른 응답을 받지 못했습니다."
+            );
+        }
+
+        if (improvedPrompt == null) {
+            improvedPrompt = answer;
+        }
+
+        if (answer == null) {
+            answer = improvedPrompt;
+        }
+
+        List<?> sources = firstList(
+                ragResponse,
+                "sources",
+                "references",
+                "documents"
+        );
+
+        String ragStatus = firstNonBlank(
+                ragResponse,
+                "ragStatus",
+                "rag_status"
+        );
+
+        if (ragStatus == null) {
+            ragStatus = sources.isEmpty()
+                    ? "no_evidence"
+                    : "ok";
+        }
+
+
+        if (askMode) {
+            mode = "ask";
+            improvedPrompt = "";
+        } else {
+            mode = "improve";
+        }
+
+        Map<String, Object> body =
+                new LinkedHashMap<>();
+
+        body.put("mode", mode);
+        body.put("answer", answer);
+        body.put("improvedPrompt", improvedPrompt);
+        body.put("sources", sources);
+        body.put("ragStatus", ragStatus);
+        body.put(
+                "summary",
+                summary
+        );
+        body.put(
+                "techniquesApplied",
+                firstList(
+                        ragResponse,
+                        "techniquesApplied",
+                        "techniques_applied"
+                )
+        );
+        body.put(
+                "changes",
+                firstList(ragResponse, "changes")
+        );
+        body.put(
+                "questions",
+                questions
+        );
+        body.put(
+                "fields",
+                firstList(
+                        ragResponse,
+                        "fields",
+                        "fieldState",
+                        "missingFields"
+                )
+        );
+        body.put("score", ragResponse.get("score"));
+
+        return body;
+    }
+
+    private List<?> firstList(
+            Map<?, ?> source,
+            String... keys
+    ) {
+        if (source == null) {
+            return List.of();
+        }
+
+        for (String key : keys) {
+            Object value = source.get(key);
+
+            if (value instanceof List<?> list) {
+                return list;
+            }
+        }
+
+        return List.of();
+    }
+
+    private boolean isRateLimitError(
+            WebClientResponseException exception
+    ) {
+        String responseBody =
+                exception.getResponseBodyAsString();
+
+        if (responseBody == null
+                || responseBody.isBlank()) {
+            return false;
+        }
+
+        String normalized =
+                responseBody.toLowerCase(
+                        java.util.Locale.ROOT
+                );
+
+        return normalized.contains("한도 초과")
+                || normalized.contains("quota")
+                || normalized.contains("rate limit")
+                || normalized.contains(
+                        "resource_exhausted"
+                );
+    }
+
+    private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(size, 1);
+        int from = Math.min((safePage - 1) * safeSize, prompts.size());
+        int to = Math.min(from + safeSize, prompts.size());
+        List<Map<String, Object>> items = prompts.subList(from, to).stream()
+                .map(prompt -> PromptMapper.toPromptResponse(prompt, memberId, isSaved(prompt.getId(), memberId), isLiked(prompt.getId(), memberId)))
+                .toList();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", items);
+        body.put("content", items);
+        body.put("page", safePage);
+        body.put("size", safeSize);
+        body.put("total", prompts.size());
+        body.put("totalPages", (int) Math.ceil((double) prompts.size() / safeSize));
+        return body;
+    }
+
+    private Comparator<PromptPost> comparator(String sort) {
+        Comparator<PromptPost> byViews =
+                Comparator.comparingLong(PromptPost::getViews).reversed();
+        Comparator<PromptPost> byComments =
+                Comparator.comparingLong(PromptPost::getComments).reversed();
+        Comparator<PromptPost> bySaves =
+                Comparator.comparingLong(PromptPost::getSaves).reversed();
+        Comparator<PromptPost> byLikes =
+                Comparator.comparingLong(PromptPost::getLikes).reversed();
+        Comparator<PromptPost> byLatest =
+                Comparator.comparing(PromptPost::getCreatedAt).reversed();
+        Comparator<PromptPost> byId =
+                Comparator.comparing(PromptPost::getId).reversed();
+
+        return switch (sort == null ? "popular" : sort) {
+            case "saves" -> bySaves
+                    .thenComparing(byViews)
+                    .thenComparing(byComments)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "comments" -> byComments
+                    .thenComparing(byViews)
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "likes" -> byLikes
+                    .thenComparing(byViews)
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+
+            case "latest" -> byLatest
+                    .thenComparing(byViews)
+                    .thenComparing(byId);
+
+            default -> byViews
+                    .thenComparing(byComments)
+                    .thenComparing(bySaves)
+                    .thenComparing(byLatest)
+                    .thenComparing(byId);
+        };
+    }
+
+    private boolean isSaved(Long promptId, Long memberId) {
+        return memberId != null && saveRepository.existsByPromptIdAndMemberId(promptId, memberId);
+    }
+
+    private boolean isLiked(Long promptId, Long memberId) {
+        return memberId != null && likeRepository.existsByPromptIdAndMemberId(promptId, memberId);
+    }
+
+    private Long requireMemberId(String authorization) {
+        Long memberId =
+                authService.currentMemberIdOrNull(authorization);
+
+        if (memberId == null) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 필요합니다."
+            );
+        }
+
+        return memberId;
+    }
+
+    private boolean canView(PromptPost prompt, String authorization) {
+        if (prompt == null || prompt.isDeleted()) {
+            return false;
+        }
+
+        if (prompt.isShared()) {
+            return true;
+        }
+
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) {
+            return false;
+        }
+
+        if (Objects.equals(prompt.getAuthorId(), memberId)) {
+            return true;
+        }
+
+        return authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+    }
+
+    private boolean canManage(PromptPost prompt, String authorization) {
+        Long memberId = authService.currentMemberIdOrNull(authorization);
+        if (memberId == null) return false;
+        boolean isAuthor = prompt.getAuthorId() != null && Objects.equals(prompt.getAuthorId(), memberId);
+        boolean isAdmin = authService.getMemberFromAuthorization(authorization)
+                .map(member -> "ADMIN".equalsIgnoreCase(member.getRole()))
+                .orElse(false);
+        return isAuthor || isAdmin;
+    }
+
+    private boolean matchesSearch(PromptPost prompt, String scope, String query, String keyword, String author) {
+        String q = firstNonBlank(query, keyword);
+        String normalizedScope = scope == null || scope.isBlank() ? "all" : scope.toLowerCase();
+
+        if (author != null && !author.isBlank()) {
+            String authorText = prompt.getAuthorNickname() == null ? "" : prompt.getAuthorNickname();
+            if (!authorText.toLowerCase().contains(author.toLowerCase())) return false;
+        }
+
+        if (q == null || q.isBlank()) return true;
+        String lower = q.toLowerCase();
+        return switch (normalizedScope) {
+            case "tag", "hashtag", "tags" -> PromptMapper.splitTags(prompt.getTagsCsv()).stream()
+                    .anyMatch(tag -> tag.toLowerCase().contains(lower));
+            case "author" -> prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower);
+            case "keyword", "title", "text" -> containsPromptText(prompt, lower);
+            default -> containsPromptText(prompt, lower)
+                    || (prompt.getAuthorNickname() != null && prompt.getAuthorNickname().toLowerCase().contains(lower))
+                    || PromptMapper.splitTags(prompt.getTagsCsv()).stream().anyMatch(tag -> tag.toLowerCase().contains(lower));
+        };
+    }
+
+    private boolean containsPromptText(PromptPost prompt, String lower) {
+        return (prompt.getTitle() != null && prompt.getTitle().toLowerCase().contains(lower))
+                || (prompt.getText() != null && prompt.getText().toLowerCase().contains(lower));
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        if (second != null && !second.isBlank()) return second;
+        return null;
+    }
+
+    private void increaseTagUsage(List<String> tags) {
+        if (tags == null) return;
+        for (String raw : tags) {
+            String name = Tag.normalize(raw);
+            if (name.isBlank()) continue;
+            Tag tag = tagRepository.findByName(name).orElseGet(() -> new Tag(name));
+            tag.increaseUseCount();
+            tagRepository.save(tag);
+        }
+    }
+
+    public record SharePromptRequest(String title, String text, List<String> tags) {}
+    public record VisibilityRequest(Boolean isShared) {}
+    public record ImproveRequest(
+            String prompt,
+            String category,
+            Long conversationId,
+            Long threadId,
+            String messageId,
+            String requestId,
+            List<Map<String, String>> history
+    ) {
+        public ImproveRequest(
+                String prompt,
+                String category,
+                Long conversationId,
+                Long threadId,
+                String messageId,
+                List<Map<String, String>> history
+        ) {
+            this(
+                    prompt,
+                    category,
+                    conversationId,
+                    threadId,
+                    messageId,
+                    null,
+                    history
+            );
+        }
+    }
+}
