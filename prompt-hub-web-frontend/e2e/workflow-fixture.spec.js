@@ -220,11 +220,20 @@ test("report failure preserves the dialog and success prevents duplicate reporti
   await page.locator('[data-report-prompt="88"]').click();
   const reportForm = page.locator('[data-report-form="88"]');
   await reportForm.locator('textarea[name="reason"]').fill("스팸입니다");
+  const failedReportResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/reports/prompts/88" && response.status() === 500,
+  );
   await reportForm.locator('button[type="submit"]').click();
+  await failedReportResponse;
+  await expect(page.locator(".toast")).toContainText("SERVER_ERROR");
   await expect(reportForm).toBeVisible();
 
   await reportForm.locator('textarea[name="reason"]').fill("스팸입니다");
+  const successfulReportResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/reports/prompts/88" && response.status() === 200,
+  );
   await reportForm.locator('button[type="submit"]').click();
+  await successfulReportResponse;
   await expect(reportForm).toHaveCount(0);
   await page.locator('[data-report-prompt="88"]').click();
   await expect(page.locator(".toast")).toContainText("이미 신고");
