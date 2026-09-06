@@ -39,11 +39,12 @@ import { parts } from "./make-message-parts.mjs";
       composerHtml,
       feedHtml,
       hasMessages,
+      hasResponseLessConversation,
       sidePanelHtml,
     } = data;
 
     return `
-      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"}" aria-label="프롬프트 첨삭">
+      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"} ${hasResponseLessConversation ? "has-response-less-conversation" : ""}" aria-label="프롬프트 첨삭">
         <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="false">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
             <path d="M6.5 4.5h11a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H10l-4.5 3v-3.25a3 3 0 0 1-2-2.75v-7a3 3 0 0 1 3-3Z"></path>
@@ -103,8 +104,19 @@ import { parts } from "./make-message-parts.mjs";
     if (current.length) turns.push(current);
     return turns.map((turn, index) => {
       const waitingForReply = isThinking && index === turns.length - 1 && turn.at(-1)?.role === "user";
-      return `<section class="conversation-turn ${waitingForReply ? "is-processing" : ""}" aria-label="대화 ${index + 1}">${turn.map(renderMessageBubble).join("")}${waitingForReply ? MessageThinkingView() : ""}</section>`;
+      const missingReply = !isThinking && index === turns.length - 1 && turn.at(-1)?.role === "user";
+      const turnStateClass = waitingForReply ? "is-processing" : missingReply ? "is-incomplete" : "";
+      return `<section class="conversation-turn ${turnStateClass}" aria-label="대화 ${index + 1}">${turn.map(renderMessageBubble).join("")}${waitingForReply ? MessageThinkingView() : missingReply ? MessageIncompleteView() : ""}</section>`;
     }).join("");
+  }
+
+  function MessageIncompleteView() {
+    return `
+      <div class="make-incomplete-response" role="status">
+        <span class="make-incomplete-mark" aria-hidden="true">!</span>
+        <span><strong>응답을 받지 못했습니다</strong><small>입력한 내용을 확인한 뒤 다시 보내주세요.</small></span>
+      </div>
+    `;
   }
 
   function MessageThinkingView() {
@@ -127,23 +139,22 @@ import { parts } from "./make-message-parts.mjs";
     const fieldTemplates = promptTemplates.filter((template) => template.id !== "custom");
     const selectedTemplate = promptTemplates.find((template) => template.id === selectedTemplateId);
     const hasSelectedField = Boolean(selectedTemplate && selectedTemplate.id !== "custom");
-    const collapsedLabel = hasSelectedField ? selectedTemplate.label : "분야 선택";
-    const collapsedAriaLabel = hasSelectedField ? `현재 분야: ${collapsedLabel}, 분야 선택 펼치기` : "분야 선택 펼치기";
+    const collapsedAriaLabel = hasSelectedField ? `현재 분야: ${selectedTemplate.label}, 분야 선택 펼치기` : "분야 선택 펼치기";
 
     return `
       <div class="make-template-bar ${templateCollapsed ? "collapsed" : ""}" aria-label="분야 선택">
-        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? collapsedAriaLabel : "분야 선택 접기"}" aria-expanded="${templateCollapsed ? "false" : "true"}">
-          <span class="template-toggle-label">${escapeHtml(templateCollapsed ? collapsedLabel : "분야 선택")}</span>
+        <button class="template-toggle" type="button" data-toggle-templates aria-label="${templateCollapsed ? collapsedAriaLabel : "분야 선택 접기"}" aria-controls="make-template-panel" aria-expanded="${templateCollapsed ? "false" : "true"}">
+          <span class="template-toggle-label">${templateCollapsed ? "분야 선택" : "접기"}</span>
           <svg class="template-toggle-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4"></path></svg>
         </button>
-        ${
-          templateCollapsed
-            ? ""
-            : `<div class="template-list">
-                ${fieldTemplates.map((template) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}">${escapeHtml(template.label)}</button>`).join("")}
-              </div>`
-        }
-        ${templateCollapsed ? "" : `<div class="template-guidance"><span>분야를 선택하거나</span>${customTemplate ? `<button class="template-custom-action ${selectedTemplateId === customTemplate.id ? "active" : ""}" type="button" data-template="${escapeAttr(customTemplate.id)}" aria-pressed="${selectedTemplateId === customTemplate.id ? "true" : "false"}">직접 입력</button>` : ""}</div>`}
+        <div class="template-panel" id="make-template-panel" aria-hidden="${templateCollapsed ? "true" : "false"}" ${templateCollapsed ? "inert" : ""}>
+          <div class="template-panel-inner">
+            <div class="template-list">
+              ${fieldTemplates.map((template, index) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}" style="--template-delay: ${36 + index * 18}ms">${escapeHtml(template.label)}</button>`).join("")}
+            </div>
+            <div class="template-guidance"><span>분야를 선택하거나</span>${customTemplate ? `<button class="template-custom-action ${selectedTemplateId === customTemplate.id ? "active" : ""}" type="button" data-template="${escapeAttr(customTemplate.id)}" aria-pressed="${selectedTemplateId === customTemplate.id ? "true" : "false"}">직접 입력</button>` : ""}</div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -187,7 +198,10 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <aside class="make-side-panel" id="make-conversation-drawer" aria-label="Make 최근 대화" tabindex="-1">
-        <button class="make-drawer-close" type="button" data-close-make-drawer aria-label="대화 목록 닫기">&times;</button>
+        <div class="make-drawer-head">
+          <strong>대화</strong>
+          <button class="make-drawer-close" type="button" data-close-make-drawer aria-label="대화 목록 닫기">&times;</button>
+        </div>
         <section class="make-folder-section">
           <div class="make-side-head">
             <span class="make-side-title"><strong>폴더</strong><small>${visibleFolders.length + 1}</small></span>

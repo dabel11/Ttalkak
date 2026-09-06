@@ -22,7 +22,9 @@ test("wide Make layout keeps every field on one horizontal row", async ({ page }
     return {
       display: getComputedStyle(bar).display,
       fieldRows: [...new Set(buttons.map((button) => Math.round(button.getBoundingClientRect().top)))],
-      label: getComputedStyle(label, "::before").content,
+      label: label.textContent.trim(),
+      toggleLeft: toggle.getBoundingClientRect().left,
+      toggleTop: toggle.getBoundingClientRect().top,
       fieldsBottom: Math.max(...buttons.map((button) => button.getBoundingClientRect().bottom)),
       guidanceTop: guidance.getBoundingClientRect().top,
     };
@@ -30,8 +32,43 @@ test("wide Make layout keeps every field on one horizontal row", async ({ page }
 
   expect(layout.display).toBe("grid");
   expect(layout.fieldRows).toHaveLength(1);
-  expect(layout.label).toBe('"부분 선택"');
+  expect(layout.label).toBe("접기");
   expect(layout.guidanceTop).toBeGreaterThanOrEqual(layout.fieldsBottom);
+  const toggle = page.locator("[data-toggle-templates]");
+  await toggle.click();
+  await expect(toggle.locator(".template-toggle-label")).toHaveText("분야 선택");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.waitForTimeout(340);
+  const collapsedPosition = await toggle.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { left: bounds.left, top: bounds.top };
+  });
+  expect(Math.abs(collapsedPosition.left - layout.toggleLeft)).toBeLessThanOrEqual(1);
+  expect(Math.abs(collapsedPosition.top - layout.toggleTop)).toBeLessThanOrEqual(1);
+  await toggle.click();
+  await expect(toggle.locator(".template-toggle-label")).toHaveText("접기");
+  await expectNoDocumentOverflow(page);
+});
+
+test("full-screen laptop Make layout keeps fields on the same centered row", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoApp(page);
+  await page.locator('[data-route="make"]').first().click();
+
+  const layout = await page.locator(".make-template-bar").evaluate((bar) => {
+    const list = bar.querySelector(".template-list");
+    const buttons = [...list.querySelectorAll("[data-template]")];
+    const hero = document.querySelector(".make-empty").getBoundingClientRect();
+    const bounds = bar.getBoundingClientRect();
+    return {
+      columns: getComputedStyle(list).gridTemplateColumns.split(" ").length,
+      rows: [...new Set(buttons.map((button) => Math.round(button.getBoundingClientRect().top)))].length,
+      centerDelta: Math.abs((bounds.left + bounds.width / 2) - (hero.left + hero.width / 2)),
+    };
+  });
+  expect(layout.columns).toBe(8);
+  expect(layout.rows).toBe(1);
+  expect(layout.centerDelta).toBeLessThanOrEqual(20);
   await expectNoDocumentOverflow(page);
 });
 
@@ -83,6 +120,7 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await expect(drawerToggle).toHaveCSS("background-color", "rgb(220, 235, 228)");
   const drawer = page.locator(".make-side-panel");
   await expect(drawer).toBeVisible();
+  await expect(drawer.locator(".make-drawer-head")).toContainText("대화");
   await expect(drawer).toHaveAttribute("role", "dialog");
   await expect(drawer).toHaveAttribute("aria-modal", "true");
   await expect(page.locator(".make-main")).toHaveAttribute("inert", "");
@@ -100,7 +138,7 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   await expect(templateToggle).toHaveAttribute("aria-expanded", "false");
   await expect(templateToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
   await templateToggle.click();
-  await expect(templateToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
+  await expect(templateToggle.locator(".template-toggle-label")).toHaveText("접기");
   await expect(templateToggle.locator(".template-toggle-chevron")).toBeVisible();
   await expect(templateToggle.locator(".template-toggle-mark")).toHaveCount(0);
   await expect(page.locator(".template-list [data-template]")).toHaveCount(8);
@@ -193,12 +231,15 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
     return {
       textareaHeight: textarea.height,
       submitBottom: submit.bottom,
+      previewTop: document.querySelector(".share-preview").getBoundingClientRect().top,
+      formBottom: document.querySelector(".share-form").getBoundingClientRect().bottom,
       titleDisplay: getComputedStyle(title).display,
       titleCenterDelta: Math.abs((icon.top + icon.height / 2) - (heading.top + heading.height / 2)),
     };
   });
   expect(shareLayout.textareaHeight).toBeLessThanOrEqual(160);
   expect(shareLayout.submitBottom).toBeLessThanOrEqual(844);
+  expect(shareLayout.previewTop).toBeGreaterThanOrEqual(shareLayout.formBottom);
   expect(shareLayout.titleDisplay).toBe("flex");
   expect(shareLayout.titleCenterDelta).toBeLessThanOrEqual(2);
 
@@ -213,6 +254,10 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
     return {
       gap: empty.top - filters.bottom,
       height: empty.height,
+      filterHeight: filters.height,
+      filterDisplay: getComputedStyle(document.querySelector(".filter-groups")).display,
+      activeTabBackground: getComputedStyle(document.querySelector(".my-page-tabs .active")).backgroundColor,
+      inactiveTabBackground: getComputedStyle(document.querySelector(".my-page-tabs button:not(.active)")).backgroundColor,
       titleDisplays: titles.map((title) => getComputedStyle(title).display),
       titleCenterDeltas: titles.map((title) => {
         const icon = title.querySelector(":scope > span").getBoundingClientRect();
@@ -223,8 +268,106 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
   });
   expect(savedLayout.gap).toBeLessThanOrEqual(24);
   expect(savedLayout.height).toBeLessThanOrEqual(230);
+  expect(savedLayout.filterHeight).toBeLessThanOrEqual(100);
+  expect(savedLayout.filterDisplay).toBe("grid");
+  expect(savedLayout.activeTabBackground).not.toBe(savedLayout.inactiveTabBackground);
+  await expect(page.locator(".my-page-tabs .active")).toHaveAttribute("aria-current", "page");
   expect(savedLayout.titleDisplays.every((display) => display === "flex")).toBe(true);
   expect(Math.max(...savedLayout.titleCenterDeltas)).toBeLessThanOrEqual(2);
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 1920, height: 900 });
+  const wideEmpty = await page.locator(".saved-empty").evaluate((empty) => {
+    const pageBounds = document.querySelector(".saved-page").getBoundingClientRect();
+    const emptyBounds = empty.getBoundingClientRect();
+    return {
+      width: emptyBounds.width,
+      centerDelta: Math.abs((emptyBounds.left + emptyBounds.width / 2) - (pageBounds.left + pageBounds.width / 2)),
+    };
+  });
+  expect(wideEmpty.width).toBeLessThanOrEqual(1100);
+  expect(wideEmpty.centerDelta).toBeLessThanOrEqual(1);
+});
+
+test("desktop Share centers its side-by-side form and preview", async ({ page }) => {
+  await page.route("http://localhost:8080/**", async (route) => route.fulfill({
+    status: route.request().method() === "OPTIONS" ? 204 : 200,
+    contentType: "application/json",
+    headers: { "access-control-allow-origin": "*" },
+    body: route.request().method() === "OPTIONS" ? "" : JSON.stringify({ items: [] }),
+  }));
+  await page.addInitScript(() => {
+    localStorage.setItem("ttalkak_access_token", "share-layout-token");
+    localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({
+      popularPrompts: [], savedPrompts: [],
+      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "share-layout-token", token: "share-layout-token" },
+    }));
+  });
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await gotoApp(page);
+  await page.locator('[data-route="share"]').first().click();
+
+  const layout = await page.locator(".share-shell").evaluate((shell) => {
+    const form = shell.querySelector(".share-form").getBoundingClientRect();
+    const firstInput = shell.querySelector(".share-form input").getBoundingClientRect();
+    const preview = shell.querySelector(".share-preview").getBoundingClientRect();
+    const shellBounds = shell.getBoundingClientRect();
+    const pageBounds = shell.closest(".share-page").getBoundingClientRect();
+    return {
+      columns: getComputedStyle(shell).gridTemplateColumns.split(" ").length,
+      previewLeft: preview.left,
+      formRight: form.right,
+      topDelta: Math.abs(preview.top - firstInput.top),
+      centerDelta: Math.abs((shellBounds.left + shellBounds.width / 2) - (pageBounds.left + pageBounds.width / 2)),
+    };
+  });
+  expect(layout.columns).toBe(2);
+  expect(layout.previewLeft).toBeGreaterThan(layout.formRight);
+  expect(layout.topDelta).toBeLessThanOrEqual(4);
+  expect(layout.centerDelta).toBeLessThanOrEqual(1);
+  await expectNoDocumentOverflow(page);
+});
+
+test("mobile My page offers an inline retry and refreshes after the backend recovers", async ({ page }) => {
+  let available = false;
+  let holdRecovery = false;
+  let releaseRecovery = () => {};
+  let recoveryGate = Promise.resolve();
+  await page.route("http://localhost:8080/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, body: "" });
+    if (available && holdRecovery) await recoveryGate;
+    return route.fulfill({
+      status: available ? 200 : 503,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(available ? { items: [] } : { code: "BACKEND_UNAVAILABLE" }),
+    });
+  });
+  await page.addInitScript(() => {
+    window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+    localStorage.setItem("ttalkak_access_token", "my-page-retry-token");
+    localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({
+      popularPrompts: [], savedPrompts: [],
+      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "my-page-retry-token", token: "my-page-retry-token", myPageTab: "library" },
+    }));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page);
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="saved"]').click();
+
+  const prompt = page.locator(".demo-library-prompt.is-error");
+  await expect(prompt).toBeVisible();
+  const retry = prompt.getByRole("button", { name: "다시 연결" });
+  await expect(retry).toBeVisible();
+  available = true;
+  holdRecovery = true;
+  recoveryGate = new Promise((resolve) => { releaseRecovery = resolve; });
+  await retry.click();
+  await expect(page.locator(".demo-library-prompt.is-recovering")).toBeVisible();
+  holdRecovery = false;
+  releaseRecovery();
+  await expect(page.locator(".demo-library-prompt")).toContainText("서버 응답 우선");
   await expectNoDocumentOverflow(page);
 });
 
@@ -250,7 +393,8 @@ test("conversation drawer clears modal state when the viewport becomes desktop-s
 
   await page.setViewportSize({ width: 640, height: 720 });
   await expect(page.locator("[data-toggle-templates]")).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator(".template-list")).toHaveCount(0);
+  await expect(page.locator(".template-panel")).toHaveAttribute("inert", "");
+  await expect(page.locator(".template-list")).toBeHidden();
 });
 
 test("essential navigation and authentication remain reachable on a small screen", async ({ page }) => {

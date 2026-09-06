@@ -1345,7 +1345,9 @@ h1 {
 
 .content-empty-state {
   width: 100%;
+  max-width: 1100px;
   min-height: clamp(190px, 30vh, 280px);
+  margin-inline: auto;
   padding: 28px 24px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1357,7 +1359,7 @@ h1 {
 .sort-select { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #d8e3dd; border-radius: 999px; background: #eef4ef; color: #587068; font-size: 12px; font-weight: 700; }
 .sort-select select { min-width: 88px; height: 38px; border: 0; outline: 0; color: var(--brand-green); background: transparent; font: inherit; cursor: pointer; }
 .sort-select:focus-within { border-color: rgba(18, 63, 52, 0.35); box-shadow: 0 0 0 3px rgba(18, 63, 52, 0.08); }
-.search-empty { min-height: 190px; gap: 7px; padding: 24px; }
+.search-empty { max-width: 960px; min-height: 190px; gap: 7px; padding: 24px; }
 .search-empty :is(h2, p) { margin: 0; }
 .search-empty button { min-height: 38px; margin-top: 9px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--brand-green); color: #fff; font-weight: 700; }
 .backend-status-menu, .topbar-settings, .topbar-account { position: relative; }
@@ -1808,6 +1810,33 @@ h1 {
 
 .share-shell {
   width: min(760px, 100%);
+  margin-inline: auto;
+}
+
+@media (min-width: 1181px) {
+  .share-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.85fr);
+    gap: 0 32px;
+    width: min(1120px, 100%);
+  }
+
+  .share-title {
+    grid-column: 1 / -1;
+  }
+
+  .share-form {
+    grid-column: 1;
+  }
+
+  .share-preview {
+    position: sticky;
+    top: 92px;
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    margin-top: 0;
+  }
 }
 
 .share-title {
@@ -2253,6 +2282,19 @@ input[type="checkbox"] {
   flex: 0 0 auto;
 }
 
+.demo-library-prompt.is-error {
+  background: #fff8ed;
+  color: #77531b;
+}
+
+.demo-library-prompt.is-error strong {
+  color: #77531b;
+}
+
+.demo-library-prompt.is-recovering {
+  background: #f3f7f5;
+}
+
 .saved-empty {
   align-content: center;
   justify-items: center;
@@ -2277,6 +2319,13 @@ input[type="checkbox"] {
 .search-error {
   gap: 4px;
   padding: 16px 24px;
+}
+
+.search-error h2 {
+  max-width: 100%;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  text-wrap: balance;
 }
 
 .search-error span svg {
@@ -3916,15 +3965,59 @@ input[type="checkbox"] {
   }
 
   .filter-groups {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 10px;
     width: 100%;
-    justify-content: flex-start;
+    padding: 8px 10px;
+    border: 1px solid rgba(18, 63, 52, 0.08);
+    border-radius: 16px;
+    background: #f7faf8;
+    box-shadow: var(--edge-shadow);
   }
 
   .filter-group {
-    width: 100%;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    border-radius: 14px;
+    width: auto;
+    min-height: 36px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .filter-groups > .filter-group:nth-of-type(1) {
+    justify-content: flex-end;
+  }
+
+  .filter-groups > .filter-group:nth-of-type(2) {
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px solid rgba(18, 63, 52, 0.08);
+  }
+
+  .my-page-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .my-page-tabs button {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .demo-library-prompt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .demo-library-prompt button {
+    align-self: flex-start;
+    min-height: 40px;
+  }
+
+  .search-error h2 {
+    font-size: clamp(19px, 5.4vw, 22px);
   }
 
   .content-empty-state,
@@ -4174,19 +4267,26 @@ input[type="checkbox"] {
 }
 
 .my-page-tabs button {
-  border: 0;
+  border: 1px solid rgba(18, 63, 52, 0.1);
   border-radius: 999px;
   padding: 10px 14px;
-  background: rgba(18, 63, 52, 0.08);
+  background: #f7faf8;
   color: var(--brand-green);
   box-shadow: var(--edge-shadow);
   font-weight: 700;
+  transition: background 0.16s, border-color 0.16s, color 0.16s, box-shadow 0.16s;
 }
 
-.my-page-tabs button.active,
 .my-page-tabs button:hover {
+  border-color: rgba(18, 63, 52, 0.2);
+  background: #e8f1ed;
+}
+
+.my-page-tabs button.active {
+  border-color: var(--brand-green);
   background: var(--brand-green);
   color: #fff;
+  box-shadow: 0 10px 24px rgba(18, 63, 52, 0.16);
 }
 
 .my-page-tabs span {

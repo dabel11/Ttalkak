@@ -16,7 +16,7 @@
           ${tabs
             .map(
               (tab) => `
-                <button class="${state.myPageTab === tab.id ? "active" : ""}" type="button" data-my-tab="${tab.id}">
+                <button class="${state.myPageTab === tab.id ? "active" : ""}" type="button" data-my-tab="${tab.id}" ${state.myPageTab === tab.id ? 'aria-current="page"' : ""}>
                   ${tab.label}<span>${formatNumber(tab.count)}</span>
                 </button>
               `,

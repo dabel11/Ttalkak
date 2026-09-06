@@ -4,9 +4,12 @@
 export function createMakePageAdapter(ctx) {
   function render() {
     const hasMessages = ctx.state.messages.length > 0;
+    const hasResponseLessConversation = hasMessages
+      && !ctx.isThinking()
+      && !ctx.state.messages.some((/** @type {TtalkakStateEntity} */ message) => message?.role === "assistant");
     return ctx.MakePageView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
-      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), hasMessages, sidePanelHtml: sidePanel() },
+      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), hasMessages, hasResponseLessConversation, sidePanelHtml: sidePanel() },
     );
   }
 

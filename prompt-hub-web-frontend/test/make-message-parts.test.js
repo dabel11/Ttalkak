@@ -4,12 +4,12 @@ const fixtures = require("./fixtures/make-responses.js");
 const fixtureMatrix = require("../../fixtures/prompt-improve-responses.json");
 const messageModel = require("../src/utils/make-message-model.js");
 
-let MessageQuestionsView; let MakeComposerView; let MakeFeedView; let MakeFolderButtonView; let MakeTemplateBarView; let MessageBubbleView;
+let MessageQuestionsView; let MakeComposerView; let MakeFeedView; let MakeFolderButtonView; let MakePageView; let MakeTemplateBarView; let MessageBubbleView;
 test.before(async () => {
   const { parts } = await import("../src/renderers/pages/make-message-parts.mjs");
   const { renderers } = await import("../src/renderers/pages/make-page.mjs");
   ({ MessageQuestionsView } = parts);
-  ({ MakeComposerView, MakeFeedView, MakeFolderButtonView, MakeTemplateBarView, MessageBubbleView } = renderers);
+  ({ MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeTemplateBarView, MessageBubbleView } = renderers);
 });
 const escapeHtml = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const escapeAttr = escapeHtml;
@@ -179,21 +179,24 @@ test("template selection uses a compact shared guidance and exposes pressed stat
   assert.match(html, /template-guidance/);
   assert.match(html, /분야를 선택하거나/);
   assert.match(html, /class="template-custom-action/);
-  assert.match(html, /class="template-toggle-label">분야 선택/);
+  assert.match(html, /class="template-toggle-label">접기/);
   assert.match(html, /class="template-toggle-chevron"/);
+  assert.match(html, /id="make-template-panel" aria-hidden="false"/);
+  assert.doesNotMatch(html, /aria-hidden="false" inert/);
   assert.doesNotMatch(html, /<strong>글쓰기<\/strong>/);
 });
 
-test("collapsed template selection names the current field without rendering the grid", () => {
+test("collapsed template selection keeps the grid inert for a reversible transition", () => {
   const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
     promptTemplates: [{ id: "writing", label: "글쓰기" }, { id: "custom", label: "직접 입력" }],
     selectedTemplateId: "writing",
     templateCollapsed: true,
   });
   assert.match(html, /현재 분야: 글쓰기, 분야 선택 펼치기/);
-  assert.match(html, /class="template-toggle-label">글쓰기/);
+  assert.match(html, /class="template-toggle-label">분야 선택/);
   assert.match(html, /class="template-toggle-chevron"/);
-  assert.doesNotMatch(html, /class="template-list"/);
+  assert.match(html, /id="make-template-panel" aria-hidden="true" inert/);
+  assert.match(html, /class="template-list"/);
 });
 
 test("collapsed direct input uses the field selection action instead of naming custom input as a field", () => {
@@ -221,6 +224,26 @@ test("conversation turns group a user request with its reply and highlight pendi
   assert.match(html, /conversation-turn is-processing/);
   assert.ok(html.indexOf("u1") < html.indexOf("a1"));
   assert.ok(html.indexOf("u2") < html.indexOf("data-make-thinking-indicator"));
+});
+
+test("an unanswered final turn renders a compact recovery status directly after the request", () => {
+  const messages = [{ id: "u1", role: "user" }];
+  const html = MakeFeedView({ icons: { make: "make", send: "send" } }, { hasMessages: true, isThinking: false, messages, renderMessageBubble: (message) => `<i>${message.id}</i>`, templateBarHtml: "" });
+  assert.match(html, /conversation-turn is-incomplete/);
+  assert.match(html, /class="make-incomplete-response" role="status"/);
+  assert.match(html, /응답을 받지 못했습니다/);
+  assert.ok(html.indexOf("u1") < html.indexOf("make-incomplete-response"));
+});
+
+test("a completed final turn does not render an incomplete response status", () => {
+  const messages = [{ id: "u1", role: "user" }, { id: "a1", role: "assistant" }];
+  const html = MakeFeedView({ icons: { make: "make", send: "send" } }, { hasMessages: true, isThinking: false, messages, renderMessageBubble: (message) => `<i>${message.id}</i>`, templateBarHtml: "" });
+  assert.doesNotMatch(html, /is-incomplete|make-incomplete-response/);
+});
+
+test("a response-less conversation brings the composer into the same start flow", () => {
+  const html = MakePageView({}, { composerHtml: "<form></form>", feedHtml: "<div></div>", hasMessages: true, hasResponseLessConversation: true, sidePanelHtml: "<aside></aside>" });
+  assert.match(html, /make-page has-conversation has-response-less-conversation/);
 });
 
 test("real response regressions keep ask inputs and executable results distinct", () => {

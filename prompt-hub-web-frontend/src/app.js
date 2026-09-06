@@ -455,6 +455,7 @@ let makeProgressStartedAt = 0;
 let makeProgressTimerId = null;
 let makeInteractionVersion = 0;
 let makeServerSyncEffects = null;
+let myPageRecoveryPromise = null;
 let appBootstrap = null;
 const getBackendDataEffectContext = (...args) => appBootstrap.getBackendDataEffectContext(...args);
 const getBackendHydrationEffectContext = (...args) => appBootstrap.getBackendHydrationEffectContext(...args);
@@ -1145,6 +1146,17 @@ function SavedPage() {
   );
 }
 function DemoLibraryPrompt() {
+  if (state.myBackendStatus === "checking") {
+    return `
+      <div class="demo-library-prompt is-recovering" role="status" aria-live="polite">
+        <div>
+          <strong>서버에 다시 연결하는 중입니다</strong>
+          <p>저장한 프롬프트와 최근 활동을 새로 불러오고 있습니다.</p>
+        </div>
+        <button class="secondary-button" type="button" disabled>연결 중…</button>
+      </div>
+    `;
+  }
   if (state.myBackendStatus === "connected") {
     return `
       <div class="demo-library-prompt">
@@ -1157,11 +1169,12 @@ function DemoLibraryPrompt() {
   }
   if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) {
     return `
-      <div class="demo-library-prompt">
+      <div class="demo-library-prompt is-error" role="alert">
         <div>
-          <strong>현재: 서버 응답 실패</strong>
-          <p>서버에 연결할 수 없습니다. 잠시 후 다시 연결해 주세요.</p>
+          <strong>서버에 연결할 수 없습니다</strong>
+          <p>네트워크 상태를 확인한 뒤 잠시 후 다시 연결해 주세요.</p>
         </div>
+        <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
       </div>
     `;
   }
@@ -1175,6 +1188,21 @@ function DemoLibraryPrompt() {
       ${canUseDemoFallback() ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
     </div>
   `;
+}
+async function retryMyPageBackendConnection() {
+  if (myPageRecoveryPromise) return myPageRecoveryPromise;
+  state.myBackendStatus = "checking";
+  render();
+  myPageRecoveryPromise = Promise.resolve(hydrateBackendMyPageDataIfNeeded({ force: true }))
+    .catch((error) => {
+      reportWarning("backend-hydration", "my-page-retry", error);
+      state.myBackendStatus = "fallback";
+      render();
+    })
+    .finally(() => {
+      myPageRecoveryPromise = null;
+    });
+  return myPageRecoveryPromise;
 }
 function MyPagePanel() {
   if (state.myPageTab === "mine") return MyPromptsPanel();
@@ -1492,6 +1520,11 @@ function bindPromptInteractionEvents() {
       state.myPageTab = nextTab;
       state.savedPage = 1;
       render();
+    });
+  });
+  document.querySelectorAll("[data-retry-my-page-load]").forEach((button) => {
+    button.addEventListener("click", () => {
+      retryMyPageBackendConnection();
     });
   });
   document.querySelectorAll("[data-saved-sort]").forEach((select) => {
@@ -2411,7 +2444,12 @@ const markApplicationReady = () => {
   document.documentElement.dataset.ttalkakReady = "true";
   document.dispatchEvent(new CustomEvent("ttalkak:ready"));
 };
+const markApplicationHydrated = () => {
+  document.documentElement.dataset.ttalkakHydrated = "true";
+  document.dispatchEvent(new CustomEvent("ttalkak:hydrated"));
+};
 if (needsAdminRuntime || needsShareRuntime || needsMakeRuntime) routeReady.finally(markApplicationReady);
 else markApplicationReady();
+void hydration.then(markApplicationHydrated, markApplicationHydrated);
 return hydration;
 }

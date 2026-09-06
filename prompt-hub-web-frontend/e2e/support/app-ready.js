@@ -25,4 +25,8 @@ async function gotoApp(page, path = "/") {
   }
 }
 
-module.exports = { gotoApp };
+async function waitForAppHydration(page) {
+  await expect(page.locator("html")).toHaveAttribute("data-ttalkak-hydrated", "true", { timeout: 15_000 });
+}
+
+module.exports = { gotoApp, waitForAppHydration };

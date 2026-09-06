@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const TOKEN_KEY = "ttalkak_access_token";
@@ -118,6 +118,7 @@ async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
   await mockBackend(page, improveHandler, { threads: extra.backendThreads, threadHandler: extra.threadHandler });
   await gotoApp(page);
+  await waitForAppHydration(page);
   await page.locator('.sidebar [data-route="make"]').click();
   await expect(page.locator(".make-page")).toBeVisible();
 }
@@ -305,20 +306,36 @@ test("long-running request status advances while the cancel action remains avail
   releaseResponse();
 });
 
-test("template categories collapse immediately without a layout-animation state", async ({ page }) => {
+test("template categories collapse and expand through one reversible panel", async ({ page }) => {
   await openMake(page);
 
   const toggle = page.locator("[data-toggle-templates]");
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator(".template-list")).toBeVisible();
+  const motion = await page.locator(".template-panel").evaluate((panel) => {
+    const buttons = [...panel.querySelectorAll(".template-list [data-template]")];
+    return {
+      duration: getComputedStyle(panel).transitionDuration,
+      firstDelay: getComputedStyle(buttons[0]).getPropertyValue("--template-delay").trim(),
+      lastDelay: getComputedStyle(buttons.at(-1)).getPropertyValue("--template-delay").trim(),
+    };
+  });
+  expect(motion.duration).toContain("0.42s");
+  expect(motion).toMatchObject({ firstDelay: "36ms", lastDelay: "162ms" });
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator(".template-list")).toHaveCount(0);
+  await expect(toggle.locator(".template-toggle-label")).toHaveText("분야 선택");
+  await expect(page.locator(".template-panel")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.locator(".template-panel")).toHaveAttribute("inert", "");
+  await expect(page.locator(".template-list")).toBeHidden();
   await expect(page.locator(".make-template-bar.collapsing")).toHaveCount(0);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle.locator(".template-toggle-label")).toHaveText("접기");
+  await expect(page.locator(".template-panel")).toHaveAttribute("aria-hidden", "false");
+  await expect(page.locator(".template-panel")).not.toHaveAttribute("inert", "");
   await expect(page.locator(".template-list")).toBeVisible();
 });
 
@@ -589,11 +606,11 @@ test("Make groups turns and keeps a balanced field grid with an independent togg
   await expect(page.locator(".conversation-turn")).toHaveCount(2);
   const fieldToggle = page.locator("[data-toggle-templates]");
   await expect(fieldToggle).toHaveAttribute("aria-label", "분야 선택 접기");
-  await expect(fieldToggle.locator(".template-toggle-label")).toHaveText("분야 선택");
+  await expect(fieldToggle.locator(".template-toggle-label")).toHaveText("접기");
   await expect(fieldToggle.locator(".template-toggle-chevron")).toBeVisible();
   expect(await fieldToggle.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(122);
   const templateColumns = await page.locator(".template-list").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
-  expect([2, 3]).toContain(templateColumns);
+  expect(templateColumns).toBe(4);
   const templateBounds = await page.locator(".make-template-bar").evaluate((element) => {
     const list = element.querySelector(".template-list");
     return {

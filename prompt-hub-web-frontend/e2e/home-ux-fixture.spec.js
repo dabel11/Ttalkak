@@ -43,6 +43,7 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
     headers: { "access-control-allow-origin": "*" },
     body: JSON.stringify({ code: "BACKEND_UNAVAILABLE" }),
   }));
+  await page.setViewportSize({ width: 1920, height: 900 });
   await gotoApp(page);
 
   const sort = page.locator(".sort-select");
@@ -57,6 +58,24 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   const errorHeight = await empty.evaluate((element) => element.getBoundingClientRect().height);
   expect(errorHeight).toBeGreaterThanOrEqual(180);
   expect(errorHeight).toBeLessThanOrEqual(210);
+  const errorLayout = await empty.evaluate((element) => {
+    const pageBounds = element.closest(".home-page").getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return {
+      width: bounds.width,
+      centerDelta: Math.abs((bounds.left + bounds.width / 2) - (pageBounds.left + pageBounds.width / 2)),
+    };
+  });
+  expect(errorLayout.width).toBeLessThanOrEqual(960);
+  expect(errorLayout.centerDelta).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 390, height: 800 });
+  const errorHeadingStyle = await empty.getByRole("heading", { name: "프롬프트를 불러오지 못했습니다" }).evaluate((element) => ({
+    wordBreak: getComputedStyle(element).wordBreak,
+    overflowWrap: getComputedStyle(element).overflowWrap,
+  }));
+  expect(errorHeadingStyle.wordBreak).toBe("keep-all");
+  expect(errorHeadingStyle.overflowWrap).toBe("normal");
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   await page.locator(".backend-status-menu > summary").click();
   await expect(page.locator(".backend-status-popover")).toContainText("개발 서버에 연결할 수 없습니다");

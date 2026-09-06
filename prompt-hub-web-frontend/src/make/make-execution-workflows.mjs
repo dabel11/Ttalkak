@@ -1,6 +1,6 @@
 "use strict";
 export function createMakeExecutionWorkflows(ctx) {
-    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState } = ctx;
+    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState, persistState } = ctx;
     async function copyMakeMessage(messageId) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
@@ -155,9 +155,30 @@ export function createMakeExecutionWorkflows(ctx) {
     }
 
     function toggleTemplateBar() {
-      if (window.matchMedia?.("(max-width: 760px)").matches) state.mobileTemplateExpanded = !state.mobileTemplateExpanded;
+      const compactViewport = Boolean(window.matchMedia?.("(max-width: 760px)").matches);
+      if (compactViewport) state.mobileTemplateExpanded = !state.mobileTemplateExpanded;
       else state.templateCollapsed = !state.templateCollapsed;
-      render();
+
+      const collapsed = compactViewport ? !state.mobileTemplateExpanded : state.templateCollapsed;
+      const bar = document.querySelector(".make-template-bar");
+      const toggle = bar?.querySelector("[data-toggle-templates]");
+      const label = toggle?.querySelector(".template-toggle-label");
+      const panel = bar?.querySelector(".template-panel");
+      if (!bar || !toggle || !label || !panel) {
+        render();
+        return;
+      }
+
+      const selectedTemplate = promptTemplates.find((item) => item.prompt === state.composerDraft && item.id !== "custom");
+      bar.classList.toggle("collapsed", collapsed);
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      toggle.setAttribute("aria-label", collapsed
+        ? selectedTemplate ? `현재 분야: ${selectedTemplate.label}, 분야 선택 펼치기` : "분야 선택 펼치기"
+        : "분야 선택 접기");
+      label.textContent = collapsed ? "분야 선택" : "접기";
+      panel.setAttribute("aria-hidden", collapsed ? "true" : "false");
+      panel.toggleAttribute("inert", collapsed);
+      persistState?.();
     }
 
     return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
