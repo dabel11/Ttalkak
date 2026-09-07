@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 async function expectNoDocumentOverflow(page) {
   const dimensions = await page.evaluate(() => ({
@@ -192,6 +192,7 @@ test("conversation drawer keeps its accessible name at a very narrow width", asy
 test("mobile Home keeps search and sorting controls in compact single rows", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoApp(page);
+  await waitForAppHydration(page);
 
   const layout = await page.evaluate(() => {
     const search = document.querySelector(".search-field").getBoundingClientRect();
