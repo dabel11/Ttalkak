@@ -34,7 +34,7 @@
 }
 
 html {
-  overflow-y: scroll;
+  overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
@@ -2066,6 +2066,13 @@ h1 {
   color: var(--brand-green);
 }
 
+.share-required-card p {
+  max-width: 290px;
+  margin-inline: auto;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
 .share-required-card .primary-button {
   margin-top: 24px;
 }
@@ -3974,6 +3981,22 @@ input[type="checkbox"] {
     border-radius: 16px;
     background: #f7faf8;
     box-shadow: var(--edge-shadow);
+  }
+
+  .brand {
+    flex: 0 0 auto;
+    max-width: none;
+  }
+
+  .brand span:last-child {
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .prompt-card {
+    min-height: 0;
+    max-height: none;
+    padding: 20px;
   }
 
   .filter-group {

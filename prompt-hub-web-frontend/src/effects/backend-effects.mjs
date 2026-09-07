@@ -1,4 +1,7 @@
 import { classifyMakeError } from "../utils/make-message-model.mjs";
+import { runtimeConfig } from "../runtime/runtime-config.mjs";
+
+const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
   "use strict";
 
@@ -321,16 +324,50 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
 
     state.myBackendStatus = "checking";
     const token = getAuthToken() || undefined;
-    const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = await Promise.allSettled([
-      api.getMyLibrary({ filter: "all", page: 1, pageSize: 64 }, token),
-      api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64 }, token),
-      api.getMyPrompts?.({ page: 1, pageSize: 64 }, token),
-      api.getMyComments?.({ page: 1, pageSize: 64 }, token),
-      api.getMyReports?.({ page: 1, pageSize: 64 }, token),
+    const hydrationController = new AbortController();
+    const settledRequests = Promise.allSettled([
+      api.getMyLibrary({ filter: "all", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+      api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+      api.getMyPrompts?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+      api.getMyComments?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+      api.getMyReports?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
     ]);
+    let hydrationTimeoutId;
+    const hydrationTimeout = new Promise((resolve) => {
+      hydrationTimeoutId = globalThis.setTimeout(() => {
+        hydrationController.abort();
+        resolve(null);
+      }, MY_PAGE_HYDRATION_TIMEOUT_MS);
+    });
+    const settledResults = await Promise.race([settledRequests, hydrationTimeout]);
+    globalThis.clearTimeout(hydrationTimeoutId);
+    if (!settledResults) {
+      const timeoutError = Object.assign(new Error("My page data hydration timed out."), {
+        code: "MY_PAGE_HYDRATION_TIMEOUT",
+        status: 0,
+      });
+      ctx.reportWarning?.("backend-hydration", "my-page-timeout", timeoutError);
+      state.myBackendStatus = "fallback";
+      if (state.route === "saved") render();
+      return;
+    }
+    const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = settledResults;
     const allRequestsFailed = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult].every(
       (result) => result.status === "rejected" || result.value === undefined,
     );
+    const rejectedReasons = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    const unauthorizedReason = rejectedReasons.find((reason) => {
+      const status = Number(reason?.status || reason?.payload?.status || 0);
+      const code = String(reason?.payload?.code || reason?.code || "");
+      return status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED";
+    });
+
+    if (allRequestsFailed && unauthorizedReason && typeof ctx.handleBackendAccessError === "function") {
+      ctx.handleBackendAccessError(unauthorizedReason, "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+      return;
+    }
 
     let shouldRender = false;
     const backendDataContext = applyContext();

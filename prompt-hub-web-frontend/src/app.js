@@ -1142,7 +1142,10 @@ function SavedPage() {
   ];
   return SavedPageView(
     { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel },
-    { tabs },
+    {
+      tabs,
+      hideMyPagePanel: !canUseDemoFallback() && ["checking", "fallback"].includes(state.myBackendStatus),
+    },
   );
 }
 function DemoLibraryPrompt() {
@@ -1171,8 +1174,8 @@ function DemoLibraryPrompt() {
     return `
       <div class="demo-library-prompt is-error" role="alert">
         <div>
-          <strong>서버에 연결할 수 없습니다</strong>
-          <p>네트워크 상태를 확인한 뒤 잠시 후 다시 연결해 주세요.</p>
+          <strong>My page 데이터를 불러오지 못했습니다</strong>
+          <p>네트워크 상태를 확인한 뒤 잠시 후 다시 시도해 주세요.</p>
         </div>
         <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
       </div>

@@ -2,6 +2,7 @@
 const DEFAULT_API_URL = "http://localhost:8080";
 const DEFAULT_API_TIMEOUT_MS = 60_000;
 const DEFAULT_IMPROVE_TIMEOUT_MS = 90_000;
+const DEFAULT_MY_PAGE_HYDRATION_TIMEOUT_MS = 15_000;
 
 /** @param {unknown} value @param {number} fallback @param {string} name */
 function positiveTimeout(value, fallback, name) {
@@ -23,6 +24,7 @@ export function readRuntimeConfig(browserWindow = globalThis.window) {
     apiEnvironment,
     apiTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_API_TIMEOUT_MS, DEFAULT_API_TIMEOUT_MS, "TTALKAK_API_TIMEOUT_MS"),
     improveTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_IMPROVE_TIMEOUT_MS, DEFAULT_IMPROVE_TIMEOUT_MS, "TTALKAK_IMPROVE_TIMEOUT_MS"),
+    myPageHydrationTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS, DEFAULT_MY_PAGE_HYDRATION_TIMEOUT_MS, "TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS"),
     googleCredential: String(browserWindow?.TTALKAK_GOOGLE_CREDENTIAL || ""),
     demoFallbackEnabled: browserWindow?.TTALKAK_DEMO_FALLBACK_ENABLED === true,
   });

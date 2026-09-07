@@ -2,7 +2,7 @@
 
   function SavedPageView(ctx, data) {
     const { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel } = ctx;
-    const { tabs } = data;
+    const { hideMyPagePanel, tabs } = data;
 
     return `
       <section class="saved-page my-page" aria-labelledby="my-page-heading">
@@ -24,7 +24,7 @@
             .join("")}
         </nav>
         ${DemoLibraryPrompt()}
-        ${MyPagePanel()}
+        ${hideMyPagePanel ? "" : MyPagePanel()}
       </section>
     `;
   }

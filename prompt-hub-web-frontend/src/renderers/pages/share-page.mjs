@@ -10,7 +10,7 @@
           <div class="empty-state share-required-card">
             <span>${icons.share}</span>
             <h1 id="share-required-title">로그인이 필요합니다</h1>
-            <p>프롬프트를 공유하려면 먼저 로그인해주세요.</p>
+            <p>공유하려면 먼저 로그인해 주세요.</p>
             <button class="primary-button" type="button" data-open-auth="login">로그인</button>
           </div>
         </section>

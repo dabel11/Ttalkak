@@ -72,6 +72,9 @@
     const resolvedAuthButton = state.isLoggedIn
       ? `<div class="account-actions">${adminAccessButton}${accountMenu}</div>`
       : authButton;
+    const makeAuthHint = state.route === "make" && !state.isLoggedIn
+      ? `비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.`
+      : "";
 
     return `
       <header class="topbar">
@@ -88,12 +91,13 @@
                 ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">My page</button>` : ""}
                 <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">Share</button>
               </nav>
+              ${makeAuthHint ? `<p class="make-auth-hint make-auth-hint-mobile">${makeAuthHint}</p>` : ""}
               ${resolvedAuthButton}
               ${BackendStatusBadge()}
               ${settingsMenu}
             </div>
           </div>
-          ${state.route === "make" && !state.isLoggedIn ? `<p class="make-auth-hint">비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.</p>` : ""}
+          ${makeAuthHint ? `<p class="make-auth-hint make-auth-hint-desktop">${makeAuthHint}</p>` : ""}
         </div>
       </header>
     `;

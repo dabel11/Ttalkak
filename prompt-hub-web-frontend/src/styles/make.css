@@ -1524,6 +1524,10 @@
   line-height: 1.45;
 }
 
+.make-auth-hint-mobile {
+  display: none;
+}
+
 .recent-thread-item,
 .composer textarea,
 .message.assistant,
@@ -2850,6 +2854,8 @@
   .make-page { position: relative; grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); height: 100%; overflow: hidden; }
   .make-main { grid-column: 1; grid-row: 1; height: 100%; overflow: hidden; }
   .make-drawer-toggle { position: fixed; top: 12px; right: 104px; z-index: 51; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 76px; height: 44px; padding: 0 14px; border: 1px solid #dce6e1; border-radius: 999px; background: #eef4ef; color: var(--brand-green); font-size: 12px; font-weight: 800; cursor: pointer; transition: transform 140ms ease, background 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+  .make-auth-hint-desktop { display: none; }
+  .topbar-action-menu .make-auth-hint-mobile { display: block; width: 100%; max-width: none; margin: 0; padding: 8px 12px; border-bottom: 1px solid #e6ede9; color: var(--muted); text-align: left; white-space: normal; }
   .make-drawer-toggle svg { width: 17px; height: 17px; flex: 0 0 auto; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1); }
   .make-drawer-toggle:is(:hover, :focus-visible) { border-color: rgba(18, 63, 52, 0.24); background: #e5f0eb; box-shadow: 0 6px 18px rgba(5, 40, 31, 0.08); }
   .make-drawer-toggle:active { transform: scale(0.97); }
