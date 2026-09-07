@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.frontend.json",
+  "compilerOptions": {
+    "checkJs": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": true
+  },
+  "include": [
+    "types/browser-globals.d.ts",
+    "src/app-entry.js",
+    "src/**/index.js",
+    "src/saved/saved-library-controller.js",
+    "src/discovery/discovery-controller.js",
+    "src/state/state-persistence.js",
+    "src/state/state-core.js",
+    "src/state/state-prompt.js",
+    "src/state/state-admin.js",
+    "src/state/state-interaction.js",
+    "src/state/state-make.js",
+    "src/state/app-state.js"
+  ]
+}

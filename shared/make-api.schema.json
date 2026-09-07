@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ttalkak.com/schemas/make-api.schema.json",
+  "title": "Ttalkak Make API contract",
+  "type": "object",
+  "x-ttalkak-contract": {
+    "requestIdMaxLength": 128,
+    "paths": {
+      "improve": "/api/prompts/improve",
+      "threads": "/api/make/threads",
+      "thread": "/api/make/threads/{threadId}"
+    },
+    "errorCodes": {
+      "requestIdInvalid": "REQUEST_ID_INVALID",
+      "requestIdReused": "REQUEST_ID_REUSED",
+      "threadConcurrentlyUpdated": "THREAD_CONCURRENTLY_UPDATED"
+    }
+  },
+  "$defs": {
+    "HistoryMessage": {
+      "type": "object",
+      "required": ["role", "content"],
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "ImproveRequest": {
+      "type": "object",
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "category": { "type": ["string", "null"] },
+        "conversationId": { "type": ["integer", "null"] },
+        "threadId": { "type": ["integer", "null"] },
+        "messageId": { "type": ["string", "null"] },
+        "requestId": { "type": ["string", "null"], "maxLength": 128 },
+        "history": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/HistoryMessage" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ImproveResponse": {
+      "type": "object",
+      "required": ["replayed"],
+      "properties": {
+        "conversationId": { "type": ["integer", "null"] },
+        "threadId": { "type": ["integer", "null"] },
+        "requestId": { "type": ["string", "null"], "maxLength": 128 },
+        "replayed": { "type": "boolean" },
+        "editedMessageId": { "type": ["string", "null"] },
+        "improvedPrompt": { "type": ["string", "null"] },
+        "result": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "ApiError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["REQUEST_ID_INVALID", "REQUEST_ID_REUSED", "THREAD_CONCURRENTLY_UPDATED"]
+        },
+        "message": { "type": "string" },
+        "status": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": true
+    }
+  }
+}

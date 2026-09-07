@@ -1,0 +1,72 @@
+# ── Claude Code ─────────────────────────────────────────────
+.claude/
+
+# ── OS / IDE ────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# ── Secrets ─────────────────────────────────────────────────
+**/.env
+**/.env.local
+**/.env.example
+*.pem
+*.key
+
+# ── Java / Gradle (backend) ─────────────────────────────────
+.gradle/
+build/
+bin/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── Node (extension) ────────────────────────────────────────
+extension/node_modules/
+extension/dist/
+extension/dist-dev/
+extension/dist-prod/
+extension/dist-verify/
+extension/.npm-cache/
+prompt-hub-web-frontend/node_modules/
+prompt-hub-web-frontend/dist/
+prompt-hub-web-frontend/playwright-report/
+prompt-hub-web-frontend/test-results/
+
+# ── Python (rag-server) ─────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ── RAG data / vector DB (대용량, 재생성 가능) ───────────────
+rag-server/chroma_db/
+rag-server/data/
+
+# ── 평가 응답 캐시·임시 로그 (재생성 가능) ──────────────────
+rag-server/eval/.uplift_cache.json
+rag-server/eval/.gen_cache*.json
+rag-server/eval/.example_ab_cache*.json
+rag-server/eval/.multi_turn_*cache.json
+rag-server/eval/.multi_turn_result.json
+rag-server/eval/.temp_*.log
+
+# ── 계약 문서 (git 미포함 · 백엔드/프론트 담당에게 별도 공유) ──
+rag-server/CONTRACT_*.md
+
+docs/*
+!docs/prompt-improve-contract.schema.json
+!docs/FRONTEND_OPERATING_POLICIES.md
+!docs/WEB_STORE_RELEASE_CHECKLIST.md
+!docs/WEB_STORE_RELEASE_RECORD_TEMPLATE.md
+!docs/ACCOUNT_WITHDRAWAL_SMOKE_CHECKLIST.md
+!docs/smoke-results/
+!docs/smoke-results/*.md
+.gitignore
+
+extension/.env.production.local
+
+# Local preview server logs
+prompt-hub-web-frontend/preview-server.*.log
+
+# Local backend run logs
+backend/codex-bootrun*.log

@@ -1,0 +1,107 @@
+  "use strict";
+
+  function createAppBootstrap(ctx) {
+    function getBackendDataEffectContext() {
+      return {
+        isBackendNumericId: ctx.isBackendNumericId,
+        makePreview: ctx.makePreview,
+        makeState: ctx.makeState,
+        normalizeMakeFolders: ctx.normalizeMakeFolders,
+        normalizePersistedLikeCounts: ctx.normalizePersistedLikeCounts,
+        normalizeRecentThreads: ctx.normalizeRecentThreads,
+        popularPrompts: ctx.popularPrompts,
+        savedPrompts: ctx.savedPrompts,
+        state: ctx.state,
+        updateBackendHomePageMeta: ctx.updateBackendHomePageMeta,
+        upsertPrompt: ctx.upsertPrompt,
+      };
+    }
+
+    function getBackendHydrationEffectContext() {
+      return {
+        api: ctx.api,
+        applyContext: getBackendDataEffectContext,
+        canUseDemoFallback: ctx.canUseDemoFallback,
+        clearAuthenticatedSession: ctx.clearAuthenticatedSession,
+        getApiFailureMessage: ctx.getApiFailureMessage,
+        getAuthToken: ctx.getAuthToken,
+        hasBackendAuthToken: ctx.hasBackendAuthToken,
+        getMakeApi: ctx.getMakeApi,
+        getMakeApiToken: ctx.getMakeApiToken,
+        getMakeInteractionVersion: ctx.getMakeInteractionVersion,
+        getValidSearchScope: ctx.getValidSearchScope,
+        handleBackendAccessError: ctx.handleBackendAccessError,
+        makeState: ctx.makeState,
+        homePageSize: ctx.homePageSize,
+        render: ctx.render,
+        reportWarning: ctx.reportWarning,
+        state: ctx.state,
+      };
+    }
+
+    async function hydrateBackendMakeDataIfNeeded() {
+      if (ctx.isMakeThinking()) return;
+      return ctx.hydrateBackendMakeDataEffect(getBackendHydrationEffectContext());
+    }
+
+    function refreshMyPageDataAfterMutation() {
+      if (!ctx.state.isLoggedIn || ctx.state.myBackendStatus !== "connected") return Promise.resolve();
+      ctx.state.myBackendStatus = "idle";
+      return hydrateBackendMyPageDataIfNeeded({ force: true });
+    }
+
+    async function hydrateBackendMyPageDataIfNeeded({ force = false } = {}) {
+      return ctx.hydrateBackendMyPageDataEffect(getBackendHydrationEffectContext(), { force });
+    }
+
+    function getAdminHydrationEffectContext() {
+      return {
+        api: ctx.api,
+        canUseDemoFallback: ctx.canUseDemoFallback,
+        formatShortDate: ctx.formatShortDate,
+        getAuthToken: ctx.getAuthToken,
+        getReportRecord: ctx.getReportRecord,
+        hasBackendAuthToken: ctx.hasBackendAuthToken,
+        mapBackendReportStatus: ctx.mapBackendReportStatus,
+        render: ctx.render,
+        reportWarning: ctx.reportWarning,
+        state: ctx.state,
+      };
+    }
+
+    async function hydrateBackendAdminDataIfNeeded(options = {}) {
+      return ctx.hydrateBackendAdminData(getAdminHydrationEffectContext(), options);
+    }
+
+    async function hydrateBackendHomeData() {
+      return ctx.hydrateBackendHomeDataEffect(getBackendHydrationEffectContext());
+    }
+
+    async function refreshBackendHomePrompts() {
+      return ctx.refreshBackendHomePromptsEffect(getBackendHydrationEffectContext());
+    }
+
+    function bootstrap() {
+      ctx.loadPersistedState();
+      ctx.prepareDemoData();
+      ctx.normalizeAssistantPromptOutputs();
+      ctx.normalizeRecentThreads();
+      ctx.render();
+      return hydrateBackendHomeData();
+    }
+
+    return Object.freeze({
+      bootstrap,
+      getAdminHydrationEffectContext,
+      getBackendDataEffectContext,
+      getBackendHydrationEffectContext,
+      hydrateBackendAdminDataIfNeeded,
+      hydrateBackendHomeData,
+      hydrateBackendMakeDataIfNeeded,
+      hydrateBackendMyPageDataIfNeeded,
+      refreshBackendHomePrompts,
+      refreshMyPageDataAfterMutation,
+    });
+  }
+
+export { createAppBootstrap };

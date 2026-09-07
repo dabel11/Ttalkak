@@ -1,0 +1,68 @@
+name: Extension production release smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_api_url:
+        description: Spring Boot production HTTPS origin
+        required: true
+        type: string
+      extension_id:
+        description: Chrome Web Store extension ID
+        required: true
+        type: string
+      privacy_policy_url:
+        description: Public HTTPS privacy policy URL
+        required: true
+        type: string
+      support_url:
+        description: Public HTTPS support URL
+        required: true
+        type: string
+      release_owner:
+        description: Person responsible for this release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release-smoke:
+    name: Production artifact and live CORS gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_BACKEND_API_URL: ${{ inputs.backend_api_url }}
+      TTALKAK_PRODUCTION_EXTENSION_ID: ${{ inputs.extension_id }}
+      TTALKAK_PRIVACY_POLICY_URL: ${{ inputs.privacy_policy_url }}
+      TTALKAK_SUPPORT_URL: ${{ inputs.support_url }}
+      TTALKAK_RELEASE_OWNER: ${{ inputs.release_owner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Verify and run live production release gate
+        working-directory: extension
+        run: npm run release:prepare
+
+      - name: Upload verified production extension
+        uses: actions/upload-artifact@v6
+        with:
+          name: extension-production-${{ github.run_id }}
+          path: extension/dist-prod/
+          if-no-files-found: error
+          retention-days: 14

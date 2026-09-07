@@ -1,0 +1,4 @@
+export function getAdminReportFilters(records) { return [{ id: "all", label: "전체", count: records.length }, { id: "prompt", label: "프롬프트", count: records.filter((record) => record.type === "prompt").length }, { id: "comment", label: "댓글", count: records.filter((record) => record.type === "comment").length }]; }
+export const getAdminPromptFilters = () => [{ id: "all", label: "전체" }, { id: "shared", label: "공개" }, { id: "private", label: "비공개" }, { id: "hidden", label: "숨김" }, { id: "reported", label: "신고됨" }];
+export const getAdminTagFilters = () => [{ id: "all", label: "전체" }, { id: "pending", label: "검토 중" }, { id: "approved", label: "검토 완료" }, { id: "rejected", label: "반려" }, { id: "disabled", label: "추천 제외" }];
+export function selectAdminPanel(tab, panels) { return panels[["prompts", "tags", "users", "audit"].includes(tab) ? tab : "reports"]; }
