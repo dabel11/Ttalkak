@@ -157,7 +157,7 @@ interface TtalkakModuleRegistry {
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; errorBoundary: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
-  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
+  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; myPageHydrationTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
@@ -321,6 +321,7 @@ interface Window {
   TTALKAK_API_BASE_URL?: string;
   TTALKAK_API_TIMEOUT_MS?: number | string;
   TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
+  TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS?: number | string;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
 }

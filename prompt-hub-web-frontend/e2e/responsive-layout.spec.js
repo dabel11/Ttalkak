@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 async function expectNoDocumentOverflow(page) {
   const dimensions = await page.evaluate(() => ({
@@ -83,6 +83,16 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
 
   await compactMenu.click();
   await page.locator('#topbar-action-menu [data-route="make"]').click();
+  const brand = page.getByRole("button", { name: "TTALKAK 홈" });
+  const brandLayout = await brand.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    textWidth: element.querySelector("span").getBoundingClientRect().width,
+  }));
+  expect(brandLayout.width).toBeGreaterThanOrEqual(brandLayout.textWidth);
+  await expect(page.locator(".make-auth-hint-desktop")).toBeHidden();
+  await compactMenu.click();
+  await expect(page.locator("#topbar-action-menu .make-auth-hint-mobile")).toBeVisible();
+  await compactMenu.click();
   const composer = page.locator('[data-composer] textarea[name="prompt"]');
   await expect(composer).toBeVisible();
   const sendButton = page.locator('[data-composer] button[type="submit"]');
@@ -181,7 +191,29 @@ test("conversation drawer keeps its accessible name at a very narrow width", asy
 
 test("mobile Home keeps search and sorting controls in compact single rows", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("http://localhost:8080/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" }, body: "" });
+      return;
+    }
+    const payload = new URL(request.url()).pathname === "/api/prompts"
+      ? {
+          content: [{ id: 88, title: "모바일 카드", text: "모바일 화면에서 카드 밀도를 검증하는 프롬프트입니다.", source: "community", isShared: true }],
+          totalPages: 1,
+          totalElements: 1,
+        }
+      : { items: [] };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(payload),
+    });
+  });
   await gotoApp(page);
+  await waitForAppHydration(page);
+  await expect(page.locator(".prompt-card").first()).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const search = document.querySelector(".search-field").getBoundingClientRect();
@@ -192,12 +224,14 @@ test("mobile Home keeps search and sorting controls in compact single rows", asy
     const sort = document.querySelector("[data-popular-sort]").getBoundingClientRect();
     return {
       searchHeight: search.height,
+      cardHeight: document.querySelector(".prompt-card").getBoundingClientRect().height,
       controlCenters: [scope, query, help].map((rect) => rect.top + rect.height / 2),
       titleCenters: [heading, sort].map((rect) => rect.top + rect.height / 2),
     };
   });
 
   expect(layout.searchHeight).toBeLessThanOrEqual(53);
+  expect(layout.cardHeight).toBeLessThan(360);
   expect(Math.max(...layout.controlCenters) - Math.min(...layout.controlCenters)).toBeLessThanOrEqual(3);
   expect(Math.max(...layout.titleCenters) - Math.min(...layout.titleCenters)).toBeLessThanOrEqual(6);
   await expect(page.locator(".section-icon")).toHaveCount(0);
@@ -289,6 +323,18 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
   expect(wideEmpty.centerDelta).toBeLessThanOrEqual(1);
 });
 
+test("mobile Share login prompt keeps Korean words intact", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page);
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="share"]').click();
+
+  const prompt = page.locator(".share-required-card p");
+  await expect(prompt).toHaveText("공유하려면 먼저 로그인해 주세요.");
+  await expect(prompt).toHaveCSS("word-break", "keep-all");
+  await expectNoDocumentOverflow(page);
+});
+
 test("desktop Share centers its side-by-side form and preview", async ({ page }) => {
   await page.route("http://localhost:8080/**", async (route) => route.fulfill({
     status: route.request().method() === "OPTIONS" ? 204 : 200,
@@ -358,6 +404,8 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
 
   const prompt = page.locator(".demo-library-prompt.is-error");
   await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText("My page 데이터를 불러오지 못했습니다");
+  await expect(page.locator(".my-page-panel")).toHaveCount(0);
   const retry = prompt.getByRole("button", { name: "다시 연결" });
   await expect(retry).toBeVisible();
   available = true;
@@ -369,6 +417,39 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
   releaseRecovery();
   await expect(page.locator(".demo-library-prompt")).toContainText("서버 응답 우선");
   await expectNoDocumentOverflow(page);
+});
+
+test("My page exits recovery when an authenticated data request does not settle", async ({ page }) => {
+  await page.route("http://localhost:8080/**", async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, body: "" });
+    if (new URL(route.request().url()).pathname.startsWith("/api/me/")) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        return await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ items: [] }) });
+      } catch {
+        return undefined;
+      }
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ items: [] }) });
+  });
+  await page.addInitScript(() => {
+    window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+    window.TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS = 100;
+    localStorage.setItem("ttalkak_access_token", "my-page-timeout-token");
+    localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({
+      popularPrompts: [], savedPrompts: [],
+      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "my-page-timeout-token", token: "my-page-timeout-token", myPageTab: "library" },
+    }));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gotoApp(page);
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="saved"]').click();
+
+  const errorPrompt = page.locator(".demo-library-prompt.is-error");
+  await expect(errorPrompt).toContainText("My page 데이터를 불러오지 못했습니다");
+  await expect(errorPrompt.getByRole("button", { name: "다시 연결" })).toBeVisible();
+  await expect(page.locator(".my-page-panel")).toHaveCount(0);
 });
 
 test("conversation drawer clears modal state when the viewport becomes desktop-sized", async ({ page }) => {

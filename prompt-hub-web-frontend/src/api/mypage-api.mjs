@@ -6,16 +6,16 @@ export function createMyPageApi({ request, unwrapItems, normalizers }) {
         const query = new URLSearchParams({ filter, page: String(page), size: String(size) });
         return request(`/api/prompts/my?${query.toString()}`, { token });
       },
-      getMyLibrary({ filter = "all", page = 1, pageSize = 64 } = {}, token) {
+      getMyLibrary(/** @type {{filter?: string, page?: number, pageSize?: number, signal?: AbortSignal}} */ { filter = "all", page = 1, pageSize = 64, signal } = {}, token) {
         const query = new URLSearchParams({ filter, page: String(page), pageSize: String(pageSize) });
-        return request(`/api/me/library?${query.toString()}`, { token }).then((payload) => ({
+        return request(`/api/me/library?${query.toString()}`, { token, signal }).then((payload) => ({
           ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
           items: unwrapItems(payload).map(normalizePrompt),
         }));
       },
-      getMyPrompts({ page = 1, pageSize = 64 } = {}, token) {
+      getMyPrompts(/** @type {{page?: number, pageSize?: number, signal?: AbortSignal}} */ { page = 1, pageSize = 64, signal } = {}, token) {
         const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        return request(`/api/me/prompts?${query.toString()}`, { token }).then((payload) => ({
+        return request(`/api/me/prompts?${query.toString()}`, { token, signal }).then((payload) => ({
           ...(payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {}),
           items: unwrapItems(payload).map((prompt) => ({
             ...normalizePrompt(prompt),
@@ -24,13 +24,13 @@ export function createMyPageApi({ request, unwrapItems, normalizers }) {
           })),
         }));
       },
-      getMyComments({ page = 1, pageSize = 64 } = {}, token) {
+      getMyComments(/** @type {{page?: number, pageSize?: number, signal?: AbortSignal}} */ { page = 1, pageSize = 64, signal } = {}, token) {
         const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        return request(`/api/me/comments?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeComment));
+        return request(`/api/me/comments?${query.toString()}`, { token, signal }).then((payload) => unwrapItems(payload).map(normalizeComment));
       },
-      getMyReports({ page = 1, pageSize = 64 } = {}, token) {
+      getMyReports(/** @type {{page?: number, pageSize?: number, signal?: AbortSignal}} */ { page = 1, pageSize = 64, signal } = {}, token) {
         const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        return request(`/api/me/reports?${query.toString()}`, { token }).then((payload) => unwrapItems(payload).map(normalizeReport));
+        return request(`/api/me/reports?${query.toString()}`, { token, signal }).then((payload) => unwrapItems(payload).map(normalizeReport));
       },
       getMyRevisionRequests({ status = "all" } = {}, token) {
         const query = new URLSearchParams();

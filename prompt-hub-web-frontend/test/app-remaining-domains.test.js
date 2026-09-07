@@ -19,6 +19,81 @@ test("My Page data model combines backend and local records without duplicates",
   assert.equal(model.getComments().length, 1);
 });
 
+test("My Page hydration routes an expired session through the authentication boundary", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const unauthorized = Object.assign(new Error("expired"), { status: 401, payload: { code: "AUTHENTICATION_REQUIRED" } });
+  const reject = async () => { throw unauthorized; };
+  const handled = [];
+  const state = { route: "saved", isLoggedIn: true, myBackendStatus: "idle" };
+
+  await backendEffects.hydrateBackendMyPageDataEffect({
+    api: { getMyLibrary: reject, getMyPrompts: reject, getMyComments: reject, getMyReports: reject },
+    canUseDemoFallback: () => false,
+    getAuthToken: () => "expired-token",
+    handleBackendAccessError: (...args) => handled.push(args),
+    state,
+  });
+
+  assert.equal(handled.length, 1);
+  assert.equal(handled[0][0], unauthorized);
+  assert.equal(handled[0][1], "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+});
+
+test("My Page hydration exits checking state when one or more requests never settle", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const signals = [];
+  const pending = ({ signal }) => {
+    signals.push(signal);
+    return new Promise(() => {});
+  };
+  const state = { route: "saved", isLoggedIn: true, myBackendStatus: "idle" };
+  let renderCount = 0;
+
+  globalThis.setTimeout = (callback) => {
+    queueMicrotask(callback);
+    return 1;
+  };
+  globalThis.clearTimeout = () => {};
+  try {
+    await backendEffects.hydrateBackendMyPageDataEffect({
+      api: { getMyLibrary: pending, getMyPrompts: pending, getMyComments: pending, getMyReports: pending },
+      canUseDemoFallback: () => false,
+      getAuthToken: () => "fixture-token",
+      render: () => { renderCount += 1; },
+      state,
+    });
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+
+  assert.equal(state.myBackendStatus, "fallback");
+  assert.equal(renderCount, 1);
+  assert.equal(signals.length, 5);
+  assert.ok(signals.every((signal) => signal.aborted));
+});
+
+test("My Page hides empty content while a production data load is unavailable", async () => {
+  const { renderers: { SavedPageView } } = await load("renderers/pages/saved-page.mjs");
+  let panelRenderCount = 0;
+  const html = SavedPageView({
+    icons: { user: "user" },
+    state: { myPageTab: "library" },
+    formatNumber: String,
+    DemoLibraryPrompt: () => '<div class="is-error">My page 데이터를 불러오지 못했습니다</div>',
+    MyPagePanel: () => { panelRenderCount += 1; return '<div class="saved-empty">empty</div>'; },
+  }, {
+    tabs: [{ id: "library", label: "내 보관함", count: 0 }],
+    hideMyPagePanel: true,
+  });
+
+  assert.match(html, /My page 데이터를 불러오지 못했습니다/);
+  assert.doesNotMatch(html, /saved-empty/);
+  assert.equal(panelRenderCount, 0);
+});
+
 test("My Page data model merges reports and owned revisions while respecting fallback policy", async () => {
   const { createMyPageDataModel } = await load("saved/my-page-data-model.mjs");
   const state = {

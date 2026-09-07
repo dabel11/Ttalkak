@@ -260,10 +260,10 @@ test("runtime configuration globals are read only by the config boundary", () =>
     else if (/\.(?:js|mjs)$/.test(entry.name)) files.push(target);
   });
   walk(path.join(frontendRoot, "src"));
-  const owners = files.filter((file) => /window\.(?:__API_BASE_URL__|TTALKAK_(?:API|IMPROVE|GOOGLE|DEMO))/.test(fs.readFileSync(file, "utf8")));
+  const owners = files.filter((file) => /window\.(?:__API_BASE_URL__|TTALKAK_(?:API|IMPROVE|MY_PAGE|GOOGLE|DEMO))/.test(fs.readFileSync(file, "utf8")));
   assert.deepEqual(owners.map((file) => path.relative(frontendRoot, file).replaceAll("\\", "/")), []);
   const config = fs.readFileSync(path.join(frontendRoot, "src/runtime/runtime-config.mjs"), "utf8");
-  ["__API_BASE_URL__", "TTALKAK_API_TIMEOUT_MS", "TTALKAK_IMPROVE_TIMEOUT_MS", "TTALKAK_GOOGLE_CREDENTIAL", "TTALKAK_DEMO_FALLBACK_ENABLED"].forEach((name) => assert.match(config, new RegExp(name)));
+  ["__API_BASE_URL__", "TTALKAK_API_TIMEOUT_MS", "TTALKAK_IMPROVE_TIMEOUT_MS", "TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS", "TTALKAK_GOOGLE_CREDENTIAL", "TTALKAK_DEMO_FALLBACK_ENABLED"].forEach((name) => assert.match(config, new RegExp(name)));
 });
 
 test("app orchestration stays within the reviewed size boundary", () => {
