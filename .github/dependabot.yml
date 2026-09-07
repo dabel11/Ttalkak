@@ -3,7 +3,7 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/prompt-hub-web-frontend"
-    target-branch: "develop-integrated"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -27,7 +27,7 @@ updates:
 
   - package-ecosystem: "npm"
     directory: "/extension"
-    target-branch: "develop-integrated"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -51,7 +51,7 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "develop-integrated"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"

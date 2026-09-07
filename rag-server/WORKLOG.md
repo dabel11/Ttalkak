@@ -923,7 +923,7 @@ eval/  run_eval.py(+__init__.py)
 ---
 
 ## [2026-07-23] 통합 상태 전체 재검토 + 계층 간 SSOT 계약 문서
-**목적**: develop-integrated 현행에서 rag·backend·extension·web·docker 연동을 처음부터 재점검. 계층 간 규칙을 담당자 공유용 단일 문서로 확정.
+**목적**: develop 현행에서 rag·backend·extension·web·docker 연동을 처음부터 재점검. 계층 간 규칙을 담당자 공유용 단일 문서로 확정.
 
 **검토 결과(신규 발견)**
 - **프론트가 둘**: Chrome 확장 + 웹(prompt-hub-web-frontend, nginx :4173). 둘 다 `/api/prompts/improve` 호출.
@@ -1647,7 +1647,7 @@ gold 를 보지 않는 고정 템플릿으로 질의 형태만 카드 쪽에 정
 - `min_score=0.40` 폐기 또는 실분포(0.42~0.59) 기준 재설정.
 
 **후속(백로그)**
-- 로컬 `develop-integrated`의 **멀티표현 인덱싱**(`app/rag/views.py`, `0deb13f`)은 이 브랜치에 없어 측정하지 못했다. 병합 후 **같은 잣대(gold Recall@5)로 재볼 것** — 효과가 처음으로 검증된다.
+- 로컬 `develop`의 **멀티표현 인덱싱**(`app/rag/views.py`, `0deb13f`)은 이 브랜치에 없어 측정하지 못했다. 병합 후 **같은 잣대(gold Recall@5)로 재볼 것** — 효과가 처음으로 검증된다.
 - `gold_techniques` 라벨 팀 검토. 현재 모든 수치의 기준선이다.
 
 ---

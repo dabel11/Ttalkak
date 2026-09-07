@@ -50,7 +50,7 @@ test("Dependabot keeps frontend dependency updates bounded and reviewable", () =
   ];
 
   for (const { block, time, limit, prefix, group } of expectedPolicies) {
-    assert.match(block, /target-branch: "develop-integrated"/);
+    assert.match(block, /target-branch: "develop"/);
     assert.match(block, /interval: "weekly"/);
     assert.match(block, /day: "monday"/);
     assert.match(block, new RegExp(`time: "${time}"`));
