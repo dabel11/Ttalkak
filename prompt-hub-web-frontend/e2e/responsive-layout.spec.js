@@ -191,8 +191,29 @@ test("conversation drawer keeps its accessible name at a very narrow width", asy
 
 test("mobile Home keeps search and sorting controls in compact single rows", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("http://localhost:8080/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" }, body: "" });
+      return;
+    }
+    const payload = new URL(request.url()).pathname === "/api/prompts"
+      ? {
+          content: [{ id: 88, title: "모바일 카드", text: "모바일 화면에서 카드 밀도를 검증하는 프롬프트입니다.", source: "community", isShared: true }],
+          totalPages: 1,
+          totalElements: 1,
+        }
+      : { items: [] };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(payload),
+    });
+  });
   await gotoApp(page);
   await waitForAppHydration(page);
+  await expect(page.locator(".prompt-card").first()).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const search = document.querySelector(".search-field").getBoundingClientRect();
