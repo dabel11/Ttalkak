@@ -1580,7 +1580,7 @@
   .chat-feed, .composer { width: min(720px, calc(100% - 40px)); }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .make-page { grid-template-columns: 1fr; }
   .make-side-panel {
     margin: 12px;
@@ -1664,7 +1664,7 @@
   .make-empty .spark-badge { width: 66px; height: 66px; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .template-guidance { grid-column: 1 / -1; }
 }
 .composer.is-restored textarea { animation: make-composer-restored 1.4s ease-out; }
@@ -2847,7 +2847,7 @@
 .make-drawer-backdrop,
 .make-drawer-close { display: none; }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   html:has(.make-page) { overflow-y: hidden; scrollbar-gutter: auto; }
   .main-area:has(.make-page) { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }
   .content-area:has(.make-page) { flex: 1 1 auto; min-height: 0; }

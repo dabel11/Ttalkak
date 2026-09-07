@@ -1144,7 +1144,7 @@ function SavedPage() {
     { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel },
     {
       tabs,
-      hideMyPagePanel: !canUseDemoFallback() && ["checking", "fallback"].includes(state.myBackendStatus),
+      hideMyPagePanel: !canUseDemoFallback() && state.myBackendStatus === "fallback",
     },
   );
 }

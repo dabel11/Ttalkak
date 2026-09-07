@@ -172,7 +172,7 @@ test("compact header state resets when crossing the desktop viewport boundary", 
   await expect(primaryActions).toHaveClass(/compact-open/);
   await expect(account).toHaveJSProperty("open", true);
 
-  await page.setViewportSize({ width: 900, height: 800 });
+  await page.setViewportSize({ width: 901, height: 800 });
   await expect(primaryActions).not.toHaveClass(/compact-open/);
   await expect(account).toHaveJSProperty("open", false);
   await expect(toggle).toHaveAttribute("aria-expanded", "false");

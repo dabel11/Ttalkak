@@ -168,14 +168,17 @@ test("composer enables submission only for a non-empty draft outside processing"
   assert.match(render("작성할 내용", true), /aria-label="보내기" disabled/);
 });
 
-test("template selection uses a compact shared guidance and exposes pressed state", () => {
+test("template selection uses a compact radiogroup with one checked option", () => {
   const html = MakeTemplateBarView({ escapeAttr, escapeHtml }, {
     promptTemplates: [{ id: "writing", label: "글쓰기", description: "글의 뼈대를 만듭니다." }, { id: "custom", label: "직접 입력", description: "직접 작성합니다." }],
     selectedTemplateId: "writing",
     templateCollapsed: false,
   });
   assert.doesNotMatch(html, /<small>분야<\/small>/);
-  assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /role="radiogroup" aria-label="프롬프트 분야"/);
+  assert.match(html, /role="radio"[^>]+aria-checked="true"[^>]+tabindex="0"/);
+  assert.match(html, /role="radio"[^>]+aria-checked="false"[^>]+tabindex="-1"/);
+  assert.doesNotMatch(html, /aria-pressed=/);
   assert.match(html, /template-guidance/);
   assert.match(html, /분야를 선택하거나/);
   assert.match(html, /class="template-custom-action/);

@@ -75,6 +75,49 @@ test("My Page hydration exits checking state when one or more requests never set
   assert.ok(signals.every((signal) => signal.aborted));
 });
 
+test("My Page hydration renders the connected state even when successful data is unchanged", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const state = {
+    route: "saved",
+    isLoggedIn: true,
+    myBackendStatus: "idle",
+    currentUser: "Fixture",
+    backendLibraryPromptIds: new Set(),
+    backendLibraryPrompts: [],
+    backendLikedPrompts: [],
+    backendMyPrompts: [],
+    backendMyComments: [],
+    backendMyReports: [],
+    userLibraryPromptIds: new Set(),
+    likedPromptIds: new Set(),
+  };
+  const emptyPage = async () => ({ items: [] });
+  let renderCount = 0;
+
+  await backendEffects.hydrateBackendMyPageDataEffect({
+    api: {
+      getMyLibrary: emptyPage,
+      getMyPrompts: emptyPage,
+      getMyComments: async () => [],
+      getMyReports: async () => [],
+    },
+    applyContext: () => ({
+      state,
+      popularPrompts: [],
+      savedPrompts: [],
+      upsertPrompt: () => {},
+    }),
+    canUseDemoFallback: () => false,
+    getAuthToken: () => "fixture-token",
+    render: () => { renderCount += 1; },
+    reportWarning: () => {},
+    state,
+  });
+
+  assert.equal(state.myBackendStatus, "connected");
+  assert.equal(renderCount, 1);
+});
+
 test("My Page hides empty content while a production data load is unavailable", async () => {
   const { renderers: { SavedPageView } } = await load("renderers/pages/saved-page.mjs");
   let panelRenderCount = 0;
