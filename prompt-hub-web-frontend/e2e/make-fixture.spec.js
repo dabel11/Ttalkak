@@ -96,6 +96,10 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
       await improveHandler(route);
       return;
     }
+    if (request.method() === "GET" && ["/api/make/threads", "/api/make/folders"].includes(pathname) && fixtures.makeHydrationHandler) {
+      await fixtures.makeHydrationHandler(route, pathname);
+      return;
+    }
     const threadMatch = pathname.match(/^\/api\/make\/threads\/(\d+)$/);
     if (threadMatch && request.method() === "GET" && fixtures.threads) {
       if (fixtures.threadHandler) {
@@ -116,7 +120,11 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
 
 async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
-  await mockBackend(page, improveHandler, { threads: extra.backendThreads, threadHandler: extra.threadHandler });
+  await mockBackend(page, improveHandler, {
+    threads: extra.backendThreads,
+    threadHandler: extra.threadHandler,
+    makeHydrationHandler: extra.makeHydrationHandler,
+  });
   await gotoApp(page);
   await waitForAppHydration(page);
   await page.locator('.sidebar [data-route="make"]').click();
@@ -178,6 +186,42 @@ test("unchanged no-evidence response explains the outcome without result actions
   await page.getByRole("button", { name: "내용을 구체화하기" }).click();
   await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue(prompt);
   await expect(page.locator('[data-composer] textarea[name="prompt"]')).toBeFocused();
+});
+
+test("background Make hydration preserves an active composer draft and focus", async ({ page }) => {
+  let releaseHydration;
+  let hydrationRequestCount = 0;
+  let markHydrationStarted;
+  const hydrationGate = new Promise((resolve) => { releaseHydration = resolve; });
+  const hydrationStarted = new Promise((resolve) => { markHydrationStarted = resolve; });
+  const prompt = "Preserve this draft while Make data loads";
+
+  await openMake(page, [], {
+    isLoggedIn: true,
+    currentUser: "Fixture",
+    currentUserId: "1",
+    authToken: "fixture-token",
+    makeHydrationHandler: async (route) => {
+      hydrationRequestCount += 1;
+      if (hydrationRequestCount === 2) markHydrationStarted();
+      await hydrationGate;
+      await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: [] }) });
+    },
+  });
+  await hydrationStarted;
+
+  const composer = page.locator('[data-composer] textarea[name="prompt"]');
+  await composer.evaluate((input, value) => {
+    input.focus();
+    input.value = value;
+    input.setSelectionRange(value.length, value.length);
+  }, prompt);
+  releaseHydration();
+
+  await expect(page.locator(".make-backend-note")).toContainText("Make API 연결됨");
+  await expect(composer).toHaveValue(prompt);
+  await expect(composer).toBeFocused();
+  await expect(page.locator('[data-composer] button[type="submit"]')).toBeEnabled();
 });
 
 test("legacy questions migrate, empty messages disappear, and restored data survives reload", async ({ page }) => {

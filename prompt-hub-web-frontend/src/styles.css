@@ -2302,6 +2302,39 @@ input[type="checkbox"] {
   background: #f3f7f5;
 }
 
+.demo-library-prompt.is-compact {
+  justify-content: flex-start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.demo-library-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-green);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .saved-empty {
   align-content: center;
   justify-items: center;
@@ -4032,6 +4065,11 @@ input[type="checkbox"] {
   .demo-library-prompt {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .demo-library-prompt.is-compact {
+    align-items: center;
+    flex-direction: row;
   }
 
   .demo-library-prompt button {
