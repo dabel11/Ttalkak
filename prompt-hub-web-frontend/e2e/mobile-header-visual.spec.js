@@ -21,16 +21,27 @@ async function prepare(page, { loggedIn = false, backendError = false } = {}) {
     return route.fulfill({ status: backendError ? 503 : 200, headers: HEADERS, body: JSON.stringify(backendError ? { code: "SERVICE_UNAVAILABLE" } : { items: [] }) });
   });
   await gotoApp(page);
-  await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}.topbar{min-height:360px!important}" });
+  await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}.content-area{visibility:hidden!important}" });
   await page.getByRole("button", { name: "메뉴" }).click();
 }
 
 async function expectHeader(page, name) {
-  await expect(page.locator(".topbar")).toHaveScreenshot(name, {
+  const boxes = await Promise.all([
+    page.locator(".topbar").boundingBox(),
+    page.locator("#topbar-action-menu").boundingBox(),
+  ]);
+  const visibleBoxes = boxes.filter(Boolean);
+  const left = Math.max(0, Math.floor(Math.min(...visibleBoxes.map((box) => box.x))));
+  const top = Math.max(0, Math.floor(Math.min(...visibleBoxes.map((box) => box.y))));
+  const right = Math.ceil(Math.max(...visibleBoxes.map((box) => box.x + box.width)));
+  const bottom = Math.ceil(Math.max(...visibleBoxes.map((box) => box.y + box.height)) + 12);
+
+  await expect(page).toHaveScreenshot(name, {
     animations: "disabled",
     caret: "hide",
-    maxDiffPixelRatio: 0.08,
-    threshold: 0.3,
+    clip: { x: left, y: top, width: right - left, height: bottom - top },
+    maxDiffPixelRatio: 0.015,
+    threshold: 0.2,
   });
 }
 

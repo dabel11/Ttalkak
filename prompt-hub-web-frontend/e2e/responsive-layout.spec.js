@@ -417,8 +417,12 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
     window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
     localStorage.setItem("ttalkak_access_token", "my-page-retry-token");
     localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({
-      popularPrompts: [], savedPrompts: [],
-      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "my-page-retry-token", token: "my-page-retry-token", myPageTab: "library" },
+      popularPrompts: [], savedPrompts: [{
+        id: "cached-prompt", title: "캐시된 프롬프트", text: "최근에 저장한 프롬프트",
+        tags: ["캐시"], source: "mine", owner: "Fixture", author: "Fixture", ownerId: 7,
+        isShared: false, savedByMe: true,
+      }],
+      state: { isLoggedIn: true, currentUser: "Fixture", currentUserId: 7, currentUserRole: "user", authToken: "my-page-retry-token", token: "my-page-retry-token", myPageTab: "library", userLibraryPromptIds: ["cached-prompt"] },
     }));
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -436,7 +440,9 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
   holdRecovery = true;
   recoveryGate = new Promise((resolve) => { releaseRecovery = resolve; });
   await retry.click();
-  await expect(page.locator(".demo-library-prompt.is-recovering")).toBeVisible();
+  const recoveryPrompt = page.locator(".demo-library-prompt.is-recovering.is-compact");
+  await expect(recoveryPrompt).toContainText("최신 정보 확인 중");
+  await expect(page.locator('[data-open-prompt="cached-prompt"]')).toBeVisible();
   holdRecovery = false;
   releaseRecovery();
   await expect(page.locator(".demo-library-prompt")).toContainText("서버 응답 우선");

@@ -1150,6 +1150,18 @@ function SavedPage() {
 }
 function DemoLibraryPrompt() {
   if (state.myBackendStatus === "checking") {
+    const hasCachedContent = getSavedPagePrompts().length > 0
+      || getMyPrompts().length > 0
+      || getMyComments().length > 0
+      || getMyReports().length > 0;
+    if (hasCachedContent) {
+      return `
+        <div class="demo-library-prompt is-recovering is-compact" role="status" aria-live="polite">
+          <span class="demo-library-status-dot" aria-hidden="true"></span>
+          <span>최신 정보 확인 중…</span>
+        </div>
+      `;
+    }
     return `
       <div class="demo-library-prompt is-recovering" role="status" aria-live="polite">
         <div>

@@ -70,7 +70,7 @@ test("My Page hydration exits checking state when one or more requests never set
   }
 
   assert.equal(state.myBackendStatus, "fallback");
-  assert.equal(renderCount, 1);
+  assert.equal(renderCount, 2);
   assert.equal(signals.length, 5);
   assert.ok(signals.every((signal) => signal.aborted));
 });
@@ -115,7 +115,49 @@ test("My Page hydration renders the connected state even when successful data is
   });
 
   assert.equal(state.myBackendStatus, "connected");
-  assert.equal(renderCount, 1);
+  assert.equal(renderCount, 2);
+});
+
+test("My Page hydration always exits checking when request setup throws", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const state = { route: "saved", isLoggedIn: true, myBackendStatus: "idle" };
+  const warnings = [];
+  let renderCount = 0;
+
+  await backendEffects.hydrateBackendMyPageDataEffect({
+    api: { getMyLibrary: () => { throw new Error("request setup failed"); } },
+    canUseDemoFallback: () => false,
+    getAuthToken: () => "fixture-token",
+    render: () => { renderCount += 1; },
+    reportWarning: (...args) => warnings.push(args),
+    state,
+  });
+
+  assert.equal(state.myBackendStatus, "fallback");
+  assert.equal(renderCount, 2);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0][1], "my-page-unexpected");
+});
+
+test("My Page hydration still exits checking when warning reporting fails", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const requestError = new Error("backend unavailable");
+  const reject = async () => { throw requestError; };
+  const state = { route: "saved", isLoggedIn: true, myBackendStatus: "idle" };
+  let renderCount = 0;
+
+  await backendEffects.hydrateBackendMyPageDataEffect({
+    api: { getMyLibrary: reject, getMyPrompts: reject, getMyComments: reject, getMyReports: reject },
+    applyContext: () => ({}),
+    canUseDemoFallback: () => false,
+    getAuthToken: () => "fixture-token",
+    render: () => { renderCount += 1; },
+    reportWarning: () => { throw new Error("warning sink failed"); },
+    state,
+  });
+
+  assert.equal(state.myBackendStatus, "fallback");
+  assert.equal(renderCount, 2);
 });
 
 test("My Page hides empty content while a production data load is unavailable", async () => {
