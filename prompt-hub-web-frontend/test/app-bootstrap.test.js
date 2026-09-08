@@ -29,6 +29,21 @@ test("Make hydration is skipped while a request is thinking", async () => {
   assert.equal(hydrations, 0);
 });
 
+test("backend hydration uses the draft-preserving render boundary", async () => {
+  const renderAfterBackendUpdate = () => {};
+  let effectContext;
+  const bootstrap = createAppBootstrap({
+    state: {},
+    isMakeThinking: () => false,
+    render: () => {},
+    renderAfterBackendUpdate,
+    hydrateBackendMakeDataEffect: (ctx) => { effectContext = ctx; },
+  });
+
+  await bootstrap.hydrateBackendMakeDataIfNeeded();
+  assert.equal(effectContext.render, renderAfterBackendUpdate);
+});
+
 test("My Page refresh only forces hydration after a connected mutation", async () => {
   const calls = [];
   const state = { isLoggedIn: true, myBackendStatus: "connected" };

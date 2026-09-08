@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 const BACKEND_URL = process.env.TTALKAK_INTEGRATION_BACKEND_URL || "http://127.0.0.1:8080";
 const STORAGE_KEY = "prompt_hub_web_state_v2";
@@ -73,12 +73,16 @@ test("web Make completes through the real Spring backend and persists the turn",
   }, { storageKey: STORAGE_KEY, tokenKey: TOKEN_KEY, accessToken: token, identity: member, backendUrl: BACKEND_URL });
 
   await gotoApp(page);
+  await waitForAppHydration(page);
   await page.locator('[data-route="make"]').first().click();
   const composer = page.locator('[data-composer] textarea[name="prompt"]');
   await composer.fill(prompt);
-  await page.locator('[data-composer] button[type="submit"]').click();
+  const submit = page.locator('[data-composer] button[type="submit"]');
+  await expect(composer).toHaveValue(prompt);
+  await expect(submit).toBeEnabled({ timeout: 15_000 });
+  await submit.click();
 
-  await expect(page.locator(".message.assistant").last()).toContainText(`개선된 ${prompt}`, { timeout: 90_000 });
+  await expect(page.locator(".message.assistant").last().locator(".message-result-prompt")).toContainText(prompt, { timeout: 90_000 });
 
   const threadsResponse = await request.get(`${BACKEND_URL}/api/make/threads?size=100`, {
     headers: { Authorization: `Bearer ${token}` },

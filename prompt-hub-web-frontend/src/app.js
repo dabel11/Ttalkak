@@ -862,6 +862,26 @@ document.addEventListener("ttalkak:route-renderers-changed", (event) => {
 function renderPreservingMakeScroll() {
   renderWithPreservedMakeScroll(render);
 }
+function renderAfterBackendUpdate() {
+  /** @type {HTMLTextAreaElement | null} */
+  const input = state.route === "make"
+    ? document.querySelector('[data-composer] textarea[name="prompt"]')
+    : null;
+  const restoreComposerFocus = Boolean(input && !input.disabled && document.activeElement === input);
+  const selectionStart = restoreComposerFocus ? input.selectionStart : null;
+  const selectionEnd = restoreComposerFocus ? input.selectionEnd : null;
+  if (input && !input.disabled) makeStateModule.setMakeComposerDraft(state, input.value);
+  const result = render();
+  if (restoreComposerFocus) {
+    /** @type {HTMLTextAreaElement | null} */
+    const restoredInput = document.querySelector('[data-composer] textarea[name="prompt"]');
+    restoredInput?.focus({ preventScroll: true });
+    if (restoredInput && Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) {
+      restoredInput.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
+  return result;
+}
 function scrollToHighlightedComment() {
   if (!state.detailHighlightCommentId) return;
   window.setTimeout(() => {
@@ -2432,7 +2452,7 @@ appBootstrap = createAppBootstrap({
   normalizePersistedLikeCounts, normalizeRecentThreads, updateBackendHomePageMeta, upsertPrompt,
   canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken,
   hasBackendAuthToken, getMakeApi, getMakeApiToken, getMakeInteractionVersion: () => makeInteractionVersion,
-  getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render,
+  getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render, renderAfterBackendUpdate,
   isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,
   formatShortDate, getReportRecord, mapBackendReportStatus, hydrateBackendAdminData,
   reportWarning,
