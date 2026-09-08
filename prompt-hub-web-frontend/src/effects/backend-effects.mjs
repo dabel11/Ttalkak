@@ -397,8 +397,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       shouldRender = applyMyReportsResult(backendDataContext, reportsResult.value) || shouldRender;
     }
 
-    state.myBackendStatus = allRequestsFailed ? "fallback" : "connected";
-    if (shouldRender || allRequestsFailed) render();
+    state.myBackendStatus = allRequestsFailed || !shouldRender ? "fallback" : "connected";
+    if (state.route === "saved") render();
   }
 
   async function hydrateBackendHomeDataEffect(ctx) {

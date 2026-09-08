@@ -106,7 +106,7 @@
     root.addEventListener("submit", (event) => handlers.submit?.(event));
     root.addEventListener("click", (event) => handlers.click?.(event));
     const rootWindow = root.defaultView || root.ownerDocument?.defaultView;
-    rootWindow?.matchMedia?.("(max-width: 760px)")?.addEventListener?.("change", (event) => {
+    rootWindow?.matchMedia?.("(max-width: 900px)")?.addEventListener?.("change", (event) => {
       if (!event.matches) closeMakeDrawer(root);
       handlers.viewportChange?.(event.matches);
     });
@@ -146,6 +146,24 @@
         if (recentSearch && event.key === "Escape" && recentSearch.value) {
           event.preventDefault();
           clearRecentThreadSearch(recentSearch);
+          return;
+        }
+        const templateRadio = event.target.closest?.('[role="radio"][data-template]');
+        if (templateRadio && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+          const radios = [...templateRadio.closest('[role="radiogroup"]')?.querySelectorAll?.('[role="radio"][data-template]') || []];
+          const currentIndex = radios.indexOf(templateRadio);
+          if (currentIndex >= 0 && radios.length) {
+            event.preventDefault();
+            const nextIndex = event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? radios.length - 1
+                : (currentIndex + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + radios.length) % radios.length;
+            const nextRadio = radios[nextIndex];
+            nextRadio.focus();
+            actions.applyTemplate(nextRadio.dataset.template);
+            if (!state.messages?.length) actions.focusLater?.(`[data-template="${nextRadio.dataset.template}"]`);
+          }
           return;
         }
         if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;

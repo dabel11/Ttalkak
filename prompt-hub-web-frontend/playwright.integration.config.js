@@ -6,6 +6,7 @@ module.exports = defineConfig({
   outputDir: process.env.TTALKAK_E2E_OUTPUT_DIR || "test-results-integration",
   testDir: "./e2e",
   testMatch: "live-backend-smoke.spec.js",
+  timeout: 120_000,
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

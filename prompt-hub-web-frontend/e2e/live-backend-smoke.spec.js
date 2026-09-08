@@ -4,6 +4,27 @@ const { gotoApp } = require("./support/app-ready.js");
 const BACKEND_URL = process.env.TTALKAK_INTEGRATION_BACKEND_URL || "http://127.0.0.1:8080";
 const STORAGE_KEY = "prompt_hub_web_state_v2";
 const TOKEN_KEY = "ttalkak_access_token";
+const REMOTE_SMOKE_OPT_IN = process.env.TTALKAK_ALLOW_REMOTE_INTEGRATION_SMOKE === "true";
+let disposableAccount = null;
+
+test.beforeAll(() => {
+  const hostname = new URL(BACKEND_URL).hostname;
+  const isLoopback = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  if (!isLoopback && !REMOTE_SMOKE_OPT_IN) {
+    throw new Error("Integration smoke may only create disposable data on a loopback backend. Set TTALKAK_ALLOW_REMOTE_INTEGRATION_SMOKE=true only for an explicitly approved disposable environment.");
+  }
+});
+
+test.afterEach(async ({ request }) => {
+  if (!disposableAccount) return;
+  const { password, token } = disposableAccount;
+  disposableAccount = null;
+  const cleanup = await request.delete(`${BACKEND_URL}/api/auth/withdraw`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { password },
+  });
+  expect(cleanup.ok(), "the integration smoke account must be withdrawn during cleanup").toBeTruthy();
+});
 
 test("web Make completes through the real Spring backend and persists the turn", async ({ page, request }) => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -31,8 +52,10 @@ test("web Make completes through the real Spring backend and persists the turn",
   const member = session.member || session.user;
   expect(token).toBeTruthy();
   expect(member?.memberId || member?.id).toBeTruthy();
+  disposableAccount = { password, token };
 
-  await page.addInitScript(({ storageKey, tokenKey, accessToken, identity }) => {
+  await page.addInitScript(({ storageKey, tokenKey, accessToken, identity, backendUrl }) => {
+    window.TTALKAK_API_BASE_URL = backendUrl;
     localStorage.setItem(tokenKey, accessToken);
     localStorage.setItem(storageKey, JSON.stringify({
       state: {
@@ -47,7 +70,7 @@ test("web Make completes through the real Spring backend and persists the turn",
       savedPrompts: [],
       popularPrompts: [],
     }));
-  }, { storageKey: STORAGE_KEY, tokenKey: TOKEN_KEY, accessToken: token, identity: member });
+  }, { storageKey: STORAGE_KEY, tokenKey: TOKEN_KEY, accessToken: token, identity: member, backendUrl: BACKEND_URL });
 
   await gotoApp(page);
   await page.locator('[data-route="make"]').first().click();

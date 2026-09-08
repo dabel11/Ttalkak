@@ -3671,7 +3671,7 @@ input[type="checkbox"] {
 
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .app-shell {
     display: block;
   }
@@ -4086,7 +4086,7 @@ input[type="checkbox"] {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .sidebar {
     border-bottom: 0;
     box-shadow: 0 14px 34px -32px rgba(5, 5, 16, 0.62);
@@ -5202,7 +5202,7 @@ input[type="checkbox"] {
 }
 
 /* Compact navigation keeps the primary content first at mobile and zoomed widths. */
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .sidebar {
     display: none;
   }

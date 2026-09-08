@@ -68,6 +68,24 @@ test("keyboard operation opens and closes authentication and enters Make with fo
   await expect(composer).toHaveValue("키보드 접근성 확인");
 });
 
+test("Make field choices expose a single-select radio group and support arrow keys", async ({ page }) => {
+  await gotoApp(page);
+  await page.locator('[data-route="make"]').first().click();
+
+  const group = page.getByRole("radiogroup", { name: "프롬프트 분야" });
+  const writing = group.getByRole("radio", { name: "글쓰기" });
+  const summary = group.getByRole("radio", { name: "요약" });
+  await expect(group.getByRole("radio")).toHaveCount(9);
+  await writing.click();
+  await expect(writing).toHaveAttribute("aria-checked", "true");
+  await writing.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(summary).toHaveAttribute("aria-checked", "true");
+  await expect(summary).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(group.getByRole("radio", { name: "직접 입력" })).toHaveAttribute("aria-checked", "true");
+});
+
 test("confirmation modal opens through a real folder workflow and restores focus", async ({ page }) => {
   let folders = [];
   await page.route("http://localhost:8080/**", async (route) => {

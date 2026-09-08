@@ -148,11 +148,11 @@ import { parts } from "./make-message-parts.mjs";
           <svg class="template-toggle-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none"><path d="m4 6 4 4 4-4"></path></svg>
         </button>
         <div class="template-panel" id="make-template-panel" aria-hidden="${templateCollapsed ? "true" : "false"}" ${templateCollapsed ? "inert" : ""}>
-          <div class="template-panel-inner">
+          <div class="template-panel-inner" role="radiogroup" aria-label="프롬프트 분야">
             <div class="template-list">
-              ${fieldTemplates.map((template, index) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" data-template="${escapeAttr(template.id)}" aria-pressed="${selectedTemplateId === template.id ? "true" : "false"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}" style="--template-delay: ${36 + index * 18}ms">${escapeHtml(template.label)}</button>`).join("")}
+              ${fieldTemplates.map((template, index) => `<button class="${selectedTemplateId === template.id ? "active" : ""}" type="button" role="radio" data-template="${escapeAttr(template.id)}" aria-checked="${selectedTemplateId === template.id ? "true" : "false"}" tabindex="${selectedTemplateId === template.id || (!selectedTemplateId && index === 0) ? "0" : "-1"}" title="${escapeAttr(template.description || `${template.label} 템플릿`)}" style="--template-delay: ${36 + index * 18}ms">${escapeHtml(template.label)}</button>`).join("")}
             </div>
-            <div class="template-guidance"><span>분야를 선택하거나</span>${customTemplate ? `<button class="template-custom-action ${selectedTemplateId === customTemplate.id ? "active" : ""}" type="button" data-template="${escapeAttr(customTemplate.id)}" aria-pressed="${selectedTemplateId === customTemplate.id ? "true" : "false"}">직접 입력</button>` : ""}</div>
+            <div class="template-guidance"><span>분야를 선택하거나</span>${customTemplate ? `<button class="template-custom-action ${selectedTemplateId === customTemplate.id ? "active" : ""}" type="button" role="radio" data-template="${escapeAttr(customTemplate.id)}" aria-checked="${selectedTemplateId === customTemplate.id ? "true" : "false"}" tabindex="${selectedTemplateId === customTemplate.id ? "0" : "-1"}">직접 입력</button>` : ""}</div>
           </div>
         </div>
       </div>

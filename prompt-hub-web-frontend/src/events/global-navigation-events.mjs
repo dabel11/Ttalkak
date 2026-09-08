@@ -19,7 +19,7 @@ export function bindGlobalMenuAndRouteEvents(root, { state, render, closeTopModa
     return openMenus.length > 0;
   };
   compactViewportCleanups.get(root)?.();
-  const compactViewport = root.defaultView?.matchMedia?.("(max-width: 760px)");
+  const compactViewport = root.defaultView?.matchMedia?.("(max-width: 900px)");
   const resetCompactMenusAtDesktop = (event) => {
     if (event.matches) return;
     closeTopbarMenus();

@@ -323,6 +323,30 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
   expect(wideEmpty.centerDelta).toBeLessThanOrEqual(1);
 });
 
+test("tablet-width Make uses the conversation drawer instead of squeezing three columns", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await gotoApp(page);
+  await expect(page.locator(".sidebar")).toBeHidden();
+  const compactMenu = page.getByRole("button", { name: "메뉴" });
+  await expect(compactMenu).toBeVisible();
+  await compactMenu.click();
+  await page.locator('#topbar-action-menu [data-route="make"]').click();
+
+  const drawerToggle = page.getByRole("button", { name: "대화 목록", exact: true });
+  const drawer = page.locator(".make-side-panel");
+  const makeMain = page.locator(".make-main");
+  await expect(drawerToggle).toBeVisible();
+  await expect(drawer).toBeHidden();
+  await expect(makeMain).toHaveCSS("grid-column", "1");
+  const mainWidth = await makeMain.evaluate((element) => element.getBoundingClientRect().width);
+  expect(mainWidth).toBeGreaterThan(700);
+
+  await drawerToggle.click();
+  await expect(drawer).toHaveAttribute("role", "dialog");
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  await expectNoDocumentOverflow(page);
+});
+
 test("mobile Share login prompt keeps Korean words intact", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoApp(page);
@@ -464,7 +488,7 @@ test("conversation drawer clears modal state when the viewport becomes desktop-s
   const drawer = page.locator(".make-side-panel");
   await expect(drawer).toHaveAttribute("aria-modal", "true");
 
-  await page.setViewportSize({ width: 900, height: 720 });
+  await page.setViewportSize({ width: 901, height: 720 });
   await expect(drawer).not.toHaveAttribute("role", "dialog");
   await expect(drawer).not.toHaveAttribute("aria-modal", "true");
   await expect(page.locator(".make-main")).not.toHaveAttribute("inert", "");
