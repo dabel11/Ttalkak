@@ -1880,3 +1880,269 @@ context_isolation 5 · comparison 3
 2. **어휘 공백**: Task Framing·Instruction-First 처럼 12축에 안 맞는 카드 처리(새 축 vs 무배정 허용)
 3. **기존 134장 재태깅 여부**: 폐기 모델이 붙인 태그다. 일치 60%라면 남길지 새로 할지 결정 필요
 4. gold 라벨 검토(DESIGN §5-2) — 여전히 미착수. Recall 수용 기준의 전제
+
+---
+
+## [2026-09-12] 🔴 축 쏠림의 원인 규명 — 어휘 문제가 아니라 **코퍼스에 범주가 다른 카드가 섞여 있다**
+**목적**: 앞 항목에서 드러난 축 쏠림(`output_format` 54 · `constraints` 51 = 태그의 51%)의 원인을 찾아 축 어휘 수정안을 만들려 했다. **결론은 어휘를 고칠 문제가 아니었다.**
+
+### 발견 — 카드 170장에 성격이 다른 4종류가 섞여 있다
+
+축 어휘 12개는 *"이 기법이 사용자 프롬프트에 어떤 지시문을 추가하는가"* 를 묻는다. 그런데 그 질문 자체가 성립하지 않는 카드가 다수다.
+
+| 종류 | 내용 | 예 | 장수 |
+|---|---|---|---:|
+| ① **빈/무의미 템플릿** | `Prompt Template` 이 비었거나 `? ? ? ?`, `` ? ` `` 수준 | AutoPrompt · Standard Prompt · Reasoning Prompt · Knowledge generation · Start Simple | **12** |
+| ② **메타 기법** | 프롬프트를 만들거나 고치는 법 = **딸깍 자신이 하는 일** | Meta-Prompting · Prompt Generator Pattern · Prompt Optimization · Prompt Expansion · Prompt Repair | **15** |
+| ③ **RAG/에이전트 시스템 기법** | 시스템 설계자용. 사용자 요청과 무관 | HyDE · Chunk Design · Prompt Injection Defense · Instruction Hierarchy · Use API-Defined Tools · Temperature | **20** |
+| | **합계(중복 제거)** | | **44/170 = 26%** |
+
+⚠️ 위 ②③ 목록은 손으로 고른 **보수적** 분류라 26%는 **하한**이다(Prompt Chaining·Modular Prompting·Graph Prompting·Iterative Query Analysis 등 경계 사례 다수 제외).
+
+②가 특히 위험하다 — 검색되면 생성기에 *"기존 프롬프트의 약점을 찾고 개선안을 제시하라"* 가 **참고 기법**으로 들어간다. **딸깍이 이미 하고 있는 일을 자기 자신에게 지시하는 동어반복**이다.
+
+### 이것이 축 쏠림의 직접 원인이다
+
+| 축 | 전체 | 그중 쓸 수 없는 카드 |
+|---|---:|---|
+| `output_format` | 54 | **18 (33%)** — Meta-Prompting · HyDE · Chunk Design · Temperature · Zero-Shot … |
+| `constraints` | 51 | **16 (31%)** — Prompt Injection Defense · Instruction Hierarchy · Prompt Repair … |
+| 미태깅 36장 | 36 | **12** |
+
+**축이 두 개로 쏠린 게 아니라, 축을 붙일 수 없는 카드가 '형식/제약처럼 보여서' 그 두 축으로 떠밀린 것이다.** 걷어내면 54→36, 51→35 로 내려간다.
+미태깅 36장도 LLM이 못 고른 게 아니라 **정말 축에 안 맞는 카드**가 3분의 1이다.
+
+### 운영 영향 실측 — 검색이 무작위와 구별되지 않는다
+
+실사용형 질의 10건 · dense 단독 · top-5 (`min_score` 없음):
+
+```
+top-5 총 50개 중 쓸 수 없는 카드 15개 = 30%   (코퍼스 비율 26%)
+```
+
+🔴 **무작위 추출(26%)보다 오히려 높다.** 검색이 '이 카드가 이 요청에 쓸 수 있는 것인가'에 대해 **정보를 0 제공**하고 있다.
+
+가장 선명한 예 — `"신입 개발자를 위한 Git 브랜치 전략 블로그 글 써줘"` → top-5 중 **4장이 RAG 시스템 구축 기법**:
+`Chunk Design · Prompt Governance · Query Rewriting · Instruction Hierarchy · Retrieval Failure Handling`
+그 외: `"제주도 여행 블로그"` → Meta-Prompting / `"다이어트 식단"` → Chunk Design Prompting
+
+### ⭐ 왜 지금까지 안 보였나 — 진단 기준이 '중복'이었기 때문
+
+2026-08-15 「검색 구조 정밀 진단」은 코퍼스를 **near-dup 기준**으로 보고 *"유사도 >0.90 0쌍 → 코퍼스 위기 아님, 정리는 우선순위 아님"* 이라고 판정했다. 그 판정은 **그 기준 안에서는 옳다.**
+문제는 **중복이 아니라 범주 오류**였다. 이 카드들은 서로 닮지도 않았고 카드 자체로는 멀쩡하다 — **다른 질문에 답하고 있을 뿐이다.** 어떤 유사도 지표로도 안 잡힌다.
+→ `CORPUS_STRATEGY.md` 2-2(변별성)·2-4(카드 품질)에 **'범주 정합성' 축이 빠져 있다.**
+
+### 제안 — 삭제가 아니라 `layer` 메타데이터로 층을 나눈다
+
+```
+layer: "user_instruction"  # 사용자 프롬프트에 추가할 지시문     → 검색 대상 (~126장)
+layer: "meta"              # 프롬프트 생성·개선 기법(딸깍의 동작)  → 검색 제외
+layer: "system"            # RAG·에이전트 구축 기법              → 검색 제외
+layer: "degenerate"        # 빈/무의미 템플릿                   → 검색 제외
+```
+
+- **삭제하지 않는 이유**: 카드 자체는 자산이다(②는 딸깍 SYSTEM_PROMPT를 개선할 때 참고 대상). 삭제는 되돌리기 어렵고, `layer` 는 `axes`·`embedding_views` 와 같은 **메타데이터 추가 방식이라 무회귀**다.
+- 배선은 `_load_collection` 에 `layer` 필터 한 줄.
+
+**기대**: 검색 대상 170→~126 · 축 쏠림 완화(54→36, 51→35) · top-5 노이즈 30% 제거. 그 뒤에 축 어휘를 보면 **진짜 어휘 문제만 남는다**(Task Framing·Instruction-First 같은 공백).
+
+### 순서 수정 — 축 어휘 확정은 2순위로 내린다
+
+| 순 | 작업 | 이유 |
+|---|---|---|
+| 1 | **`layer` 분류 + 배선** | 이게 안 되면 축 어휘를 아무리 잘 짜도 26%가 딸려온다 |
+| 2 | 축 어휘 재검토 | 노이즈 제거 후의 실제 분포로 판단 |
+| 3 | 남은 카드 태깅·재태깅 | 어휘 확정 후 |
+| 4 | gold 라벨 검토 → Recall 재측정 | 종전과 동일 |
+
+**측정**: 라이브 LLM 호출 없음(분류는 이름·템플릿 기반, 검색은 로컬 bge-m3). DB 미변경.
+
+---
+
+## [2026-09-12] 카드 층(layer) 분류 — 전량 LLM 배치 완료 · top-5 노이즈 30%→8%
+**목적**: 앞 항목에서 규명한 '범주 오류'를 실제로 걷어낸다. 검색 대상 자격을 층으로 분류.
+
+### 층 어휘 (`app/rag/layers.py`, `LAYERS_VERSION=v1`)
+
+| 층 | 정의 | 검색 |
+|---|---|---|
+| `user_instruction` | 일반 사용자 요청 뒤에 그대로 덧붙일 수 있는 지시문 | ✅ |
+| `meta` | **기존 프롬프트를 입력으로 받아** 더 나은 프롬프트를 만드는 기법(딸깍 자신의 동작) | ❌ |
+| `system` | 서비스 운영자가 **시스템 계층**에 심는 규칙(시스템 프롬프트·검색·도구·모델 파라미터) | ❌ |
+| `degenerate` | 카드 전체를 봐도 무엇을 추가하는지 알 수 없음 | ❌ |
+
+⭐ **미분류(층 없음)는 검색에 포함**한다 — 배치 실패·신규 카드로 코퍼스가 통째로 비는 사고 방지. `embedding_views` NULL 이 종전 동작인 것과 같은 원칙(무회귀). `is_searchable()`.
+
+### 프롬프트 설계 — meta/system 경계가 실측으로 한 번 무너졌다
+
+1차 정의는 meta 를 *"산출물이 프롬프트인 기법"* 으로 썼다. 결과 **`system` 을 한 번도 고르지 않았다**(경계 6장 중 3장 오분류). 모델 근거가 원인을 그대로 말했다:
+> *"the technique **outputs a prompt** rather than a user-facing instruction"* (Prompt Injection Defense → meta)
+
+시스템 프롬프트 규칙을 만드는 카드도 '산출물이 프롬프트'라 meta 로 빨려든다.
+→ **가르는 기준을 '산출물'에서 '입력'으로 바꿨다**: 사용자의 프롬프트를 고치면 meta, 시스템 계층에 규칙을 심으면 system. 판정 순서도 좁은 것(system) 먼저로.
+→ 경계 6장 재검증 **3/6 → 5/6**.
+
+### 출력 예산 — `_MAX_TOKENS` 를 또 올렸다
+
+전량 실행에서 **9/170 이 400** 으로 실패. 두 종류였다:
+| 메시지 | `failed_generation` | 원인 |
+|---|---|---|
+| Failed to **generate** JSON | `max completion tokens reached` | 예산 부족(긴 카드일수록 추론이 길다) |
+| Failed to **validate** JSON | `''` (빈 생성) | 일시적 |
+
+→ `_MAX_TOKENS` 700 → **1500** (`tag_layers`·`tag_axes` 둘 다). 예산은 상한일 뿐이라 실사용(~204)·과금·지연은 그대로다. 9장 재실행 **전부 성공 → 미분류 0**.
+
+### 결과
+
+```
+170장 · 미분류 0
+user_instruction 124 · system 26 · meta 17 · degenerate 3
+검색 대상 124 / 제외 46
+```
+
+### ⭐ 운영 효과 — 독립 잣대로 검증
+
+LLM 분류와 **무관하게** 앞 항목에서 손으로 만든 44장 목록을 잣대로, 같은 질의 10건 dense top-5:
+
+| | 노이즈율 |
+|---|---:|
+| 적용 전 | 15/50 = **30%** |
+| 적용 후 | 4/50 = **8%** |
+
+예: `"신입 개발자를 위한 Git 브랜치 전략 블로그 글"` top-5 중 4장이 RAG 구축 기법이던 것이 전부 교체됐다. `"임영웅 콘서트 홍보 문구"` 의 Meta-Prompting·Chunk Design 도 빠졌다.
+
+### 🔴 사람 검토 필요 — 분류가 완벽하지 않다
+
+- **남은 노이즈 3장**: `Multi-Query Retrieval Prompting` · `Prompt Governance Prompting` · `Zero-Shot` 이 user_instruction 으로 분류돼 여전히 회수된다.
+- **과잉 제외 의심**: `Delimiter Prompting` · `XML Tags for Structure` (사용자도 구분자를 쓸 수 있다) → meta / `Priority Placement` · `Abstention Prompting` (사용자가 쓸 수 있는 지시문) → system
+- **경계 사례는 실행마다 흔들린다**(temp=0인데도): `Temperature`·`Give the Model an Out` 이 두 실행에서 다르게 나왔다. 축 태깅과 같은 양상 — 어휘가 애매한 카드에 불안정이 몰린다.
+- 검토용 원본: 각 카드의 분류 근거가 `--out` JSON 에 있다.
+
+**변경 파일**
+- 신규: `app/rag/layers.py` · `ingestion/tag_layers.py` · `tests/test_layers.py`(12개)
+- 수정: `ingestion/tag_axes.py` (`_MAX_TOKENS` 1500 + 근거 주석)
+
+**검증**: `pytest tests/ -q` → **83 passed** · `python3 -m tests.test_layers` → 12 passed
+
+**아직 안 한 것**: `is_searchable` 은 **리트리버에 배선되지 않았다.** DB 에 `layer` 가 기록됐을 뿐 `/query` 동작은 **무변경**이다. 배선은 검토 후 별도 작업.
+
+---
+
+## [2026-09-13] 층 어휘 v2 — 회귀 셋 신설 · 재분류 · **두 잣대가 엇갈림(혼합 결과)**
+**목적**: v1 전량 분류의 34/170 엇갈림을 사람이 검토해 원인을 찾고, 기준을 고쳐 재분류.
+
+### 회귀 셋 신설 (`eval/layer_set.json` 34장 · `eval/layer_eval.py`)
+v1 결과와 사람 판단이 갈린 34장을 **재분류 전에** 라벨링해 고정했다. 나중에 만들면 결과에 맞춰 라벨을 고치게 된다.
+⚠️ 작성자 1인 판단 — `gold_techniques` 와 같은 미검증 기준선 함정. 팀 검토 전까지 잠정.
+
+### v1 실패 원인 — 기준 문장이 만든 체계적 오류 3종
+| # | 증상 | 모델 근거 |
+|---|---|---|
+| ① | "덧붙일 수 있는가"를 **문법적 가능성**으로 읽음 → 효과 없는 카드도 통과 | *"can be directly appended after a user request"* |
+| ② | "기존 프롬프트를 입력으로"를 넓게 읽어 **작성 방법론까지 meta 로** | *"reformats an existing prompt"* (Delimiter·Specificity) |
+| ③ | `degenerate` 를 거의 안 고름(170장 중 3장) | — |
+
+**설계 결함도 드러났다**: `meta` 가 (a)딸깍이 이미 하는 일(동어반복)과 (b)프롬프트 작성 방법론(유용)을 한 데 묶고 있었다. (b)는 빼면 손해다.
+
+### v2 변경
+- 판정 질문을 **문법 → 효용**으로: *"이 카드를 참고해 개선 프롬프트를 만들면 사용자의 결과물이 좋아지는가"*
+- `meta` 를 *"'좋은 프롬프트를 만들어라' 자체를 말할 뿐 무엇을 넣을지는 안 알려주는"* 으로 좁힘
+- `system` 을 *"프롬프트 텍스트만으로는 효과가 없는"* 으로 재정의
+- `degenerate` 강제 문구 추가 · `LAYERS_VERSION` v1 → **v2**
+
+### 🔴 결과 — 두 잣대가 반대로 움직였다
+
+| 잣대 | v1 | v2 |
+|---|---:|---:|
+| 회귀 셋 34장 층 정확 일치 | 32% | **59%** |
+| 회귀 셋 검색 포함/제외 일치 | 32% | **71%** |
+| **실사용 질의 top-5 노이즈율**(독립 44장 목록) | **8%** | **20%** 🔴 |
+| 층 분포 | ui 124 / sys 26 / meta 17 / deg 3 | ui **143** / sys 21 / meta **3** / deg 3 |
+
+**v2 가 검토에서 지적된 것은 전부 고쳤다** — 과잉제외 9장(Delimiter·XML Tags·Specificity·Problem Decomposition·Rubric·Abstention·Priority Placement·Instruction Conflict Resolution·Diff/Patch) 전부 `user_instruction` 복귀, Temperature·Multi-Query Retrieval·Tool-Use·Use of Affordances 전부 `system` 이동.
+
+**그런데 새 구멍이 생겼다 — 판정 근거가 전부 *"provides concrete instruction"***:
+| 카드 | v1 | v2 | 실제 |
+|---|---|---|---|
+| Chunk Design Prompting | system | **user_instruction** | RAG 청크 설계 |
+| Instruction Hierarchy Prompting | system | **user_instruction** | 시스템 계층 |
+| Retrieval Failure Handling | system | **user_instruction** | 검색 인프라 필요 |
+| Zero-Shot (PT=`Text: {내용}`) | user_instruction | user_instruction | degenerate |
+
+→ **v1 은 '붙는가'(문법), v2 는 '구체적인가'(형식)로 판정했다. 둘 다 효용이 아니다.**
+`meta` 도 17→3 으로 과교정됐다(Prompt Compression·Expansion 이 user_instruction 으로 — 이 둘은 사람 판단도 갈린다).
+
+### ⭐ 구조적 결론 — 단일 LLM 판정으로 이 경계가 안 잡힌다
+근거 3건: ①v1 1차(system 을 한 번도 안 고름) ②v1 2차(meta 과흡인) ③v2(구체성 구멍). **세 번 모두 프롬프트가 명시한 표면 속성에 모델이 달라붙었다.** 여기에 temp=0 인데도 경계 카드는 실행마다 흔들린다(Temperature·Give the Model an Out 실측).
+
+**다음 제안**: LLM 분류(쉬운 다수) + **사람 override 목록**(경계 소수, git 관리). 회귀 셋과 override 는 **파일을 분리**해야 한다 — 합치면 회귀 점수가 구조적으로 100% 가 돼 측정 불능이 된다.
+
+**변경 파일**
+- 수정: `app/rag/layers.py`(v2 어휘) · `ingestion/tag_layers.py`(프롬프트) · `tests/test_layers.py`
+- 신규: `eval/layer_set.json`(34장) · `eval/layer_eval.py`
+
+**검증**: `pytest tests/ -q` → 83 passed · v2 전량 재분류 170/170 성공(미분류 0)
+**주의**: DB 에는 v2 가 기록돼 있다. `is_searchable` 은 **여전히 미배선**이므로 `/query` 동작은 무변경이다.
+
+---
+
+## [2026-09-13] 층 분류 확정 — LLM + 사람 override 2층 구조 · top-5 노이즈 22%→2%
+**목적**: v2 가 회귀 셋은 올렸으나(32→59%) 검색 노이즈는 악화시킨(8→12%) 혼합 결과를 매듭짓는다.
+
+### 먼저 — 내 잣대에 오류 4건이 있었다
+노이즈 측정에 쓰던 '쓸 수 없는 카드' 44장 목록에서 **4장이 틀렸다.** 검토와 팀 판단으로 제외:
+| 카드 | 판정 | 근거 |
+|---|---|---|
+| Source-Bounded Answering | user_instruction | 사용자가 자료를 붙여넣고 쓸 수 있다 |
+| Add Defense in the Instruction | user_instruction | 일반 제약 지시문으로 읽힌다 |
+| **Prompt Compression** | user_instruction | **생성기에 유용한 지침(2026-09-13 결정)** |
+| **Prompt Expansion** | user_instruction | 동일 — "역할·맥락·조건·출력형식을 포함하라"는 개선에 직접 쓰인다 |
+
+→ 잣대 44 → **40장**. 이 수정만으로 v1/v2 격차가 **8% vs 20% → 8% vs 12%** 로 줄었다. **앞 항목의 "v2 가 크게 나빠졌다"는 서술은 과장이었다**(잣대 오류가 부풀린 값).
+
+### 결론 — 단일 LLM 판정으로 이 경계는 안 잡힌다 (근거 3건)
+| 시도 | 실패 양상 |
+|---|---|
+| v1 1차 | `system` 을 **한 번도** 안 고름 |
+| v1 2차 | `meta` 과흡인 — 작성 방법론까지 빨아들임 |
+| v2 | **'구체적인가'** 라는 새 구멍 — 근거가 전부 *"provides concrete instruction"* |
+
+세 번 모두 **프롬프트가 명시한 표면 속성에 모델이 달라붙었다.** 여기에 temp=0 인데도 경계 카드는 실행마다 흔들린다. 네 번째 프롬프트는 네 번째 구멍을 만들 공산이 크다.
+
+### 채택 — 2층 구조 (LLM 다수 + 사람 소수)
+```
+LLM 분류 170장  →  사람 override 17장  →  DB(layer, layerSource)
+     ↑                    ↑
+ 쉬운 다수           경계 소수(git 관리)
+```
+- 신규 `ingestion/layer_overrides.json` — 17건, 각 항목에 판정 근거 1줄
+- `apply_overrides()` 가 **원본 LLM 판정을 `llmLayer` 에 보존** → 분류기 품질을 나중에도 채점 가능
+- `metadata.layerSource` 에 `human|llm` 기록 → 사람 판정이 다음 배치에 조용히 덮이지 않는다
+- `--apply-overrides` : LLM 호출 없이 override 만 재적용
+- `--no-override` : 분류기 원본 품질 측정용
+
+**⚠️ 파일 분리 원칙**: override(`ingestion/`)와 회귀 셋(`eval/`)은 **다른 파일**이다. 합치면 회귀 점수가 구조적으로 100% 가 돼 분류기 품질을 못 잰다. `layer_eval.py --from <배치출력>` 이 override 이전 원본을 채점하고, 테스트가 `len(override) < len(회귀셋)` 을 강제한다.
+
+### 결과
+
+| 지표 | 필터 없음 | v1 | v2 | **v2+override** |
+|---|---:|---:|---:|---:|
+| top-5 노이즈율(잣대 40장) | 22% | 8% | 12% | **2%** |
+| 검색 풀 | 170 | 124 | 143 | **130** |
+| 회귀 셋(분류기 원본) | — | 32% | **59%** | 59%(불변 — 원본 채점) |
+
+남은 노이즈는 `Data Provenance Prompting` **1장**.
+
+최종 분포: `user_instruction 130 · system 26 · meta 7 · degenerate 7` (미분류 0)
+
+**변경 파일**
+- 신규: `ingestion/layer_overrides.json`
+- 수정: `ingestion/tag_layers.py`(override 적용·`layerSource`·`--apply-overrides`/`--no-override`) · `eval/layer_eval.py`(`--from`) · `tests/test_layers.py`(12→18)
+
+**검증**: `pytest tests/ -q` → **89 passed** · override 17/17 적용 · 회귀 채점 원본 59% 유지(오염 없음)
+
+**아직 안 한 것 — `is_searchable` 미배선**
+DB 에 `layer` 가 있을 뿐 `retriever._load_collection` 은 여전히 전량을 읽는다. 위 2% 는 필터를 임시로 씌워 잰 값이고 **`/query` 동작은 무변경**이다. 배선 시 확인할 것:
+- `min_score`·`fetch_k` 재교정(풀이 170→130 으로 줄면 점수 분포가 바뀐다)
+- 리랭커 경로 포함 `run_eval` 정식 재측정(지금까지는 dense 단독 측정이다)
+- `qa_set_realistic` 정답이 제외된 카드를 가리키는 경우가 없는지
