@@ -46,6 +46,21 @@ def _est_tokens(text: str) -> int:
     return int(hangul / 1.0 + ascii_ / 4 + other / 1.5)
 
 
+def _gen_reasoning_effort() -> str | None:
+    """생성기 추론량. GEN_REASONING_EFFORT 환경변수로 지정(미설정=모델 기본값).
+
+    gpt-oss 계열은 최종 출력 앞에 추론 토큰을 먼저 쓴다. analyzer·query_transform 에서는
+    그 때문에 예산이 소진돼 아예 실패했고(2026-09-13), 'low' 로 완료 토큰이 1/6 로 줄었다.
+    생성기는 `_fit_max_tokens` 동적 산정 덕에 즉사하지는 않았지만, 추론 토큰이 출력 예약을
+    갉아먹으므로 TPM 여유·긴 원문 verbatim 여력에 영향이 있다.
+
+    ⚠️ 다만 생성은 analyzer 와 달리 **추론량이 품질에 직결될 수 있다**(모드 판정·기법 반영·
+    원문 보존). 그래서 기본값을 바꾸지 않고 A/B 용 토글로만 둔다 — 측정 없이 켜지 말 것.
+    """
+    value = os.environ.get("GEN_REASONING_EFFORT", "").strip().lower()
+    return value if value in ("low", "medium", "high") else None
+
+
 def _gen_temperature() -> float:
     """생성 temperature. GEN_TEMPERATURE 환경변수로 오버라이드(평가 비교용, 기본 0.7)."""
     try:
@@ -417,12 +432,14 @@ class GroqGenerator:
 
         for attempt in range(2):
             try:
+                effort = _gen_reasoning_effort()
                 response = self.client.chat.completions.create(
                     model=groq_model,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=_gen_temperature(),
                     response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
+                    **({"reasoning_effort": effort} if effort else {}),
                 )
                 return _strip_cjk_noise(response.choices[0].message.content)
             except RateLimitError as e:
