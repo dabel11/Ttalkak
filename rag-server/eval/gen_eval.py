@@ -23,7 +23,7 @@ eval/gen_eval.py
 사용법 (rag-server/ 에서 실행, GROQ_API_KEY 필요):
     python -m eval.gen_eval
     python -m eval.gen_eval --qa gen_set.json --limit 4 --show
-    python -m eval.gen_eval --judge-model llama-3.3-70b-versatile
+    python -m eval.gen_eval --hyde              # HyDE 실험(운영과 다름)
     python -m eval.gen_eval --cache-file eval/.gen_cache.json   # 캐시 활성화(재평가 비용↓)
 """
 
@@ -194,10 +194,18 @@ def main():
     ap.add_argument("--show", action="store_true", help="항목별 응답·점수 상세 출력")
     ap.add_argument("--cache-file", default=None,
                     help="생성 응답 캐시 JSON 경로 (지정 시 동일 조건 재호출 스킵)")
+    # ⚠️ 기본값을 off 로 되돌렸다(2026-09-13). 운영(`main.py` QueryRequest.use_hyde)은
+    #    2026-07-30 재평가 이후 HyDE **off** 인데 이 하네스만 on 이 기본이었다 —
+    #    HyDE 는 R@5 를 0.763→0.441 로 떨어뜨리므로, 그동안의 생성 평가는 운영보다
+    #    훨씬 나쁜 검색 위에서 측정된 값이다. 평가는 기본적으로 운영과 같아야 한다.
+    ap.add_argument("--hyde", action="store_true",
+                    help="검색 시 HyDE 적용(실험용). 기본은 운영과 동일하게 off.")
     ap.add_argument("--no-hyde", action="store_true",
-                    help="검색 시 HyDE 미적용(baseline). 기본은 운영과 동일하게 HyDE on.")
+                    help="(하위호환) 이제 기본값이라 아무 효과 없음")
     args = ap.parse_args()
-    use_hyde = not args.no_hyde
+    use_hyde = args.hyde
+    if args.no_hyde and not args.hyde:
+        print("[gen_eval] --no-hyde 는 이제 기본값입니다(무시). HyDE 를 켜려면 --hyde")
 
     qa_path = Path(__file__).parent / args.qa
     data = json.loads(qa_path.read_text(encoding="utf-8"))

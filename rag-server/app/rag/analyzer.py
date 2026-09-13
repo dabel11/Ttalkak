@@ -35,6 +35,22 @@ from app.rag.axes import (
 _MODEL = "openai/gpt-oss-20b"   # 형식 판단이라 소형 모델로 충분. TPM 8000 주의.
 _TEMPERATURE = 0.2                 # 결정성 우선 — 같은 입력 → 같은 필드/mode
 
+# 🔴 2026-09-13: 이 둘이 없어서 **분석기가 사실상 전부 실패하고 있었다.**
+# gpt-oss 계열은 최종 JSON 앞에 추론 토큰을 먼저 쓴다. 이 시스템 프롬프트(2,917자)에서
+# 기본 추론량이 완료 토큰 ~1,259 라 종전 max_tokens=700 이 먼저 소진되고 Groq 가
+# 400 json_validate_failed 를 낸다. 실측: 700 실패 / 1500 성공(완료 1259).
+#   → gen_eval 18문항 중 16건에서 분석 실패가 찍혔다. analyze() 가 예외를 삼키고 None 을
+#     돌려주므로 **에러 없이 조용히** 2단계 파이프라인이 1단계로 퇴화해 있었다
+#     (2026-08-21 모델 교체 이후 줄곧).
+#
+# 그냥 예산만 올리면 TPM 이 죽는다 — Groq 는 '입력 + 출력예약'을 합산해 한도를 잡으므로
+# max_tokens=1500 이면 요청당 ~3,100 토큰을 예약해 TPM 8000 에서 분당 2회가 한계다.
+# reasoning_effort="low" 로 추론량 자체를 줄이는 것이 옳은 해법이다.
+#   실측(같은 입력): low 완료 198 / medium 완료 1500 / high 실패
+#   멀티턴(history 포함)에서도 완료 316~447 로 안정
+_REASONING_EFFORT = "low"   # 형식 판단에 긴 추론이 필요 없다
+_MAX_TOKENS = 1000          # low 기준 실사용 198~447 → 2배 이상 여유
+
 # 주의: 구체적인 예시 하나를 길게 쓰면 8b가 그 예시를 무관한 요청에도 복사한다
 # (실측: "환불 거절 이메일" 예시가 "글 써줘"의 taskType으로 새어나옴).
 # → 작업유형별 required 를 '짧은 목록'으로만 주고, 특정 시나리오를 서술하지 않는다.
@@ -232,7 +248,8 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
         resp = client.chat.completions.create(
             model=_MODEL,
             temperature=_TEMPERATURE,
-            max_tokens=700,
+            max_tokens=_MAX_TOKENS,
+            reasoning_effort=_REASONING_EFFORT,
             response_format={"type": "json_object"},
             messages=[{"role": "system", "content": _SYSTEM},
                       {"role": "user", "content": user_msg}],
