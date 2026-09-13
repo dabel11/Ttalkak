@@ -1733,3 +1733,64 @@ gold 를 보지 않는 고정 템플릿으로 질의 형태만 카드 쪽에 정
 **결정·근거**
 - Groq 잔존 모델 중 `gpt-oss-120b/20b`가 기존 70b/8b의 역할 분담(생성/판단)에 그대로 대응돼 구조 변경 없이 이름만 교체.
 - **미검증으로 남긴 것**: 교체가 검색·생성 품질에 준 영향의 정량 비교(A/B). 기능 복구가 우선이라 라이브 A/B는 수행하지 않았다. `analyzer`가 그간 404로 무력화돼 있었으므로, 과거 평가 수치는 analyzer 없는 상태에서 측정된 것일 수 있어 재측정이 필요하다.
+
+---
+
+## [2026-09-08] 분석기 A·D 수정 — 축 폐기 버그 차단 · 정제 규칙 관측 가능화
+**목적**: 전수조사에서 나온 analyzer 결함 2건. 둘 다 **축 라우팅 배선 전에** 고쳐야 하는 것들이다 — A는 배선하는 순간 조회 경로를 죽이고, D는 배선 후 문제가 나도 원인을 판별할 수 없게 만든다.
+
+### A. 필드가 비면 `techniqueAxes` 가 통째로 폐기됨
+
+**Before** (`analyzer.py`)
+```python
+fields = _sanitize(data.get("fields") or [])
+if not fields:
+    return None          # ← 축이 잘 뽑혔어도 여기서 함께 폐기
+```
+- 지금은 축이 미배선이라 무해하지만, `DESIGN_TECHNIQUE_ROUTING.md` 5단계(조회 경로 연결)를 하는 순간 **실질 버그**가 된다. 축 판정은 성공했는데 필드가 비었다는 이유로 축까지 사라지고, 호출자는 유사도 폴백(AUC 0.575 경로)으로 떨어진다.
+- `_sanitize` 가 만능 필드(`_JUNK`)·작업유형 오염(`_TASK_WORDS`)을 걷어내면 필드가 0이 되는 경로가 실제로 존재한다.
+
+**After**
+```python
+fields = _sanitize(data.get("fields") or [])
+axes   = normalize_axes(data.get("techniqueAxes"))
+if not fields and not axes:   # 둘 다 비었을 때만 '분석 실패'
+    return None
+```
+- `None` 의 의미를 **분석 실패 하나로** 좁혔다(키 없음·호출 실패·파싱 실패·산출물 전무).
+- **생성 경로 무회귀 근거**: `generator.build_analysis_block()` 이 이미 `not analysis.get("fields")` 에서 `""` 를 반환한다(generator.py:323) → 빈 fields 분석은 `analysis=None` 과 렌더 결과가 **완전히 동일**하다. 이 등가성을 테스트로 고정했다.
+
+### D. 정제 규칙의 근거가 폐기된 모델 것인데 조용히 동작
+
+**Before**
+- 주석이 *"8b 는 …"* 이라 적혀 있으나 `_MODEL` 은 2026-08-21에 `openai/gpt-oss-20b` 로 교체됨.
+- `_JUNK`·`_TASK_WORDS`·`_FRAMING_EXACT`·`_MAX_REQUIRED` 전부 `llama-3.1-8b-instant` 오염 실측 기반. **현 모델에서 재측정된 적 없음.**
+- 규칙이 발동해도 `continue` 로 **조용히 버려서**, 지금 이 방어가 (a)여전히 필요한지 (b)불필요한 교정을 하는지 (c)새 오염을 놓치는지 **판별할 방법이 없었다.**
+
+**After**
+- 주석에 근거의 출처(폐기 모델)와 미검증 상태를 명시.
+- `_record_drop(rule, name)` 으로 교정 발동을 규칙별 집계 + 로그. 읽기는 `sanitize_stats()`, 구간 분리는 `reset_sanitize_stats()`.
+- 규칙 6종: `junk` · `task_word` · `framing_coerced` · `role_unknown` · `required_over_cap` · `not_dict`
+- **규칙 동작 자체는 안 바꿨다** — 관측만 추가(무회귀). `framing_coerced` 만 `and role != "framing"` 조건을 붙여 **이미 framing 인 것을 교정으로 오집계하지 않게** 했다(동작 동일, 카운터 오탐 제거).
+- ⚠️ 규칙 제거는 이 카운터가 쌓인 뒤에 한다. 지금 지우면 8b 시절 회귀를 되살리면서 그게 회귀인지조차 판별 못 한다.
+
+**변경 파일**
+- 수정: `app/rag/analyzer.py` (모듈 docstring · `_sanitize` 관측 · `analyze` 반환 계약 · 낡은 8b 주석)
+- 수정: `app/rag/generator.py` (`build_analysis_block` 의 "분석기(8b)" 표기 정정 1곳)
+- 수정: `RAG_PIPELINE.md` §1-[C0]
+- 신규: `tests/test_analyzer.py` (9개 — LLM·DB 없이 동작, Groq 클라이언트는 fake 주입)
+
+**검증**
+- `python3 -m tests.test_analyzer` → **9 passed**
+- `python3 -m pytest tests/ -q` → **71 passed** (종전 61 + 신규 9 + axes 수 변동)
+- 비pytest 3종 회귀 없음: postprocess 43 / token_budget 13 / generator_guards 16 / axes 13
+
+**미검증으로 남긴 것**
+- `gpt-oss-20b` 에서 각 방어 규칙이 실제로 필요한지 — **이번 변경은 그 질문을 측정 가능하게 만든 것이지 답한 것이 아니다.** 라이브 트래픽/`gen_eval` 실행 후 `sanitize_stats()` 를 읽어 판정할 것.
+- 축이 배선되지 않았으므로 A 수정의 실효(조회 경로 보존)는 **아직 end-to-end로 확인 불가**. 배선 시 함께 확인.
+
+**남은 analyzer 결함(미착수)** — 전수조사 지적 중 이번에 안 고친 것
+- **B**: `required` 상한 강등이 LLM 출력 **순서 의존**(앞 2개만 유지). 작업유형별 required 목록과 대조해 고르는 게 맞다
+- **C**: `history[-4:]` 고정 → 문서가 주장하는 "같은 질문 반복 구조적 차단"이 **실제로는 2턴 보장**
+- **E**: `max_tokens=700` 고정 → 긴 원문에서 분석기만 먼저 죽어 `None` 폴백(분석이 가장 필요한 케이스)
+- **F**: 축 카탈로그 추가 후 축 선택 일관성·기존 mode 정확도(0.83) 재측정 안 됨

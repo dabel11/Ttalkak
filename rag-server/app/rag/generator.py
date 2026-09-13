@@ -330,7 +330,8 @@ def build_analysis_block(analysis: dict | None) -> str:
         elif role == "fact":
             lines.append(f"- {f['name']} [fact] = (없음 → 지어내지 말고 [{f['name']} 입력] 빈칸 + 질문)")
         elif role == "required":
-            # 분석기(8b)가 요청에 있는 값을 놓치는 경우가 있다(실측: "임영웅 콘서트 …"에서
+            # 분석기가 요청에 있는 값을 놓치는 경우가 있다(실측: llama-3.1-8b-instant 시절,
+            # 현 모델 openai/gpt-oss-20b 에서 재측정 안 됨 — "임영웅 콘서트 …"에서
             # 홍보 대상을 empty 로 판정 → 잘못된 ask). 단정 대신 '확인 요청'으로 렌더해
             # 원문을 함께 보는 생성기가 교정할 수 있게 한다.
             lines.append(f"- {f['name']} [required] = (분석기가 못 찾음 — 원문을 다시 확인해 "

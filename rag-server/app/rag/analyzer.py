@@ -16,6 +16,12 @@ MAKE 파이프라인 1단계 — 요청 분석기.
   framing  — 없으면 합리적으로 가정 가능 (톤·대상·분량·형식)
 
 실패 시 None 을 반환한다 → 호출자는 분석 없이 기존 단일 단계로 진행(무회귀).
+
+⚠️ **None 의 의미는 '분석 실패' 하나뿐이다.** 필드가 하나도 안 나왔더라도 축
+(`techniqueAxes`)이 나왔으면 dict 를 돌려준다 — 축은 필드와 독립적인 산출물이고,
+축 라우팅(DESIGN_TECHNIQUE_ROUTING.md)이 배선되면 이게 조회 경로의 입력이 된다.
+필드만 비는 것은 생성 경로에서 이미 무회귀다(generator.build_analysis_block 이
+빈 fields 를 analysis=None 과 똑같이 "" 로 처리한다).
 """
 
 import json
@@ -115,9 +121,19 @@ def _get_client():
 
 
 # 규약의 '하드 제약'은 프롬프트가 아니라 코드로 강제한다.
-# 8b 는 프롬프트에 넣은 예시를 무관한 요청의 필드명으로 복사하는 성향이 강해서
-# (실측: "환불 거절 이메일"→"글 써줘", "자기소개서"→"부산 여행 일정표"), 규칙을 문장으로만
-# 주면 계속 새어나온다. 아래 세 가지는 결정적으로 교정한다.
+# `llama-3.1-8b-instant` 는 프롬프트에 넣은 예시를 무관한 요청의 필드명으로 복사하는 성향이
+# 강해서(실측: "환불 거절 이메일"→"글 써줘", "자기소개서"→"부산 여행 일정표"), 규칙을 문장으로만
+# 주면 계속 새어나왔다. 아래 세 가지는 결정적으로 교정한다.
+#
+# 🔴 근거의 유효기간 주의 — 위 실측은 **폐기된 모델(llama-3.1-8b-instant)** 기준이다.
+#    현재 `_MODEL` 은 `openai/gpt-oss-20b`(2026-08-21 교체)이고, 이 모델이 같은 오염 성향을
+#    갖는지는 **재측정된 적이 없다.** 지금 이 규칙들은 (a) 여전히 필요하거나 (b) 필요 없는
+#    교정을 하고 있거나 (c) 새 오염 유형을 놓치고 있는 셋 중 하나인데, 아직 알 수 없다.
+#    → 판정을 가능하게 하려고 `_record_drop` 으로 **교정 발동을 관측 가능하게** 했다.
+#      운영/평가 로그에서 규칙별 발동 횟수가 0 이면 그 규칙은 제거 후보,
+#      특정 규칙만 계속 터지면 프롬프트 쪽을 고칠 신호다. `sanitize_stats()` 로 읽는다.
+#    ⚠️ 규칙을 지우는 것은 이 관측 결과가 쌓인 뒤에 한다. 지금 지우면 8b 시절 회귀를
+#      되살릴 뿐이고, 그게 회귀인지조차 판별할 수 없다.
 _JUNK = ("포함 핵심내용", "포함 내용", "상세 내용", "대안 제시", "핵심내용")
 # 주의: 부분 문자열로 매칭하면 안 된다 — "홍보 대상"(마케팅의 required)까지 framing 으로
 # 강등돼 required 가 사라진다(실측: 마케팅 요청 3건이 ask→improve 로 오판). 정확 매칭 + '독자' 포함만.
@@ -127,24 +143,54 @@ _TASK_WORDS = ("자기소개서", "이메일", "발표", "블로그", "기획안
                "번역", "요약", "마케팅", "SNS", "대본", "글쓰기")
 _MAX_REQUIRED = 2
 
+# 규칙별 교정 발동 횟수(프로세스 누적). 위 '근거의 유효기간' 참조 — 현재 모델에서
+# 각 방어가 실제로 쓰이는지 판정하는 유일한 관측 창이다.
+_SANITIZE_DROPS: dict[str, int] = {}
+
+
+def _record_drop(rule: str, name: str) -> None:
+    """방어 규칙이 모델 출력을 고쳤다는 사실을 남긴다(조용히 버리지 않는다)."""
+    _SANITIZE_DROPS[rule] = _SANITIZE_DROPS.get(rule, 0) + 1
+    print(f"[Analyzer] _sanitize 교정 {rule}: {name!r} ({_MODEL})")
+
+
+def sanitize_stats() -> dict[str, int]:
+    """규칙별 누적 교정 횟수 사본. 평가 스크립트·운영 점검에서 읽는다."""
+    return dict(_SANITIZE_DROPS)
+
+
+def reset_sanitize_stats() -> None:
+    """카운터 초기화 — 측정 구간을 나눌 때 쓴다(테스트 격리에도 사용)."""
+    _SANITIZE_DROPS.clear()
+
 
 def _sanitize(fields: list) -> list:
-    """모델 출력 정리 — 만능/오염 필드 제거 + 역할 강제 + required 상한."""
+    """모델 출력 정리 — 만능/오염 필드 제거 + 역할 강제 + required 상한.
+
+    교정이 일어나면 `_record_drop` 으로 규칙명을 남긴다. 규칙 자체의 동작은
+    종전과 동일하다(관측만 추가 — 무회귀)."""
     out = []
     for f in fields:
         if not isinstance(f, dict):
+            _record_drop("not_dict", type(f).__name__)
             continue
         name = str(f.get("name") or "").strip()
-        if not name or name in _JUNK:
+        if not name:
+            continue
+        if name in _JUNK:
+            _record_drop("junk", name)            # 만능 필드 → 항상 required+empty 로 강제 ask
             continue
         # 작업유형 자체를 필드로 만든 것은 예시 오염 → 폐기
         if name in _TASK_WORDS:
+            _record_drop("task_word", name)
             continue
         role = str(f.get("role") or "").strip()
         if role not in ("required", "fact", "framing"):
+            _record_drop("role_unknown", name)
             role = "framing"                      # 불명은 가장 안전한 쪽(가정 가능)으로
         # 규약 §2: 대상 독자·톤·분량·형식은 언제나 framing (모델이 required/fact 로 올려도 교정)
-        if name in _FRAMING_EXACT or "독자" in name:
+        if (name in _FRAMING_EXACT or "독자" in name) and role != "framing":
+            _record_drop("framing_coerced", name)
             role = "framing"
         status = "filled" if str(f.get("status")) == "filled" else "empty"
         value = f.get("value")
@@ -158,12 +204,16 @@ def _sanitize(fields: list) -> list:
             continue
         seen += 1
         if seen > _MAX_REQUIRED:
+            _record_drop("required_over_cap", f["name"])
             f["role"] = "fact"
     return out
 
 
 def analyze(query: str, history: list[dict] | None = None) -> dict | None:
-    """요청 → {"taskType", "fields":[{name, role, status, value}]}. 실패 시 None."""
+    """요청 → {"taskType", "fields":[{name, role, status, value}], "techniqueAxes":[…]}.
+
+    None 은 **분석 실패**만 뜻한다(키 없음·호출 실패·JSON 파싱 실패·산출물 전무).
+    필드가 비었지만 축이 있으면 dict 를 돌려준다 — 축은 축 라우팅의 입력이다."""
     client = _get_client()
     if client is None:
         return None
@@ -191,13 +241,20 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
         return None
 
     fields = _sanitize(data.get("fields") or [])
-    if not fields:
+    # 통제 어휘 밖의 값은 버린다. 비면 호출자가 기존 유사도 경로로 폴백한다.
+    axes = normalize_axes(data.get("techniqueAxes"))
+
+    # 필드와 축은 독립적인 산출물이다. 예전엔 필드가 비면 무조건 None 이라 **축이 잘
+    # 뽑혔어도 함께 폐기**됐다 — 축 라우팅이 배선되면 이건 조회 경로를 통째로 못 쓰게
+    # 만드는 실질 버그가 된다. 이제 둘 다 비었을 때만 '분석 실패'로 본다.
+    # 필드만 비는 경우의 생성 경로는 종전과 동일하다(build_analysis_block 이 빈 fields 를
+    # analysis=None 과 똑같이 "" 로 처리 — generator.py:323).
+    if not fields and not axes:
         return None
     return {
         "taskType": str(data.get("taskType") or ""),
         "fields": fields,
-        # 통제 어휘 밖의 값은 버린다. 비면 호출자가 기존 유사도 경로로 폴백한다.
-        "techniqueAxes": normalize_axes(data.get("techniqueAxes")),
+        "techniqueAxes": axes,
     }
 
 
