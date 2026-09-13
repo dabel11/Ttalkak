@@ -40,8 +40,26 @@ from app.rag.axes import (
 )
 
 
-_MODEL = "llama-3.3-70b-versatile"   # 축 선택은 '판단'이라 8b는 위험. 파일럿으로 확인할 것.
+# 축 선택은 '판단'이라 소형 모델은 위험하다 → 대형 쪽을 기본으로 둔다.
+# 2026-08-15 파일럿은 `llama-3.3-70b-versatile` 로 돌았으나 Groq 가 2026-08-21에 llama-3.x 를
+# 폐기(`model_not_found`)해 그대로 두면 전량 404 였다. 같은 역할(대형=판단/생성)인
+# `openai/gpt-oss-120b` 로 교체한다. 소형은 `openai/gpt-oss-20b`.
+# ⚠️ 모델이 바뀌었으므로 파일럿 결과(2026-08-15의 16/16)는 이 모델에서 **재확인 대상**이다.
+_MODEL = "openai/gpt-oss-120b"
 _TEMPERATURE = 0.0                    # 태깅은 결정적이어야 한다
+
+# 출력 예산. 종전 200 은 llama-3.3-70b 기준이었고 gpt-oss 계열에선 **전량 실패**한다 —
+# 이 계열은 최종 JSON 앞에 추론 토큰을 먼저 쓰므로 예산이 먼저 소진되고, Groq 가
+# `json_validate_failed`(400, "max completion tokens reached before generating a valid
+# document") 를 낸다. 실측: 카드당 완료 토큰 203~204 → 200 에서 딱 넘쳤다(2026-09-12, 20/20 실패).
+# 예산은 상한일 뿐이라 올려도 실사용(~204)·과금·지연은 그대로다. 그래서 넉넉히 잡는다 —
+# tag_layers 전량 실행에서 **700 으로도 9/170 이 같은 400 을 냈다**(긴 카드일수록 추론이
+# 길어진다). 그 실측을 반영해 1500 으로 올렸다(2026-09-12).
+_MAX_TOKENS = 1500
+
+# ⚠️ 이 400 은 `is_rate_limited` 가 False 로 판정하므로 재시도되지 않는다(정상 — 재시도해도
+#    같은 결과다). 대신 카드가 axes=[] 로 남으므로, 대량 실행 후 "무배정" 수를 반드시 볼 것.
+#    전량이 무배정이면 쿼터가 아니라 이 예산 문제일 가능성이 높다.
 
 
 def build_tagging_prompt(card_text: str) -> str:
@@ -82,7 +100,7 @@ def make_groq_tagger(model: str = _MODEL):
         resp = client.chat.completions.create(
             model=model,
             temperature=_TEMPERATURE,
-            max_tokens=200,
+            max_tokens=_MAX_TOKENS,
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
         )
