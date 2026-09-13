@@ -2368,3 +2368,67 @@ hybrid 가 깬 문항    1개  평균 어휘누수 0.000
 - `min_score=0.40` 폐기(이미 사문화 — dense 최소 0.421). 층 필터 배선과 함께 처리
 - `example_min_score=0.40` — 예시 코퍼스 기준으로 잰 적 없는 임시값
 - `fetch_k` 는 **코퍼스가 바뀌면 다시 재야 한다**(이번이 그 사례)
+
+---
+
+## [2026-09-13] 운영 결함 3건 — /index 무인증 · LLM 타임아웃 부재 · 평가 judge 전멸
+**목적**: RAG 서버 자체의 개선점을 코드로 훑어 나온 것들. 셋 다 독립이고 기능 변경이 아니다.
+
+### 🔴 ① `/index` 가 무인증이었고 포트가 외부로 열려 있었다
+
+- `.env` 14행의 `RAG_INDEX_API_KEY` 가 **주석 처리**돼 런타임에 미설정이었다.
+- `main.py` 는 이 경우 **경고만 찍고 허용**했다(`if not _INDEX_API_KEY: return`).
+- `docker-compose.yml` 은 rag-server 를 `"8000:8000"` 으로 **모든 인터페이스**에 게시했다. (mysql 만 `127.0.0.1:3306:3306` 으로 묶여 있었다.)
+
+→ 같은 네트워크의 누구나 임의 청크를 코퍼스에 넣을 수 있었고, 주입된 청크는 이후 모든 요청에서 `[참고 기법]` 으로 생성 LLM 에 들어간다. **프롬프트 인젝션 경로**다.
+
+**조치 — fail-closed 로 전환**
+| 상태 | 종전 | 변경 |
+|---|---|---|
+| 키 미설정 | 경고 후 **허용** | **503**(엔드포인트 비활성) |
+| 키 설정 + 헤더 없음/불일치 | 403 | 403 (동일) |
+| 키 설정 + 헤더 일치 | 200 | 200 (동일) |
+
+저장소 전체에서 `/index` 를 호출하는 코드는 **없다** — 모든 적재는 `ingestion/*` 이 DB 에 직접 쓴다. 따라서 막아도 깨지는 경로가 없고, '키를 깜빡함'이 곧 '노출'이 되지 않는 쪽이 옳다.
+compose 는 `127.0.0.1:8000:8000` 으로 변경. 백엔드는 컨테이너 네트워크(`http://rag-server:8000`)로 부르므로 게시 포트는 로컬 디버깅용일 뿐이다.
+
+⚠️ **backend 의 `"8080:8080"` 은 건드리지 않았다** — 브라우저가 직접 호출하므로 바인딩을 바꾸면 데모 구성이 깨질 수 있다. 다만 `/api/prompts/improve` 가 게스트 무제한인 기존 P0 와 함께 보면 같은 성격의 노출이다.
+
+### 🔴 ② LLM 호출에 타임아웃이 없었다
+`generator.py` · `analyzer.py` · `query_transform.py` 어디에도 `timeout` 이 없어, 제공자가 응답하지 않으면 **스레드가 무한 대기**했다. FastAPI 는 `def` 엔드포인트를 스레드풀(기본 40)에서 돌리므로 제공자가 느려지면 스레드가 쌓여 서버가 멎는다. 백엔드는 75s WebClient 타임아웃이 있어 사용자에겐 에러가 가지만 **rag-server 스레드는 계속 잡혀 있었다** — 백엔드에서는 2026-08 에 고쳐진 결함이 여기만 남아 있었다.
+
+신규 `app/core/timeouts.py` 에 예산을 모았다(환경변수 오버라이드 가능).
+| 상수 | 값 | 적용 |
+|---|---:|---|
+| `FAST_SECONDS` | 20s | analyzer · query_transform (짧은 프롬프트, 실패해도 폴백 있음) |
+| `GEN_SECONDS` | 45s | generator Groq |
+| `GEN_MILLIS` | 45000ms | generator Gemini (google-genai 는 ms 단위) |
+
+검색 5s + 분석 20s + 생성 45s = 70s 로 백엔드 75s 안에 들어온다. ⚠️ 재시도·폴백까지 겹치면 초과할 수 있는데 그건 남은 한계다 — **여기서 막으려는 건 '느림'이 아니라 '영원히 안 끝남'** 이다.
+
+### 🔴 ③ 평가 judge 경로가 전부 퇴역 모델을 쓰고 있었다
+uplift_eval 만 문제인 줄 알았는데 **4개 스크립트 전부**였다. 근본 원인은 **모델 기본값이 네 곳에 중복**된 것 — 2026-08-21 Groq 가 llama-3.x 를 폐기했을 때 `generator.py` 만 갱신되고 나머지가 드리프트했다.
+
+| 파일 | 종전 | 영향 |
+|---|---|---|
+| `uplift_eval.py` | `llama-3.3-70b-versatile` / `gemini-2.0-flash` | target·judge 404 → **uplift 축 실행 불가** |
+| `gen_eval.py` | `llama-3.3-70b-versatile` | judge 404 |
+| `halluc_eval.py` | `llama-3.3-70b-versatile` | judge 404 |
+| `run_multi_turn_eval.py` | uplift 우회용 자체 표인데 groq 항목이 같은 폐기 모델 | 우회가 반쪽 |
+
+**조치**: `generator.default_model(backend)` 공개 헬퍼를 단일 출처로 두고 네 곳이 전부 이를 쓴다. 다음 모델 교체 때 **한 줄만 고치면 된다.**
+검증: 네 스크립트 모두 `openai/gpt-oss-120b`(groq) / `gemini-flash-latest`(gemini) 로 해소됨.
+
+⚠️ **남겨둔 것**: `multi_turn_eval.py:460` `analyzer_model="llama-3.1-8b-instant"` 는 순수 함수의 **캐시 키 라벨**(실제 호출 아님)이다. 바꾸면 쿼터를 들여 쌓은 기존 측정 캐시가 무효화되므로 손대지 않았다. 라벨이 실제 모델과 다르다는 점만 기록한다.
+
+**변경 파일**
+- 신규: `app/core/timeouts.py`
+- 수정: `app/main.py`(fail-closed) · `../docker-compose.yml`(루프백) · `app/rag/{generator,analyzer,query_transform}.py`(타임아웃) · `app/rag/generator.py`(`default_model`) · `eval/{uplift_eval,gen_eval,halluc_eval,run_multi_turn_eval}.py`
+
+**검증**: `pytest tests/ -q` → 89 passed · `/index` 세 상태(503/403/200) 실동작 확인 · 클라이언트 timeout 속성 실측(20.0 / 20.0 / 45.0)
+
+**남은 것**(이번에 안 함)
+- 컬렉션 캐시 — 요청당 236ms 를 DB+JSON 파싱에 쓴다(기법 170ms + 예시 66ms). 지금은 리랭커에 가려 있지만 축 라우팅 후 병목이 된다
+- `/health` 심화 — DB·모델 상태를 안 봐서 compose healthcheck 가 거짓 안심을 준다
+- `requirements.txt` 전부 `>=` — 재현성 위험. 이미 모델 폐기로 한 번 전면 장애를 겪었다
+- 리랭커 지연 로드 경합(`self._reranker`) — 동시 요청 시 모델 2중 로드 가능

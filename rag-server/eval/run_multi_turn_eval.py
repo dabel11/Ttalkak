@@ -60,12 +60,13 @@ from eval.multi_turn_eval import (
 
 CONDITIONS = ("rag_off", "rag_on", "oracle")
 
-# uplift_eval._BACKEND_DEFAULT_MODEL 의 gemini-2.0-flash 는 퇴역해 404 가 난다.
-# 그 파일은 수정 대상이 아니므로 러너에서 자체 기본값을 쓴다.
-_JUDGE_DEFAULT_MODEL = {
-    "groq": "llama-3.3-70b-versatile",
-    "gemini": "gemini-flash-latest",
-}
+# judge 기본 모델 — generator.default_model() 이 단일 출처다.
+# 종전에는 여기서 uplift_eval 의 퇴역 모델을 우회하려고 자체 표를 뒀는데,
+# 그 표의 groq 항목("llama-3.3-70b-versatile")도 같이 폐기돼 우회가 반쪽이 됐다.
+# 중복이 드리프트를 낳았으므로 표를 없앤다(2026-09-13).
+def _judge_default_model(backend: str) -> str:
+    from app.rag.generator import default_model
+    return default_model(backend)
 
 _JUDGE_SYSTEM = (
     "너는 다중 턴 프롬프트 개선 결과를 채점하는 엄격하고 일관된 평가자다. "
@@ -186,7 +187,7 @@ def main() -> None:
         raise SystemExit(f"알 수 없는 조건: {unknown}")
 
     backend = _pick_backend()
-    judge_model = args.judge_model or _JUDGE_DEFAULT_MODEL[backend]
+    judge_model = args.judge_model or _judge_default_model(backend)
     judge_call = make_judge_call(backend)
 
     dataset = load_dataset(args.dataset)

@@ -48,11 +48,13 @@ from app.main import retriever, generator, extract_improved_prompt, run_generati
 
 _NEUTRAL_SYSTEM = "너는 유능한 한국어 AI 어시스턴트다. 사용자의 요청을 충실히 수행해 결과물을 직접 만들어라."
 
-# 백엔드별 기본 모델 (gen_eval/generator 와 동일 계열)
-_BACKEND_DEFAULT_MODEL = {
-    "groq":   "llama-3.3-70b-versatile",
-    "gemini": "gemini-2.0-flash",
-}
+# 백엔드별 기본 모델 — generator.default_model() 이 단일 출처다.
+# 종전에는 여기에 하드코딩돼 있었고, 2026-08-21 Groq 의 llama-3.x 폐기 때
+# generator 만 갱신돼 이 파일은 퇴역 모델("llama-3.3-70b-versatile" /
+# "gemini-2.0-flash")을 참조한 채 남았다 → uplift 측정 축이 404 로 죽어 있었다.
+def _default_model(backend: str) -> str:
+    from app.rag.generator import default_model
+    return default_model(backend)
 
 _client_cache: dict[str, object] = {}
 
@@ -242,8 +244,8 @@ def main():
     args = ap.parse_args()
 
     backend = _pick_backend()
-    target_model = args.target_model or _BACKEND_DEFAULT_MODEL[backend]
-    judge_model  = args.judge_model  or _BACKEND_DEFAULT_MODEL[backend]
+    target_model = args.target_model or _default_model(backend)
+    judge_model  = args.judge_model  or _default_model(backend)
     cache_path = None if args.no_cache else args.cache_file
     cache = _load_cache(cache_path)
 

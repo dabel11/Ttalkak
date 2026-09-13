@@ -90,7 +90,15 @@ def _retry(fn, tries: int = 4, base: float = 9.0):
             else:
                 raise
 
-_JUDGE_MODEL = "llama-3.3-70b-versatile"
+# judge 기본 모델 — generator.default_model() 이 단일 출처다.
+# 종전 하드코딩 "llama-3.3-70b-versatile" 은 2026-08-21 Groq 폐기분이라
+# 이 채점 경로가 404 로 죽어 있었다(2026-09-13 발견).
+def _judge_model_default() -> str:
+    from app.rag.generator import default_model
+    return default_model("groq" if __import__("os").environ.get("GROQ_API_KEY") else "gemini")
+
+
+_JUDGE_MODEL = _judge_model_default()
 
 _JUDGE_SYSTEM = """너는 '프롬프트 개선 어시스턴트'의 응답을 채점하는 엄격한 평가자다.
 이 어시스턴트(딸각)는 사용자의 거친 프롬프트를 받아, 결과물을 직접 쓰지 않고

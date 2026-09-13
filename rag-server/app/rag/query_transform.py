@@ -14,6 +14,8 @@ query_transform.py
 
 import os
 
+from app.core.timeouts import FAST_SECONDS
+
 _TRANSFORM_MODEL = "openai/gpt-oss-20b"
 # HyDE는 '추론 품질'이 아니라 '기법 카드 장르로 문체를 맞추는 것'이 목적이라 8b로 충분하다.
 # 실측(2026-07-29): 8b HyDE가 6개 거친 쿼리를 dense 0.69~0.84로 끌어올려(baseline 0.34~0.48)
@@ -63,7 +65,7 @@ def _get_client():
         return None
     try:
         from groq import Groq
-        _client = Groq(api_key=api_key)
+        _client = Groq(api_key=api_key, timeout=FAST_SECONDS)
         return _client
     except Exception as e:
         print(f"[QueryTransform] 초기화 실패 → 원본 쿼리 사용: {e}")

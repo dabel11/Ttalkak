@@ -27,6 +27,7 @@ MAKE 파이프라인 1단계 — 요청 분석기.
 import json
 import os
 
+from app.core.timeouts import FAST_SECONDS
 from app.rag.axes import (
     MAX_AXES_PER_REQUEST, build_axis_catalog, normalize_axes,
 )
@@ -112,7 +113,8 @@ def _get_client():
         return None
     try:
         from groq import Groq
-        _client = Groq(api_key=api_key)
+        # 타임아웃 없으면 제공자가 멈췄을 때 스레드가 영원히 잡힌다(core/timeouts.py)
+        _client = Groq(api_key=api_key, timeout=FAST_SECONDS)
         return _client
     except Exception as e:
         print(f"[Analyzer] 초기화 실패 → 분석 생략: {e}")

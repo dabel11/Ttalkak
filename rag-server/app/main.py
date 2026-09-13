@@ -25,13 +25,27 @@ app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 # 미설정이면 로컬 개발 편의상 허용하되 기동 시 경고. (/query 는 제품 API라 공개 유지)
 _INDEX_API_KEY = os.environ.get("RAG_INDEX_API_KEY", "")
 if not _INDEX_API_KEY:
-    print("[Main] ⚠️  RAG_INDEX_API_KEY 미설정 — /index 가 무인증입니다. 배포 시 .env에 설정하세요.")
+    print("[Main] /index 비활성 (RAG_INDEX_API_KEY 미설정). 쓰려면 .env 에 키를 설정하세요.")
 
 
 def _verify_index_key(provided: str | None) -> None:
-    """키가 설정된 경우에만 검사. 불일치 시 403."""
+    """실패에 닫힌다(fail-closed) — 키가 없으면 엔드포인트 자체를 막는다.
+
+    종전에는 키 미설정 시 **경고만 찍고 허용**했다. 실제로 `.env` 의
+    `RAG_INDEX_API_KEY` 가 주석 처리돼 있어 운영에서 무인증이었고, compose 가
+    8000 포트를 모든 인터페이스에 열어 두어 같은 네트워크의 누구나 코퍼스에
+    임의 청크를 넣을 수 있었다. 주입된 청크는 이후 모든 요청에서 `[참고 기법]`
+    으로 생성 LLM 에 들어가므로 **프롬프트 인젝션 경로**가 된다.
+
+    저장소 전체에서 `/index` 를 호출하는 코드는 없다(모든 적재 스크립트는
+    `ingestion/*` 에서 DB 에 직접 쓴다). 따라서 막아도 깨지는 경로가 없고,
+    '키를 깜빡함'이 곧 '노출'이 되지 않는 쪽이 옳다.
+    """
     if not _INDEX_API_KEY:
-        return
+        raise HTTPException(
+            status_code=503,
+            detail="/index 는 비활성 상태입니다. RAG_INDEX_API_KEY 를 설정하세요.",
+        )
     if not provided or not hmac.compare_digest(provided, _INDEX_API_KEY):
         raise HTTPException(status_code=403, detail="X-API-Key 가 없거나 올바르지 않습니다.")
 
