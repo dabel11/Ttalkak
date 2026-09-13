@@ -4,7 +4,7 @@ query_transform.py
 검색 전 쿼리 변환.
 
 사용자가 입력하는 '개선 대상 프롬프트'(예: "마케팅 글 써줘")는 그 자체로는
-기법 검색용 쿼리로 적합하지 않다. 빠른 LLM(Groq llama-3.1-8b-instant)으로
+기법 검색용 쿼리로 적합하지 않다. 빠른 LLM(Groq openai/gpt-oss-20b)으로
 "이 프롬프트를 개선하는 데 필요한 프롬프트 엔지니어링 기법"을 가리키는
 짧은 검색 쿼리/키워드로 바꿔 검색 정확도를 올린다.
 
@@ -21,6 +21,22 @@ _TRANSFORM_MODEL = "openai/gpt-oss-20b"
 # 실측(2026-07-29): 8b HyDE가 6개 거친 쿼리를 dense 0.69~0.84로 끌어올려(baseline 0.34~0.48)
 # 오히려 70b(0.65~0.68)보다 높고 폴백 0건. 70b는 일일 토큰 한도(TPD)에 걸려 429로 원본 폴백됨.
 _HYDE_MODEL      = "openai/gpt-oss-20b"
+
+# 🔴 2026-09-13: 이 설정이 없어서 **두 함수 모두 아무것도 하지 않고 있었다.**
+# gpt-oss 계열은 최종 출력 앞에 추론 토큰을 먼저 쓴다. 종전 예산(transform 120 /
+# hyde 300)은 추론에서 전부 소진돼 `message.content` 가 **빈 문자열**로 돌아왔다.
+#   실측(같은 입력): transform 120 → 완료 120·content 0자 / hyde 300 → 완료 300·content 0자
+#
+# ⚠️ analyzer·tag_axes·tag_layers 와 **증상이 다르다**. 그쪽은 JSON 모드라
+#    `400 json_validate_failed` 로 시끄럽게 터졌지만, 여기는 `response_format` 이 없어
+#    조용히 빈 응답이 되고 `return query` 폴백으로 흡수된다 — **에러 로그조차 안 남는다.**
+#    "실패해도 검색이 안 끊긴다"는 무회귀 설계가 또 한 번 장애를 은폐했다.
+#
+# 해법은 예산 증액이 아니라 추론량 감축이다(Groq 는 입력+출력예약을 합산해 TPM 을 잡는다).
+#   effort=low 실측: transform 완료 117·content 127자 / hyde 완료 112·content 416자
+_REASONING_EFFORT = "low"
+_TRANSFORM_MAX_TOKENS = 600   # 실사용 117 → 5배 여유(history 포함 대비)
+_HYDE_MAX_TOKENS      = 800   # 실사용 112, 출력이 3~5문장이라 여유를 더 둠
 
 # HyDE: 키워드 확장(미스매치) 대신 '기법 카드처럼 생긴 가상 문서'를 생성해 임베딩한다.
 # 코퍼스(기법 청크)와 글의 모양이 비슷해져 검색이 살아난다.
@@ -93,7 +109,8 @@ def transform(query: str, history: list[dict] | None = None) -> str:
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user",   "content": user_msg},
             ],
-            max_tokens=120,
+            max_tokens=_TRANSFORM_MAX_TOKENS,
+            reasoning_effort=_REASONING_EFFORT,
             temperature=0.3,
         )
         out = (resp.choices[0].message.content or "").strip()
@@ -123,7 +140,8 @@ def hyde(query: str, history: list[dict] | None = None) -> str:
                 {"role": "system", "content": _HYDE_SYSTEM},
                 {"role": "user",   "content": user_msg},
             ],
-            max_tokens=300,
+            max_tokens=_HYDE_MAX_TOKENS,
+            reasoning_effort=_REASONING_EFFORT,
             temperature=0.3,
         )
         doc = (resp.choices[0].message.content or "").strip()

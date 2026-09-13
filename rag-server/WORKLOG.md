@@ -2503,3 +2503,52 @@ python3 -m eval.gen_eval --sleep 8 --cache-file eval/.gen_cache_20260913b.json
 **후속 확인 필요**
 - `generator`(gpt-oss-120b)도 같은 추론 토큰 특성을 갖는다. `_fit_max_tokens` 가 동적 산정이라 즉사는 없었고 `structured` 폴백도 0회였지만, `reasoning_effort` 적용 시 TPM 여유가 커진다 → A/B 대상
 - `query_transform` 의 `max_tokens` 120/300 도 같은 위험. 기본 off 라 운영 영향은 없으나 켜면 실패할 것
+
+---
+
+## [2026-09-13] `query_transform` 도 같은 예산 버그 — 두 함수 모두 조용히 무효였다
+**목적**: 분석기와 같은 원인이 `query_transform` 에도 있는지 확인(기본 off 라 운영 영향은 없지만 켜면 실패).
+
+### 실측 — 현행 설정에서 `content` 가 빈 문자열로 온다
+| 함수 | 종전 예산 | 완료 토큰 | content | 결과 |
+|---|---:|---:|---:|---|
+| `transform()` | 120 | 120 | **0자** | `return query` (무효) |
+| `hyde()` | 300 | 300 | **0자** | `return query` (무효) |
+
+추론 토큰이 예산을 전부 먹고 본문이 한 글자도 안 나온다. **두 함수 모두 2026-08-21 모델 교체 이후 아무 일도 하지 않고 토큰만 태우고 있었다.**
+
+### ⚠️ 증상이 analyzer 와 다르다 — 더 조용하다
+| | analyzer · tag_axes · tag_layers | query_transform |
+|---|---|---|
+| `response_format` | `json_object` | **없음(평문)** |
+| 예산 부족 시 | `400 json_validate_failed` (예외) | **빈 문자열**(정상 응답) |
+| 로그 | `[Analyzer] 분석 실패 …` 남음 | **아무것도 안 남음** |
+
+`except` 로도 안 잡힌다 — 정상 200 응답에 내용만 없기 때문이다. `if out else query` 폴백이 그대로 흡수한다. **"실패해도 검색이 안 끊긴다"는 무회귀 설계가 오늘만 두 번째로 장애를 은폐했다.**
+
+### 조치
+예산 증액이 아니라 추론량 감축(Groq 는 입력+출력예약 합산으로 TPM 을 잡는다).
+```
+_REASONING_EFFORT      = "low"
+_TRANSFORM_MAX_TOKENS  = 600   # 실사용 117
+_HYDE_MAX_TOKENS       = 800   # 실사용 112 (출력 3~5문장이라 여유 더 둠)
+```
+검증: `transform()` → `"여행 블로그, 제주도, 가족 여행, 3박 4일 일정, …"` · `hyde()` → `"…\nTechnique: **Audience & Context…"` 정상 반환.
+낡은 모듈 docstring(`llama-3.1-8b-instant`)도 현 모델로 정정.
+
+### 🔴 측정 이력에 미치는 함의 — HyDE 기각 근거의 유효 범위
+HyDE 기각 측정(2026-07-30, R@5 0.763→0.441)은 **`llama-3.1-8b-instant` 기준**이다. 2026-08-21 교체 이후 HyDE 는 **무효(원본 그대로 반환)** 였으므로, 그 이후 HyDE 를 켜고 잰 수치가 있다면 그건 "HyDE 효과"가 아니라 **baseline 그 자체**다.
+- 오늘 `gen_eval` 의 HyDE 기본값 on 문제(직전 항목)와 겹쳐서 봐야 한다 — 그 구성으로 잰 값은 "HyDE 적용"이 아니라 "HyDE 가 무효인 baseline"이었다. 즉 **검색 구성은 운영과 같았고**, 문제는 표기가 틀렸다는 쪽이다.
+- HyDE 기각 결론 자체는 유지한다(형태 정렬이 변별력을 떨어뜨린다는 이유는 모델 무관). 다만 **현 모델에서는 한 번도 측정된 적이 없다**는 점을 명시해 둔다.
+
+### 남은 예산 위험 전수 확인
+| 위치 | 상태 |
+|---|---|
+| `generator.py` | `_fit_max_tokens` 동적 산정(상한 4096) — 즉사 없음, `structured` 폴백 0회. 다만 추론 토큰이 출력 예산을 갉아먹으므로 `reasoning_effort` 적용 시 TPM 여유↑ → **A/B 대상**(생성 품질에 영향) |
+| `ingestion/gen_examples.py` (2200) · `ingest_knowledge.py` (4096) | Gemini 경로·큰 예산이라 위험 낮음 |
+| `analyzer` · `query_transform` · `tag_axes` · `tag_layers` | ✅ 이번에 전부 수정 |
+
+**교훈**: 2026-08-21 모델 교체는 이름만 바꾸면 되는 작업이 아니었다. **비추론 모델 기준으로 잡힌 토큰 예산이 네 곳에 남아 있었고, 그중 둘은 에러조차 내지 않았다.** 모델 계열이 바뀌면 예산을 전수 재검토할 것.
+
+**변경 파일**: `app/rag/query_transform.py`
+**검증**: `pytest tests/ -q` → 89 passed · 두 함수 라이브 정상 반환 확인
