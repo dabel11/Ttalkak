@@ -2146,3 +2146,118 @@ DB 에 `layer` 가 있을 뿐 `retriever._load_collection` 은 여전히 전량�
 - `min_score`·`fetch_k` 재교정(풀이 170→130 으로 줄면 점수 분포가 바뀐다)
 - 리랭커 경로 포함 `run_eval` 정식 재측정(지금까지는 dense 단독 측정이다)
 - `qa_set_realistic` 정답이 제외된 카드를 가리키는 경우가 없는지
+
+---
+
+## [2026-09-13] 평가셋 정합성 점검 — 층 필터 배선 전 확인 (측정만, 코드 무변경)
+**목적**: 층 필터를 배선하면 제외된 40장을 정답으로 지목하는 평가 문항이 **구조적으로 Recall 0** 이 된다. 그러면 수치 하락이 필터 탓인지 검색 품질 탓인지 구분이 안 된다. 배선 전에 확인.
+
+### ① 정답 충돌 — Recall 상한이 내려간다
+
+| 평가셋 | Recall@5 **상한** (필터 없음 → 적용) | 정답 전멸 | 정답 일부 손실 |
+|---|---|---:|---:|
+| `qa_set_realistic` (59) | 1.000 → **0.935** (−6.5%) | **3문항** | 5문항 |
+| `qa_set` (40) | 1.000 → 0.967 (−3.3%) | 1문항 | 2문항 |
+| `multi_turn_set` (10) | 1.000 → 0.975 (−2.5%) | 0문항 | 1문항 |
+
+현재 실측 R@5 가 0.763 이므로 **−6.5%p 는 무시할 수 없는 크기**다. 배선 후 재측정은 이 상한 변화를 함께 보고하지 않으면 해석 불가다.
+
+⚠️ `qa_set_realistic`·`qa_set` 의 `relevant` 는 **기법명이 아니라 `chunk_id`**(`pdf_001`…)다. 이름으로 대조하면 "충돌 0건"이라는 잘못된 결론이 나온다(실제로 1차에 그렇게 나왔다).
+
+### ② 영향받는 문항은 성격이 다르다 — 스코프 불일치
+
+`qa_set_realistic` 에서 영향받는 5문항:
+| 질의 | 정답(제외됨) |
+|---|---|
+| 계산기랑 검색을 써가면서 풀어줘 | ReAct · Tool-Use (전멸) |
+| 프롬프트 주입 공격을 막게 방어적으로 짜줘 | Injection Defense · Instruction Hierarchy (전멸) |
+| 이 데이터로 비슷한 샘플 데이터를 더 만들어줘 | Synthetic Data Generation (전멸) |
+| 내 프롬프트를 더 좋게 다듬어줘 | Meta-Prompting (일부) |
+| 여러 문서를 종합해서 충돌하는 정보는 짚어줘 | Conflict Resolution (일부) |
+
+**나머지 54문항은 일반 작업 질의다**("이 회의록을 핵심만 세 줄로 줄여줘"·"이 코드 어디가 문제인지 봐줘"). 위 5개만 **프롬프트 엔지니어링·시스템 기능 자체**를 묻는다.
+
+🟩 **팀이 상정한 사용자 분포로 판정**: `gen_set`(18) · `uplift_set`(8) 전량이 일반 작업 요청이다 — 마케팅 문구·채용 공고·코드리뷰·회의록 요약·환불 이메일·여행 일정표·번역·"글 써줘". **도구 사용·주입 방어·합성 데이터·지시 우선순위를 묻는 질의는 0건.**
+→ 층 경계는 `gen_set`/`uplift_set` 분포와 **일치**하고, 어긋나는 것은 `qa_set_realistic` 의 5문항이다.
+
+### ③ 🔴 더 큰 문제 — 커버리지 37%
+
+```
+코퍼스 170장 중 정답으로 한 번이라도 지목된 카드 : 63장 (37%)
+한 번도 지목되지 않은 카드                      : 107장
+  그중 검색 대상(user_instruction)             : 74장  ← 평가셋이 못 보는 구간
+```
+
+검색 대상 130장 중 **74장(57%)이 한 번도 측정되지 않는다.** 미측정 예: `Specificity Prompting` · `Self-Ask` · `Plan-and-Solve` · `Cognitive Verifier` · `Instruction-First` · `Style Imitation`.
+→ CORPUS_STRATEGY §2-3 의 지적(*"정답이 134청크 기준이라 신규 56기법을 겨냥한 문항이 없다"*)이 **수치로 확인**됐다. 층 필터와 무관하게 **현재 모든 검색 수치는 코퍼스의 37%만 본 값**이다.
+
+### 제안 (미실행 — 결정 필요)
+1. `qa_set_realistic`·`qa_set` 에 `scope` 필드 추가 → 위 문항을 `out_of_scope` 로 **표시**(삭제 금지, 스코프가 바뀌면 되살려야 함)
+2. `run_eval` 이 **전체·in-scope 두 수치를 병기** + Recall 상한을 함께 출력
+3. 커버리지 37% → 미측정 74장을 겨냥한 문항 추가. 이게 없으면 층 필터의 실효도 절반만 보인다
+
+**코드 변경 없음. 측정만 수행.**
+
+---
+
+## [2026-09-13] 평가셋 확장 — 커버리지 50%→94% · 🔴 **기존 수치가 코퍼스의 쉬운 절반만 본 값이었다**
+**목적**: 검색 대상 카드의 절반이 어떤 평가 문항에도 안 걸린다는 문제(앞 항목 ③)를 해소.
+
+### 생성기 (`eval/gen_qa_set.py`)
+미커버 카드마다 *"그 기법이 도움이 될 상황에서 사용자가 칠 법한 작업 요청"* 을 생성.
+
+★ **핵심 위험은 어휘 누수다.** 카드를 보고 질의를 만들면 카드 어휘가 새어 들어가 검색이 '의미'가 아니라 '표면'으로 맞고 점수가 부풀려진다(2026-08-15 진단: *"맞히는 케이스는 전부 어휘 중첩"*). 방어 2겹:
+1. 프롬프트가 기법명·카드 표현 사용을 금지하고 **운영 분포**(gen_set·uplift_set 말투)를 기준으로 준다
+2. `leak_score()` 로 질의↔카드 어휘 중첩을 **측정**해 표시 → 사람이 그 목록만 보면 된다
+
+🟩 **누수 방어가 실제로 작동했다**: 평균 0.068 · 0.5 이상 1개. 그리고 지표가 잡아낸 상위 항목은 실제로 새어 있었다 — `"…조건과 예외를 알려줘"`(Boundary Condition) · `"…품질 기준 충족 여부"`(Quality Gate) · `"…없으면 not found"`(Give the Model an Out). 0.35 이상 4건에 `review` 표시.
+
+### 부수 성과 — 층 오분류 7건이 추가로 드러났다
+커버리지 생성 대상(=검색 대상)에 있으면 안 될 카드가 섞여 있었다. 전부 `layerSource=llm`(override 미적용):
+| 카드 | v2 | 판정 | 근거 |
+|---|---|---|---|
+| Prompt Generator Pattern | user_instruction | **meta** | "바로 복붙 가능한 최종 프롬프트를 생성하라" — 딸깍 그 자체 |
+| Request Normalization | user_instruction | **meta** | 요청을 표준 스키마로 정규화 — 딸깍 전처리 |
+| Data Provenance | user_instruction | **system** | source_id·source_url |
+| Adversarial Prompt Detector | user_instruction | **system** | 주입 탐지 |
+| Few-shot learning / Knowledge generation / Prompt leaking | user_instruction | **degenerate** | **Prompt Template 이 아예 빈 카드** |
+
+→ override 17 → **24건**. 분포: `user_instruction 123 · system 28 · degenerate 10 · meta 9`.
+⚠️ v2 의 degenerate 회피가 여기서도 나왔다 — **PT 가 빈 카드 3장이 user_instruction 이었다.**
+
+### 커버리지
+
+| | 검색 대상 123장 기준 |
+|---|---|
+| 종전(`qa_set_realistic` + `qa_set`) | 62장 = **50%** |
+| + `qa_set_coverage.json`(54문항) | 116장 = **94%** |
+| 남은 미측정 | 7장(쿼터 소진으로 생성 실패) |
+
+### 🔴 핵심 발견 — 통제 비교
+
+같은 리트리버·같은 지표·**같은 단일정답 조건**으로 맞췄다:
+
+| 평가셋 | n | Hit@1 | Recall@5 |
+|---|---:|---:|---:|
+| `qa_set_realistic` 전체 | 59 | 0.644 | 0.723 |
+| `qa_set_realistic` **단일정답 문항만** | 22 | 0.773 | **1.000** |
+| `qa_set_coverage` (전부 단일정답) | 54 | 0.130 | **0.296** |
+
+**정답 개수라는 교란을 제거해도 1.000 vs 0.296 이다.** 차이는 오직 **어떤 카드를 재느냐**다.
+→ **지금까지의 R@5 0.763 은 평가셋 작성자가 문항을 쓸 수 있었던 '쉬운 카드' 위에서 나온 값이다.** 한 번도 측정되지 않던 구간에서는 검색이 훨씬 못 한다.
+
+### ⚠️ 0.296 은 하한이다 — 라벨 품질 한계
+- 미적중 38문항 중 **9문항(24%)** 은 top1 이 정답 카드와 **축을 공유**해 공동정답일 수 있다
+- 실제로 라벨이 틀린 사례: `"매출 데이터를 표로 정리해줘"` 정답=`Embedding Data` / top1=`Table Transformation Prompting` ← **top1 이 더 맞다**
+- 공동정답을 인정하면 대략 **0.30 ~ 0.47** 구간. 그래도 1.000 과의 격차는 남는다
+- `qa_set_coverage` 라벨은 **LLM 생성**이라 `qa_set_realistic` 의 사람 라벨과 같은 급이 아니다. 두 셋 수치를 직접 비교하지 말고 각각의 추이로 볼 것
+
+**변경 파일**
+- 신규: `eval/gen_qa_set.py` · `eval/qa_set_coverage.json`(54문항)
+- 수정: `ingestion/layer_overrides.json`(17→24건)
+
+**남은 일**
+1. 미측정 7장 생성(쿼터 회복 후) — Context-Aware Delimiters · Diff/Patch Format · Instruction Conflict Resolution · Iterative Query Analysis · Response Rules Section · Avoid Over-Incentivization · Avoid Conflicting Tool-Call
+2. **공동정답 라벨링** — 단일정답이라 Recall 이 과소평가된다
+3. 누수 `review` 4건 사람 확인
+4. 이 셋을 기준선으로 층 필터 배선 전후 비교
