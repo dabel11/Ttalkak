@@ -26,7 +26,7 @@ POST /query
   ▼
 [B] 기법 검색 (2단계+컷) retriever.py:84   (컬렉션 prompt_techniques)
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        retriever.py:193
-   ├ B2 1단계 후보 20개  (bge-m3 dense 코사인 —    retriever.py:126
+   ├ B2 1단계 후보 50개  (bge-m3 dense 코사인 —    retriever.py:126
    │                     본문 벡터 ∪ 검색뷰 벡터의 max)
    ├ B3 2단계 리랭크 → top 5 (cross-encoder)       retriever.py:175
    └ B4 유효 유사도 컷   (dense < min_score 제외)   retriever.py:121
@@ -76,14 +76,14 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   - MySQL `rag_chunk`에서 `collection_name` 일치 행을 `id` 순으로 `SELECT document, metadata, embedding, embedding_views`
   - 임베딩(JSON) → numpy 배열. **매 쿼리마다 전체 로드** → 자세히는 §2-(3)
 - **B2. 1단계 후보 추리기** (`_candidates`, `retriever.py:126`)
-  - 리랭크 ON이므로 후보 폭 `stage1_k = max(fetch_k=20, top_k=5) = 20` (`retriever.py:107`)
-  - **fetch_k=20은 측정 파레토 최적** — 50은 전 지표 열세+2.5배 느림(21~50위 쓰레기가 리랭커를 오판시킴), 10은 지연 절반이나 Recall@5 −4.5%p (WORKLOG 2026-07-05 스윕)
+  - 리랭크 ON이므로 후보 폭 `stage1_k = max(fetch_k=50, top_k=5) = 50` (`retriever.py:107`)
+  - **fetch_k=50 (2026-09-13 변경)** — 종전 20 의 근거(2026-07-05 스윕)는 108~134청크 시절 값이라 소멸했다. 커버리지 97% 평가셋으로 재측정: 10=0.777/0.386 · 20=0.763/0.421 · 50=0.763/**0.474** (기존셋 R@5 / 신규셋 R@5). **기존셋에서 20과 50이 동일**하므로 쉬운 구간 손실 0, 어려운 구간 +5.3pp, 비용은 지연 2.0s→4.5s 뿐
   - `_dense_scores`: bge-m3로 쿼리 인코딩 → 전체 행렬과 **numpy 코사인** (`retriever.py:148`)
   - **멀티표현 max 풀링(2026-08-09)**: 행이 `embedding_views`(검색용 축약뷰 벡터)를 가지면 **본문 벡터와 뷰 벡터 중 최고 점수**를 그 행 점수로 쓴다. 뷰가 없는 행(`NULL`)은 종전과 완전히 동일 → 자세히는 §2-(5)
-  - `use_hybrid=False` → BM25 건너뜀, `argsort(-dense)[:20]`
+  - `use_hybrid=False` → BM25 건너뜀, `argsort(-dense)[:50]`
   - (하이브리드 ON 시: BM25(kiwipiepy 형태소) 점수와 **RRF 융합**, `_rrf_order` 165 — 기본 off)
 - **B3. 2단계 리랭크** (`_rerank`, `retriever.py:175`)
-  - `bge-reranker-v2-m3`에 `(query, doc)` 20쌍 → logit → **sigmoid(0~1)** → 정렬 → **top_k=5**
+  - `bge-reranker-v2-m3`에 `(query, doc)` 50쌍 → logit → **sigmoid(0~1)** → 정렬 → **top_k=5**
   - 표시 `score`는 평탄한 sigmoid 대신 **dense 코사인으로 환산**해 노출(순위만 리랭커 기준), `rerank_score`(sigmoid) 병기
   - 리랭커 예외 → 후보 상위 5개로 **폴백** (검색 안 끊김, `retriever.py:117`)
 - **B4. 유효 유사도 컷** (`retriever.py:121`, 기본 `min_score=0.40`)
@@ -200,7 +200,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 |---|---|---|---|
 | `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수(상한 — min_score 컷으로 줄 수 있음) |
 | `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. 🔴 **운영 분포에서 무효** — 실사용 404 6%·무관입력 5/8 통과. 재교정 필요(§1-[B4]) |
-| `fetch_k` | 20 | `main.py:48` Retriever | 측정 파레토 최적(50: 전지표 열세·2.5배 느림 / 10: Recall@5 −4.5%p) |
+| `fetch_k` | **50** | `main.py` Retriever | 2026-09-13 재측정. 어려운 구간 +5.3pp·쉬운 구간 손실 0. 종전 20 은 108~134청크 시절 근거 |
 | `use_reranker` | True | `main.py:48` | 측정상 단독이 최고 |
 | `use_hybrid` | False | `main.py:48` | 한국어 코퍼스에서 악화 → off |
 | 생성 모델 | gemini-2.0-flash→llama-3.3-70b | `generator.py` GROQ_MODEL_MAP | 8b 생성은 mode_accuracy 0.75로 열세 → 70b 유지 |
@@ -226,7 +226,8 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
   · ⏳ **하드 404 폐지** — 게이트가 제 기능을 못 하는 동안 정상 요청만 막는다. `mode=ask`가 이미 최종 게이트로 작동함은 측정됨.
 - 🔴 **리랭커가 검색 지연의 95%** (2026-08-09 실측): 7,714ms / 8,094ms. 사는 것은 R@5 +5.4pp·Hit@1 +5.1pp. 라이브 `/query` end-to-end **19.2초**. §2-(5) 이후 H+dense 단독이 동급이라 **제거 선택지가 열렸다** → ONNX/배치(품질손실 0) → 조건부 리랭크 → 제거 순으로 검토.
 - ~~✅ **무관 입력에 쓰레기 top5 유입**: `min_score=0.40` 컷으로 해결(2026-07-05)~~ → **철회**: 위 AUC 측정으로 반증됨. 당시 결론은 `qa_set`(질문형) 분포에서 나온 것이고, 운영 분포(거친 작업지시)에서는 성립하지 않는다.
-- ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕 측정으로 20 확정(2026-07-05). `--fetch-k`로 재측정 가능.
+- ✅ **fetch_k 근거 부재**: 20/15/10/50 스윕으로 20 확정(2026-07-05) → 🔄 **코퍼스 확장 후 근거 소멸, 2026-09-13 재측정으로 50 으로 변경**. 교훈: 코퍼스가 바뀌면 이 값도 다시 재야 한다.
+- 🔄 **리랭커 제거 검토 철회(2026-09-13)**: 2026-08-15 의 '이득 0.025 노이즈'는 미검증 gold 10항목 기반이었다. 커버리지 97% 셋에서 **R@5 +12.3pp**, 기존셋에서도 +4.0pp — 어려운 구간일수록 이득이 크다(쉬운 문항만 있던 평가셋이라 안 보였던 것).
 - ✅ **생성기 원문 페이로드 누락** (uplift_eval 발견): SYSTEM_PROMPT에 "원문 verbatim 포함" 규칙 추가로 해결(2026-06-26). 후속 버그(추출 `---` 잘림·노이즈 과삭제)도 수정(2026-06-27).
 - 🟡 **긴 원문 truncation**: `_fit_max_tokens`로 413 즉사는 방지(2026-07-07). 장문은 Gemini 라우팅으로 해소(2026-07-23) — 단 **GEMINI_API_KEY 설정 시에만** 작동, Groq 단독 구성에선 여전히 출력이 잘릴 수 있음
 - 🟡 **코퍼스 확장 2차 대기**: DAIR 나머지 14윈도·OpenAI Cookbook — 70b TPD 리셋 후 적재, 이후 하이브리드 재평가·min_score 재측정 (WORKLOG 백로그)

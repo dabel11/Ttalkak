@@ -43,9 +43,18 @@ app.add_middleware(
 )
 
 indexer  = Indexer()
-# fetch_k=20: 측정상 파레토 최적 — 50은 전 지표 열세+2.5배 느림, 10은 지연 절반이나 Recall@5 -4.5%p
-# (WORKLOG 2026-07-05 스윕 표 참조. 변경 시 python -m eval.run_eval --fetch-k 로 재측정)
-retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=20)  # 리랭커 단독 (평가상 최적)
+# fetch_k=50 (2026-09-13 변경). 종전 20 의 근거(2026-07-05 스윕)는 108~134청크 시절 값이라
+# 현 코퍼스(170청크 + embedding_views)에서 성립하지 않는다. 커버리지 97% 평가셋을 새로 만들어
+# 두 셋을 대조한 결과:
+#     fetch_k |  qa_set_realistic R@5 | qa_set_coverage R@5 | 지연
+#         10  |  0.777 (최고)         | 0.386               | 1.2s
+#         20  |  0.763                | 0.421               | 2.0s
+#         50  |  0.763 (20과 동일)    | 0.474 (최고)        | 4.5s
+# → 쉬운 구간 손실 0, 어려운 구간 +5.3pp, 비용은 지연뿐. /query end-to-end 는 LLM 이 지배(~19s)
+#   하므로 +2.5s 는 약 13%. (WORKLOG 2026-09-13. 재측정: python3 -m eval.run_eval --rerank --fetch-k)
+# 리랭커 유지: 어려운 구간에서 R@5 +12.3pp — 2026-08-15 의 '리랭커 무용' 판단은 미검증 gold 10항목
+#   기반이었고 두 평가셋 모두에서 뒤집혔다.
+retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=50)
 generator = Generator()
 
 
