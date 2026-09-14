@@ -2647,3 +2647,35 @@ A/B 가 왜 안 도는지 파다가 `_needs_long_context` 가 아니라 **요청
 - 백엔드가 `Retry-After` 를 프론트로 전달하지 않는다 — 전달하면 "N초 후 자동 재시도" UX 가 가능하다(백엔드 변경이라 이번 범위 밖)
 - 리랭커가 CPU 5초를 쓰는데 게이트 밖이라 동시 요청 시 CPU 경합이 난다. 지연이 늘 뿐 실패하지는 않지만, 부하가 보이면 별도 제한 검토
 - 근본 해결은 쿼터 확대 또는 `SYSTEM_PROMPT`(4,605 토큰) 축소다. 게이트는 **깨지지 않게 막는 것**이지 처리량을 늘리지 않는다 — 여전히 **하루 약 28건**이 상한이다
+
+---
+
+## [2026-09-15] 백엔드가 `Retry-After` 를 프론트까지 전달하도록 (직전 항목 후속)
+**목적**: rag-server 동시 실행 게이트가 `503 + Retry-After: 30` 을 내도록 했지만, 백엔드가 그 값을 버리고 있어 프론트까지 닿지 않았다.
+
+### 끊겨 있던 지점 4곳
+| # | 위치 | 문제 |
+|---|---|---|
+| ① | `ApiException` | 헤더를 실어 나를 수단이 없음(`ResponseStatusException.getHeaders()` 미사용) |
+| ② | `GlobalExceptionHandler.build()` | 응답에 헤더를 붙이지 않음 |
+| ③ | `PromptController` 의 `WebClientResponseException` 처리 | 상류 응답의 `Retry-After` 를 읽지 않음 |
+| ④ | `SecurityConfig` CORS | `setExposedHeaders(List.of("Authorization"))` — **`Retry-After` 미노출** |
+
+⚠️ **④가 특히 조용한 함정이다.** 헤더를 보내도 CORS 가 노출하지 않으면 브라우저 JS 는 값을 읽을 수 없다(CORS 는 기본적으로 소수의 안전 목록 헤더만 스크립트에 보여준다). ①②③만 고치면 서버 응답에는 헤더가 보이는데 프론트에서만 `null` 이 나와 원인을 찾기 어렵다.
+
+### 변경
+- `ApiException.retryable(status, code, message, seconds)` 추가. `getHeaders()` 오버라이드로 응답 헤더를 싣는다.
+- `ApiException.retryAfterHeaders()` 가 **상류 값을 검증**한다 — 숫자만 허용(HTTP 날짜 형식은 규격상 유효하나 우리 상류는 초만 보내므로 거부), 음수 거부, **상한 3600초**. 상류가 비정상 값을 줘도 클라이언트를 한 시간 넘게 묶지 않는다.
+- `GlobalExceptionHandler` 에 헤더를 받는 `build()` 오버로드 추가. 기존 호출부는 그대로 동작(무회귀).
+- `PromptController.upstreamRetryAfter()` 로 상류 헤더를 꺼내 전달.
+  · **한도 초과**(429·rate limit): 상류가 값을 안 줘도 재시도가 의미 있으므로 기본 30초를 붙인다.
+  · **일반 장애**: 언제 복구될지 모르므로 **상류가 준 경우에만** 전달한다 — 모르는 값을 지어내면 거짓 안내가 된다.
+- `SecurityConfig` 의 `exposedHeaders` 에 `Retry-After` 추가.
+
+### 검증
+- 신규 `RetryAfterPropagationTest`(6): 헤더가 응답까지 도달 · **에러 본문 계약(ADR-0008) 불변** · 값이 없으면 헤더를 붙이지 않음 · 비정상 값 거부(null·빈값·문자열·음수·HTTP 날짜) · 상한 3600 적용 · 정상 값·0 통과
+- 신규 `RagRetryAfterExtractionTest`(3): **가정 검증** — `WebClientResponseException` 이 상류 응답 헤더를 실제로 들고 오는가. 컨트롤러 추출 로직은 한 줄이라 정작 위험한 건 이 가정이고, 틀리면 전달이 예외 없이 조용히 끊긴다.
+- rag-server 쪽 재확인: 게이트 거절 시 `503 + Retry-After: 30` 실제 발급
+- `./gradlew test` **BUILD SUCCESSFUL**(전체) · rag-server `pytest` 97 passed
+
+**남은 것**: 프론트(확장·웹)가 아직 이 헤더를 읽지 않는다. 읽으면 "N초 후 자동 재시도" UX 가 가능하다 — 지금은 헤더가 도달할 뿐 사용자는 여전히 직접 눌러야 한다.

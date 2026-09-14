@@ -5,6 +5,7 @@ import com.ttalkak.make.MakeApiContract;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -30,14 +31,17 @@ public class GlobalExceptionHandler {
     ) {
         HttpStatusCode status = exception.getStatusCode();
 
+        // ApiException 이 실어 온 헤더(예: Retry-After)를 응답에 그대로 내보낸다.
+        // 이게 빠지면 rag-server 가 알려준 재시도 시점이 백엔드에서 끊긴다.
         return build(
-            status,
+                status,
                 exception.getCode(),
                 messageOrDefault(
                         exception.getReason(),
                         defaultMessage(status)
                 ),
-                request
+                request,
+                exception.getHeaders()
         );
     }
 
@@ -195,8 +199,19 @@ public class GlobalExceptionHandler {
             String message,
             HttpServletRequest request
     ) {
+        return build(status, code, message, request, HttpHeaders.EMPTY);
+    }
+
+    private ResponseEntity<ApiErrorResponse> build(
+            HttpStatusCode status,
+            String code,
+            String message,
+            HttpServletRequest request,
+            HttpHeaders headers
+    ) {
         return ResponseEntity
                 .status(status)
+                .headers(headers == null ? HttpHeaders.EMPTY : headers)
                 .body(
                         ApiErrorResponse.of(
                                 status,
