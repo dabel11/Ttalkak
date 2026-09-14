@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # .env 는 app/__init__.py 에서 로드됨
+from app.core.concurrency import GateBusy, GateTimeout, generation_gate
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
@@ -22,7 +23,9 @@ app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 
 # ── /index 보호 ──────────────────────────────────────────────
 # RAG_INDEX_API_KEY 가 설정돼 있으면 X-API-Key 헤더가 일치해야 인덱싱 허용.
-# 미설정이면 로컬 개발 편의상 허용하되 기동 시 경고. (/query 는 제품 API라 공개 유지)
+# **미설정이면 엔드포인트 자체를 막는다(503)** — 종전의 '경고 후 허용'은 실제로
+# 무인증 노출로 이어졌다(2026-09-13). 자세한 경위는 _verify_index_key 참조.
+# (/query 는 제품 API라 공개 유지 — 대신 동시 실행은 게이트로 제한한다)
 _INDEX_API_KEY = os.environ.get("RAG_INDEX_API_KEY", "")
 if not _INDEX_API_KEY:
     print("[Main] /index 비활성 (RAG_INDEX_API_KEY 미설정). 쓰려면 .env 에 키를 설정하세요.")
@@ -133,10 +136,15 @@ def run_generation(query: str, contexts: list[dict], model: str,
            summary, questions, fields, structured}.
     필드 조립은 순수 함수 assemble_fields() 가 담당(LLM 없이 단위 테스트됨).
     JSON 파싱 실패 시 레거시 정규식 추출로 폴백(structured=False)."""
-    analysis = analyzer.analyze(query, history) if use_analyzer else None
+    # ⭐ LLM 구간은 직렬화한다(app/core/concurrency.py).
+    # 생성 1건이 Groq TPM 8,000 중 ~7,800 을 점유하므로 동시 2건이면 두 번째는 반드시
+    # 429 → Gemini 폴백 → Gemini RPD 20 소진 → 두 백엔드 동시 차단. 줄을 세우는 편이
+    # 폴백 쿼터까지 태우는 것보다 낫다. 검색·리랭크는 게이트 밖(병렬 유지).
+    with generation_gate.enter():
+        analysis = analyzer.analyze(query, history) if use_analyzer else None
 
-    raw = generator.generate(query=query, contexts=contexts, model=model,
-                             history=history, analysis=analysis)
+        raw = generator.generate(query=query, contexts=contexts, model=model,
+                                 history=history, analysis=analysis)
     if not (raw and raw.strip()):
         raise RuntimeError("생성 결과가 비어 있습니다.")
 
@@ -151,7 +159,9 @@ def run_generation(query: str, contexts: list[dict], model: str,
 # ── 엔드포인트 ───────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # 게이트 상태를 함께 노출 — 503 이 '서버 고장'인지 '줄이 길어서'인지 구분하려면
+    # 운영 중에 대기열을 볼 수 있어야 한다.
+    return {"status": "ok", "generation": generation_gate.stats()}
 
 
 @app.post("/index", response_model=IndexResponse)
@@ -219,6 +229,11 @@ def query(req: QueryRequest):
     try:
         # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)
         gen = run_generation(req.query, retrieved + examples, req.model, history)
+    except (GateBusy, GateTimeout) as e:
+        # 동시 요청 제한 — 서버가 망가진 게 아니라 '지금은 순서가 아니다'.
+        # 503 은 기존 에러 계약(ADR-0008)과 같지만 Retry-After 로 재시도 시점을 준다.
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": "30"})
     except RuntimeError as e:
         # 빈 생성·백엔드 한도 등 — 명확히 503 (extract(None) 500 크래시 방지 겸용)
         raise HTTPException(status_code=503, detail=str(e))
