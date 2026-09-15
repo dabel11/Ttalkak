@@ -43,6 +43,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_SECONDS
 from app.rag.layers import is_searchable  # noqa: E402
 
 _MODEL = "openai/gpt-oss-120b"
@@ -107,11 +112,12 @@ def make_groq_generator(model: str = _MODEL):
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         raise SystemExit("GROQ_API_KEY 가 필요합니다.")
-    client = Groq(api_key=api_key)
+    client = Groq(api_key=api_key, timeout=GEN_SECONDS)
 
     def call(prompt: str) -> str:
         resp = client.chat.completions.create(
             model=model, temperature=_TEMPERATURE, max_tokens=_MAX_TOKENS,
+            reasoning_effort="low",   # gpt-oss 추론 토큰 절감(gen_eval judge 전례)
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
         )

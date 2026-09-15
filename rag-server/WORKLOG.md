@@ -2679,3 +2679,68 @@ A/B 가 왜 안 도는지 파다가 `_needs_long_context` 가 아니라 **요청
 - `./gradlew test` **BUILD SUCCESSFUL**(전체) · rag-server `pytest` 97 passed
 
 **남은 것**: 프론트(확장·웹)가 아직 이 헤더를 읽지 않는다. 읽으면 "N초 후 자동 재시도" UX 가 가능하다 — 지금은 헤더가 도달할 뿐 사용자는 여전히 직접 눌러야 한다.
+
+---
+
+## [2026-09-15] 🔴 같은 버그 네 번째 — judge 가 조용히 빈 점수를 내고 있었다 · 측정 도구 전체 타임아웃 부재
+**목적**: 분석기·쿼리변환이 살아난 뒤의 `gen_eval` 기준선을 잡는다. **기준선 측정 중에 도구 자체의 결함 2건을 또 찾았다.**
+
+### ① 측정 도구 11곳에 LLM 타임아웃이 없었다 — 5시간 42분을 멈춰 있었다
+2026-09-13 에 타임아웃을 넣은 것은 **운영 경로(`app/rag/*`)뿐**이었다. `eval/`·`ingestion/` 은 **자체 Groq/Gemini 클라이언트**를 만들어 쓰고 있었고 전부 타임아웃이 없었다.
+
+실측 증상:
+```
+gen_eval 실행 5시간 42분 · 생성 캐시 13/18 에서 2시간 9분간 무진전
+ESTABLISHED 소켓 4개 점유 · CPU 3분 32초(= 거의 전부 네트워크 대기)
+```
+응답이 오지 않는 연결을 무한정 붙들고 있었다. **예외가 나지 않으므로 `_retry` 도 못 잡는다.**
+→ 8개 파일 11곳에 `app/core/timeouts.py` 의 `GEN_SECONDS`/`GEN_MILLIS` 적용.
+
+### ② 🔴 judge 가 예외 없이 빈 점수를 반환하고 있었다 (같은 추론 토큰 버그, 네 번째)
+`gen_eval._judge` 는 `max_tokens=300` 에 **`response_format` 도 없었다**(평문).
+gpt-oss 계열이 추론 토큰으로 300 을 다 쓰고 `content` 가 빈 문자열로 오는데, `_loads_loose("")` 가 `{}` 를 돌려주므로 **예외도 로그도 없이** 모든 점수가 `None` 이 됐다.
+
+| 발생 위치 | 모드 | 증상 |
+|---|---|---|
+| `tag_axes`(200) · `tag_layers`(700) · `analyzer`(700) | JSON 강제 | `400 json_validate_failed` — 시끄럽게 실패 |
+| `query_transform`(120/300) · **`gen_eval._judge`(300)** | **평문** | **빈 문자열 → 조용히 무효** |
+
+→ `reasoning_effort="low"` + `max_tokens=900` + **JSON 강제** 추가. 스모크 테스트에서 5개 축 전부 정상 수신 확인:
+```
+{'mode_fit': 5, 'technique_grounding': 3, 'instruction_form': 5,
+ 'intent_preservation': 5, 'faithfulness': 5, 'fabricated': False, 'reason': '…'}
+```
+같은 이유로 `gen_qa_set`·`tag_axes`·`tag_layers` 에도 `reasoning_effort="low"` 를 넣었다.
+
+⚠️ **함의**: 어제 "judge 퇴역 모델을 고쳐 평가 축을 복구했다"고 기록했으나(2026-09-13), **모델만 고쳤지 judge 는 여전히 빈 점수를 내고 있었다.** 그 시점 이후의 judge 기반 수치는 전부 N/A 였다.
+
+### 교훈 — 무회귀 폴백이 장애를 은폐한다 (누적 3회)
+`analyze()` 의 `return None`, `query_transform` 의 `return query`, `_judge` 의 `{}` — 셋 다 "실패해도 서비스가 안 끊기게" 만든 장치인데, **셋 다 고장을 보이지 않게 만들었다.**
+→ 폴백에는 **관측 장치가 함께 있어야 한다**. `analyzer.sanitize_stats()` 처럼 "폴백이 몇 번 발동했는가"를 셀 수 있어야 한다. 이건 아직 `_judge`·`query_transform` 에 없다(백로그).
+
+### ⭐ 기준선 (2026-09-15) — 분석기·쿼리변환·judge 가 모두 살아난 첫 측정
+
+`python3 -u -m eval.gen_eval --sleep 25 --cache-file eval/.gen_cache_20260913b.json`
+운영 파리티: **HyDE=off · fetch_k=50 · rerank on · judge=gpt-oss-120b · 분석기 정상**
+
+| 지표 | 값 | n |
+|---|---:|---:|
+| **mode_accuracy** | **0.93** | 14/15 |
+| **structured(JSON)** | **15/15** | 정규식 폴백 0회 |
+| **환각률(fabricated)** | **0.00** | 0/7 |
+| mode_fit | 4.27 | 11 |
+| technique_grounding | 4.09 | 11 |
+| instruction_form | 5.00 | 7 |
+| intent_preservation | 4.91 | 11 |
+| faithfulness | 5.00 | 7 |
+
+**읽는 법 / 한계**
+- ⚠️ **이전 수치와 직접 비교 금지.** 2026-07-31 의 mode 정확도 0.83 은 분석기가 살아 있던 시절 값이고, 그 사이(08-21~09-15) 분석기는 죽어 있었다. 지금 0.93 은 **분석기가 돌아온 상태의 새 기준선**이다.
+- 15·16·17 은 **일시적 DNS 오류**(`Errno 8 nodename nor servname provided`)로 생성 실패 — 쿼터·품질 문제가 아니다. 캐시 15/18.
+- judge 실패 4건(429)은 점수 n 이 11·7 로 줄어든 이유다. mode_accuracy·structured 는 결정론적이라 영향 없다.
+- 유일한 mode 오판은 **[18] "제품 홍보 이메일 써줘"** — 기대 ask, 실제 improve. judge 도 `mode_fit=2` 로 낮게 봤다. 분석기 프롬프트의 *"'제품'은 일반명사, 어떤 제품인지 없음 → empty"* 규칙이 먹히지 않은 사례다.
+- `technique_grounding` 이 ask 모드에서 일관되게 **2점**(9·10·11번)이다 — 질문 모드에서 검색된 기법이 질문에 거의 반영되지 않는다는 뜻이고, 이는 **검색 품질 문제(R@5 0.296)와 같은 뿌리**로 보인다.
+- 속도: 항목당 ~11분(TPM 8,000 vs 항목당 ~11,600 토큰의 구조적 한계). 전량 1회에 약 3시간.
+
+**변경 파일**: `eval/{gen_eval,uplift_eval,halluc_eval,gen_qa_set}.py` · `ingestion/{gen_examples,tag_axes,tag_layers,ingest_knowledge}.py`
+**검증**: 8개 파일 구문 통과 · 타임아웃 없는 클라이언트 0곳 · judge 스모크 정상 · `pytest tests/ -q` 97 passed

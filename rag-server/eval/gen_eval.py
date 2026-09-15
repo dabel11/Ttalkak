@@ -35,6 +35,11 @@ import re
 import time
 from pathlib import Path
 
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_SECONDS
 from app.main import retriever, generator, extract_improved_prompt, run_generation
 from app.rag import query_transform
 from app.rag.generator import SYSTEM_PROMPT
@@ -128,6 +133,14 @@ _JUDGE_SYSTEM = """너는 '프롬프트 개선 어시스턴트'의 응답을 채
 반드시 아래 JSON 한 개만 출력한다(설명 금지):
 {"mode_fit": <1-5>, "technique_grounding": <1-5>, "instruction_form": <1-5 또는 null>, "intent_preservation": <1-5>, "faithfulness": <1-5 또는 null>, "fabricated": <true/false>, "reason": "<한 줄 근거>"}"""
 
+# 🧠 gpt-oss 계열은 최종 출력 앞에 **추론 토큰**을 먼저 쓴다. 비추론 모델(llama-3.x) 기준으로
+# 잡힌 예산은 추론에서 소진돼 본문이 빈 문자열로 온다. JSON 모드면 400 으로 시끄럽게 터지지만,
+# 평문 모드면 정상 200 에 내용만 없어 **예외 없이 조용히** 실패한다 — gen_eval 의 judge 가
+# 정확히 그랬고(max_tokens=300, 평문), 점수가 전부 None 인데 '실패' 로그도 안 남았다.
+# 해법은 예산 증액이 아니라 추론량 감축이다(Groq 는 입력+출력예약을 합산해 TPM 을 잡는다).
+_REASONING_EFFORT = "low"
+_JUDGE_MAX_TOKENS = 900   # 실사용 ~200(low). JSON 강제도 함께 켠다
+
 _judge_client = None
 
 
@@ -138,7 +151,7 @@ def _get_judge():
         key = os.environ.get("GROQ_API_KEY")
         if not key:
             raise EnvironmentError("GROQ_API_KEY 가 필요합니다 (judge LLM).")
-        _judge_client = Groq(api_key=key)
+        _judge_client = Groq(api_key=key, timeout=GEN_SECONDS)
     return _judge_client
 
 
@@ -169,7 +182,9 @@ def _judge(query: str, techniques: list[str], answer: str,
             {"role": "system", "content": _JUDGE_SYSTEM},
             {"role": "user",   "content": user},
         ],
-        max_tokens=300,
+        max_tokens=_JUDGE_MAX_TOKENS,
+        reasoning_effort=_REASONING_EFFORT,
+        response_format={"type": "json_object"},
         temperature=0.0,
     )
     return _loads_loose(resp.choices[0].message.content or "")

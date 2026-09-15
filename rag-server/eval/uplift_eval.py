@@ -39,6 +39,11 @@ import time
 from pathlib import Path
 
 # 운영과 동일한 파이프라인(검색·생성·개선프롬프트 추출)을 그대로 재사용
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
 from app.main import retriever, generator, extract_improved_prompt, run_generation
 
 
@@ -73,10 +78,11 @@ def _get_client(backend: str):
         return _client_cache[backend]
     if backend == "groq":
         from groq import Groq
-        c = Groq(api_key=os.environ["GROQ_API_KEY"])
+        c = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
     else:
         from google import genai
-        c = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        c = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+                         http_options=types.HttpOptions(timeout=GEN_MILLIS))
     _client_cache[backend] = c
     return c
 
