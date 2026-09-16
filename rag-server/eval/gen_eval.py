@@ -40,9 +40,14 @@ from pathlib import Path
 # 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
 # 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
 from app.core.timeouts import GEN_SECONDS
-from app.main import retriever, generator, extract_improved_prompt, run_generation
-from app.rag import query_transform
+from app.main import (retriever, generator, extract_improved_prompt, run_generation,
+                      retrieve_contexts, QueryRequest)
 from app.rag.generator import SYSTEM_PROMPT
+from app.rag.layers import is_searchable
+
+# 기법명 → 카드(층 판정용). main() 에서 채운다 — 필터와 무관하게 전량을 봐야
+# '반영할 수 없는 카드가 적용됐는가'를 셀 수 있다.
+_cards_by_name: dict = {}
 
 
 # ── 응답 캐시 (Groq 무료 TPD 100k 절약) ────────────────────────
@@ -52,9 +57,17 @@ from app.rag.generator import SYSTEM_PROMPT
 #  temperature 도 같은 이유로 포함 — 온도 비교 실험 캐시가 서로 오염되지 않게. 2026-07-23)
 
 def _cache_key(query: str, technique_names: list[str], model: str = "",
-               temperature: str = "") -> str:
+               temperature: str = "", example_ids: list[str] | None = None) -> str:
+    """생성 캐시 키. **생성 입력을 바꾸는 것은 전부 들어가야 한다.**
+
+    ⚠️ 2026-09-16: 예시(prompt_examples) 주입을 평가에도 넣으면서 예시 식별자를 키에
+    추가했다. 빠지면 '예시 없이 만든 생성'이 '예시 있는 입력'에 재사용돼 조용히 오염된다.
+    그래서 이 변경 이전의 캐시 파일은 전부 미스가 난다 — 의도된 결과다(다른 파이프라인의
+    산출물이므로 재사용하면 안 된다).
+    """
     payload = (str(model) + "|t" + str(temperature) + "|" + SYSTEM_PROMPT + "|"
-               + query + "|" + str(sorted(technique_names)))
+               + query + "|" + str(sorted(technique_names))
+               + "|ex" + str(sorted(example_ids or [])))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -213,6 +226,8 @@ def main():
     #    2026-07-30 재평가 이후 HyDE **off** 인데 이 하네스만 on 이 기본이었다 —
     #    HyDE 는 R@5 를 0.763→0.441 로 떨어뜨리므로, 그동안의 생성 평가는 운영보다
     #    훨씬 나쁜 검색 위에서 측정된 값이다. 평가는 기본적으로 운영과 같아야 한다.
+    ap.add_argument("--no-layer-filter", action="store_true",
+                    help="층 필터 끄기(검색 대상 자격 없는 카드도 회수) — A/B 기준선용")
     ap.add_argument("--hyde", action="store_true",
                     help="검색 시 HyDE 적용(실험용). 기본은 운영과 동일하게 off.")
     ap.add_argument("--no-hyde", action="store_true",
@@ -234,8 +249,17 @@ def main():
     cache = _load_cache(args.cache_file)
     cache_hits = 0
     temperature = os.environ.get("GEN_TEMPERATURE", "0.7")   # generator 와 동일 규약
+
+    # 층 필터: 운영 기본값(on)을 따르되 A/B 를 위해 끌 수 있다
+    retriever.use_layer_filter = not args.no_layer_filter
+    from ingestion.tag_layers import load_cards
+    _cards_by_name.clear()
+    _cards_by_name.update({str(c["technique"]).strip().lower(): c for c in load_cards(0)})
     print(f"생성 평가셋: {args.qa}  (컬렉션 {collection}, {len(items)}개, "
           f"temp={temperature}, HyDE={'on' if use_hyde else 'off'}, "
+          f"층필터={'on' if retriever.use_layer_filter else 'off'}, "
+          f"min_score={QueryRequest.model_fields['min_score'].default}, "
+          f"예시={QueryRequest.model_fields['n_examples'].default}, "
           f"judge={'생략' if args.no_judge else args.judge_model})"
           + (f"  캐시: {args.cache_file} ({len(cache)}건)" if args.cache_file else ""))
 
@@ -247,6 +271,10 @@ def main():
     fabricated_known = 0  # fabricated 판정이 있는 개선 모드 건수
     structured_n = 0     # 구조화 JSON 파싱 성공(정규식 폴백 미발동) 건수
     structured_known = 0  # structured 필드가 있는 건수(구형 캐시는 알 수 없음)
+    no_evidence = 0       # 운영이라면 404 가 났을 건수(검색 0건 + 첫 턴)
+    applied_total = 0     # 개선안에 적용된 기법 수
+    applied_unusable = 0  # 그중 검색 대상 자격이 없는 층(meta·system·degenerate)
+    tech_by_mode: dict[str, list] = {}
 
     for i, it in enumerate(items, 1):
         query = it["query"]
@@ -254,12 +282,24 @@ def main():
 
         # 운영과 동일: use_hyde 면 검색 쿼리를 기법 카드형으로 재작성(main.py 엔드포인트와 일치).
         # 실패 시 hyde()가 원본 반환하므로 검색은 절대 끊기지 않음.
-        search_query = query_transform.hyde(query) if use_hyde else query
-        retrieved = retriever.search(query=search_query, collection_name=collection, top_k=5)
+        # ⭐ 운영 /query 와 **같은 함수**로 검색한다(app.main.retrieve_contexts).
+        # 종전 복제본은 min_score 를 안 넘겨 항상 5개를 받았고 예시도 주입하지 않았다 —
+        # 기준선이 운영과 다른 파이프라인을 재고 있었다(2026-09-16).
+        req = QueryRequest(query=query, collection_name=collection, use_hyde=use_hyde)
+        retrieved, examples = retrieve_contexts(req)
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
+        example_ids = [str((e.get("metadata") or {}).get("chunk_id") or e.get("text", "")[:40])
+                       for e in examples]
 
-        ckey = _cache_key(query, techniques, args.model, temperature) if args.cache_file else None
+        if not retrieved:
+            # 운영에서는 첫 턴 + 검색 0건이면 404 — 생성 자체가 일어나지 않는다
+            no_evidence += 1
+            print(f"  [{i:>2}] 404(근거 없음) — 운영에서는 생성하지 않음  | {query[:30]}")
+            continue
+
+        ckey = (_cache_key(query, techniques, args.model, temperature, example_ids)
+                if args.cache_file else None)
         if ckey and ckey in cache:
             cached = cache[ckey]
             if isinstance(cached, dict):           # 신형 캐시: run_generation 결과 dict
@@ -271,7 +311,7 @@ def main():
         else:
             try:
                 # 운영과 동일 경로(JSON 구조화 + 폴백) — /query 와 같은 run_generation 사용
-                gen = _retry(lambda: run_generation(query, retrieved, args.model, []))
+                gen = _retry(lambda: run_generation(query, retrieved + examples, args.model, []))
             except Exception as e:
                 print(f"  [{i}] 생성 실패: {e}")
                 continue
@@ -281,7 +321,18 @@ def main():
 
         answer   = gen["answer"]
         improved = gen["improved_prompt"]
-        mode = "improve" if improved else "ask"
+        # 운영 규약: mode 필드가 프론트 분기의 단일 기준(추측 금지). 구형 캐시만 추정으로 폴백.
+        mode = gen.get("mode") or ("improve" if improved else "ask")
+
+        # ── 결정론적 지표: 적용된 기법 중 '반영할 수 없는 층'의 비율 ──
+        # judge 의 technique_grounding 은 "검색된 것을 반영했나"만 보고 "그게 맞는 기법이었나"는
+        # 못 본다. 기준선에서 적용 기법의 20%(9/45)가 meta·system 카드였는데 judge 는 전부 5점을 줬다.
+        if mode == "improve":
+            for a in gen.get("techniques_applied") or []:
+                card = _cards_by_name.get(str(a).strip().lower())
+                applied_total += 1
+                if card is not None and not is_searchable(card):
+                    applied_unusable += 1
         if expected:
             mode_total += 1
             mode_correct += 1 if mode == expected else 0
@@ -301,6 +352,7 @@ def main():
                 verdict = {}
         for k in scores:
             scores[k].append(verdict.get(k))
+        tech_by_mode.setdefault(mode, []).append(verdict.get("technique_grounding"))
         # 환각률: 개선 모드에서 fabricated(bool) 판정이 있을 때만 집계
         if mode == "improve" and isinstance(verdict.get("fabricated"), bool):
             fabricated_known += 1
@@ -340,6 +392,18 @@ def main():
         print(f"  {'환각률(fabricated)':<18}: {rate:.2f}  ({fabricated_n}/{fabricated_known} 개선안이 없는 사실 창작)")
     if structured_known:
         print(f"  {'structured(JSON)':<20}: {structured_n}/{structured_known}  (정규식 폴백 {structured_known - structured_n}회)")
+    print("─" * 52)
+    print("  [결정론 지표 — judge 가 못 보는 것]")
+    if applied_total:
+        print(f"  {'반영불가 기법 적용률':<16}: {applied_unusable/applied_total:.2f}  "
+              f"({applied_unusable}/{applied_total} — meta·system·degenerate 카드가 개선안에 쓰임)")
+    for m_ in ("improve", "ask"):
+        vals = tech_by_mode.get(m_) or []
+        a = _avg(vals)
+        cnt = len([v for v in vals if isinstance(v, (int, float))])
+        label = f"technique_grounding({m_})"
+        print(f"  {label:<26}: {a:.2f}  (n={cnt})" if a is not None else f"  {label:<26}: N/A")
+    print(f"  {'404(근거 없음)':<20}: {no_evidence}/{n}  (운영이라면 생성 자체가 안 됨)")
     print("═" * 52)
 
 

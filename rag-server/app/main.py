@@ -176,9 +176,18 @@ def index_chunks(req: IndexRequest,
     return IndexResponse(indexed_count=count, collection_name=req.collection_name)
 
 
-@app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest):
-    history = req.history or []
+def retrieve_contexts(req: "QueryRequest",
+                      history: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+    """검색 단계 전체 — (기법 청크, 예시 청크) 를 돌려준다. /query 와 평가가 **공유**한다.
+
+    왜 함수로 뺐나 (2026-09-16): gen_eval 이 이 로직을 **따로 복제**해 들고 있었고,
+    복제본은 `min_score` 를 넘기지 않고(항상 5개) 예시 주입도 하지 않았다. 즉 기준선이
+    운영과 다른 파이프라인을 재고 있었다. 모델 기본값·타임아웃·예산 드리프트와 같은
+    원인(중복)이라, 복제 대신 이 한 곳을 양쪽이 부르게 한다.
+
+    404 판정(검색 0건 + 첫 턴)은 HTTP 관심사라 여기서 하지 않는다 — 호출자가 판단한다.
+    """
+    history = history or []
 
     # 검색에는 '기법 검색용 쿼리'를 쓰고, 생성에는 원본 프롬프트를 그대로 쓴다.
     if req.use_hyde:
@@ -196,20 +205,10 @@ def query(req: QueryRequest):
         use_hybrid=req.use_hybrid,
         min_score=req.min_score,
     )
-    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
-    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
-    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
-    # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
-    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
-    if not retrieved and not history:
-        raise HTTPException(
-            status_code=404,
-            detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
-        )
 
     # ── C(타입별 멀티 컬렉션): 예시 컬렉션에서 '유사 요청 개선 사례'를 별도 검색해 주입 ──
     # 예시는 원본 거친 요청(req.query)과 매칭한다(기법 검색용 변환쿼리가 아님 — 예시의 'before'가
-    # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(20건 규모 typed 컬렉션엔 dense로 충분,
+    # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(typed 컬렉션엔 dense로 충분,
     # 쿼리당 리랭크 2회 지연 방지). min_score 미달·빈 컬렉션·검색 실패는 모두 '예시 없음'으로 흡수.
     examples: list[dict] = []
     if req.use_examples and req.n_examples > 0:
@@ -225,6 +224,25 @@ def query(req: QueryRequest):
         except Exception as e:                       # 예시 실패가 본 개선을 막지 않게
             print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
             examples = []
+
+    return retrieved, examples
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    history = req.history or []
+    retrieved, examples = retrieve_contexts(req, history)
+
+    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
+    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
+    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
+    # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
+    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
+    if not retrieved and not history:
+        raise HTTPException(
+            status_code=404,
+            detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
+        )
 
     try:
         # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)

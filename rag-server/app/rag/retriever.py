@@ -22,6 +22,7 @@ from sqlalchemy import select
 
 from app.core.db import SessionLocal, RagChunk, init_db
 from app.core.embeddings import get_model, get_reranker
+from app.rag.layers import is_searchable
 
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
 _TOKEN_RE = re.compile(r"[a-zA-Z]+|[0-9]+|[가-힣]+")
@@ -69,6 +70,7 @@ class Retriever:
         use_reranker: bool = True,
         use_hybrid: bool = False,
         fetch_k: int = 50,   # 2026-09-13 재측정. 종전 20 은 108~134청크 시절 값이라 근거가 소멸했다
+        use_layer_filter: bool = True,
         **_ignore,
     ):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)
@@ -76,6 +78,9 @@ class Retriever:
         self.use_reranker = use_reranker
         self.use_hybrid   = use_hybrid
         self.fetch_k      = fetch_k
+        # 검색 대상 자격이 없는 카드를 로드 단계에서 뺀다(app/rag/layers.py).
+        # 끄면 종전처럼 컬렉션 전체를 본다 — A/B·회귀 확인용.
+        self.use_layer_filter = use_layer_filter
         self._reranker    = None  # 지연 로드
         self._bm25_cache  = {}    # {collection: (BM25Okapi, row_count)} — 토큰화 재사용
         init_db()
@@ -221,10 +226,24 @@ class Retriever:
                 .order_by(RagChunk.id)   # 안정적 정렬 → BM25 캐시와 rows 정렬 일치
             ).all()
 
-        return [
+        rows = [
             {"document": doc, "metadata": meta, "embedding": emb, "embedding_views": views}
             for doc, meta, emb, views in results
         ]
+
+        # ── 층 필터 (2026-09-15 배선) ──────────────────────────
+        # 회수되는 카드의 21%가 '반영할 수 없는' 것이었다(gen_set 18질의 실측:
+        # meta 14% + degenerate 3% + system 3%). 최다 회수 카드가 `Meta-Prompting`
+        # (18질의 중 7회)인데, 이건 "요청을 최적의 프롬프트로 변환하라"는 카드라
+        # 생성기가 이미 하는 일이다 — 참고 기법으로 줘도 반영할 것이 없다.
+        #
+        # ⚠️ 미분류 카드는 통과한다(layers.is_searchable). 분류 배치가 실패하거나
+        #    신규 카드가 아직 분류 전이어도 컬렉션이 통째로 비지 않는다 —
+        #    `embedding_views` 가 NULL 이면 종전 동작인 것과 같은 원칙.
+        if self.use_layer_filter:
+            rows = [r for r in rows if is_searchable(r)]
+
+        return rows
 
     @staticmethod
     def _cosine(q: np.ndarray, m: np.ndarray) -> np.ndarray:
