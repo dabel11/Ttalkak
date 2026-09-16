@@ -641,9 +641,11 @@ class Generator:
                 model=model, max_tokens=max_tokens,
                 history=history, analysis=analysis,
             )
-        except RuntimeError:
+        except RuntimeError as e:
             if backend is self._groq and self._gemini:
-                print("[Generator] Groq 실패 → Gemini 폴백")
+                # 원인을 반드시 남긴다 — 종전엔 사유 없이 "Groq 실패"만 찍혀서, 폴백 쪽(Gemini)
+                # 에러만 보이고 진짜 원인(대개 Groq 429)은 가려졌다(2026-09-16).
+                print(f"[Generator] Groq 실패 → Gemini 폴백 — 원인: {str(e)[:160]}")
                 return self._gemini.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,
