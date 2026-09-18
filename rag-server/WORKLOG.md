@@ -2947,3 +2947,64 @@ fields(분석기): ('원문', 'required', 'empty')
 
 **변경 파일**: `app/rag/generator.py`(폴백 원인 로깅 — 동작 불변)
 **검증**: `pytest tests/ -q` 103 passed · 폴백 원인 로그 실출력 확인
+
+---
+
+## [2026-09-19] 층 필터 A/B 결과 — 반영불가 기법 29% → 0%, 품질 회귀 없음 · 모드 뒤집힘은 필터가 아니라 분석기
+
+**질문**: 09-16 에 배선한 층 필터(`retriever.use_layer_filter`, `user_instruction` 만 검색)가
+생성 단계에서 실제로 "반영할 수 없는 기법"을 없애는가, 그리고 다른 품질을 깎지 않는가.
+
+**조건**: `gen_eval` · gen_set 공통 13항목(1,3,5,7,8,9,10,11,12,13,16,17,18) · Groq 단일 백엔드
+(`GEMINI_API_KEY=""` — A팔 캐시가 전부 Groq 생성) · temp 0.7 · judge gpt-oss-120b · 두 팔 **같은 실행 조건**에서 채점.
+A = `--no-layer-filter`, B = 기본(필터 on). 캐시 `eval/.gen_cache_parity.json`.
+
+**제외 4항목(2·4·6·14)**: B 생성이 HTTP 400 을 2회 연속 → 포기. 필터 탓이 아님을 따로 확인했다 —
+필터 on/off 의 `_fit_max_tokens` 차이는 −41~+16 토큰뿐이고, 400 은 예산 ~1,100~1,250 구간에서
+**확률적으로** 난다(09-16 항목의 추론 토큰 예산 버그). 이번 재생성에서도 A·B 모두 4회 중 1회꼴로 400.
+
+### 결과 (공통 13항목, 각 1회 생성)
+| 지표 | A (필터 off) | B (필터 on) |
+|---|---|---|
+| **반영불가 기법 적용률** (결정론) | **0.29** (8/28) | **0.00** (0/14) |
+| technique_grounding(improve) | 5.00 (n=7) | 5.00 (n=4) |
+| technique_grounding(ask) | 3.67 (n=6) | 3.56 (n=9) |
+| mode_accuracy | 0.92 (12/13) | 0.85 (11/13) |
+| mode_fit | 5.00 | 4.54 |
+| intent_preservation | 5.00 | 4.77 |
+| instruction_form / faithfulness | 5.00 / 5.00 (n=7) | 5.00 / 5.00 (n=4) |
+| 환각률 · structured · 404 | 0/7 · 13/13 · 0 | 0/4 · 13/13 · 0 |
+
+### 모드 차이 3건 — 전부 필터와 무관
+| 항목 | A | B | 원인 확인 |
+|---|---|---|---|
+| 3 코드리뷰 프롬프트 | improve ✓ | **ask ✗** | B팔 그대로 **3회 재생성 → 3/3 improve**. A팔도 3/3 improve. 1회성 흔들림 |
+| 8 영어 이메일 번역 프롬프트 | improve ✓ | **ask ✗** ("원문이 제공되지 않아") | **분석기**를 5회 단독 호출 → **3/5 가 `원문=empty`(required)**. 규칙 5("~하는 프롬프트" 요청이면 원문은 required 아님) 위반. 분석기는 검색 **전**에 돌므로 필터가 영향을 줄 수 없다 |
+| 18 제품 홍보 이메일 | **improve ✗** | ask ✓ | 기대 ask. A 쪽이 틀렸다 |
+
+→ mode_fit·intent 하락(5.00→4.54/4.77)은 항목 3의 ask ✗(fit 2·intent 2) 한 건이 대부분을 만든다.
+   항목 13(제주도)의 B fit=2 는 mode 가 기대대로 improve ✓ 인데도 judge 가 낮게 줬다 — 원인 미확인(judge 1회).
+
+### 같은 질의에서 무엇이 바뀌었나 (필터의 실제 효과)
+| 항목 | A 적용 기법 | B 적용 기법 |
+|---|---|---|
+| 8 번역 (A) | Request Normalization · **Meta-Prompting** · Terminology Control · Variable Slot · **Prompt Generator Pattern** | (ask) |
+| 13 제주도 | **Meta-Prompting** · Directional Stimulus | Directional Stimulus · Analyst-Then-Writer |
+| 3 코드리뷰 (재생성) | … · **Meta-Prompting** | … · Add Clear Syntax |
+
+A팔 번역 개선안은 "1. Request Normalization Prompting 기법에 따라 정규화한다 2. Meta-Prompting 을 활용해…"처럼
+**기법 이름을 절차로 옮겨 적은 무의미한 지시문**이었다 — judge 는 이것에 tech=5·fit=5 를 줬다.
+09-16 에 적은 "judge 는 검색 품질에 눈이 멀었다"가 실물로 확인된 사례.
+
+### 판단
+- **필터 유지.** 목표 지표(반영불가 29%→0%)를 달성했고, judge 지표 차이는 전부 필터 밖 원인으로 추적됐다.
+- **한계**: 항목당 1회 생성·n=13. B 는 improve 가 4건뿐이라 improve 지표의 표본이 작다.
+- **다음 1순위 = 분석기 규칙 5 위반**(번역 템플릿 요청에 원문 required, 5회 중 3회). 이게 지금 mode_accuracy 를 가장 크게 흔든다.
+
+### 부수 발견 (미수정)
+- 🔴 A팔 항목 3 캐시: `techniques_applied` 에 `'{"name":"Checklist Prompting","reason":…}'` 처럼 **JSON 문자열이 이름째** 들어갔고,
+  마크다운 `answer` 에는 빈 글머리표(`• `)가 찍혔다. 생성기가 techniques 를 문자열화된 JSON 으로 낸 경우를 정규화하지 못한다.
+  측정 영향: 이런 이름은 카드와 매칭이 안 돼 반영불가 적용률의 **분모에만** 들어간다(과소집계 방향).
+- `gen_eval` 캐시 키에 분석기 결과가 없다 — 분석기 출력이 달라져도 같은 키면 캐시 히트. 이번엔 두 팔의 기법 목록이 달라 충돌은 없었다.
+
+**변경 파일**: 없음(측정·기록만) · 스크래치 `drive_b.py`·`replay3.py`
