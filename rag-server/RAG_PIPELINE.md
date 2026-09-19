@@ -103,6 +103,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - **status 판정이 mode 정확도를 지배**: 단서가 있으면 filled(관대), 단 결과물 '종류'를 가리키는 말(대본·제품·글)은 주제가 아님. 전수조사 mode 정확도 0.78→0.72→**0.83**(gen_set 18)
 - **실패 시 `None`** → 분석 없이 기존 단일 단계로 진행(무회귀). `None` 은 **분석 실패만** 뜻한다(키 없음·호출 실패·JSON 파싱 실패·산출물 전무). 필드가 비어도 `techniqueAxes` 가 있으면 dict 를 돌려준다 — 축은 필드와 독립 산출물이고 축 라우팅의 입력이다(2026-09-08). 필드만 빈 경우 생성 경로는 `analysis=None` 과 완전히 동일(`build_analysis_block` 이 `""` 반환)
 - **정제 규칙 관측**: `_sanitize()` 의 방어 발동이 `sanitize_stats()` 에 규칙별로 집계된다(`junk`·`task_word`·`framing_coerced`·`role_unknown`·`required_over_cap`·`not_dict`). ⚠️ 이 규칙들의 근거는 **폐기된 `llama-3.1-8b-instant` 실측**이고 현 `openai/gpt-oss-20b` 에서 재측정된 적이 없다 — 카운터가 그 판정 수단이다(2026-09-08)
+- **규칙 5 코드 강제**(`_exempt_template_source`, 2026-09-19): "~하는 프롬프트 만들어줘"(템플릿 요청, `is_template_request` — 프롬프트를 꾸미는 현재형 관형절 `는/위한/용 프롬프트`, 뒤에 개선 동사가 오면 제외)에서 **비어 있는 원문 계열 required**(`원문`·`원본`·`본문`·`텍스트`)를 `fact` 로 강등한다. 프롬프트의 [작업유형별 required] 목록(`번역: 원문`·`요약: 요약할 원문`)이 규칙 5 와 충돌해 모델이 **24회 중 13회** 위반했다(eval/analyzer_rule5_eval.py). 발동은 `sanitize_stats()['template_source_demoted']`. 분석 결과에 `templateRequest` 를 실어 생성기로 넘긴다(응답 `fields` 에는 안 나감)
 - ⚠️ **비용**: 요청당 LLM 호출 +1(≈1~4초). 8b는 TPM 6,000이라 동시 트래픽에서 429 가능 — 그때는 `None` 폴백이라 기능은 유지되나 분석 이점이 사라진다(모델/티어 상향은 백로그)
 - **멀티턴**: `history`를 함께 넣어 매 턴 필드 상태를 재구성 → 이전 턴에 답한 항목은 `filled`가 되어 **같은 질문 반복을 구조적으로 차단**
 

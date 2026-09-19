@@ -194,3 +194,74 @@ def run_tests() -> None:
 
 if __name__ == "__main__":
     run_tests()
+
+
+# ── E. 규칙 5 — 템플릿 요청의 원문은 required 가 아니다 ─────
+_RULE5_SET = json.loads((Path(__file__).resolve().parents[1] / "eval"
+                         / "analyzer_rule5_set.json").read_text(encoding="utf-8"))["items"]
+_GEN_SET = json.loads((Path(__file__).resolve().parents[1] / "eval"
+                       / "gen_set.json").read_text(encoding="utf-8"))["items"]
+
+
+def test_template_detection_matches_labeled_set() -> None:
+    """회귀셋의 template 라벨과 판별 결과가 전부 일치해야 한다(대조군 7건 포함)."""
+    wrong = [it["query"] for it in _RULE5_SET
+             if analyzer.is_template_request(it["query"]) != it["template"]]
+    assert wrong == []
+
+
+def test_template_detection_never_fires_on_expected_ask() -> None:
+    """gen_set 에서 ask 가 기대되는 요청에는 절대 발동하면 안 된다 — 발동하면 되물어야 할
+    요청을 개선 모드로 밀 수 있다."""
+    fired = [it["query"] for it in _GEN_SET
+             if it.get("expected_mode") == "ask" and analyzer.is_template_request(it["query"])]
+    assert fired == []
+
+
+def _f(name, role="required", status="empty", value=None):
+    return {"name": name, "role": role, "status": status, "value": value}
+
+
+def test_empty_source_demoted_to_fact_on_template_request() -> None:
+    analyzer.reset_sanitize_stats()
+    q = "영어 이메일을 한국어로 번역하되 비즈니스 격식체로 바꾸는 프롬프트 만들어줘."
+    out = analyzer._exempt_template_source(q, [_f("원문"), _f("목표 언어", status="filled", value="한국어")])
+    assert [(f["name"], f["role"]) for f in out] == [("원문", "fact"), ("목표 언어", "required")]
+    assert analyzer.derive_mode(out) == "improve"
+    assert analyzer.sanitize_stats() == {"template_source_demoted": 1}
+
+
+def test_source_kept_required_when_not_template() -> None:
+    """'이 이메일 번역해줘'는 특정 원문을 가리킨다 — 비어 있으면 되묻는 게 맞다."""
+    analyzer.reset_sanitize_stats()
+    out = analyzer._exempt_template_source("이 이메일 한국어로 번역해줘", [_f("원문")])
+    assert out[0]["role"] == "required"
+    assert analyzer.derive_mode(out) == "ask"
+    assert analyzer.sanitize_stats() == {}
+
+
+def test_only_empty_source_fields_are_demoted() -> None:
+    """붙여넣은 원문(filled)과 원문이 아닌 required(주제 등)는 그대로다."""
+    q = "아래 파이썬 함수를 리뷰하는 프롬프트로 만들어줘: def add(a,b): return a+b"
+    fields = [_f("원문 코드", status="filled", value="def add(a,b): return a+b"), _f("주제")]
+    out = analyzer._exempt_template_source(q, fields)
+    assert [f["role"] for f in out] == ["required", "required"]
+
+
+def test_analyze_applies_template_exemption() -> None:
+    """analyze() 경로에 실제로 배선돼 있는지 — 가짜 모델이 규칙 5 를 어긴 출력을 낸다."""
+    payload = {"taskType": "번역",
+               "fields": [{"name": "원문", "role": "required", "status": "empty", "value": None}],
+               "techniqueAxes": []}
+    got = _analyze_with(payload, query="일본어 제품 설명서를 한국어로 번역하는 프롬프트 작성해줘")
+    assert got["fields"][0]["role"] == "fact"
+
+
+def test_template_flag_only_in_analysis_not_fields() -> None:
+    """templateRequest 는 분석 dict 최상위에만 — 클라이언트로 나가는 fields 스키마는 불변."""
+    payload = {"taskType": "요약",
+               "fields": [{"name": "요약할 원문", "role": "required", "status": "empty", "value": None}],
+               "techniqueAxes": []}
+    got = _analyze_with(payload, query="긴 뉴스 기사를 5줄로 요약해주는 프롬프트")
+    assert got["templateRequest"] is True
+    assert set(got["fields"][0]) == {"name", "role", "status", "value"}

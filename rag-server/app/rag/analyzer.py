@@ -25,6 +25,7 @@ MAKE 파이프라인 1단계 — 요청 분석기.
 """
 
 import json
+import re
 import os
 
 from app.core.timeouts import FAST_SECONDS
@@ -227,6 +228,50 @@ def _sanitize(fields: list) -> list:
     return out
 
 
+# ── 규칙 5 를 코드로: 템플릿 요청의 '원문'은 required 가 아니다 ────────────
+# "~하는 프롬프트 만들어줘"는 **작업 지시문을 만들어 달라**는 요청이다. 원문(번역·요약·리뷰할
+# 재료)이 없어도 `[원문 입력]` 빈칸을 둔 채 완결된 지시문을 낼 수 있다(생성기 규약).
+# 그런데 SYSTEM 의 [작업유형별 required] 목록이 "번역: 원문 | 요약: 요약할 원문"을
+# '기준'으로 못박고 있어 규칙 5 와 정면으로 충돌하고, 모델은 목록 쪽을 따른다.
+#   실측(2026-09-19, gpt-oss-20b): gen_set #8 "영어 이메일 번역 프롬프트" 5회 중 3회
+#   `원문=required·empty` → 생성기가 ask("원문이 제공되지 않아") — 층 필터 A/B 의 mode 흔들림 원인.
+# 교정 방향은 삭제가 아니라 **fact 로 강등**이다: fact·empty 는 생성기에서 "지어내지 말고
+# [원문 입력] 빈칸 + 질문"으로 렌더되므로 원문 날조는 여전히 막히고, mode 만 막지 않는다.
+#
+# 템플릿 판별은 '프롬프트를 꾸미는 현재형 관형절'로 한다 — "요약하는 프롬프트",
+# "번역하기 위한 프롬프트", "리뷰용 프롬프트". 과거형("내가 작성한 프롬프트")과
+# 지시어("이 프롬프트")는 기존 프롬프트를 가리키므로 템플릿이 아니다. 뒤에 개선 동사가
+# 오면("요약하는 프롬프트 개선해줘") 고칠 대상이 따로 있다는 뜻이라 역시 제외한다.
+_TEMPLATE_RE = re.compile(r"(?:는|위한|용)\s*프롬프트")
+_IMPROVE_AFTER_RE = re.compile(r"프롬프트\S*\s*(?:좀\s*)?(?:개선|고쳐|고치|다듬|수정|손봐|손 봐)")
+_SOURCE_WORDS = ("원문", "원본", "본문", "텍스트")
+
+
+def is_template_request(query: str) -> bool:
+    """'~하는 프롬프트 만들어줘' 형태 — 원문 없이도 지시문을 완결할 수 있는 요청인가."""
+    q = query or ""
+    return bool(_TEMPLATE_RE.search(q)) and not _IMPROVE_AFTER_RE.search(q)
+
+
+def is_source_field(name: str) -> bool:
+    """변환·가공할 재료(원문) 필드인가 — 이름 기준. 생성기의 분석 블록 렌더도 이걸 쓴다."""
+    return any(w in (name or "") for w in _SOURCE_WORDS)
+
+
+def _exempt_template_source(query: str, fields: list[dict]) -> list[dict]:
+    """템플릿 요청이면 비어 있는 '원문' 계열 required 를 fact 로 강등한다(규칙 5).
+
+    채워진 원문(사용자가 실제로 붙여넣은 경우)은 건드리지 않는다 — 재료로 쓰여야 한다."""
+    if not is_template_request(query):
+        return fields
+    for f in fields:
+        if (f["role"] == "required" and f["status"] == "empty"
+                and is_source_field(f["name"])):
+            _record_drop("template_source_demoted", f["name"])
+            f["role"] = "fact"
+    return fields
+
+
 def analyze(query: str, history: list[dict] | None = None) -> dict | None:
     """요청 → {"taskType", "fields":[{name, role, status, value}], "techniqueAxes":[…]}.
 
@@ -260,6 +305,9 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
         return None
 
     fields = _sanitize(data.get("fields") or [])
+    # 판별은 **이번 입력**만 본다 — 멀티턴 후속 입력("격식체로")에는 관형절이 없어 적용되지
+    # 않는다. 첫 턴에서 이미 강등돼 improve 로 갔다면 후속 턴은 개선안 다듬기라 무관하다.
+    fields = _exempt_template_source(query, fields)
     # 통제 어휘 밖의 값은 버린다. 비면 호출자가 기존 유사도 경로로 폴백한다.
     axes = normalize_axes(data.get("techniqueAxes"))
 
@@ -274,6 +322,9 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
         "taskType": str(data.get("taskType") or ""),
         "fields": fields,
         "techniqueAxes": axes,
+        # 생성기의 분석 블록이 빈 원문을 '되물을 것'이 아니라 '나중에 붙여넣을 빈칸'으로
+        # 렌더하는 데 쓴다(generator.build_analysis_block). 응답의 fields 에는 안 나간다.
+        "templateRequest": is_template_request(query),
     }
 
 

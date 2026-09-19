@@ -3085,3 +3085,65 @@ A팔 번역 개선안은 "1. Request Normalization Prompting 기법에 따라 �
 
 **변경 파일**: 신규 `ingestion/gen_request_views.py` · `ingestion/request_views.json` · `eval/doc2query_eval.py` · `tests/test_request_views.py` · `CORPUS_STRATEGY.md`(doc2query ❌ 기각 표기)
 **검증**: `pytest tests/test_request_views.py` 4 passed(로컬·CI 조건) · A/B 2조건 × 116문항 × rerank on/off 실행 완료
+
+---
+
+## [2026-09-19] 분석기 규칙 5 를 코드로 강제 — 템플릿 요청의 '원문'을 required 로 잡던 것 (13/24 → 0/24)
+
+**문제**: 층 필터 A/B 에서 gen_set #8("영어 이메일 번역 프롬프트 만들어줘")이 ask("원문이 제공되지 않아")로
+뒤집혔다. 분석기가 규칙 5("~하는 프롬프트 만들어줘"면 원문은 required 아님)를 어긴 탓이었다.
+
+**원인**: 분석기 `_SYSTEM` 안에서 두 지시가 정면으로 충돌한다.
+- `[작업유형별 required — 이 목록이 기준이다]` … `요약: 요약할 원문 | 번역: 원문, 목표 언어`
+- `5. … "~하는 프롬프트를 만들어줘"라고 한 경우, 그 원문은 required 가 아니다`
+
+모델은 '기준'이라고 못박힌 목록 쪽을 따른다.
+
+**측정 도구 신설**: `eval/analyzer_rule5_set.json`(템플릿 8 + 대조군 7) · `eval/analyzer_rule5_eval.py`
+(`--from` 으로 저장한 원본 출력에 가드를 오프라인 적용 가능).
+
+### Before — gpt-oss-20b, 템플릿 8건 × 3회
+| | 결과 |
+|---|---|
+| 원문 계열 required+empty (규칙 5 위반) | **13/24 (54%)** — gen_set #4(회의록)·#8(번역) 포함 |
+| 그로 인해 derive_mode = ask | 13/24 |
+
+### 변경
+- `analyzer.is_template_request(query)` — 프롬프트를 꾸미는 **현재형 관형절**(`는/위한/용 프롬프트`)이면 템플릿.
+  과거형("내가 작성한 프롬프트")·지시어("이 프롬프트")는 기존 프롬프트라 제외, 뒤에 개선 동사가 오면
+  ("요약하는 프롬프트 개선해줘") 제외. gen_set 18건에 적용: 기대 improve 템플릿 7건 전부 True, 기대 ask 7건 전부 False.
+- `_exempt_template_source` — 템플릿 요청에서 **비어 있는** 원문 계열(`원문`·`원본`·`본문`·`텍스트`) required 를
+  **삭제가 아니라 `fact` 로 강등**. fact·empty 는 생성기에서 "지어내지 말고 빈칸"으로 렌더되므로 원문 날조는 여전히 막힌다.
+  사용자가 붙여넣은(filled) 원문은 건드리지 않는다. 발동은 `sanitize_stats()['template_source_demoted']`.
+- 분석 결과에 `templateRequest` 추가(응답 `fields` 스키마는 불변 — 테스트로 고정).
+- 프롬프트(`_SYSTEM`)는 **안 건드렸다** — 한 번에 한 변수.
+
+### After
+| | 결과 |
+|---|---|
+| 가드 적용 후 잔여 위반 (Before 출력 24건에 오프라인 적용 = 운영과 동일한 결정론 경로) | **0/24** |
+| 가드 후에도 ask 로 막힘 | 1/24 — "파이썬 코드 리뷰 프롬프트"의 `구현할 기능`(아래) |
+| end-to-end gen_set #4 (회의록 요약 프롬프트) | **improve 2/2** (강등 발동 1회 포함) |
+| end-to-end gen_set #8 (번역 프롬프트) | 🔴 **ask 2/2 — 분석기를 고쳐도 안 풀린다** (아래) |
+
+### 🔴 #8 은 생성기 쪽에도 원인이 있다 — 미검증 수정은 커밋하지 않음
+원문이 `fact·empty` 로 넘어가도(강등 1회 + 모델이 처음부터 fact 1회) 생성기는 "번역할 원문이 제공되지 않아" ask.
+- 분석 블록 렌더가 `원문 [fact] = (없음 → … 빈칸 + 질문)` — '템플릿 요청'이라는 사실이 생성기에 안 간다.
+- 주입되는 참고 예시 2개가 **둘 다 원문을 붙여넣은 번역 예시**다(`ex_translate_5c01185c`, `ex_translate_6ad0f014`).
+- SYSTEM_PROMPT 의 템플릿 예외(※ 문단)는 분석 블록과 연결돼 있지 않다.
+
+수정안: `templateRequest` 면 빈 원문을 `[template] = (템플릿 요청 — 되묻지 말고 [원문 붙여넣기] 빈칸 + 개선 모드)`로
+렌더(`build_analysis_block`). **작업 트리에만 있고 커밋하지 않았다** — 생성기 입력 문구 변경이라 라이브 A/B 가 필요한데,
+재생 도중 **gpt-oss-120b TPD 소진**(공유 한도, 재시도 ~25분)으로 한 건도 못 쟀다.
+게다가 #8 은 **400(생성기 예산 버그)이 3회 중 3회** — 예산 문제(다음 과제)가 이 항목의 측정 자체를 막고 있다.
+
+### 부수 발견 (미수정)
+- **대조군 3/7 이 improve** — 가드와 무관(템플릿 판별 False, 가드 미발동). 모델이 "이 이메일 번역해줘"·"이 글 요약해줘"의
+  원문을 처음부터 `fact` 로 잡고, "내가 작성한 프롬프트 다듬어줘"는 `prompt_text` 를 fact 로 잡는다.
+  **규칙 5 와 반대 방향의 오판**(되물어야 할 걸 안 되물음).
+- `코드: 구현할 기능` 목록이 '코드 리뷰'에도 적용된다(3회 중 1회 `구현할 기능=empty`). 리뷰 대상 코드는 원문 계열이지만
+  "코드 짜는 프롬프트"(되물어야 함)와 이름으로 구분이 안 돼 가드에 넣지 않았다.
+
+**변경 파일**: `app/rag/analyzer.py` · `eval/analyzer_rule5_set.json`(신규) · `eval/analyzer_rule5_eval.py`(신규) ·
+`tests/test_analyzer.py`(+7) · `RAG_PIPELINE.md`
+**검증**: `pytest tests/ -q` 185 passed(작업 트리) · 커밋 상태 격리 복사본에서 analyzer/layers/concurrency 42 passed

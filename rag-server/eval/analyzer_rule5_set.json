@@ -1,0 +1,21 @@
+{
+  "description": "분석기 규칙 5 회귀셋 — '~하는 프롬프트 만들어줘' 형태의 템플릿 요청에서 원문(재료)을 required+empty 로 잡으면 안 된다. template=true 는 원문 없이도 개선안이 가능한 요청, template=false 는 사용자가 특정 원문을 가리키지만 붙여넣지 않아 되물어야 하는 요청(대조군).",
+  "items": [
+    {"query": "영어 이메일을 한국어로 번역하되 비즈니스 격식체로 바꾸는 프롬프트 만들어줘.", "template": true, "source": "gen_set #8"},
+    {"query": "이 회의록을 핵심만 3줄로 요약하는 프롬프트 만들어줘. 결정사항과 액션아이템 위주로.", "template": true, "source": "gen_set #4 · 규칙 5 예시"},
+    {"query": "논문 초록을 쉬운 한국어로 요약하는 프롬프트 만들어줘", "template": true},
+    {"query": "일본어 제품 설명서를 한국어로 번역하는 프롬프트 작성해줘", "template": true},
+    {"query": "긴 뉴스 기사를 5줄로 요약해주는 프롬프트", "template": true},
+    {"query": "한국어 블로그 글을 자연스러운 영어로 번역하는 프롬프트를 만들어줘", "template": true},
+    {"query": "고객 리뷰를 긍정/부정으로 나눠 요약하는 프롬프트 만들어줘", "template": true},
+    {"query": "파이썬 코드를 성능 관점에서 리뷰하는 프롬프트 만들어줘", "template": true},
+
+    {"query": "이 이메일 한국어로 번역해줘", "template": false},
+    {"query": "이 글 3줄로 요약해줘", "template": false},
+    {"query": "이 프롬프트 좀 개선해줘", "template": false},
+    {"query": "아래 문서 요약해줘", "template": false},
+    {"query": "번역해줘", "template": false},
+    {"query": "내가 작성한 프롬프트 다듬어줘", "template": false},
+    {"query": "요약하는 프롬프트 개선해줘", "template": false}
+  ]
+}
