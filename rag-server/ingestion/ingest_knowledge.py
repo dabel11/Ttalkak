@@ -345,6 +345,7 @@ class LLMJudge:
             self.model = model or "llama-3.3-70b-versatile"
         elif os.environ.get("GEMINI_API_KEY"):
             from google import genai
+            from google.genai import types
             self.backend = "gemini"
             self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                                        http_options=types.HttpOptions(timeout=GEN_MILLIS))

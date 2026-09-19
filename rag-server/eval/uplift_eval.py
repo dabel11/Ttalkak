@@ -81,6 +81,7 @@ def _get_client(backend: str):
         c = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
     else:
         from google import genai
+        from google.genai import types
         c = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                          http_options=types.HttpOptions(timeout=GEN_MILLIS))
     _client_cache[backend] = c
