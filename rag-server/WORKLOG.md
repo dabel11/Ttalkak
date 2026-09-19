@@ -3033,3 +3033,55 @@ A팔 번역 개선안은 "1. Request Normalization Prompting 기법에 따라 �
 **결정·근거**
 - ruff 는 F821·E9 만 켠다. 전체 규칙은 기존 코드에서 대량 경고가 나 CI 를 소음으로 만든다.
 - ⚠️ `tests/` 가 `app.main`·`app.core.embeddings` 를 import 하게 되면 CI 가 깨진다 — `requirements-test.txt` 머리말에 명시.
+
+---
+
+## [2026-09-19] doc2query(문서측 요청 예문) A/B — ❌ 기각: 예문이 기법이 아니라 **소재**로 맞는다
+**목적**: 2026-08-09 백로그 🔴 1순위(CORPUS_STRATEGY 실행 순서 5). 기법 카드마다 사용자 말투 요청 예문을 오프라인 생성해 검색뷰로 붙이면, 카드 ↔ 거친 요청의 표현 간극이 메워져 검색·관련성 판별이 좋아지는가.
+
+**Before**: 검색뷰 = 본문 ∪ 축약뷰(이름+정의+Use When). 예문 뷰 없음.
+
+**After (측정용 산출물만 — DB·운영 무변경)**
+- 신규 `ingestion/gen_request_views.py` — 검색 대상 123장 × 5개, `openai/gpt-oss-20b`(120b 는 judge 와 하루 한도 공유라 피함), 5장씩 배치, 이어 실행. 누수 방어: 기법명 포함 요청은 코드로 버림, `leak_score ≥ 0.5` 버림.
+- 신규 `ingestion/request_views.json` — 123장 · 572개(버림 41 · 예문 0개 카드 2) · 평균 leak 0.096.
+- 신규 `eval/doc2query_eval.py` — `Retriever._load_collection` 결과에 예문 벡터를 **메모리에서만** 덧붙여 base vs +req 비교. `rag_chunk` 은 읽기만.
+- 신규 `tests/test_request_views.py`(파싱·정제 4개).
+
+**측정** (운영 설정: 층 필터 ON · fetch_k 50)
+
+| 셋 | rerank | 지표 | base | +req | Δ |
+|---|---|---|---:|---:|---:|
+| realistic(사람 라벨, 59) | off | Hit@1 | 0.610 | **0.220** | −0.390 |
+| | off | R@5 | 0.681 | 0.446 | −0.234 |
+| | on | Hit@1 | 0.576 | 0.542 | −0.034 |
+| | on | R@5 | 0.749 | 0.723 | −0.025 |
+| coverage(LLM 생성, 57) | off | R@5 | 0.333 | 0.439 | +0.105 |
+| | on | R@5 | 0.456 | 0.439 | −0.018 |
+
+관련성 판별(정상 = `gen_set` 18 · 무관 = WORKLOG 에 기록된 7개, top1 dense):
+
+| | AUC | 정상 최저 | 무관 최고 | τ=0.40 무관 통과 |
+|---|---:|---:|---:|---:|
+| base | 0.857 | 0.433 | 0.543 | 6/7 |
+| +req | 0.849 | 0.530 | 0.663 | **7/7** |
+
+- 변형: 예문 벡터를 카드당 평균 1개(centroid)로 합쳐도 realistic dense Hit@1 **0.322**, AUC 0.802 — 역시 악화.
+- 오염 점검(질의 ↔ 정답 카드 예문 최대 코사인): realistic 중앙값 0.672 · coverage 0.603, ≥0.85 는 각 1·0건 → coverage 개선(+0.105)은 근접 중복 때문은 아니나, 둘 다 LLM 이 카드 → 요청으로 만든 문장이라는 **같은 분포**다. 사람 라벨 셋이 반대 부호이므로 채택 근거가 못 된다.
+
+**원인 (max-pool 오답 top1 이 어떤 예문으로 이겼나)**
+| 질의 | 이긴 카드 | 이긴 예문 |
+|---|---|---|
+| 이 회의록을 핵심만 세 줄로 줄여줘 | Prompt Compression | 핵심 내용만 3줄로 정리해줘 |
+| 이 문서들에서 가격 정보만 뽑아줘 | Avoid Conflicting Tool-Call Instructions | 이 URL에서 가격 정보를 추출해 주세요 |
+| 추천 영화 순위를 매겨줘 | Markdown Tables | 내가 모아둔 영화 리스트를 표로 정리해줘 |
+| 영어 계약서 번역하는데 용어를 일관되게 해줘 | Domain-Specific Prompting | 법률 문서 스타일로 계약서를 작성해줘 |
+
+예문 하나하나는 그럴듯하지만 **소재**(회의록·가격·영화·계약서)를 담는다. 질의와 소재가 겹치는 아무 카드가 이긴다 — 2026-08-15 진단("형태 괴리가 아니라 관계 종류가 문제")과 같은 현상이 문서 쪽에서 재현됐다. CORPUS_STRATEGY 가 적어 둔 함정("제네릭 예문이 오답 attractor")이 그대로 일어났다.
+
+**결정·근거**
+- **적용하지 않는다.** 백필(`backfill_views`)·`views.py` 등록 안 함. 사람 라벨 셋에서 dense 는 크게, rerank 는 작게 악화하고 AUC 는 그대로다.
+- 산출물(생성기·예문 JSON·A/B 도구)은 음성 결과의 재현 근거로 남긴다. 필요 없으면 지워도 운영 영향 없음.
+- 관측: **base AUC 가 0.857** 이다(2026-08-09 의 0.575 는 축약뷰·층 필터 이전 + 다른 양성 10개 기준). 그러나 무관 입력 6/7 이 여전히 τ=0.40 을 통과 — 판별 순위는 나아졌어도 **임계치 게이트는 여전히 못 쓴다**. 음성셋(100건) 없이는 확정 불가.
+
+**변경 파일**: 신규 `ingestion/gen_request_views.py` · `ingestion/request_views.json` · `eval/doc2query_eval.py` · `tests/test_request_views.py` · `CORPUS_STRATEGY.md`(doc2query ❌ 기각 표기)
+**검증**: `pytest tests/test_request_views.py` 4 passed(로컬·CI 조건) · A/B 2조건 × 116문항 × rerank on/off 실행 완료
