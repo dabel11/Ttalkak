@@ -44,7 +44,8 @@ from pathlib import Path
 # 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
 # 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
 from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
-from app.main import retriever, generator, extract_improved_prompt, run_generation
+# app.main 은 import 만으로 bge-m3 로드 + MySQL 접속을 한다 → main() 안에서만 가져온다.
+# 이 모듈의 헬퍼(_loads_loose 등)만 쓰는 defect_canary·테스트가 모델·DB 없이 돌게 하기 위함.
 
 
 # ── 실행/채점용 '순수 LLM' (딸각 시스템프롬프트 없음) ────────────
@@ -225,6 +226,8 @@ def _num(v):
 
 
 def main():
+    from app.main import retriever, run_generation
+
     ap = argparse.ArgumentParser(
         description="딸각 결과 상향(uplift) 평가 — raw vs 개선프롬프트 결과물 A/B")
     ap.add_argument("--qa", default="uplift_set.json", help="평가셋 파일명 (eval/ 기준)")

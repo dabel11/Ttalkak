@@ -3008,3 +3008,28 @@ A팔 번역 개선안은 "1. Request Normalization Prompting 기법에 따라 �
 - `gen_eval` 캐시 키에 분석기 결과가 없다 — 분석기 출력이 달라져도 같은 키면 캐시 히트. 이번엔 두 팔의 기법 목록이 달라 충돌은 없었다.
 
 **변경 파일**: 없음(측정·기록만) · 스크래치 `drive_b.py`·`replay3.py`
+
+---
+
+## [2026-09-19] CI 에 rag-server 단위 테스트 추가 · 측정 도구 3곳 `types` 미정의(NameError) 수정
+**목적**: rag-server 는 CI 에서 전혀 검사되지 않았다(통합 스모크도 가짜 RAG 만 씀). "조용히 죽어 있던" 결함이 네 번 반복된 만큼 최소한의 자동 검사를 건다.
+
+**Before**
+- `.github/workflows/ci.yml` 에 Python job 없음.
+- `eval/uplift_eval.py` 가 모듈 최상단에서 `app.main` 을 import → 헬퍼(`_loads_loose` 등)만 쓰는 `defect_canary`·테스트도 import 순간 bge-m3 로드 + MySQL 접속. 로컬에선 모델 캐시·DB 가 있어 통과, CI 에선 불가.
+- `c91201b`(측정 도구 타임아웃 추가)가 Gemini 분기 3곳에 `types.HttpOptions` 를 넣으면서 `from google.genai import types` 를 빠뜨림 → **Gemini 경로로 돌면 NameError**. Groq 우선이라 드러나지 않았다: `eval/uplift_eval.py:_get_client` · `ingestion/gen_examples.py` · `ingestion/ingest_knowledge.py`.
+
+**After**
+- CI job `rag-server`: Python 3.11(Dockerfile 과 동일) · `requirements-test.txt`(torch·sentence-transformers 제외) · `ruff check --select F821,E9`(정의 안 된 이름·문법 오류만) · `pytest tests -q`.
+- `uplift_eval` 의 `app.main` import 를 `main()` 안으로 이동(동작 불변 — `retriever`·`run_generation` 은 `main()` 에서만 쓰임, 다른 도구는 `app.main` 을 직접 import).
+- 3곳에 `from google.genai import types` 추가.
+
+**변경 파일**: `.github/workflows/ci.yml` · 신규 `requirements-test.txt` · `eval/uplift_eval.py` · `ingestion/gen_examples.py` · `ingestion/ingest_knowledge.py`
+
+**검증**
+- 커밋된 트리(HEAD + 이 수정) 를 `.env` 없는 worktree 에서 `requirements-test.txt` 만으로: ruff 통과 · `pytest` 97 passed (Python 3.10). 작업 트리 전체(미커밋 테스트 포함) 172 passed.
+- ruff F821 이 수정 전 `gen_examples.py` 의 `types` 를 잡는 것 확인.
+
+**결정·근거**
+- ruff 는 F821·E9 만 켠다. 전체 규칙은 기존 코드에서 대량 경고가 나 CI 를 소음으로 만든다.
+- ⚠️ `tests/` 가 `app.main`·`app.core.embeddings` 를 import 하게 되면 CI 가 깨진다 — `requirements-test.txt` 머리말에 명시.

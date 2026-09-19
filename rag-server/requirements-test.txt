@@ -1,0 +1,13 @@
+# ── CI 단위 테스트용 (tests/) — 모델·DB 없이 돈다 ──
+# requirements.txt 의 torch·sentence-transformers(수 GB)는 뺐다. tests/ 는 app.main 을
+# import 하지 않으므로 필요 없다. 테스트가 app.main 이나 app.core.embeddings 를 import 하게
+# 되면 CI 에서 bge-m3 다운로드 + MySQL 접속을 시도하다 실패한다 — 그런 테스트는 만들지 말 것.
+pytest>=8.0.0
+ruff>=0.6.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+SQLAlchemy>=2.0.0
+PyMySQL>=1.1.0
+numpy>=1.24.0
+google-genai>=1.0.0
+groq>=0.11.0
