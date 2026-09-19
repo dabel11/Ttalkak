@@ -35,6 +35,12 @@ import argparse
 import hashlib
 import json
 import os
+
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
 import pathlib
 import re
 import sys
@@ -335,12 +341,14 @@ class LLMJudge:
         if os.environ.get("GROQ_API_KEY"):
             from groq import Groq
             self.backend = "groq"
-            self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
+            self.client = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
             self.model = model or "llama-3.3-70b-versatile"
         elif os.environ.get("GEMINI_API_KEY"):
             from google import genai
+            from google.genai import types
             self.backend = "gemini"
-            self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+            self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+                                       http_options=types.HttpOptions(timeout=GEN_MILLIS))
             self.model = model or "gemini-2.0-flash"
         else:
             raise EnvironmentError(

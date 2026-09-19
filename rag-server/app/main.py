@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # .env 는 app/__init__.py 에서 로드됨
+from app.core.concurrency import GateBusy, GateTimeout, generation_gate
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
@@ -22,16 +23,32 @@ app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 
 # ── /index 보호 ──────────────────────────────────────────────
 # RAG_INDEX_API_KEY 가 설정돼 있으면 X-API-Key 헤더가 일치해야 인덱싱 허용.
-# 미설정이면 로컬 개발 편의상 허용하되 기동 시 경고. (/query 는 제품 API라 공개 유지)
+# **미설정이면 엔드포인트 자체를 막는다(503)** — 종전의 '경고 후 허용'은 실제로
+# 무인증 노출로 이어졌다(2026-09-13). 자세한 경위는 _verify_index_key 참조.
+# (/query 는 제품 API라 공개 유지 — 대신 동시 실행은 게이트로 제한한다)
 _INDEX_API_KEY = os.environ.get("RAG_INDEX_API_KEY", "")
 if not _INDEX_API_KEY:
-    print("[Main] ⚠️  RAG_INDEX_API_KEY 미설정 — /index 가 무인증입니다. 배포 시 .env에 설정하세요.")
+    print("[Main] /index 비활성 (RAG_INDEX_API_KEY 미설정). 쓰려면 .env 에 키를 설정하세요.")
 
 
 def _verify_index_key(provided: str | None) -> None:
-    """키가 설정된 경우에만 검사. 불일치 시 403."""
+    """실패에 닫힌다(fail-closed) — 키가 없으면 엔드포인트 자체를 막는다.
+
+    종전에는 키 미설정 시 **경고만 찍고 허용**했다. 실제로 `.env` 의
+    `RAG_INDEX_API_KEY` 가 주석 처리돼 있어 운영에서 무인증이었고, compose 가
+    8000 포트를 모든 인터페이스에 열어 두어 같은 네트워크의 누구나 코퍼스에
+    임의 청크를 넣을 수 있었다. 주입된 청크는 이후 모든 요청에서 `[참고 기법]`
+    으로 생성 LLM 에 들어가므로 **프롬프트 인젝션 경로**가 된다.
+
+    저장소 전체에서 `/index` 를 호출하는 코드는 없다(모든 적재 스크립트는
+    `ingestion/*` 에서 DB 에 직접 쓴다). 따라서 막아도 깨지는 경로가 없고,
+    '키를 깜빡함'이 곧 '노출'이 되지 않는 쪽이 옳다.
+    """
     if not _INDEX_API_KEY:
-        return
+        raise HTTPException(
+            status_code=503,
+            detail="/index 는 비활성 상태입니다. RAG_INDEX_API_KEY 를 설정하세요.",
+        )
     if not provided or not hmac.compare_digest(provided, _INDEX_API_KEY):
         raise HTTPException(status_code=403, detail="X-API-Key 가 없거나 올바르지 않습니다.")
 
@@ -43,9 +60,18 @@ app.add_middleware(
 )
 
 indexer  = Indexer()
-# fetch_k=20: 측정상 파레토 최적 — 50은 전 지표 열세+2.5배 느림, 10은 지연 절반이나 Recall@5 -4.5%p
-# (WORKLOG 2026-07-05 스윕 표 참조. 변경 시 python -m eval.run_eval --fetch-k 로 재측정)
-retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=20)  # 리랭커 단독 (평가상 최적)
+# fetch_k=50 (2026-09-13 변경). 종전 20 의 근거(2026-07-05 스윕)는 108~134청크 시절 값이라
+# 현 코퍼스(170청크 + embedding_views)에서 성립하지 않는다. 커버리지 97% 평가셋을 새로 만들어
+# 두 셋을 대조한 결과:
+#     fetch_k |  qa_set_realistic R@5 | qa_set_coverage R@5 | 지연
+#         10  |  0.777 (최고)         | 0.386               | 1.2s
+#         20  |  0.763                | 0.421               | 2.0s
+#         50  |  0.763 (20과 동일)    | 0.474 (최고)        | 4.5s
+# → 쉬운 구간 손실 0, 어려운 구간 +5.3pp, 비용은 지연뿐. /query end-to-end 는 LLM 이 지배(~19s)
+#   하므로 +2.5s 는 약 13%. (WORKLOG 2026-09-13. 재측정: python3 -m eval.run_eval --rerank --fetch-k)
+# 리랭커 유지: 어려운 구간에서 R@5 +12.3pp — 2026-08-15 의 '리랭커 무용' 판단은 미검증 gold 10항목
+#   기반이었고 두 평가셋 모두에서 뒤집혔다.
+retriever = Retriever(use_reranker=True, use_hybrid=False, fetch_k=50)
 generator = Generator()
 
 
@@ -110,10 +136,15 @@ def run_generation(query: str, contexts: list[dict], model: str,
            summary, questions, fields, structured}.
     필드 조립은 순수 함수 assemble_fields() 가 담당(LLM 없이 단위 테스트됨).
     JSON 파싱 실패 시 레거시 정규식 추출로 폴백(structured=False)."""
-    analysis = analyzer.analyze(query, history) if use_analyzer else None
+    # ⭐ LLM 구간은 직렬화한다(app/core/concurrency.py).
+    # 생성 1건이 Groq TPM 8,000 중 ~7,800 을 점유하므로 동시 2건이면 두 번째는 반드시
+    # 429 → Gemini 폴백 → Gemini RPD 20 소진 → 두 백엔드 동시 차단. 줄을 세우는 편이
+    # 폴백 쿼터까지 태우는 것보다 낫다. 검색·리랭크는 게이트 밖(병렬 유지).
+    with generation_gate.enter():
+        analysis = analyzer.analyze(query, history) if use_analyzer else None
 
-    raw = generator.generate(query=query, contexts=contexts, model=model,
-                             history=history, analysis=analysis)
+        raw = generator.generate(query=query, contexts=contexts, model=model,
+                                 history=history, analysis=analysis)
     if not (raw and raw.strip()):
         raise RuntimeError("생성 결과가 비어 있습니다.")
 
@@ -128,7 +159,9 @@ def run_generation(query: str, contexts: list[dict], model: str,
 # ── 엔드포인트 ───────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # 게이트 상태를 함께 노출 — 503 이 '서버 고장'인지 '줄이 길어서'인지 구분하려면
+    # 운영 중에 대기열을 볼 수 있어야 한다.
+    return {"status": "ok", "generation": generation_gate.stats()}
 
 
 @app.post("/index", response_model=IndexResponse)
@@ -143,9 +176,18 @@ def index_chunks(req: IndexRequest,
     return IndexResponse(indexed_count=count, collection_name=req.collection_name)
 
 
-@app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest):
-    history = req.history or []
+def retrieve_contexts(req: "QueryRequest",
+                      history: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+    """검색 단계 전체 — (기법 청크, 예시 청크) 를 돌려준다. /query 와 평가가 **공유**한다.
+
+    왜 함수로 뺐나 (2026-09-16): gen_eval 이 이 로직을 **따로 복제**해 들고 있었고,
+    복제본은 `min_score` 를 넘기지 않고(항상 5개) 예시 주입도 하지 않았다. 즉 기준선이
+    운영과 다른 파이프라인을 재고 있었다. 모델 기본값·타임아웃·예산 드리프트와 같은
+    원인(중복)이라, 복제 대신 이 한 곳을 양쪽이 부르게 한다.
+
+    404 판정(검색 0건 + 첫 턴)은 HTTP 관심사라 여기서 하지 않는다 — 호출자가 판단한다.
+    """
+    history = history or []
 
     # 검색에는 '기법 검색용 쿼리'를 쓰고, 생성에는 원본 프롬프트를 그대로 쓴다.
     if req.use_hyde:
@@ -163,20 +205,10 @@ def query(req: QueryRequest):
         use_hybrid=req.use_hybrid,
         min_score=req.min_score,
     )
-    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
-    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
-    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
-    # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
-    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
-    if not retrieved and not history:
-        raise HTTPException(
-            status_code=404,
-            detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
-        )
 
     # ── C(타입별 멀티 컬렉션): 예시 컬렉션에서 '유사 요청 개선 사례'를 별도 검색해 주입 ──
     # 예시는 원본 거친 요청(req.query)과 매칭한다(기법 검색용 변환쿼리가 아님 — 예시의 'before'가
-    # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(20건 규모 typed 컬렉션엔 dense로 충분,
+    # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(typed 컬렉션엔 dense로 충분,
     # 쿼리당 리랭크 2회 지연 방지). min_score 미달·빈 컬렉션·검색 실패는 모두 '예시 없음'으로 흡수.
     examples: list[dict] = []
     if req.use_examples and req.n_examples > 0:
@@ -193,9 +225,33 @@ def query(req: QueryRequest):
             print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
             examples = []
 
+    return retrieved, examples
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    history = req.history or []
+    retrieved, examples = retrieve_contexts(req, history)
+
+    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
+    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
+    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
+    # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
+    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
+    if not retrieved and not history:
+        raise HTTPException(
+            status_code=404,
+            detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
+        )
+
     try:
         # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)
         gen = run_generation(req.query, retrieved + examples, req.model, history)
+    except (GateBusy, GateTimeout) as e:
+        # 동시 요청 제한 — 서버가 망가진 게 아니라 '지금은 순서가 아니다'.
+        # 503 은 기존 에러 계약(ADR-0008)과 같지만 Retry-After 로 재시도 시점을 준다.
+        raise HTTPException(status_code=503, detail=str(e),
+                            headers={"Retry-After": "30"})
     except RuntimeError as e:
         # 빈 생성·백엔드 한도 등 — 명확히 503 (extract(None) 500 크래시 방지 겸용)
         raise HTTPException(status_code=503, detail=str(e))

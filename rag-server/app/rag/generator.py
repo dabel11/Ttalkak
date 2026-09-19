@@ -1,10 +1,12 @@
 import os
+import re
 import time
+
 from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 
-import re
+from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
 
 # 한글 단어에 '직접 붙어' 끼어든 한자(Han) 노이즈만 제거한다.
 # (Groq 70b가 한글 출력에 간혹 한자를 글자에 붙여 토해내는 현상 대응)
@@ -42,6 +44,21 @@ def _est_tokens(text: str) -> int:
     ascii_ = len(_ASCII_RE.findall(text))
     other  = len(text) - hangul - ascii_
     return int(hangul / 1.0 + ascii_ / 4 + other / 1.5)
+
+
+def _gen_reasoning_effort() -> str | None:
+    """생성기 추론량. GEN_REASONING_EFFORT 환경변수로 지정(미설정=모델 기본값).
+
+    gpt-oss 계열은 최종 출력 앞에 추론 토큰을 먼저 쓴다. analyzer·query_transform 에서는
+    그 때문에 예산이 소진돼 아예 실패했고(2026-09-13), 'low' 로 완료 토큰이 1/6 로 줄었다.
+    생성기는 `_fit_max_tokens` 동적 산정 덕에 즉사하지는 않았지만, 추론 토큰이 출력 예약을
+    갉아먹으므로 TPM 여유·긴 원문 verbatim 여력에 영향이 있다.
+
+    ⚠️ 다만 생성은 analyzer 와 달리 **추론량이 품질에 직결될 수 있다**(모드 판정·기법 반영·
+    원문 보존). 그래서 기본값을 바꾸지 않고 A/B 용 토글로만 둔다 — 측정 없이 켜지 말 것.
+    """
+    value = os.environ.get("GEN_REASONING_EFFORT", "").strip().lower()
+    return value if value in ("low", "medium", "high") else None
 
 
 def _gen_temperature() -> float:
@@ -330,7 +347,8 @@ def build_analysis_block(analysis: dict | None) -> str:
         elif role == "fact":
             lines.append(f"- {f['name']} [fact] = (없음 → 지어내지 말고 [{f['name']} 입력] 빈칸 + 질문)")
         elif role == "required":
-            # 분석기(8b)가 요청에 있는 값을 놓치는 경우가 있다(실측: "임영웅 콘서트 …"에서
+            # 분석기가 요청에 있는 값을 놓치는 경우가 있다(실측: llama-3.1-8b-instant 시절,
+            # 현 모델 openai/gpt-oss-20b 에서 재측정 안 됨 — "임영웅 콘서트 …"에서
             # 홍보 대상을 empty 로 판정 → 잘못된 ask). 단정 대신 '확인 요청'으로 렌더해
             # 원문을 함께 보는 생성기가 교정할 수 있게 한다.
             lines.append(f"- {f['name']} [required] = (분석기가 못 찾음 — 원문을 다시 확인해 "
@@ -383,7 +401,7 @@ class GroqGenerator:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             raise EnvironmentError("GROQ_API_KEY 환경변수를 설정해주세요.")
-        self.client = Groq(api_key=api_key)
+        self.client = Groq(api_key=api_key, timeout=GEN_SECONDS)
         print("[Generator] Groq 백엔드 초기화 완료")
 
     def generate(self, query: str, contexts: list[dict],
@@ -414,12 +432,14 @@ class GroqGenerator:
 
         for attempt in range(2):
             try:
+                effort = _gen_reasoning_effort()
                 response = self.client.chat.completions.create(
                     model=groq_model,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=_gen_temperature(),
                     response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
+                    **({"reasoning_effort": effort} if effort else {}),
                 )
                 return _strip_cjk_noise(response.choices[0].message.content)
             except RateLimitError as e:
@@ -462,6 +482,26 @@ def _resolve_gemini_model(model: str) -> str:
     return model
 
 
+def default_model(backend: str) -> str:
+    """백엔드별 '지금 실제로 호출 가능한' 기본 모델. 평가 스크립트의 단일 출처다.
+
+    왜 여기 있나: 이 값이 generator·uplift_eval·run_multi_turn_eval 세 곳에
+    **중복**돼 있었다. 2026-08-21 Groq 가 llama-3.x 를 폐기했을 때 generator 만
+    고쳐졌고 나머지 둘은 폐기 모델을 참조한 채 남아 **uplift 측정 축이 통째로
+    죽어 있었다**(404). 모델 교체는 앞으로도 반복되므로 출처를 하나로 둔다.
+
+    ⚠️ 평가 스크립트의 '중립 호출'(딸깍 시스템프롬프트 없이 결과물을 직접 만드는
+    호출)과 judge 호출은 Generator 를 거치지 않아 `_resolve_gemini_model` 의
+    보정을 못 받는다. 그 경로들이 이 함수를 써야 한다.
+    """
+    if backend == "gemini":
+        return _resolve_gemini_model("")
+    if backend == "groq":
+        # GROQ_MODEL_MAP 의 대표 별칭이 가리키는 실제 모델(= 생성용 대형)
+        return GroqGenerator.GROQ_MODEL_MAP.get("gemini-2.0-flash", "openai/gpt-oss-120b")
+    raise ValueError(f"알 수 없는 백엔드: {backend}")
+
+
 class GeminiGenerator:
     """Gemini API 사용 (무료 티어 모델·쿼터는 _resolve_gemini_model 참고)"""
 
@@ -469,7 +509,11 @@ class GeminiGenerator:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY 환경변수를 설정해주세요.")
-        self.client = genai.Client(api_key=api_key)
+        # google-genai 는 밀리초 단위를 받는다
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=GEN_MILLIS),
+        )
         print("[Generator] Gemini 백엔드 초기화 완료")
 
     def generate(self, query: str, contexts: list[dict],
@@ -597,9 +641,11 @@ class Generator:
                 model=model, max_tokens=max_tokens,
                 history=history, analysis=analysis,
             )
-        except RuntimeError:
+        except RuntimeError as e:
             if backend is self._groq and self._gemini:
-                print("[Generator] Groq 실패 → Gemini 폴백")
+                # 원인을 반드시 남긴다 — 종전엔 사유 없이 "Groq 실패"만 찍혀서, 폴백 쪽(Gemini)
+                # 에러만 보이고 진짜 원인(대개 Groq 429)은 가려졌다(2026-09-16).
+                print(f"[Generator] Groq 실패 → Gemini 폴백 — 원인: {str(e)[:160]}")
                 return self._gemini.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,

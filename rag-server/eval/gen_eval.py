@@ -23,7 +23,7 @@ eval/gen_eval.py
 사용법 (rag-server/ 에서 실행, GROQ_API_KEY 필요):
     python -m eval.gen_eval
     python -m eval.gen_eval --qa gen_set.json --limit 4 --show
-    python -m eval.gen_eval --judge-model llama-3.3-70b-versatile
+    python -m eval.gen_eval --hyde              # HyDE 실험(운영과 다름)
     python -m eval.gen_eval --cache-file eval/.gen_cache.json   # 캐시 활성화(재평가 비용↓)
 """
 
@@ -35,9 +35,19 @@ import re
 import time
 from pathlib import Path
 
-from app.main import retriever, generator, extract_improved_prompt, run_generation
-from app.rag import query_transform
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_SECONDS
+from app.main import (retriever, generator, extract_improved_prompt, run_generation,
+                      retrieve_contexts, QueryRequest)
 from app.rag.generator import SYSTEM_PROMPT
+from app.rag.layers import is_searchable
+
+# 기법명 → 카드(층 판정용). main() 에서 채운다 — 필터와 무관하게 전량을 봐야
+# '반영할 수 없는 카드가 적용됐는가'를 셀 수 있다.
+_cards_by_name: dict = {}
 
 
 # ── 응답 캐시 (Groq 무료 TPD 100k 절약) ────────────────────────
@@ -47,9 +57,17 @@ from app.rag.generator import SYSTEM_PROMPT
 #  temperature 도 같은 이유로 포함 — 온도 비교 실험 캐시가 서로 오염되지 않게. 2026-07-23)
 
 def _cache_key(query: str, technique_names: list[str], model: str = "",
-               temperature: str = "") -> str:
+               temperature: str = "", example_ids: list[str] | None = None) -> str:
+    """생성 캐시 키. **생성 입력을 바꾸는 것은 전부 들어가야 한다.**
+
+    ⚠️ 2026-09-16: 예시(prompt_examples) 주입을 평가에도 넣으면서 예시 식별자를 키에
+    추가했다. 빠지면 '예시 없이 만든 생성'이 '예시 있는 입력'에 재사용돼 조용히 오염된다.
+    그래서 이 변경 이전의 캐시 파일은 전부 미스가 난다 — 의도된 결과다(다른 파이프라인의
+    산출물이므로 재사용하면 안 된다).
+    """
     payload = (str(model) + "|t" + str(temperature) + "|" + SYSTEM_PROMPT + "|"
-               + query + "|" + str(sorted(technique_names)))
+               + query + "|" + str(sorted(technique_names))
+               + "|ex" + str(sorted(example_ids or [])))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -90,7 +108,15 @@ def _retry(fn, tries: int = 4, base: float = 9.0):
             else:
                 raise
 
-_JUDGE_MODEL = "llama-3.3-70b-versatile"
+# judge 기본 모델 — generator.default_model() 이 단일 출처다.
+# 종전 하드코딩 "llama-3.3-70b-versatile" 은 2026-08-21 Groq 폐기분이라
+# 이 채점 경로가 404 로 죽어 있었다(2026-09-13 발견).
+def _judge_model_default() -> str:
+    from app.rag.generator import default_model
+    return default_model("groq" if __import__("os").environ.get("GROQ_API_KEY") else "gemini")
+
+
+_JUDGE_MODEL = _judge_model_default()
 
 _JUDGE_SYSTEM = """너는 '프롬프트 개선 어시스턴트'의 응답을 채점하는 엄격한 평가자다.
 이 어시스턴트(딸각)는 사용자의 거친 프롬프트를 받아, 결과물을 직접 쓰지 않고
@@ -120,6 +146,14 @@ _JUDGE_SYSTEM = """너는 '프롬프트 개선 어시스턴트'의 응답을 채
 반드시 아래 JSON 한 개만 출력한다(설명 금지):
 {"mode_fit": <1-5>, "technique_grounding": <1-5>, "instruction_form": <1-5 또는 null>, "intent_preservation": <1-5>, "faithfulness": <1-5 또는 null>, "fabricated": <true/false>, "reason": "<한 줄 근거>"}"""
 
+# 🧠 gpt-oss 계열은 최종 출력 앞에 **추론 토큰**을 먼저 쓴다. 비추론 모델(llama-3.x) 기준으로
+# 잡힌 예산은 추론에서 소진돼 본문이 빈 문자열로 온다. JSON 모드면 400 으로 시끄럽게 터지지만,
+# 평문 모드면 정상 200 에 내용만 없어 **예외 없이 조용히** 실패한다 — gen_eval 의 judge 가
+# 정확히 그랬고(max_tokens=300, 평문), 점수가 전부 None 인데 '실패' 로그도 안 남았다.
+# 해법은 예산 증액이 아니라 추론량 감축이다(Groq 는 입력+출력예약을 합산해 TPM 을 잡는다).
+_REASONING_EFFORT = "low"
+_JUDGE_MAX_TOKENS = 900   # 실사용 ~200(low). JSON 강제도 함께 켠다
+
 _judge_client = None
 
 
@@ -130,7 +164,7 @@ def _get_judge():
         key = os.environ.get("GROQ_API_KEY")
         if not key:
             raise EnvironmentError("GROQ_API_KEY 가 필요합니다 (judge LLM).")
-        _judge_client = Groq(api_key=key)
+        _judge_client = Groq(api_key=key, timeout=GEN_SECONDS)
     return _judge_client
 
 
@@ -161,7 +195,9 @@ def _judge(query: str, techniques: list[str], answer: str,
             {"role": "system", "content": _JUDGE_SYSTEM},
             {"role": "user",   "content": user},
         ],
-        max_tokens=300,
+        max_tokens=_JUDGE_MAX_TOKENS,
+        reasoning_effort=_REASONING_EFFORT,
+        response_format={"type": "json_object"},
         temperature=0.0,
     )
     return _loads_loose(resp.choices[0].message.content or "")
@@ -186,10 +222,20 @@ def main():
     ap.add_argument("--show", action="store_true", help="항목별 응답·점수 상세 출력")
     ap.add_argument("--cache-file", default=None,
                     help="생성 응답 캐시 JSON 경로 (지정 시 동일 조건 재호출 스킵)")
+    # ⚠️ 기본값을 off 로 되돌렸다(2026-09-13). 운영(`main.py` QueryRequest.use_hyde)은
+    #    2026-07-30 재평가 이후 HyDE **off** 인데 이 하네스만 on 이 기본이었다 —
+    #    HyDE 는 R@5 를 0.763→0.441 로 떨어뜨리므로, 그동안의 생성 평가는 운영보다
+    #    훨씬 나쁜 검색 위에서 측정된 값이다. 평가는 기본적으로 운영과 같아야 한다.
+    ap.add_argument("--no-layer-filter", action="store_true",
+                    help="층 필터 끄기(검색 대상 자격 없는 카드도 회수) — A/B 기준선용")
+    ap.add_argument("--hyde", action="store_true",
+                    help="검색 시 HyDE 적용(실험용). 기본은 운영과 동일하게 off.")
     ap.add_argument("--no-hyde", action="store_true",
-                    help="검색 시 HyDE 미적용(baseline). 기본은 운영과 동일하게 HyDE on.")
+                    help="(하위호환) 이제 기본값이라 아무 효과 없음")
     args = ap.parse_args()
-    use_hyde = not args.no_hyde
+    use_hyde = args.hyde
+    if args.no_hyde and not args.hyde:
+        print("[gen_eval] --no-hyde 는 이제 기본값입니다(무시). HyDE 를 켜려면 --hyde")
 
     qa_path = Path(__file__).parent / args.qa
     data = json.loads(qa_path.read_text(encoding="utf-8"))
@@ -203,8 +249,17 @@ def main():
     cache = _load_cache(args.cache_file)
     cache_hits = 0
     temperature = os.environ.get("GEN_TEMPERATURE", "0.7")   # generator 와 동일 규약
+
+    # 층 필터: 운영 기본값(on)을 따르되 A/B 를 위해 끌 수 있다
+    retriever.use_layer_filter = not args.no_layer_filter
+    from ingestion.tag_layers import load_cards
+    _cards_by_name.clear()
+    _cards_by_name.update({str(c["technique"]).strip().lower(): c for c in load_cards(0)})
     print(f"생성 평가셋: {args.qa}  (컬렉션 {collection}, {len(items)}개, "
           f"temp={temperature}, HyDE={'on' if use_hyde else 'off'}, "
+          f"층필터={'on' if retriever.use_layer_filter else 'off'}, "
+          f"min_score={QueryRequest.model_fields['min_score'].default}, "
+          f"예시={QueryRequest.model_fields['n_examples'].default}, "
           f"judge={'생략' if args.no_judge else args.judge_model})"
           + (f"  캐시: {args.cache_file} ({len(cache)}건)" if args.cache_file else ""))
 
@@ -216,6 +271,10 @@ def main():
     fabricated_known = 0  # fabricated 판정이 있는 개선 모드 건수
     structured_n = 0     # 구조화 JSON 파싱 성공(정규식 폴백 미발동) 건수
     structured_known = 0  # structured 필드가 있는 건수(구형 캐시는 알 수 없음)
+    no_evidence = 0       # 운영이라면 404 가 났을 건수(검색 0건 + 첫 턴)
+    applied_total = 0     # 개선안에 적용된 기법 수
+    applied_unusable = 0  # 그중 검색 대상 자격이 없는 층(meta·system·degenerate)
+    tech_by_mode: dict[str, list] = {}
 
     for i, it in enumerate(items, 1):
         query = it["query"]
@@ -223,12 +282,24 @@ def main():
 
         # 운영과 동일: use_hyde 면 검색 쿼리를 기법 카드형으로 재작성(main.py 엔드포인트와 일치).
         # 실패 시 hyde()가 원본 반환하므로 검색은 절대 끊기지 않음.
-        search_query = query_transform.hyde(query) if use_hyde else query
-        retrieved = retriever.search(query=search_query, collection_name=collection, top_k=5)
+        # ⭐ 운영 /query 와 **같은 함수**로 검색한다(app.main.retrieve_contexts).
+        # 종전 복제본은 min_score 를 안 넘겨 항상 5개를 받았고 예시도 주입하지 않았다 —
+        # 기준선이 운영과 다른 파이프라인을 재고 있었다(2026-09-16).
+        req = QueryRequest(query=query, collection_name=collection, use_hyde=use_hyde)
+        retrieved, examples = retrieve_contexts(req)
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
+        example_ids = [str((e.get("metadata") or {}).get("chunk_id") or e.get("text", "")[:40])
+                       for e in examples]
 
-        ckey = _cache_key(query, techniques, args.model, temperature) if args.cache_file else None
+        if not retrieved:
+            # 운영에서는 첫 턴 + 검색 0건이면 404 — 생성 자체가 일어나지 않는다
+            no_evidence += 1
+            print(f"  [{i:>2}] 404(근거 없음) — 운영에서는 생성하지 않음  | {query[:30]}")
+            continue
+
+        ckey = (_cache_key(query, techniques, args.model, temperature, example_ids)
+                if args.cache_file else None)
         if ckey and ckey in cache:
             cached = cache[ckey]
             if isinstance(cached, dict):           # 신형 캐시: run_generation 결과 dict
@@ -240,7 +311,7 @@ def main():
         else:
             try:
                 # 운영과 동일 경로(JSON 구조화 + 폴백) — /query 와 같은 run_generation 사용
-                gen = _retry(lambda: run_generation(query, retrieved, args.model, []))
+                gen = _retry(lambda: run_generation(query, retrieved + examples, args.model, []))
             except Exception as e:
                 print(f"  [{i}] 생성 실패: {e}")
                 continue
@@ -250,7 +321,18 @@ def main():
 
         answer   = gen["answer"]
         improved = gen["improved_prompt"]
-        mode = "improve" if improved else "ask"
+        # 운영 규약: mode 필드가 프론트 분기의 단일 기준(추측 금지). 구형 캐시만 추정으로 폴백.
+        mode = gen.get("mode") or ("improve" if improved else "ask")
+
+        # ── 결정론적 지표: 적용된 기법 중 '반영할 수 없는 층'의 비율 ──
+        # judge 의 technique_grounding 은 "검색된 것을 반영했나"만 보고 "그게 맞는 기법이었나"는
+        # 못 본다. 기준선에서 적용 기법의 20%(9/45)가 meta·system 카드였는데 judge 는 전부 5점을 줬다.
+        if mode == "improve":
+            for a in gen.get("techniques_applied") or []:
+                card = _cards_by_name.get(str(a).strip().lower())
+                applied_total += 1
+                if card is not None and not is_searchable(card):
+                    applied_unusable += 1
         if expected:
             mode_total += 1
             mode_correct += 1 if mode == expected else 0
@@ -270,6 +352,7 @@ def main():
                 verdict = {}
         for k in scores:
             scores[k].append(verdict.get(k))
+        tech_by_mode.setdefault(mode, []).append(verdict.get("technique_grounding"))
         # 환각률: 개선 모드에서 fabricated(bool) 판정이 있을 때만 집계
         if mode == "improve" and isinstance(verdict.get("fabricated"), bool):
             fabricated_known += 1
@@ -309,6 +392,18 @@ def main():
         print(f"  {'환각률(fabricated)':<18}: {rate:.2f}  ({fabricated_n}/{fabricated_known} 개선안이 없는 사실 창작)")
     if structured_known:
         print(f"  {'structured(JSON)':<20}: {structured_n}/{structured_known}  (정규식 폴백 {structured_known - structured_n}회)")
+    print("─" * 52)
+    print("  [결정론 지표 — judge 가 못 보는 것]")
+    if applied_total:
+        print(f"  {'반영불가 기법 적용률':<16}: {applied_unusable/applied_total:.2f}  "
+              f"({applied_unusable}/{applied_total} — meta·system·degenerate 카드가 개선안에 쓰임)")
+    for m_ in ("improve", "ask"):
+        vals = tech_by_mode.get(m_) or []
+        a = _avg(vals)
+        cnt = len([v for v in vals if isinstance(v, (int, float))])
+        label = f"technique_grounding({m_})"
+        print(f"  {label:<26}: {a:.2f}  (n={cnt})" if a is not None else f"  {label:<26}: N/A")
+    print(f"  {'404(근거 없음)':<20}: {no_evidence}/{n}  (운영이라면 생성 자체가 안 됨)")
     print("═" * 52)
 
 

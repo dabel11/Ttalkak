@@ -286,3 +286,35 @@ jobs:
 
       - name: Run backend tests
         run: ./gradlew test --no-daemon
+
+  rag-server:
+    name: RAG server unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: rag-server
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          # Dockerfile(python:3.11-slim)과 같은 버전
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: rag-server/requirements-test.txt
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      # 정의 안 된 이름·문법 오류만 본다. Gemini 경로에서만 실행되는 줄의 NameError 가
+      # 테스트를 통과한 채 들어온 적이 있다(c91201b, 3곳).
+      - name: Check undefined names
+        run: ruff check --select F821,E9 app eval ingestion tests
+
+      - name: Run unit tests
+        run: python -m pytest tests -q

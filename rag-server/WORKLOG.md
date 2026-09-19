@@ -1733,3 +1733,1417 @@ gold 를 보지 않는 고정 템플릿으로 질의 형태만 카드 쪽에 정
 **결정·근거**
 - Groq 잔존 모델 중 `gpt-oss-120b/20b`가 기존 70b/8b의 역할 분담(생성/판단)에 그대로 대응돼 구조 변경 없이 이름만 교체.
 - **미검증으로 남긴 것**: 교체가 검색·생성 품질에 준 영향의 정량 비교(A/B). 기능 복구가 우선이라 라이브 A/B는 수행하지 않았다. `analyzer`가 그간 404로 무력화돼 있었으므로, 과거 평가 수치는 analyzer 없는 상태에서 측정된 것일 수 있어 재측정이 필요하다.
+
+---
+
+## [2026-09-08] 분석기 A·D 수정 — 축 폐기 버그 차단 · 정제 규칙 관측 가능화
+**목적**: 전수조사에서 나온 analyzer 결함 2건. 둘 다 **축 라우팅 배선 전에** 고쳐야 하는 것들이다 — A는 배선하는 순간 조회 경로를 죽이고, D는 배선 후 문제가 나도 원인을 판별할 수 없게 만든다.
+
+### A. 필드가 비면 `techniqueAxes` 가 통째로 폐기됨
+
+**Before** (`analyzer.py`)
+```python
+fields = _sanitize(data.get("fields") or [])
+if not fields:
+    return None          # ← 축이 잘 뽑혔어도 여기서 함께 폐기
+```
+- 지금은 축이 미배선이라 무해하지만, `DESIGN_TECHNIQUE_ROUTING.md` 5단계(조회 경로 연결)를 하는 순간 **실질 버그**가 된다. 축 판정은 성공했는데 필드가 비었다는 이유로 축까지 사라지고, 호출자는 유사도 폴백(AUC 0.575 경로)으로 떨어진다.
+- `_sanitize` 가 만능 필드(`_JUNK`)·작업유형 오염(`_TASK_WORDS`)을 걷어내면 필드가 0이 되는 경로가 실제로 존재한다.
+
+**After**
+```python
+fields = _sanitize(data.get("fields") or [])
+axes   = normalize_axes(data.get("techniqueAxes"))
+if not fields and not axes:   # 둘 다 비었을 때만 '분석 실패'
+    return None
+```
+- `None` 의 의미를 **분석 실패 하나로** 좁혔다(키 없음·호출 실패·파싱 실패·산출물 전무).
+- **생성 경로 무회귀 근거**: `generator.build_analysis_block()` 이 이미 `not analysis.get("fields")` 에서 `""` 를 반환한다(generator.py:323) → 빈 fields 분석은 `analysis=None` 과 렌더 결과가 **완전히 동일**하다. 이 등가성을 테스트로 고정했다.
+
+### D. 정제 규칙의 근거가 폐기된 모델 것인데 조용히 동작
+
+**Before**
+- 주석이 *"8b 는 …"* 이라 적혀 있으나 `_MODEL` 은 2026-08-21에 `openai/gpt-oss-20b` 로 교체됨.
+- `_JUNK`·`_TASK_WORDS`·`_FRAMING_EXACT`·`_MAX_REQUIRED` 전부 `llama-3.1-8b-instant` 오염 실측 기반. **현 모델에서 재측정된 적 없음.**
+- 규칙이 발동해도 `continue` 로 **조용히 버려서**, 지금 이 방어가 (a)여전히 필요한지 (b)불필요한 교정을 하는지 (c)새 오염을 놓치는지 **판별할 방법이 없었다.**
+
+**After**
+- 주석에 근거의 출처(폐기 모델)와 미검증 상태를 명시.
+- `_record_drop(rule, name)` 으로 교정 발동을 규칙별 집계 + 로그. 읽기는 `sanitize_stats()`, 구간 분리는 `reset_sanitize_stats()`.
+- 규칙 6종: `junk` · `task_word` · `framing_coerced` · `role_unknown` · `required_over_cap` · `not_dict`
+- **규칙 동작 자체는 안 바꿨다** — 관측만 추가(무회귀). `framing_coerced` 만 `and role != "framing"` 조건을 붙여 **이미 framing 인 것을 교정으로 오집계하지 않게** 했다(동작 동일, 카운터 오탐 제거).
+- ⚠️ 규칙 제거는 이 카운터가 쌓인 뒤에 한다. 지금 지우면 8b 시절 회귀를 되살리면서 그게 회귀인지조차 판별 못 한다.
+
+**변경 파일**
+- 수정: `app/rag/analyzer.py` (모듈 docstring · `_sanitize` 관측 · `analyze` 반환 계약 · 낡은 8b 주석)
+- 수정: `app/rag/generator.py` (`build_analysis_block` 의 "분석기(8b)" 표기 정정 1곳)
+- 수정: `RAG_PIPELINE.md` §1-[C0]
+- 신규: `tests/test_analyzer.py` (9개 — LLM·DB 없이 동작, Groq 클라이언트는 fake 주입)
+
+**검증**
+- `python3 -m tests.test_analyzer` → **9 passed**
+- `python3 -m pytest tests/ -q` → **71 passed** (종전 61 + 신규 9 + axes 수 변동)
+- 비pytest 3종 회귀 없음: postprocess 43 / token_budget 13 / generator_guards 16 / axes 13
+
+**미검증으로 남긴 것**
+- `gpt-oss-20b` 에서 각 방어 규칙이 실제로 필요한지 — **이번 변경은 그 질문을 측정 가능하게 만든 것이지 답한 것이 아니다.** 라이브 트래픽/`gen_eval` 실행 후 `sanitize_stats()` 를 읽어 판정할 것.
+- 축이 배선되지 않았으므로 A 수정의 실효(조회 경로 보존)는 **아직 end-to-end로 확인 불가**. 배선 시 함께 확인.
+
+**남은 analyzer 결함(미착수)** — 전수조사 지적 중 이번에 안 고친 것
+- **B**: `required` 상한 강등이 LLM 출력 **순서 의존**(앞 2개만 유지). 작업유형별 required 목록과 대조해 고르는 게 맞다
+- **C**: `history[-4:]` 고정 → 문서가 주장하는 "같은 질문 반복 구조적 차단"이 **실제로는 2턴 보장**
+- **E**: `max_tokens=700` 고정 → 긴 원문에서 분석기만 먼저 죽어 `None` 폴백(분석이 가장 필요한 케이스)
+- **F**: 축 카탈로그 추가 후 축 선택 일관성·기존 mode 정확도(0.83) 재측정 안 됨
+
+---
+
+## [2026-09-12] 축 태깅 복구 — 모델 교체 + 출력 예산 버그 · 120b 파일럿
+**목적**: 축 라우팅 배선의 1단계. `tag_axes.py` 가 폐기 모델을 참조해 실행 불가였던 것을 복구하고, 교체 모델이 '축 선택'이라는 판단을 할 수 있는지 파일럿으로 확인.
+
+### 발견한 결함 2건 (하나인 줄 알았는데 둘이었다)
+
+**① 폐기 모델 참조** — `_MODEL = "llama-3.3-70b-versatile"`. 2026-08-21 Groq 폐기분이라 실행 시 전량 404.
+→ 같은 역할(대형=판단)인 **`openai/gpt-oss-120b`** 로 교체.
+
+**② 🔴 출력 예산 부족 — 교체만 하면 여전히 전량 실패**
+- `max_tokens=200` 으로 20장 중 **20장 전부 무배정**.
+- 원인은 쿼터가 아니라 **모델 계열 차이**: `gpt-oss` 는 최종 JSON 앞에 **추론 토큰**을 먼저 쓴다. 예산이 먼저 소진돼 Groq 가 `400 json_validate_failed` ("max completion tokens reached before generating a valid document") 를 낸다. `llama-3.3-70b` 는 추론 모델이 아니라 200 으로 충분했다.
+- 실측: 카드당 완료 토큰 **203~204** — 200에서 **딱 4 토큰 넘쳤다.**
+
+| max_tokens | 결과 | 실사용 완료 토큰 |
+|---:|---|---:|
+| 200 | ❌ 400 json_validate_failed (20/20) | — |
+| 500 | ✅ | 204 |
+| 1000 | ✅ | 204 |
+| 2000 | ✅ | 203 |
+
+→ `_MAX_TOKENS = 700` 상수로 분리(예산은 상한일 뿐 실사용·과금은 ~204 그대로).
+- ⚠️ 이 400 은 `is_rate_limited` 가 False 로 판정해 **재시도되지 않는다**(정상 — 재시도해도 같다). 대신 카드가 `axes=[]` 로 남아 **쿼터 소진과 겉모습이 같다.** 전량 무배정이면 429가 아니라 예산을 먼저 의심할 것.
+
+### 파일럿 — 기존 70b 태그 대비 일치율 (20장)
+
+⚠️ **70b 태그는 정답이 아니라 기준선이다**(그것도 미검증). 아래는 '정확도'가 아니라 '두 모델의 일치도'다.
+
+| | 건수 |
+|---|---:|
+| 완전일치 | **12/20 (60%)** |
+| 부분일치(축 하나 이상 겹침) | 4 |
+| 불일치 | 3 |
+| 무배정 | 1 |
+| 에러 | 0 |
+| **겹침 있음(일치+부분)** | **16/20 (80%)** |
+
+**불일치 4건은 모델 품질이 아니라 축 어휘의 경계 문제로 보인다**:
+| 카드 | 70b | 120b | 판단 |
+|---|---|---|---|
+| Task Framing | `role_assignment` | `constraints` | 템플릿 '너의 작업은 [핵심 작업]이다' — 역할도 제약도 아님. **어휘 공백** |
+| Context Prompting | `context_isolation`+`constraints` | `grounding` | '이 맥락 안에서 수행하라' → **120b 쪽이 grounding 정의에 더 맞다** |
+| Instruction-First | `output_format` | `decomposition` | 지시를 앞에 두는 **입력 배치** 규칙 — 출력 형식도 단계 분해도 아님. **어휘 공백** |
+| Zero-Shot | `role_assignment` | `[]` | 예시 없이 시키는 것이라 **추가 지시문이 없다**. 프롬프트 규칙 4("해당 없으면 빈 배열")를 **120b가 정확히 지킴** |
+
+### 결정성 검사 (5장 × 3회, temp=0)
+
+| | 결과 |
+|---|---|
+| 안정 | **3/5** |
+| 흔들림 | 2/5 — Task Framing, Context Prompting |
+
+⭐ **흔들린 2장이 70b와 불일치한 바로 그 2장이다.** 그리고 흔들리는 건 **2순위 축뿐**이고 1순위(`constraints`, `grounding`)는 3회 모두 동일했다.
+→ 불안정성과 불일치가 같은 카드에 모인다 = **모델이 흔들리는 게 아니라 그 카드가 어휘상 애매한 것.**
+→ 실행 함의: 카드당 축 상한을 3에서 낮추거나 **1순위 축만 신뢰**하면 노이즈가 줄어든다.
+
+### 🔴 함께 드러난 것 — 축 분포가 심하게 쏠려 있다 (`--report`)
+
+DB 실물은 WORKLOG 기록과 달랐다: **파일럿 16장이 아니라 134/170장이 이미 태깅돼 있다.**
+
+```
+총 170장 · 미태깅 36 · 다축 67 · 굶는 축 없음
+output_format 54 · constraints 51 · decomposition 29 · grounding 14 · extraction 12
+role_assignment 11 · length_control 8 · examples 8 · tone_style 6 · uncertainty 6
+context_isolation 5 · comparison 3
+```
+
+- `output_format`(54) + `constraints`(51) = 태그 207개 중 **105개(51%)**. 요청이 이 둘을 고르면 후보가 **최대 105장 = 코퍼스의 62%** → **필터가 사실상 작동하지 않는다.**
+- DESIGN_TECHNIQUE_ROUTING.md §4 의 근거 *"정답 축을 맞히면 후보가 ~14장으로 좁혀진다"* 는 **성립하지 않는다**(170÷12=14 는 카드당 1축 가정인데 실제 1.54축 + 쏠림).
+- 미태깅 36장은 `filter_cards_by_axes` 가 전부 탈락시키므로 축 경로에서 **영구 불가시**(21%).
+
+**변경 파일**
+- 수정: `ingestion/tag_axes.py` (`_MODEL` 교체 · `_MAX_TOKENS` 신설 및 적용 · 근거 주석)
+
+**검증**
+- `python3 -m pytest tests/ -q` → **71 passed** (회귀 없음)
+- `python3 -m tests.test_axes` → 13 passed
+- 파일럿·결정성은 라이브 Groq 호출 (총 ~60회, `--dry-run` 상당 — **DB 미변경**)
+
+**미결 — 전량 태깅 전에 정해야 할 것**
+1. **축 쏠림 대책**: `output_format`/`constraints` 가 절반이면 필터 효과가 없다. 축 분할? 요청 축 상한 3→2? 겹침 수 컷?
+2. **어휘 공백**: Task Framing·Instruction-First 처럼 12축에 안 맞는 카드 처리(새 축 vs 무배정 허용)
+3. **기존 134장 재태깅 여부**: 폐기 모델이 붙인 태그다. 일치 60%라면 남길지 새로 할지 결정 필요
+4. gold 라벨 검토(DESIGN §5-2) — 여전히 미착수. Recall 수용 기준의 전제
+
+---
+
+## [2026-09-12] 🔴 축 쏠림의 원인 규명 — 어휘 문제가 아니라 **코퍼스에 범주가 다른 카드가 섞여 있다**
+**목적**: 앞 항목에서 드러난 축 쏠림(`output_format` 54 · `constraints` 51 = 태그의 51%)의 원인을 찾아 축 어휘 수정안을 만들려 했다. **결론은 어휘를 고칠 문제가 아니었다.**
+
+### 발견 — 카드 170장에 성격이 다른 4종류가 섞여 있다
+
+축 어휘 12개는 *"이 기법이 사용자 프롬프트에 어떤 지시문을 추가하는가"* 를 묻는다. 그런데 그 질문 자체가 성립하지 않는 카드가 다수다.
+
+| 종류 | 내용 | 예 | 장수 |
+|---|---|---|---:|
+| ① **빈/무의미 템플릿** | `Prompt Template` 이 비었거나 `? ? ? ?`, `` ? ` `` 수준 | AutoPrompt · Standard Prompt · Reasoning Prompt · Knowledge generation · Start Simple | **12** |
+| ② **메타 기법** | 프롬프트를 만들거나 고치는 법 = **딸깍 자신이 하는 일** | Meta-Prompting · Prompt Generator Pattern · Prompt Optimization · Prompt Expansion · Prompt Repair | **15** |
+| ③ **RAG/에이전트 시스템 기법** | 시스템 설계자용. 사용자 요청과 무관 | HyDE · Chunk Design · Prompt Injection Defense · Instruction Hierarchy · Use API-Defined Tools · Temperature | **20** |
+| | **합계(중복 제거)** | | **44/170 = 26%** |
+
+⚠️ 위 ②③ 목록은 손으로 고른 **보수적** 분류라 26%는 **하한**이다(Prompt Chaining·Modular Prompting·Graph Prompting·Iterative Query Analysis 등 경계 사례 다수 제외).
+
+②가 특히 위험하다 — 검색되면 생성기에 *"기존 프롬프트의 약점을 찾고 개선안을 제시하라"* 가 **참고 기법**으로 들어간다. **딸깍이 이미 하고 있는 일을 자기 자신에게 지시하는 동어반복**이다.
+
+### 이것이 축 쏠림의 직접 원인이다
+
+| 축 | 전체 | 그중 쓸 수 없는 카드 |
+|---|---:|---|
+| `output_format` | 54 | **18 (33%)** — Meta-Prompting · HyDE · Chunk Design · Temperature · Zero-Shot … |
+| `constraints` | 51 | **16 (31%)** — Prompt Injection Defense · Instruction Hierarchy · Prompt Repair … |
+| 미태깅 36장 | 36 | **12** |
+
+**축이 두 개로 쏠린 게 아니라, 축을 붙일 수 없는 카드가 '형식/제약처럼 보여서' 그 두 축으로 떠밀린 것이다.** 걷어내면 54→36, 51→35 로 내려간다.
+미태깅 36장도 LLM이 못 고른 게 아니라 **정말 축에 안 맞는 카드**가 3분의 1이다.
+
+### 운영 영향 실측 — 검색이 무작위와 구별되지 않는다
+
+실사용형 질의 10건 · dense 단독 · top-5 (`min_score` 없음):
+
+```
+top-5 총 50개 중 쓸 수 없는 카드 15개 = 30%   (코퍼스 비율 26%)
+```
+
+🔴 **무작위 추출(26%)보다 오히려 높다.** 검색이 '이 카드가 이 요청에 쓸 수 있는 것인가'에 대해 **정보를 0 제공**하고 있다.
+
+가장 선명한 예 — `"신입 개발자를 위한 Git 브랜치 전략 블로그 글 써줘"` → top-5 중 **4장이 RAG 시스템 구축 기법**:
+`Chunk Design · Prompt Governance · Query Rewriting · Instruction Hierarchy · Retrieval Failure Handling`
+그 외: `"제주도 여행 블로그"` → Meta-Prompting / `"다이어트 식단"` → Chunk Design Prompting
+
+### ⭐ 왜 지금까지 안 보였나 — 진단 기준이 '중복'이었기 때문
+
+2026-08-15 「검색 구조 정밀 진단」은 코퍼스를 **near-dup 기준**으로 보고 *"유사도 >0.90 0쌍 → 코퍼스 위기 아님, 정리는 우선순위 아님"* 이라고 판정했다. 그 판정은 **그 기준 안에서는 옳다.**
+문제는 **중복이 아니라 범주 오류**였다. 이 카드들은 서로 닮지도 않았고 카드 자체로는 멀쩡하다 — **다른 질문에 답하고 있을 뿐이다.** 어떤 유사도 지표로도 안 잡힌다.
+→ `CORPUS_STRATEGY.md` 2-2(변별성)·2-4(카드 품질)에 **'범주 정합성' 축이 빠져 있다.**
+
+### 제안 — 삭제가 아니라 `layer` 메타데이터로 층을 나눈다
+
+```
+layer: "user_instruction"  # 사용자 프롬프트에 추가할 지시문     → 검색 대상 (~126장)
+layer: "meta"              # 프롬프트 생성·개선 기법(딸깍의 동작)  → 검색 제외
+layer: "system"            # RAG·에이전트 구축 기법              → 검색 제외
+layer: "degenerate"        # 빈/무의미 템플릿                   → 검색 제외
+```
+
+- **삭제하지 않는 이유**: 카드 자체는 자산이다(②는 딸깍 SYSTEM_PROMPT를 개선할 때 참고 대상). 삭제는 되돌리기 어렵고, `layer` 는 `axes`·`embedding_views` 와 같은 **메타데이터 추가 방식이라 무회귀**다.
+- 배선은 `_load_collection` 에 `layer` 필터 한 줄.
+
+**기대**: 검색 대상 170→~126 · 축 쏠림 완화(54→36, 51→35) · top-5 노이즈 30% 제거. 그 뒤에 축 어휘를 보면 **진짜 어휘 문제만 남는다**(Task Framing·Instruction-First 같은 공백).
+
+### 순서 수정 — 축 어휘 확정은 2순위로 내린다
+
+| 순 | 작업 | 이유 |
+|---|---|---|
+| 1 | **`layer` 분류 + 배선** | 이게 안 되면 축 어휘를 아무리 잘 짜도 26%가 딸려온다 |
+| 2 | 축 어휘 재검토 | 노이즈 제거 후의 실제 분포로 판단 |
+| 3 | 남은 카드 태깅·재태깅 | 어휘 확정 후 |
+| 4 | gold 라벨 검토 → Recall 재측정 | 종전과 동일 |
+
+**측정**: 라이브 LLM 호출 없음(분류는 이름·템플릿 기반, 검색은 로컬 bge-m3). DB 미변경.
+
+---
+
+## [2026-09-12] 카드 층(layer) 분류 — 전량 LLM 배치 완료 · top-5 노이즈 30%→8%
+**목적**: 앞 항목에서 규명한 '범주 오류'를 실제로 걷어낸다. 검색 대상 자격을 층으로 분류.
+
+### 층 어휘 (`app/rag/layers.py`, `LAYERS_VERSION=v1`)
+
+| 층 | 정의 | 검색 |
+|---|---|---|
+| `user_instruction` | 일반 사용자 요청 뒤에 그대로 덧붙일 수 있는 지시문 | ✅ |
+| `meta` | **기존 프롬프트를 입력으로 받아** 더 나은 프롬프트를 만드는 기법(딸깍 자신의 동작) | ❌ |
+| `system` | 서비스 운영자가 **시스템 계층**에 심는 규칙(시스템 프롬프트·검색·도구·모델 파라미터) | ❌ |
+| `degenerate` | 카드 전체를 봐도 무엇을 추가하는지 알 수 없음 | ❌ |
+
+⭐ **미분류(층 없음)는 검색에 포함**한다 — 배치 실패·신규 카드로 코퍼스가 통째로 비는 사고 방지. `embedding_views` NULL 이 종전 동작인 것과 같은 원칙(무회귀). `is_searchable()`.
+
+### 프롬프트 설계 — meta/system 경계가 실측으로 한 번 무너졌다
+
+1차 정의는 meta 를 *"산출물이 프롬프트인 기법"* 으로 썼다. 결과 **`system` 을 한 번도 고르지 않았다**(경계 6장 중 3장 오분류). 모델 근거가 원인을 그대로 말했다:
+> *"the technique **outputs a prompt** rather than a user-facing instruction"* (Prompt Injection Defense → meta)
+
+시스템 프롬프트 규칙을 만드는 카드도 '산출물이 프롬프트'라 meta 로 빨려든다.
+→ **가르는 기준을 '산출물'에서 '입력'으로 바꿨다**: 사용자의 프롬프트를 고치면 meta, 시스템 계층에 규칙을 심으면 system. 판정 순서도 좁은 것(system) 먼저로.
+→ 경계 6장 재검증 **3/6 → 5/6**.
+
+### 출력 예산 — `_MAX_TOKENS` 를 또 올렸다
+
+전량 실행에서 **9/170 이 400** 으로 실패. 두 종류였다:
+| 메시지 | `failed_generation` | 원인 |
+|---|---|---|
+| Failed to **generate** JSON | `max completion tokens reached` | 예산 부족(긴 카드일수록 추론이 길다) |
+| Failed to **validate** JSON | `''` (빈 생성) | 일시적 |
+
+→ `_MAX_TOKENS` 700 → **1500** (`tag_layers`·`tag_axes` 둘 다). 예산은 상한일 뿐이라 실사용(~204)·과금·지연은 그대로다. 9장 재실행 **전부 성공 → 미분류 0**.
+
+### 결과
+
+```
+170장 · 미분류 0
+user_instruction 124 · system 26 · meta 17 · degenerate 3
+검색 대상 124 / 제외 46
+```
+
+### ⭐ 운영 효과 — 독립 잣대로 검증
+
+LLM 분류와 **무관하게** 앞 항목에서 손으로 만든 44장 목록을 잣대로, 같은 질의 10건 dense top-5:
+
+| | 노이즈율 |
+|---|---:|
+| 적용 전 | 15/50 = **30%** |
+| 적용 후 | 4/50 = **8%** |
+
+예: `"신입 개발자를 위한 Git 브랜치 전략 블로그 글"` top-5 중 4장이 RAG 구축 기법이던 것이 전부 교체됐다. `"임영웅 콘서트 홍보 문구"` 의 Meta-Prompting·Chunk Design 도 빠졌다.
+
+### 🔴 사람 검토 필요 — 분류가 완벽하지 않다
+
+- **남은 노이즈 3장**: `Multi-Query Retrieval Prompting` · `Prompt Governance Prompting` · `Zero-Shot` 이 user_instruction 으로 분류돼 여전히 회수된다.
+- **과잉 제외 의심**: `Delimiter Prompting` · `XML Tags for Structure` (사용자도 구분자를 쓸 수 있다) → meta / `Priority Placement` · `Abstention Prompting` (사용자가 쓸 수 있는 지시문) → system
+- **경계 사례는 실행마다 흔들린다**(temp=0인데도): `Temperature`·`Give the Model an Out` 이 두 실행에서 다르게 나왔다. 축 태깅과 같은 양상 — 어휘가 애매한 카드에 불안정이 몰린다.
+- 검토용 원본: 각 카드의 분류 근거가 `--out` JSON 에 있다.
+
+**변경 파일**
+- 신규: `app/rag/layers.py` · `ingestion/tag_layers.py` · `tests/test_layers.py`(12개)
+- 수정: `ingestion/tag_axes.py` (`_MAX_TOKENS` 1500 + 근거 주석)
+
+**검증**: `pytest tests/ -q` → **83 passed** · `python3 -m tests.test_layers` → 12 passed
+
+**아직 안 한 것**: `is_searchable` 은 **리트리버에 배선되지 않았다.** DB 에 `layer` 가 기록됐을 뿐 `/query` 동작은 **무변경**이다. 배선은 검토 후 별도 작업.
+
+---
+
+## [2026-09-13] 층 어휘 v2 — 회귀 셋 신설 · 재분류 · **두 잣대가 엇갈림(혼합 결과)**
+**목적**: v1 전량 분류의 34/170 엇갈림을 사람이 검토해 원인을 찾고, 기준을 고쳐 재분류.
+
+### 회귀 셋 신설 (`eval/layer_set.json` 34장 · `eval/layer_eval.py`)
+v1 결과와 사람 판단이 갈린 34장을 **재분류 전에** 라벨링해 고정했다. 나중에 만들면 결과에 맞춰 라벨을 고치게 된다.
+⚠️ 작성자 1인 판단 — `gold_techniques` 와 같은 미검증 기준선 함정. 팀 검토 전까지 잠정.
+
+### v1 실패 원인 — 기준 문장이 만든 체계적 오류 3종
+| # | 증상 | 모델 근거 |
+|---|---|---|
+| ① | "덧붙일 수 있는가"를 **문법적 가능성**으로 읽음 → 효과 없는 카드도 통과 | *"can be directly appended after a user request"* |
+| ② | "기존 프롬프트를 입력으로"를 넓게 읽어 **작성 방법론까지 meta 로** | *"reformats an existing prompt"* (Delimiter·Specificity) |
+| ③ | `degenerate` 를 거의 안 고름(170장 중 3장) | — |
+
+**설계 결함도 드러났다**: `meta` 가 (a)딸깍이 이미 하는 일(동어반복)과 (b)프롬프트 작성 방법론(유용)을 한 데 묶고 있었다. (b)는 빼면 손해다.
+
+### v2 변경
+- 판정 질문을 **문법 → 효용**으로: *"이 카드를 참고해 개선 프롬프트를 만들면 사용자의 결과물이 좋아지는가"*
+- `meta` 를 *"'좋은 프롬프트를 만들어라' 자체를 말할 뿐 무엇을 넣을지는 안 알려주는"* 으로 좁힘
+- `system` 을 *"프롬프트 텍스트만으로는 효과가 없는"* 으로 재정의
+- `degenerate` 강제 문구 추가 · `LAYERS_VERSION` v1 → **v2**
+
+### 🔴 결과 — 두 잣대가 반대로 움직였다
+
+| 잣대 | v1 | v2 |
+|---|---:|---:|
+| 회귀 셋 34장 층 정확 일치 | 32% | **59%** |
+| 회귀 셋 검색 포함/제외 일치 | 32% | **71%** |
+| **실사용 질의 top-5 노이즈율**(독립 44장 목록) | **8%** | **20%** 🔴 |
+| 층 분포 | ui 124 / sys 26 / meta 17 / deg 3 | ui **143** / sys 21 / meta **3** / deg 3 |
+
+**v2 가 검토에서 지적된 것은 전부 고쳤다** — 과잉제외 9장(Delimiter·XML Tags·Specificity·Problem Decomposition·Rubric·Abstention·Priority Placement·Instruction Conflict Resolution·Diff/Patch) 전부 `user_instruction` 복귀, Temperature·Multi-Query Retrieval·Tool-Use·Use of Affordances 전부 `system` 이동.
+
+**그런데 새 구멍이 생겼다 — 판정 근거가 전부 *"provides concrete instruction"***:
+| 카드 | v1 | v2 | 실제 |
+|---|---|---|---|
+| Chunk Design Prompting | system | **user_instruction** | RAG 청크 설계 |
+| Instruction Hierarchy Prompting | system | **user_instruction** | 시스템 계층 |
+| Retrieval Failure Handling | system | **user_instruction** | 검색 인프라 필요 |
+| Zero-Shot (PT=`Text: {내용}`) | user_instruction | user_instruction | degenerate |
+
+→ **v1 은 '붙는가'(문법), v2 는 '구체적인가'(형식)로 판정했다. 둘 다 효용이 아니다.**
+`meta` 도 17→3 으로 과교정됐다(Prompt Compression·Expansion 이 user_instruction 으로 — 이 둘은 사람 판단도 갈린다).
+
+### ⭐ 구조적 결론 — 단일 LLM 판정으로 이 경계가 안 잡힌다
+근거 3건: ①v1 1차(system 을 한 번도 안 고름) ②v1 2차(meta 과흡인) ③v2(구체성 구멍). **세 번 모두 프롬프트가 명시한 표면 속성에 모델이 달라붙었다.** 여기에 temp=0 인데도 경계 카드는 실행마다 흔들린다(Temperature·Give the Model an Out 실측).
+
+**다음 제안**: LLM 분류(쉬운 다수) + **사람 override 목록**(경계 소수, git 관리). 회귀 셋과 override 는 **파일을 분리**해야 한다 — 합치면 회귀 점수가 구조적으로 100% 가 돼 측정 불능이 된다.
+
+**변경 파일**
+- 수정: `app/rag/layers.py`(v2 어휘) · `ingestion/tag_layers.py`(프롬프트) · `tests/test_layers.py`
+- 신규: `eval/layer_set.json`(34장) · `eval/layer_eval.py`
+
+**검증**: `pytest tests/ -q` → 83 passed · v2 전량 재분류 170/170 성공(미분류 0)
+**주의**: DB 에는 v2 가 기록돼 있다. `is_searchable` 은 **여전히 미배선**이므로 `/query` 동작은 무변경이다.
+
+---
+
+## [2026-09-13] 층 분류 확정 — LLM + 사람 override 2층 구조 · top-5 노이즈 22%→2%
+**목적**: v2 가 회귀 셋은 올렸으나(32→59%) 검색 노이즈는 악화시킨(8→12%) 혼합 결과를 매듭짓는다.
+
+### 먼저 — 내 잣대에 오류 4건이 있었다
+노이즈 측정에 쓰던 '쓸 수 없는 카드' 44장 목록에서 **4장이 틀렸다.** 검토와 팀 판단으로 제외:
+| 카드 | 판정 | 근거 |
+|---|---|---|
+| Source-Bounded Answering | user_instruction | 사용자가 자료를 붙여넣고 쓸 수 있다 |
+| Add Defense in the Instruction | user_instruction | 일반 제약 지시문으로 읽힌다 |
+| **Prompt Compression** | user_instruction | **생성기에 유용한 지침(2026-09-13 결정)** |
+| **Prompt Expansion** | user_instruction | 동일 — "역할·맥락·조건·출력형식을 포함하라"는 개선에 직접 쓰인다 |
+
+→ 잣대 44 → **40장**. 이 수정만으로 v1/v2 격차가 **8% vs 20% → 8% vs 12%** 로 줄었다. **앞 항목의 "v2 가 크게 나빠졌다"는 서술은 과장이었다**(잣대 오류가 부풀린 값).
+
+### 결론 — 단일 LLM 판정으로 이 경계는 안 잡힌다 (근거 3건)
+| 시도 | 실패 양상 |
+|---|---|
+| v1 1차 | `system` 을 **한 번도** 안 고름 |
+| v1 2차 | `meta` 과흡인 — 작성 방법론까지 빨아들임 |
+| v2 | **'구체적인가'** 라는 새 구멍 — 근거가 전부 *"provides concrete instruction"* |
+
+세 번 모두 **프롬프트가 명시한 표면 속성에 모델이 달라붙었다.** 여기에 temp=0 인데도 경계 카드는 실행마다 흔들린다. 네 번째 프롬프트는 네 번째 구멍을 만들 공산이 크다.
+
+### 채택 — 2층 구조 (LLM 다수 + 사람 소수)
+```
+LLM 분류 170장  →  사람 override 17장  →  DB(layer, layerSource)
+     ↑                    ↑
+ 쉬운 다수           경계 소수(git 관리)
+```
+- 신규 `ingestion/layer_overrides.json` — 17건, 각 항목에 판정 근거 1줄
+- `apply_overrides()` 가 **원본 LLM 판정을 `llmLayer` 에 보존** → 분류기 품질을 나중에도 채점 가능
+- `metadata.layerSource` 에 `human|llm` 기록 → 사람 판정이 다음 배치에 조용히 덮이지 않는다
+- `--apply-overrides` : LLM 호출 없이 override 만 재적용
+- `--no-override` : 분류기 원본 품질 측정용
+
+**⚠️ 파일 분리 원칙**: override(`ingestion/`)와 회귀 셋(`eval/`)은 **다른 파일**이다. 합치면 회귀 점수가 구조적으로 100% 가 돼 분류기 품질을 못 잰다. `layer_eval.py --from <배치출력>` 이 override 이전 원본을 채점하고, 테스트가 `len(override) < len(회귀셋)` 을 강제한다.
+
+### 결과
+
+| 지표 | 필터 없음 | v1 | v2 | **v2+override** |
+|---|---:|---:|---:|---:|
+| top-5 노이즈율(잣대 40장) | 22% | 8% | 12% | **2%** |
+| 검색 풀 | 170 | 124 | 143 | **130** |
+| 회귀 셋(분류기 원본) | — | 32% | **59%** | 59%(불변 — 원본 채점) |
+
+남은 노이즈는 `Data Provenance Prompting` **1장**.
+
+최종 분포: `user_instruction 130 · system 26 · meta 7 · degenerate 7` (미분류 0)
+
+**변경 파일**
+- 신규: `ingestion/layer_overrides.json`
+- 수정: `ingestion/tag_layers.py`(override 적용·`layerSource`·`--apply-overrides`/`--no-override`) · `eval/layer_eval.py`(`--from`) · `tests/test_layers.py`(12→18)
+
+**검증**: `pytest tests/ -q` → **89 passed** · override 17/17 적용 · 회귀 채점 원본 59% 유지(오염 없음)
+
+**아직 안 한 것 — `is_searchable` 미배선**
+DB 에 `layer` 가 있을 뿐 `retriever._load_collection` 은 여전히 전량을 읽는다. 위 2% 는 필터를 임시로 씌워 잰 값이고 **`/query` 동작은 무변경**이다. 배선 시 확인할 것:
+- `min_score`·`fetch_k` 재교정(풀이 170→130 으로 줄면 점수 분포가 바뀐다)
+- 리랭커 경로 포함 `run_eval` 정식 재측정(지금까지는 dense 단독 측정이다)
+- `qa_set_realistic` 정답이 제외된 카드를 가리키는 경우가 없는지
+
+---
+
+## [2026-09-13] 평가셋 정합성 점검 — 층 필터 배선 전 확인 (측정만, 코드 무변경)
+**목적**: 층 필터를 배선하면 제외된 40장을 정답으로 지목하는 평가 문항이 **구조적으로 Recall 0** 이 된다. 그러면 수치 하락이 필터 탓인지 검색 품질 탓인지 구분이 안 된다. 배선 전에 확인.
+
+### ① 정답 충돌 — Recall 상한이 내려간다
+
+| 평가셋 | Recall@5 **상한** (필터 없음 → 적용) | 정답 전멸 | 정답 일부 손실 |
+|---|---|---:|---:|
+| `qa_set_realistic` (59) | 1.000 → **0.935** (−6.5%) | **3문항** | 5문항 |
+| `qa_set` (40) | 1.000 → 0.967 (−3.3%) | 1문항 | 2문항 |
+| `multi_turn_set` (10) | 1.000 → 0.975 (−2.5%) | 0문항 | 1문항 |
+
+현재 실측 R@5 가 0.763 이므로 **−6.5%p 는 무시할 수 없는 크기**다. 배선 후 재측정은 이 상한 변화를 함께 보고하지 않으면 해석 불가다.
+
+⚠️ `qa_set_realistic`·`qa_set` 의 `relevant` 는 **기법명이 아니라 `chunk_id`**(`pdf_001`…)다. 이름으로 대조하면 "충돌 0건"이라는 잘못된 결론이 나온다(실제로 1차에 그렇게 나왔다).
+
+### ② 영향받는 문항은 성격이 다르다 — 스코프 불일치
+
+`qa_set_realistic` 에서 영향받는 5문항:
+| 질의 | 정답(제외됨) |
+|---|---|
+| 계산기랑 검색을 써가면서 풀어줘 | ReAct · Tool-Use (전멸) |
+| 프롬프트 주입 공격을 막게 방어적으로 짜줘 | Injection Defense · Instruction Hierarchy (전멸) |
+| 이 데이터로 비슷한 샘플 데이터를 더 만들어줘 | Synthetic Data Generation (전멸) |
+| 내 프롬프트를 더 좋게 다듬어줘 | Meta-Prompting (일부) |
+| 여러 문서를 종합해서 충돌하는 정보는 짚어줘 | Conflict Resolution (일부) |
+
+**나머지 54문항은 일반 작업 질의다**("이 회의록을 핵심만 세 줄로 줄여줘"·"이 코드 어디가 문제인지 봐줘"). 위 5개만 **프롬프트 엔지니어링·시스템 기능 자체**를 묻는다.
+
+🟩 **팀이 상정한 사용자 분포로 판정**: `gen_set`(18) · `uplift_set`(8) 전량이 일반 작업 요청이다 — 마케팅 문구·채용 공고·코드리뷰·회의록 요약·환불 이메일·여행 일정표·번역·"글 써줘". **도구 사용·주입 방어·합성 데이터·지시 우선순위를 묻는 질의는 0건.**
+→ 층 경계는 `gen_set`/`uplift_set` 분포와 **일치**하고, 어긋나는 것은 `qa_set_realistic` 의 5문항이다.
+
+### ③ 🔴 더 큰 문제 — 커버리지 37%
+
+```
+코퍼스 170장 중 정답으로 한 번이라도 지목된 카드 : 63장 (37%)
+한 번도 지목되지 않은 카드                      : 107장
+  그중 검색 대상(user_instruction)             : 74장  ← 평가셋이 못 보는 구간
+```
+
+검색 대상 130장 중 **74장(57%)이 한 번도 측정되지 않는다.** 미측정 예: `Specificity Prompting` · `Self-Ask` · `Plan-and-Solve` · `Cognitive Verifier` · `Instruction-First` · `Style Imitation`.
+→ CORPUS_STRATEGY §2-3 의 지적(*"정답이 134청크 기준이라 신규 56기법을 겨냥한 문항이 없다"*)이 **수치로 확인**됐다. 층 필터와 무관하게 **현재 모든 검색 수치는 코퍼스의 37%만 본 값**이다.
+
+### 제안 (미실행 — 결정 필요)
+1. `qa_set_realistic`·`qa_set` 에 `scope` 필드 추가 → 위 문항을 `out_of_scope` 로 **표시**(삭제 금지, 스코프가 바뀌면 되살려야 함)
+2. `run_eval` 이 **전체·in-scope 두 수치를 병기** + Recall 상한을 함께 출력
+3. 커버리지 37% → 미측정 74장을 겨냥한 문항 추가. 이게 없으면 층 필터의 실효도 절반만 보인다
+
+**코드 변경 없음. 측정만 수행.**
+
+---
+
+## [2026-09-13] 평가셋 확장 — 커버리지 50%→94% · 🔴 **기존 수치가 코퍼스의 쉬운 절반만 본 값이었다**
+**목적**: 검색 대상 카드의 절반이 어떤 평가 문항에도 안 걸린다는 문제(앞 항목 ③)를 해소.
+
+### 생성기 (`eval/gen_qa_set.py`)
+미커버 카드마다 *"그 기법이 도움이 될 상황에서 사용자가 칠 법한 작업 요청"* 을 생성.
+
+★ **핵심 위험은 어휘 누수다.** 카드를 보고 질의를 만들면 카드 어휘가 새어 들어가 검색이 '의미'가 아니라 '표면'으로 맞고 점수가 부풀려진다(2026-08-15 진단: *"맞히는 케이스는 전부 어휘 중첩"*). 방어 2겹:
+1. 프롬프트가 기법명·카드 표현 사용을 금지하고 **운영 분포**(gen_set·uplift_set 말투)를 기준으로 준다
+2. `leak_score()` 로 질의↔카드 어휘 중첩을 **측정**해 표시 → 사람이 그 목록만 보면 된다
+
+🟩 **누수 방어가 실제로 작동했다**: 평균 0.068 · 0.5 이상 1개. 그리고 지표가 잡아낸 상위 항목은 실제로 새어 있었다 — `"…조건과 예외를 알려줘"`(Boundary Condition) · `"…품질 기준 충족 여부"`(Quality Gate) · `"…없으면 not found"`(Give the Model an Out). 0.35 이상 4건에 `review` 표시.
+
+### 부수 성과 — 층 오분류 7건이 추가로 드러났다
+커버리지 생성 대상(=검색 대상)에 있으면 안 될 카드가 섞여 있었다. 전부 `layerSource=llm`(override 미적용):
+| 카드 | v2 | 판정 | 근거 |
+|---|---|---|---|
+| Prompt Generator Pattern | user_instruction | **meta** | "바로 복붙 가능한 최종 프롬프트를 생성하라" — 딸깍 그 자체 |
+| Request Normalization | user_instruction | **meta** | 요청을 표준 스키마로 정규화 — 딸깍 전처리 |
+| Data Provenance | user_instruction | **system** | source_id·source_url |
+| Adversarial Prompt Detector | user_instruction | **system** | 주입 탐지 |
+| Few-shot learning / Knowledge generation / Prompt leaking | user_instruction | **degenerate** | **Prompt Template 이 아예 빈 카드** |
+
+→ override 17 → **24건**. 분포: `user_instruction 123 · system 28 · degenerate 10 · meta 9`.
+⚠️ v2 의 degenerate 회피가 여기서도 나왔다 — **PT 가 빈 카드 3장이 user_instruction 이었다.**
+
+### 커버리지
+
+| | 검색 대상 123장 기준 |
+|---|---|
+| 종전(`qa_set_realistic` + `qa_set`) | 62장 = **50%** |
+| + `qa_set_coverage.json`(54문항) | 116장 = **94%** |
+| 남은 미측정 | 7장(쿼터 소진으로 생성 실패) |
+
+### 🔴 핵심 발견 — 통제 비교
+
+같은 리트리버·같은 지표·**같은 단일정답 조건**으로 맞췄다:
+
+| 평가셋 | n | Hit@1 | Recall@5 |
+|---|---:|---:|---:|
+| `qa_set_realistic` 전체 | 59 | 0.644 | 0.723 |
+| `qa_set_realistic` **단일정답 문항만** | 22 | 0.773 | **1.000** |
+| `qa_set_coverage` (전부 단일정답) | 54 | 0.130 | **0.296** |
+
+**정답 개수라는 교란을 제거해도 1.000 vs 0.296 이다.** 차이는 오직 **어떤 카드를 재느냐**다.
+→ **지금까지의 R@5 0.763 은 평가셋 작성자가 문항을 쓸 수 있었던 '쉬운 카드' 위에서 나온 값이다.** 한 번도 측정되지 않던 구간에서는 검색이 훨씬 못 한다.
+
+### ⚠️ 0.296 은 하한이다 — 라벨 품질 한계
+- 미적중 38문항 중 **9문항(24%)** 은 top1 이 정답 카드와 **축을 공유**해 공동정답일 수 있다
+- 실제로 라벨이 틀린 사례: `"매출 데이터를 표로 정리해줘"` 정답=`Embedding Data` / top1=`Table Transformation Prompting` ← **top1 이 더 맞다**
+- 공동정답을 인정하면 대략 **0.30 ~ 0.47** 구간. 그래도 1.000 과의 격차는 남는다
+- `qa_set_coverage` 라벨은 **LLM 생성**이라 `qa_set_realistic` 의 사람 라벨과 같은 급이 아니다. 두 셋 수치를 직접 비교하지 말고 각각의 추이로 볼 것
+
+**변경 파일**
+- 신규: `eval/gen_qa_set.py` · `eval/qa_set_coverage.json`(54문항)
+- 수정: `ingestion/layer_overrides.json`(17→24건)
+
+**남은 일**
+1. 미측정 7장 생성(쿼터 회복 후) — Context-Aware Delimiters · Diff/Patch Format · Instruction Conflict Resolution · Iterative Query Analysis · Response Rules Section · Avoid Over-Incentivization · Avoid Conflicting Tool-Call
+2. **공동정답 라벨링** — 단일정답이라 Recall 이 과소평가된다
+3. 누수 `review` 4건 사람 확인
+4. 이 셋을 기준선으로 층 필터 배선 전후 비교
+
+---
+
+## [2026-09-13] 기존 튜닝 결정 전면 재확인 — 신규 커버리지셋 + 기존셋 대조
+**목적**: 기존 결정(`fetch_k`·리랭커·하이브리드·멀티표현)은 전부 `qa_set_realistic`(코퍼스의 쉬운 절반) 위에서 내려졌다. 커버리지 97% 셋이 생겼으니 **두 셋을 대조**해 각 결정이 여전히 서는지 본다.
+
+### 결과 요약
+
+| 결정 | 문서 근거 | 기존셋 재측정 | 신규셋 | 판정 |
+|---|---|---:|---:|---|
+| `use_reranker=True` | 2026-08-15 *"이득 0.025는 노이즈, 제거 검토"* | R@5 **+4.0pp** | R@5 **+12.3pp** | ✅ **유지 — 제거 계획 철회** |
+| `use_hybrid=False` | *"한국어 코퍼스에서 악화"* | **−7.0pp**(재현) | +8.8pp | ✅ **유지**(신규셋 이득은 아티팩트, 아래) |
+| `fetch_k=20` | 2026-07-05 스윕 파레토 최적 | **10이 최고**(0.777) | **50이 최고**(0.474) | 🔴 **근거 소멸** |
+| `embedding_views` | dense Hit@1 +6.8pp | **+6.8pp 정확 재현** | rerank +3.5pp | ✅ 유지 |
+
+### ⭐ 리랭커 — 제거 계획을 철회한다
+| | dense | +rerank | Δ |
+|---|---:|---:|---:|
+| `qa_set_realistic` R@5 | 0.723 | 0.763 | +4.0pp |
+| `qa_set_coverage` R@5 | 0.298 | **0.421** | **+12.3pp** |
+
+**어려운 구간에서 이득이 3배 크다.** 쉬운 문항은 dense 로도 맞고, 리랭커는 **어려운 문항에서 일한다** — 그런데 지금까지의 평가셋은 쉬운 문항만 있었으니 리랭커가 하는 일이 안 보였다.
+2026-08-15 의 *"리랭커 로짓 0.0000 · 이득 0.025 노이즈"* 판단은 `multi_turn_set` gold(10항목, **스스로 미검증이라 명시**)에 기반했다. 제대로 된 두 셋 모두에서 리랭커가 이긴다. → **리랭커 제거/조건부화 백로그를 내린다.**
+
+### hybrid — 신규셋의 이득은 생성 아티팩트다
+| | dense | +hybrid |
+|---|---:|---:|
+| `qa_set_realistic` | 0.723 | **0.653 (−7.0pp)** |
+| `qa_set_coverage` | 0.298 | **0.386 (+8.8pp)** |
+
+두 셋이 **반대 부호**다. 원인 확인:
+```
+hybrid 가 살린 문항  6개  평균 어휘누수 0.130   ← 전체 평균의 2배
+hybrid 가 깬 문항    1개  평균 어휘누수 0.000
+변화 없음           50개  평균 어휘누수 0.060
+전체 평균 누수 0.066
+```
+→ BM25 가 **생성 질의와 원본 카드의 어휘 중첩**을 파먹은 것이다. `gen_qa_set.py` 의 누수 방어가 평균 0.066 까지 낮췄지만 0 은 아니고, BM25 는 그 잔량에 민감하다.
+⚠️ **LLM 생성 평가셋으로 어휘 기반 기법(BM25·키워드)을 평가하면 안 된다** — 구조적으로 부풀려진다. `use_hybrid=False` 유지.
+
+### 🔴 `fetch_k=20` — 어느 셋에서도 최적이 아니다
+
+| fetch_k | `qa_set_realistic` R@5 | `qa_set_coverage` R@5 | 지연 |
+|---:|---:|---:|---:|
+| 10 | **0.777** | 0.386 | 1.2s |
+| **20 (현재)** | 0.763 | 0.421 | 2.0s |
+| 50 | 0.763 | **0.474** | 4.5s |
+
+- 2026-07-05 스윕(*"10은 Recall@5 −4.5%p"*)은 **108~134청크 시절** 값이다. 지금(170청크 + `embedding_views`) 기존셋에서 10이 오히려 +1.4pp 로 **뒤집혔다.**
+- 두 셋이 **반대 방향**을 가리킨다: 쉬운 문항은 좁은 후보(노이즈 적음)가, 어려운 문항은 넓은 후보(정답이 dense 하위에 있음)가 유리하다.
+- 20 은 **양쪽 어디에서도 최적이 아닌 중간값**이다.
+- 🟩 주목: 기존셋에서 20 과 50 의 R@5·NDCG 가 **완전히 동일**(0.763/0.677). 즉 **20→50 은 쉬운 구간 손실 0, 어려운 구간 +5.3pp, 비용은 지연 2.2배.**
+- ⚠️ `fetch_k` 는 BM25 를 안 쓰므로 위 어휘누수 아티팩트의 영향은 없다(단 신규셋 라벨 자체의 한계는 남는다).
+
+### 멀티표현 인덱싱 — 유지, 그리고 측정 체계 건전성 확인
+| | 뷰 없음 → 있음 |
+|---|---|
+| `qa_set_realistic` dense Hit@1 | 0.576 → 0.644 (**+6.8pp**) |
+| `qa_set_realistic` rerank | −1.7pp / R@5 동일 |
+| `qa_set_coverage` rerank | **+3.5pp / +1.8pp** |
+
+🟩 문서에 기록된 **+6.8pp 가 소수점까지 정확히 재현**됐다. 리랭커 경로에서 상쇄된다는 서술도 재현. **측정 체계가 건전하다는 방증**이고, 위 다른 결정들의 뒤집힘이 측정 오류가 아님을 뒷받침한다.
+신규셋에서는 반대로 **리랭커 경로에서 이득**이 난다 → 유지.
+
+### 결론
+- 즉시 반영: **리랭커 제거 백로그 철회**(근거 뒤집힘)
+- 판단 필요: `fetch_k` 20 → 50 (어려운 구간 +5.3pp vs 지연 2.2배). `/query` end-to-end 는 LLM 이 지배(~19s)하므로 +2.5s 는 약 13%
+- 유지: `use_hybrid=False` · `embedding_views`
+- 폐기 대기: `min_score=0.40`(이미 사문화 — dense 최소 0.421)
+
+**측정만 수행. 코드·설정 변경 없음.**
+
+---
+
+## [2026-09-13] `fetch_k` 20 → 50 적용
+**목적**: 앞 항목의 재확인 결과 반영. 종전 20 의 근거(2026-07-05 스윕)는 108~134청크 시절 값이라 현 코퍼스(170청크 + `embedding_views`)에서 성립하지 않는다.
+
+**Before / After** (운영 기본값, `--rerank`)
+
+| 평가셋 | fetch_k=20 | **fetch_k=50** | Δ |
+|---|---:|---:|---:|
+| `qa_set_realistic` R@5 | 0.763 | **0.763** | ±0 |
+| `qa_set_realistic` NDCG@5 | 0.677 | **0.677** | ±0 |
+| `qa_set_coverage` R@5 | 0.421 | **0.474** | **+5.3pp** |
+| `qa_set_coverage` NDCG@5 | 0.361 | **0.387** | +2.6pp |
+| 검색 지연 | ~2.0s | **~5.0s** | **2.5배** |
+
+**쉬운 구간 손실 0, 어려운 구간 +5.3pp, 비용은 지연뿐.** `/query` end-to-end 는 LLM 이 지배(~19s)하므로 +3s 는 약 16%.
+⚠️ 지연은 스윕 당시 4.5s 보다 높게 나왔다(5.0s) — 측정 시 머신 부하 차이. **3s 안팎의 증가로 보되 운영 관측 필요.**
+
+**변경 파일**
+- `app/rag/retriever.py` — `fetch_k` 기본값 20 → 50
+- `app/main.py` — 운영 인스턴스 `fetch_k=50` + 근거 표 주석(두 셋 대조 결과·리랭커 유지 근거)
+- `RAG_PIPELINE.md` — §1-[B2]·§3 표·§4 갱신, §0 다이어그램과 본문의 `20` 표기 전부 동기화(후보 50개 · `argsort(-dense)[:50]` · 리랭커 50쌍)
+
+**검증**
+- `pytest tests/ -q` → **89 passed**
+- 코드 기본값 확인: `main.retriever.fetch_k == 50`, `Retriever.__init__` 기본값 50
+- 변경 후 실측이 스윕 예측과 일치(위 표)
+
+**함께 기록 — 리랭커 제거 백로그 철회**
+`RAG_PIPELINE.md` §4 에 반영. 2026-08-15 의 *"이득 0.025 노이즈"* 는 미검증 gold 10항목 기반이었고, 두 평가셋 모두에서 뒤집혔다(기존셋 +4.0pp · 신규셋 **+12.3pp**). 어려운 구간일수록 이득이 크다 — 쉬운 문항만 있던 평가셋이라 안 보였던 것.
+
+**남은 튜닝 항목**
+- `min_score=0.40` 폐기(이미 사문화 — dense 최소 0.421). 층 필터 배선과 함께 처리
+- `example_min_score=0.40` — 예시 코퍼스 기준으로 잰 적 없는 임시값
+- `fetch_k` 는 **코퍼스가 바뀌면 다시 재야 한다**(이번이 그 사례)
+
+---
+
+## [2026-09-13] 운영 결함 3건 — /index 무인증 · LLM 타임아웃 부재 · 평가 judge 전멸
+**목적**: RAG 서버 자체의 개선점을 코드로 훑어 나온 것들. 셋 다 독립이고 기능 변경이 아니다.
+
+### 🔴 ① `/index` 가 무인증이었고 포트가 외부로 열려 있었다
+
+- `.env` 14행의 `RAG_INDEX_API_KEY` 가 **주석 처리**돼 런타임에 미설정이었다.
+- `main.py` 는 이 경우 **경고만 찍고 허용**했다(`if not _INDEX_API_KEY: return`).
+- `docker-compose.yml` 은 rag-server 를 `"8000:8000"` 으로 **모든 인터페이스**에 게시했다. (mysql 만 `127.0.0.1:3306:3306` 으로 묶여 있었다.)
+
+→ 같은 네트워크의 누구나 임의 청크를 코퍼스에 넣을 수 있었고, 주입된 청크는 이후 모든 요청에서 `[참고 기법]` 으로 생성 LLM 에 들어간다. **프롬프트 인젝션 경로**다.
+
+**조치 — fail-closed 로 전환**
+| 상태 | 종전 | 변경 |
+|---|---|---|
+| 키 미설정 | 경고 후 **허용** | **503**(엔드포인트 비활성) |
+| 키 설정 + 헤더 없음/불일치 | 403 | 403 (동일) |
+| 키 설정 + 헤더 일치 | 200 | 200 (동일) |
+
+저장소 전체에서 `/index` 를 호출하는 코드는 **없다** — 모든 적재는 `ingestion/*` 이 DB 에 직접 쓴다. 따라서 막아도 깨지는 경로가 없고, '키를 깜빡함'이 곧 '노출'이 되지 않는 쪽이 옳다.
+compose 는 `127.0.0.1:8000:8000` 으로 변경. 백엔드는 컨테이너 네트워크(`http://rag-server:8000`)로 부르므로 게시 포트는 로컬 디버깅용일 뿐이다.
+
+⚠️ **backend 의 `"8080:8080"` 은 건드리지 않았다** — 브라우저가 직접 호출하므로 바인딩을 바꾸면 데모 구성이 깨질 수 있다. 다만 `/api/prompts/improve` 가 게스트 무제한인 기존 P0 와 함께 보면 같은 성격의 노출이다.
+
+### 🔴 ② LLM 호출에 타임아웃이 없었다
+`generator.py` · `analyzer.py` · `query_transform.py` 어디에도 `timeout` 이 없어, 제공자가 응답하지 않으면 **스레드가 무한 대기**했다. FastAPI 는 `def` 엔드포인트를 스레드풀(기본 40)에서 돌리므로 제공자가 느려지면 스레드가 쌓여 서버가 멎는다. 백엔드는 75s WebClient 타임아웃이 있어 사용자에겐 에러가 가지만 **rag-server 스레드는 계속 잡혀 있었다** — 백엔드에서는 2026-08 에 고쳐진 결함이 여기만 남아 있었다.
+
+신규 `app/core/timeouts.py` 에 예산을 모았다(환경변수 오버라이드 가능).
+| 상수 | 값 | 적용 |
+|---|---:|---|
+| `FAST_SECONDS` | 20s | analyzer · query_transform (짧은 프롬프트, 실패해도 폴백 있음) |
+| `GEN_SECONDS` | 45s | generator Groq |
+| `GEN_MILLIS` | 45000ms | generator Gemini (google-genai 는 ms 단위) |
+
+검색 5s + 분석 20s + 생성 45s = 70s 로 백엔드 75s 안에 들어온다. ⚠️ 재시도·폴백까지 겹치면 초과할 수 있는데 그건 남은 한계다 — **여기서 막으려는 건 '느림'이 아니라 '영원히 안 끝남'** 이다.
+
+### 🔴 ③ 평가 judge 경로가 전부 퇴역 모델을 쓰고 있었다
+uplift_eval 만 문제인 줄 알았는데 **4개 스크립트 전부**였다. 근본 원인은 **모델 기본값이 네 곳에 중복**된 것 — 2026-08-21 Groq 가 llama-3.x 를 폐기했을 때 `generator.py` 만 갱신되고 나머지가 드리프트했다.
+
+| 파일 | 종전 | 영향 |
+|---|---|---|
+| `uplift_eval.py` | `llama-3.3-70b-versatile` / `gemini-2.0-flash` | target·judge 404 → **uplift 축 실행 불가** |
+| `gen_eval.py` | `llama-3.3-70b-versatile` | judge 404 |
+| `halluc_eval.py` | `llama-3.3-70b-versatile` | judge 404 |
+| `run_multi_turn_eval.py` | uplift 우회용 자체 표인데 groq 항목이 같은 폐기 모델 | 우회가 반쪽 |
+
+**조치**: `generator.default_model(backend)` 공개 헬퍼를 단일 출처로 두고 네 곳이 전부 이를 쓴다. 다음 모델 교체 때 **한 줄만 고치면 된다.**
+검증: 네 스크립트 모두 `openai/gpt-oss-120b`(groq) / `gemini-flash-latest`(gemini) 로 해소됨.
+
+⚠️ **남겨둔 것**: `multi_turn_eval.py:460` `analyzer_model="llama-3.1-8b-instant"` 는 순수 함수의 **캐시 키 라벨**(실제 호출 아님)이다. 바꾸면 쿼터를 들여 쌓은 기존 측정 캐시가 무효화되므로 손대지 않았다. 라벨이 실제 모델과 다르다는 점만 기록한다.
+
+**변경 파일**
+- 신규: `app/core/timeouts.py`
+- 수정: `app/main.py`(fail-closed) · `../docker-compose.yml`(루프백) · `app/rag/{generator,analyzer,query_transform}.py`(타임아웃) · `app/rag/generator.py`(`default_model`) · `eval/{uplift_eval,gen_eval,halluc_eval,run_multi_turn_eval}.py`
+
+**검증**: `pytest tests/ -q` → 89 passed · `/index` 세 상태(503/403/200) 실동작 확인 · 클라이언트 timeout 속성 실측(20.0 / 20.0 / 45.0)
+
+**남은 것**(이번에 안 함)
+- 컬렉션 캐시 — 요청당 236ms 를 DB+JSON 파싱에 쓴다(기법 170ms + 예시 66ms). 지금은 리랭커에 가려 있지만 축 라우팅 후 병목이 된다
+- `/health` 심화 — DB·모델 상태를 안 봐서 compose healthcheck 가 거짓 안심을 준다
+- `requirements.txt` 전부 `>=` — 재현성 위험. 이미 모델 폐기로 한 번 전면 장애를 겪었다
+- 리랭커 지연 로드 경합(`self._reranker`) — 동시 요청 시 모델 2중 로드 가능
+
+---
+
+## [2026-09-13] 🔴 분석기가 2026-08-21 이후 줄곧 조용히 죽어 있었다 (gen_eval 기준선 재수립 시도 중 발견)
+**목적**: judge 모델 복구 후 `gen_eval` 로 생성 기준선을 다시 잡으려 했다. **기준선은 못 잡았고(쿼터 소진), 대신 더 큰 것을 찾았다.**
+
+### ① 🔴 `analyzer` 가 사실상 전 요청에서 실패하고 있었다
+
+`gen_eval` 18문항 중 **16건**에 `[Analyzer] 분석 실패` 가 찍혔다. 쿼터 문제로 보였지만 아니었다.
+
+```
+400 json_validate_failed  ·  failed_generation: ''
+```
+
+원인은 `tag_axes`(200→204)·`tag_layers`(700→9건 실패)에서 이미 두 번 본 **같은 버그**다.
+`gpt-oss` 계열은 최종 JSON 앞에 **추론 토큰**을 먼저 쓰는데, 분석기의 시스템 프롬프트(2,917자)에서 기본 추론량이 완료 토큰 **~1,259** 라 `max_tokens=700` 이 먼저 소진된다.
+
+| max_tokens | 결과 | 완료 토큰 |
+|---:|---|---:|
+| 700 (종전) | ❌ 400 json_validate_failed | — |
+| 1500 | ✅ | 1259 |
+| 3000 | ✅ | 1300 |
+
+**왜 여태 몰랐나**: `analyze()` 가 예외를 삼키고 `None` 을 돌려준다(무회귀 폴백). 서버는 200 을 내고 파이프라인은 "분석 없이" 진행한다 — **에러 없이 조용히 2단계가 1단계로 퇴화**한 채 2026-08-21 모델 교체 이후 계속 돌아왔다. 그 무회귀 설계가 장애를 은폐한 셈이다.
+
+**영향**
+- 규약 v3 의 2단계 파이프라인이 **1단계로 동작** — 필드/빈칸/질문 구조가 생성기 단독 판단에 의존
+- `techniqueAxes` 가 생성되지 않음 → **축 라우팅의 입력이 아예 없었다**
+- 2026-08-21 WORKLOG 의 "analyzer 가 되살아나 되물음" 검증은 이 관점에서 **재확인 필요**
+- mode 정확도 0.83(2026-07-31) 은 분석기가 살아 있던 시절 값이라 **현재 상태를 대표하지 않는다**
+
+**조치 — 예산만 올리면 안 된다**
+Groq 는 '입력 + 출력예약'을 합산해 한도를 잡는다. `max_tokens=1500` 이면 요청당 ~3,100 토큰을 예약해 TPM 8000 에서 **분당 2회**가 한계가 된다. 추론량 자체를 줄이는 것이 옳다.
+
+| `reasoning_effort` | 완료 토큰 | 합계 |
+|---|---:|---:|
+| (기본) | 1259 | 2901 |
+| **low (채택)** | **198** | **1840** |
+| medium | 1500 | 3142 |
+| high | 실패 | — |
+
+→ `_REASONING_EFFORT="low"` + `_MAX_TOKENS=1000`. 멀티턴(history 포함)에서도 완료 316~447 로 안정.
+검증: `analyze("제주도 여행 블로그 글 써줘…")` → `taskType=글쓰기/블로그`, fields 2개 정상 반환.
+
+⚠️ 남은 것: `"글 써줘"` 는 모델이 `fields: []` 를 돌려준다(API 는 성공). 프롬프트에는 *"글 써줘 → 주제 = empty"* 라고 적혀 있으니 프롬프트 준수 문제다. 프롬프트 수정은 라이브 3회 A/B 가 필요하므로 이번엔 손대지 않았다.
+
+### ② `gen_eval` 이 운영과 다른 구성을 재고 있었다
+`--no-hyde` 기본값이 **HyDE on** 이었다(`use_hyde = not args.no_hyde`). 운영은 2026-07-30 재평가 이후 **off** 다. HyDE 는 R@5 를 0.763→0.441 로 떨어뜨리므로, **그동안의 생성 평가는 운영보다 훨씬 나쁜 검색 위에서 측정된 값**이다.
+→ 기본값을 off(운영 파리티)로 바꾸고 `--hyde` 로 옵트인. `--no-hyde` 는 하위호환 no-op.
+
+### ③ 기준선은 못 잡았다 — 쿼터 소진
+```
+Gemini: ⛔ 일일 한도 초과
+Groq  : 429 → Gemini 폴백 → 위 한도
+18문항 중 완주 2건 · judge 전량 N/A
+```
+오늘 하루에 층 분류 2회(340) + 질의 생성(68) + 각종 파일럿(~50) + gen_eval 2회를 돌려 TPD 를 소진했다.
+
+**재개 방법**(쿼터 회복 후)
+```bash
+python3 -m eval.gen_eval --sleep 8 --cache-file eval/.gen_cache_20260913b.json
+```
+생성 캐시가 있어 중단 지점부터 누적된다. TPD 가 빠듯하면 `--no-judge` 로 결정론 지표(mode_accuracy·structured)만 먼저 잡을 수 있다.
+⚠️ **분석기 수정 이전 캐시는 쓰지 말 것** — 그 시점 생성은 `analysis=None` 상태의 결과다. 이번에 `.gen_cache_20260913.json` 을 폐기하고 `...b.json` 으로 새로 시작한 이유다.
+
+**변경 파일**: `app/rag/analyzer.py`(예산·reasoning_effort) · `eval/gen_eval.py`(HyDE 기본값)
+**검증**: `pytest tests/ -q` → 89 passed · `analyze()` 라이브 정상 반환 확인
+
+**후속 확인 필요**
+- `generator`(gpt-oss-120b)도 같은 추론 토큰 특성을 갖는다. `_fit_max_tokens` 가 동적 산정이라 즉사는 없었고 `structured` 폴백도 0회였지만, `reasoning_effort` 적용 시 TPM 여유가 커진다 → A/B 대상
+- `query_transform` 의 `max_tokens` 120/300 도 같은 위험. 기본 off 라 운영 영향은 없으나 켜면 실패할 것
+
+---
+
+## [2026-09-13] `query_transform` 도 같은 예산 버그 — 두 함수 모두 조용히 무효였다
+**목적**: 분석기와 같은 원인이 `query_transform` 에도 있는지 확인(기본 off 라 운영 영향은 없지만 켜면 실패).
+
+### 실측 — 현행 설정에서 `content` 가 빈 문자열로 온다
+| 함수 | 종전 예산 | 완료 토큰 | content | 결과 |
+|---|---:|---:|---:|---|
+| `transform()` | 120 | 120 | **0자** | `return query` (무효) |
+| `hyde()` | 300 | 300 | **0자** | `return query` (무효) |
+
+추론 토큰이 예산을 전부 먹고 본문이 한 글자도 안 나온다. **두 함수 모두 2026-08-21 모델 교체 이후 아무 일도 하지 않고 토큰만 태우고 있었다.**
+
+### ⚠️ 증상이 analyzer 와 다르다 — 더 조용하다
+| | analyzer · tag_axes · tag_layers | query_transform |
+|---|---|---|
+| `response_format` | `json_object` | **없음(평문)** |
+| 예산 부족 시 | `400 json_validate_failed` (예외) | **빈 문자열**(정상 응답) |
+| 로그 | `[Analyzer] 분석 실패 …` 남음 | **아무것도 안 남음** |
+
+`except` 로도 안 잡힌다 — 정상 200 응답에 내용만 없기 때문이다. `if out else query` 폴백이 그대로 흡수한다. **"실패해도 검색이 안 끊긴다"는 무회귀 설계가 오늘만 두 번째로 장애를 은폐했다.**
+
+### 조치
+예산 증액이 아니라 추론량 감축(Groq 는 입력+출력예약 합산으로 TPM 을 잡는다).
+```
+_REASONING_EFFORT      = "low"
+_TRANSFORM_MAX_TOKENS  = 600   # 실사용 117
+_HYDE_MAX_TOKENS       = 800   # 실사용 112 (출력 3~5문장이라 여유 더 둠)
+```
+검증: `transform()` → `"여행 블로그, 제주도, 가족 여행, 3박 4일 일정, …"` · `hyde()` → `"…\nTechnique: **Audience & Context…"` 정상 반환.
+낡은 모듈 docstring(`llama-3.1-8b-instant`)도 현 모델로 정정.
+
+### 🔴 측정 이력에 미치는 함의 — HyDE 기각 근거의 유효 범위
+HyDE 기각 측정(2026-07-30, R@5 0.763→0.441)은 **`llama-3.1-8b-instant` 기준**이다. 2026-08-21 교체 이후 HyDE 는 **무효(원본 그대로 반환)** 였으므로, 그 이후 HyDE 를 켜고 잰 수치가 있다면 그건 "HyDE 효과"가 아니라 **baseline 그 자체**다.
+- 오늘 `gen_eval` 의 HyDE 기본값 on 문제(직전 항목)와 겹쳐서 봐야 한다 — 그 구성으로 잰 값은 "HyDE 적용"이 아니라 "HyDE 가 무효인 baseline"이었다. 즉 **검색 구성은 운영과 같았고**, 문제는 표기가 틀렸다는 쪽이다.
+- HyDE 기각 결론 자체는 유지한다(형태 정렬이 변별력을 떨어뜨린다는 이유는 모델 무관). 다만 **현 모델에서는 한 번도 측정된 적이 없다**는 점을 명시해 둔다.
+
+### 남은 예산 위험 전수 확인
+| 위치 | 상태 |
+|---|---|
+| `generator.py` | `_fit_max_tokens` 동적 산정(상한 4096) — 즉사 없음, `structured` 폴백 0회. 다만 추론 토큰이 출력 예산을 갉아먹으므로 `reasoning_effort` 적용 시 TPM 여유↑ → **A/B 대상**(생성 품질에 영향) |
+| `ingestion/gen_examples.py` (2200) · `ingest_knowledge.py` (4096) | Gemini 경로·큰 예산이라 위험 낮음 |
+| `analyzer` · `query_transform` · `tag_axes` · `tag_layers` | ✅ 이번에 전부 수정 |
+
+**교훈**: 2026-08-21 모델 교체는 이름만 바꾸면 되는 작업이 아니었다. **비추론 모델 기준으로 잡힌 토큰 예산이 네 곳에 남아 있었고, 그중 둘은 에러조차 내지 않았다.** 모델 계열이 바뀌면 예산을 전수 재검토할 것.
+
+**변경 파일**: `app/rag/query_transform.py`
+**검증**: `pytest tests/ -q` → 89 passed · 두 함수 라이브 정상 반환 확인
+
+---
+
+## [2026-09-13] generator `reasoning_effort` A/B — **미완(쿼터 소진)** · 대신 용량 한계를 규명
+**목적**: `analyzer`·`query_transform` 에서 효과를 본 `reasoning_effort="low"` 를 생성기에도 적용할지 A/B 로 판정.
+
+### 결과: A/B 를 돌리지 못했다
+```
+Groq  TPD: Limit 200,000 · Used 197,202  (98.6% 소진, 리셋 ~46분)
+Gemini   : 일일 한도 초과
+```
+16콜(4질의 × 2팔 × 2반복) 설계로 시작했으나 첫 요청부터 429. **오늘 측정 불가.**
+
+### 구현은 완료 — 측정만 남았다
+`GEN_REASONING_EFFORT` 환경변수 토글을 추가했다(`generator._gen_reasoning_effort`).
+**기본값 미설정 = 현행 동작 그대로** — 측정 없이 기본값을 바꾸지 않는다. 생성은 analyzer 와 달리 추론량이 품질(모드 판정·기법 반영·원문 verbatim 보존)에 직결될 수 있다.
+
+재개 방법(쿼터 회복 후):
+```bash
+python3 /…/scratchpad/ab_effort.py      # 같은 컨텍스트 고정 · 팔만 교체
+# 또는
+GEN_REASONING_EFFORT=low python3 -m eval.gen_eval --items 1,4,6,9,12,13,16,17 --sleep 50
+```
+⚠️ 팔별로 **캐시 파일을 분리**할 것 — 같은 캐시를 쓰면 B 팔이 A 팔의 생성을 재사용해 비교가 무의미해진다.
+
+### 🔴 진단 중 나온 것 — 서비스 용량이 구조적으로 막혀 있다
+
+A/B 가 왜 안 도는지 파다가 `_needs_long_context` 가 아니라 **요청 크기 자체**가 문제임을 확인했다.
+
+| 항목 | 추정/실측 |
+|---|---:|
+| `SYSTEM_PROMPT`(생성) | **4,605 토큰** (6,715자) |
+| 분석기 시스템 프롬프트 | 1,899 토큰 (2,917자) |
+| 생성 요청 입력 실측 | 4,000~6,600 토큰 |
+| `_fit_max_tokens` 출력 예약 | 1,203~1,951 |
+| **요청당 TPM 점유** | **약 7,800 / 8,000** |
+| **/query 1건 총 토큰** | **6,500~8,000** |
+
+**함의**
+1. **동시 사용자 1명이 한계다.** 생성 1건이 TPM 8,000 을 거의 다 쓰므로 두 번째 요청은 429 → Gemini 폴백 → Gemini 무료 RPD 20 → 곧 소진. **데모에서 두 명이 동시에 누르면 깨진다.**
+2. **하루 약 28건이 상한이다** (TPD 200,000 ÷ ~7,000). 오늘 이 세션의 작업만으로 TPD 를 다 썼다.
+3. `reasoning_effort` 의 이득은 **완료 토큰 쪽뿐**이다(생성 500~1,900 중 일부 절감). 지배적인 비용은 **입력**이고, 그 절반 이상이 `SYSTEM_PROMPT` 4,605 토큰이다. → **진짜 레버는 SYSTEM_PROMPT 축소**인데, 2026-07-31 에 한 번 시도했다가 회귀가 확인돼 되돌린 이력이 있다(그때는 토큰 절감이 목적이었고 품질이 깨졌다). 용량 관점에서 다시 볼 가치는 있다.
+
+**우선순위 제안**: `reasoning_effort` A/B 보다 위 ①②가 먼저다. 데모 전에 최소한 **동시 요청 직렬화**(큐잉 또는 백엔드 단 동시성 1 제한)라도 두지 않으면, 심사 중 두 명이 동시에 누르는 순간 503 이 난다.
+
+**변경 파일**: `app/rag/generator.py`(`GEN_REASONING_EFFORT` 토글, 기본 미설정)
+**검증**: `pytest tests/ -q` → 89 passed · 토글 미설정 시 종전과 동일한 호출 인자
+
+---
+
+## [2026-09-15] LLM 구간 동시 실행 게이트 — 동시 요청 2건이면 반드시 깨지던 문제
+**목적**: 2026-09-13 에 규명한 용량 한계(생성 1건이 Groq TPM 8,000 중 **~7,800** 점유)를 코드로 막는다. 데모에서 두 명이 동시에 누르면 서비스가 깨지는 상태였다.
+
+### 종전 동작
+```
+요청 A ─ 생성(7,800 토큰 점유) ─▶ 성공
+요청 B ─ 동시 도착 ─▶ Groq 429 ─▶ Gemini 폴백 ─▶ Gemini RPD 20 소진
+                                     └─▶ 이후 두 백엔드 동시 차단, /query 가 503 만 반환
+```
+**두 번째 요청이 실패하는 것으로 끝나지 않고, 폴백 쿼터까지 태워 서비스 전체를 망가뜨린다.**
+
+### 채택 — 줄을 세운다 (`app/core/concurrency.py`)
+쿼터를 늘릴 수 없으면 429 로 실패해 폴백까지 태우는 것보다 **기다렸다 성공하는 편**이 낫다.
+
+| 설정 | 기본값 | 근거 |
+|---|---:|---|
+| `RAG_MAX_CONCURRENT_GEN` | **1** | 생성 1건이 TPM 을 거의 다 씀 |
+| `RAG_GEN_QUEUE_DEPTH` | **2** | 대기 2건 × ~20초 = 40초 |
+| `RAG_GEN_QUEUE_WAIT` | **40초** | 백엔드 75초 − 검색 ~5초 − 생성 ~20초 |
+
+⚠️ **셋은 따로 고르면 안 된다**: `대기상한 ≈ 줄길이 × 1건 처리시간`, 그리고 그 합이 백엔드 WebClient 타임아웃(75초)을 넘으면 안 된다. 줄을 늘리면 대기 상한도 같이 늘려야 하고, 그러면 75초에 부딪힌다.
+
+### 설계 판단 3가지
+1. **게이트는 LLM 구간만 감싼다**(`run_generation`). 검색·리랭크는 CPU/DB 작업이라 병렬로 둔다 — 게이트 안에 넣으면 5초짜리 검색이 줄을 막아 처리량이 반으로 준다.
+2. **무한 대기 금지.** 백엔드가 75초에 끊으므로 그 안에 못 끝날 요청은 기다려 봐야 버려진다. 상한을 넘으면 503 으로 빨리 돌려준다.
+3. **줄 길이도 제한 → 꽉 차면 즉시 거절.** 다 받아서 전원이 타임아웃 나는 것보다, 받을 수 있는 만큼만 받는 편이 낫다.
+
+### 배선 위치
+`run_generation` 안에 뒀다 — `/query` 와 eval 스크립트 6개(`gen_eval`·`uplift_eval`·`halluc_eval`·`run_multi_turn_eval`·`example_ab_eval`·`multi_turn_eval`)가 공유하는 **유일한 LLM 진입점**이라 여기 한 곳이면 전 경로가 덮인다. eval 은 단일 스레드라 게이트가 항상 비어 있어 동작 변화가 없다.
+
+거절은 **503 + `Retry-After: 30`**. 503 은 기존 에러 계약(ADR-0008)과 같아 백엔드가 이미 `AI_SERVICE_UNAVAILABLE` 로 매핑한다(`PromptController:886`).
+`/health` 에 게이트 상태를 노출했다 — 503 이 '서버 고장'인지 '줄이 길어서'인지 운영 중에 구분하려면 대기열을 볼 수 있어야 한다.
+
+### 검증
+- `tests/test_concurrency.py` **8개 신규** (LLM·DB 없이 스레드만으로): 동시 실행 상한 · limit>1 · 줄 참 시 즉시 거절 · 대기 상한 · **예외 시 슬롯 반납**(누수되면 서버가 영구히 막힌다) · 대기 카운터 복귀 · stats · 빈 슬롯은 줄 건너뜀
+- **end-to-end**(LLM 만 가짜, 검색·게이트·엔드포인트는 실제 경로): 5건 동시 요청에서 **동시 생성 최대치 = 1**, 대기 카운터 0 복귀
+- 거절 경로: 대기열 0 으로 좁혀 강제 → **503 + `Retry-After: 30`** 정상 반환
+- `pytest tests/ -q` → **97 passed**
+
+**변경 파일**: 신규 `app/core/concurrency.py` · `tests/test_concurrency.py` / 수정 `app/main.py`(게이트 배선 · `/health` · 낡은 `/index` 주석 정정)
+
+**남은 것**
+- 백엔드가 `Retry-After` 를 프론트로 전달하지 않는다 — 전달하면 "N초 후 자동 재시도" UX 가 가능하다(백엔드 변경이라 이번 범위 밖)
+- 리랭커가 CPU 5초를 쓰는데 게이트 밖이라 동시 요청 시 CPU 경합이 난다. 지연이 늘 뿐 실패하지는 않지만, 부하가 보이면 별도 제한 검토
+- 근본 해결은 쿼터 확대 또는 `SYSTEM_PROMPT`(4,605 토큰) 축소다. 게이트는 **깨지지 않게 막는 것**이지 처리량을 늘리지 않는다 — 여전히 **하루 약 28건**이 상한이다
+
+---
+
+## [2026-09-15] 백엔드가 `Retry-After` 를 프론트까지 전달하도록 (직전 항목 후속)
+**목적**: rag-server 동시 실행 게이트가 `503 + Retry-After: 30` 을 내도록 했지만, 백엔드가 그 값을 버리고 있어 프론트까지 닿지 않았다.
+
+### 끊겨 있던 지점 4곳
+| # | 위치 | 문제 |
+|---|---|---|
+| ① | `ApiException` | 헤더를 실어 나를 수단이 없음(`ResponseStatusException.getHeaders()` 미사용) |
+| ② | `GlobalExceptionHandler.build()` | 응답에 헤더를 붙이지 않음 |
+| ③ | `PromptController` 의 `WebClientResponseException` 처리 | 상류 응답의 `Retry-After` 를 읽지 않음 |
+| ④ | `SecurityConfig` CORS | `setExposedHeaders(List.of("Authorization"))` — **`Retry-After` 미노출** |
+
+⚠️ **④가 특히 조용한 함정이다.** 헤더를 보내도 CORS 가 노출하지 않으면 브라우저 JS 는 값을 읽을 수 없다(CORS 는 기본적으로 소수의 안전 목록 헤더만 스크립트에 보여준다). ①②③만 고치면 서버 응답에는 헤더가 보이는데 프론트에서만 `null` 이 나와 원인을 찾기 어렵다.
+
+### 변경
+- `ApiException.retryable(status, code, message, seconds)` 추가. `getHeaders()` 오버라이드로 응답 헤더를 싣는다.
+- `ApiException.retryAfterHeaders()` 가 **상류 값을 검증**한다 — 숫자만 허용(HTTP 날짜 형식은 규격상 유효하나 우리 상류는 초만 보내므로 거부), 음수 거부, **상한 3600초**. 상류가 비정상 값을 줘도 클라이언트를 한 시간 넘게 묶지 않는다.
+- `GlobalExceptionHandler` 에 헤더를 받는 `build()` 오버로드 추가. 기존 호출부는 그대로 동작(무회귀).
+- `PromptController.upstreamRetryAfter()` 로 상류 헤더를 꺼내 전달.
+  · **한도 초과**(429·rate limit): 상류가 값을 안 줘도 재시도가 의미 있으므로 기본 30초를 붙인다.
+  · **일반 장애**: 언제 복구될지 모르므로 **상류가 준 경우에만** 전달한다 — 모르는 값을 지어내면 거짓 안내가 된다.
+- `SecurityConfig` 의 `exposedHeaders` 에 `Retry-After` 추가.
+
+### 검증
+- 신규 `RetryAfterPropagationTest`(6): 헤더가 응답까지 도달 · **에러 본문 계약(ADR-0008) 불변** · 값이 없으면 헤더를 붙이지 않음 · 비정상 값 거부(null·빈값·문자열·음수·HTTP 날짜) · 상한 3600 적용 · 정상 값·0 통과
+- 신규 `RagRetryAfterExtractionTest`(3): **가정 검증** — `WebClientResponseException` 이 상류 응답 헤더를 실제로 들고 오는가. 컨트롤러 추출 로직은 한 줄이라 정작 위험한 건 이 가정이고, 틀리면 전달이 예외 없이 조용히 끊긴다.
+- rag-server 쪽 재확인: 게이트 거절 시 `503 + Retry-After: 30` 실제 발급
+- `./gradlew test` **BUILD SUCCESSFUL**(전체) · rag-server `pytest` 97 passed
+
+**남은 것**: 프론트(확장·웹)가 아직 이 헤더를 읽지 않는다. 읽으면 "N초 후 자동 재시도" UX 가 가능하다 — 지금은 헤더가 도달할 뿐 사용자는 여전히 직접 눌러야 한다.
+
+---
+
+## [2026-09-15] 🔴 같은 버그 네 번째 — judge 가 조용히 빈 점수를 내고 있었다 · 측정 도구 전체 타임아웃 부재
+**목적**: 분석기·쿼리변환이 살아난 뒤의 `gen_eval` 기준선을 잡는다. **기준선 측정 중에 도구 자체의 결함 2건을 또 찾았다.**
+
+### ① 측정 도구 11곳에 LLM 타임아웃이 없었다 — 5시간 42분을 멈춰 있었다
+2026-09-13 에 타임아웃을 넣은 것은 **운영 경로(`app/rag/*`)뿐**이었다. `eval/`·`ingestion/` 은 **자체 Groq/Gemini 클라이언트**를 만들어 쓰고 있었고 전부 타임아웃이 없었다.
+
+실측 증상:
+```
+gen_eval 실행 5시간 42분 · 생성 캐시 13/18 에서 2시간 9분간 무진전
+ESTABLISHED 소켓 4개 점유 · CPU 3분 32초(= 거의 전부 네트워크 대기)
+```
+응답이 오지 않는 연결을 무한정 붙들고 있었다. **예외가 나지 않으므로 `_retry` 도 못 잡는다.**
+→ 8개 파일 11곳에 `app/core/timeouts.py` 의 `GEN_SECONDS`/`GEN_MILLIS` 적용.
+
+### ② 🔴 judge 가 예외 없이 빈 점수를 반환하고 있었다 (같은 추론 토큰 버그, 네 번째)
+`gen_eval._judge` 는 `max_tokens=300` 에 **`response_format` 도 없었다**(평문).
+gpt-oss 계열이 추론 토큰으로 300 을 다 쓰고 `content` 가 빈 문자열로 오는데, `_loads_loose("")` 가 `{}` 를 돌려주므로 **예외도 로그도 없이** 모든 점수가 `None` 이 됐다.
+
+| 발생 위치 | 모드 | 증상 |
+|---|---|---|
+| `tag_axes`(200) · `tag_layers`(700) · `analyzer`(700) | JSON 강제 | `400 json_validate_failed` — 시끄럽게 실패 |
+| `query_transform`(120/300) · **`gen_eval._judge`(300)** | **평문** | **빈 문자열 → 조용히 무효** |
+
+→ `reasoning_effort="low"` + `max_tokens=900` + **JSON 강제** 추가. 스모크 테스트에서 5개 축 전부 정상 수신 확인:
+```
+{'mode_fit': 5, 'technique_grounding': 3, 'instruction_form': 5,
+ 'intent_preservation': 5, 'faithfulness': 5, 'fabricated': False, 'reason': '…'}
+```
+같은 이유로 `gen_qa_set`·`tag_axes`·`tag_layers` 에도 `reasoning_effort="low"` 를 넣었다.
+
+⚠️ **함의**: 어제 "judge 퇴역 모델을 고쳐 평가 축을 복구했다"고 기록했으나(2026-09-13), **모델만 고쳤지 judge 는 여전히 빈 점수를 내고 있었다.** 그 시점 이후의 judge 기반 수치는 전부 N/A 였다.
+
+### 교훈 — 무회귀 폴백이 장애를 은폐한다 (누적 3회)
+`analyze()` 의 `return None`, `query_transform` 의 `return query`, `_judge` 의 `{}` — 셋 다 "실패해도 서비스가 안 끊기게" 만든 장치인데, **셋 다 고장을 보이지 않게 만들었다.**
+→ 폴백에는 **관측 장치가 함께 있어야 한다**. `analyzer.sanitize_stats()` 처럼 "폴백이 몇 번 발동했는가"를 셀 수 있어야 한다. 이건 아직 `_judge`·`query_transform` 에 없다(백로그).
+
+### ⭐ 기준선 (2026-09-15) — 분석기·쿼리변환·judge 가 모두 살아난 첫 측정
+
+`python3 -u -m eval.gen_eval --sleep 25 --cache-file eval/.gen_cache_20260913b.json`
+운영 파리티: **HyDE=off · fetch_k=50 · rerank on · judge=gpt-oss-120b · 분석기 정상**
+
+| 지표 | 값 | n |
+|---|---:|---:|
+| **mode_accuracy** | **0.93** | 14/15 |
+| **structured(JSON)** | **15/15** | 정규식 폴백 0회 |
+| **환각률(fabricated)** | **0.00** | 0/7 |
+| mode_fit | 4.27 | 11 |
+| technique_grounding | 4.09 | 11 |
+| instruction_form | 5.00 | 7 |
+| intent_preservation | 4.91 | 11 |
+| faithfulness | 5.00 | 7 |
+
+**읽는 법 / 한계**
+- ⚠️ **이전 수치와 직접 비교 금지.** 2026-07-31 의 mode 정확도 0.83 은 분석기가 살아 있던 시절 값이고, 그 사이(08-21~09-15) 분석기는 죽어 있었다. 지금 0.93 은 **분석기가 돌아온 상태의 새 기준선**이다.
+- 15·16·17 은 **일시적 DNS 오류**(`Errno 8 nodename nor servname provided`)로 생성 실패 — 쿼터·품질 문제가 아니다. 캐시 15/18.
+- judge 실패 4건(429)은 점수 n 이 11·7 로 줄어든 이유다. mode_accuracy·structured 는 결정론적이라 영향 없다.
+- 유일한 mode 오판은 **[18] "제품 홍보 이메일 써줘"** — 기대 ask, 실제 improve. judge 도 `mode_fit=2` 로 낮게 봤다. 분석기 프롬프트의 *"'제품'은 일반명사, 어떤 제품인지 없음 → empty"* 규칙이 먹히지 않은 사례다.
+- `technique_grounding` 이 ask 모드에서 일관되게 **2점**(9·10·11번)이다 — 질문 모드에서 검색된 기법이 질문에 거의 반영되지 않는다는 뜻이고, 이는 **검색 품질 문제(R@5 0.296)와 같은 뿌리**로 보인다.
+- 속도: 항목당 ~11분(TPM 8,000 vs 항목당 ~11,600 토큰의 구조적 한계). 전량 1회에 약 3시간.
+
+**변경 파일**: `eval/{gen_eval,uplift_eval,halluc_eval,gen_qa_set}.py` · `ingestion/{gen_examples,tag_axes,tag_layers,ingest_knowledge}.py`
+**검증**: 8개 파일 구문 통과 · 타임아웃 없는 클라이언트 0곳 · judge 스모크 정상 · `pytest tests/ -q` 97 passed
+
+---
+
+## [2026-09-16] 결과 상향 평가셋 v2 초안 — raw vs 딸각 비교 기준을 '원래 요청'에 고정
+**목적**: "딸각이 AI 결과물을 실제로 얼마나 좋게 만드는가"를 판단할 신뢰할 수 있는 기준이 필요했다. 기존 `uplift_eval` 은 판정 LLM의 종합 점수 하나(8문항)뿐이라 판정 모델 취향이 섞이고 신뢰구간이 너무 넓다(8문항 중 6승이어도 95% CI 약 41~93%).
+
+**Before**
+- `uplift_set.json` 8문항, 문항에 채점 기준 없음 → 판정 LLM 종합 선호만 측정.
+
+**After** — 신규 `eval/uplift_set_v2.json` (40문항, 기존 8문항 그대로 포함)
+| 기준 | 필드 | 측정 | 근거 |
+|---|---|---|---|
+| 1 요구사항 충족률 | `requirements` (157개) | judge yes/no → 충족 수/전체 | InFoBench DRFR |
+| 2 형식 제약 준수율 | `checks` basis=request (22개) | 코드 판정 | IFEval |
+| 3 정보 보존 | `checks` basis=preserve (45개) | 코드 판정 | RAG faithfulness |
+| 정확성 | `gold` (49개) + `checks` basis=gold (8개) | judge yes/no / 코드 | — |
+| 4 즉시 사용성 | `global_checks` | 빈칸 수·작성 거부 여부 | 환불메일 거부·회의록 누락 사례 |
+
+- 분포: generate 24 / transform 16 · 구체성 high 31 / mid 5 / low 4 (low 는 되묻기 비율 측정용)
+- **핵심 규칙**: 채점 기준은 사용자의 원래 요청에서만 뽑는다. 딸각이 덧붙인 조건으로 채점하면 순환 논리.
+
+**변경 파일**: 신규 `eval/uplift_set_v2.json` · `tests/test_uplift_set_v2.py`
+
+**검증**: `pytest tests/ -q` 103 passed. 신규 테스트가 강제하는 것 —
+- preserve 확인값이 원래 요청에 실제로 있는가(번역 문항만 `translated` 예외)
+- 기존 8문항 query 가 v1 과 글자 단위로 같은가(이전 측정과 비교 가능)
+- 가공 문항의 글자 수 제한이 원문보다 짧은가 → **초안에서 up_35 가 걸렸다**(원문 242자에 300자 제한 = 아무것도 거르지 않음) → 150자로 수정
+
+**결정·근거 / 한계**
+- ⚠️ 라벨은 작성자 1인 판단. 팀 교차 검토 전까지 잠정.
+- 아직 채점기 미구현 — `uplift_eval` 에 체크 실행기·요구사항 judge·3조건(raw/다듬기만/딸각)·Wilson CI 연결이 다음 단계.
+- 사람 대조 검증(20~30쌍, κ ≥ 0.6) 전에는 judge 기반 기준 1·정확성 수치를 확정 결과로 쓰지 않는다.
+
+---
+
+## [2026-09-16] 🔴 `technique_grounding` 은 검색 품질에 눈이 멀었다 · gen_eval 이 운영과 다른 파이프라인을 재고 있었다
+**질문(사용자)**: 측정 기법이 왜 안 통하는가 — 정확히 어떤 이유로 분석된 기법이 프롬프트에 반영되지 않는가. 기준점이 가장 중요하니 신중하게.
+
+### 출발점 — 완전한 기준선(18/18, judge 실패 0)에서 드러난 패턴
+| 모드 | 건수 | technique_grounding |
+|---|---:|---:|
+| improve | 12 | **12건 전부 5점** |
+| ask | 6 | 3·2·3·5·4·3 → **평균 3.33** |
+
+저하는 **ask 모드에서만** 일어났다.
+
+### 진단 1 — 검색이 질의를 구분하지 못한다 (gen_set 18질의 · top-5 86슬롯)
+| 층 | 슬롯 | 비율 |
+|---|---:|---:|
+| user_instruction | 68 | 79% |
+| **meta** | 12 | **14%** |
+| degenerate | 3 | 3% |
+| system | 3 | 3% |
+
+- **최다 회수 카드가 `Meta-Prompting`(18질의 중 7회)** — *"요청을 최적의 프롬프트로 변환하라"*, 즉 생성기가 이미 하는 일이다.
+- 고유 카드 46종이 슬롯을 채우고 dense 는 전부 0.40~0.55 좁은 띠. 서로 다른 질의가 같은 카드를 받는다.
+
+### 진단 2 — 생성기는 검색 목록을 **충실히** 따른다 (⚠️ 처음 가설을 뒤집음)
+처음엔 *"improve 의 5점은 개선 프롬프트가 으레 하는 일과 일반 기법이 우연히 겹친 착시"* 라고 봤다. **틀렸다.**
+```
+improve 모드 적용 기법 45개 중 검색 결과에 있던 것 45개 = 100%
+```
+생성기는 기법명을 지어내지 않는다. **그래서 검색된 쓰레기도 그대로 적용된다.**
+
+### 진단 3 — 🔴 쓰레기 적용을 judge 가 못 잡는다
+```
+개선안에 적용된 기법 45개 중 '반영할 수 없는 층' 9개 = 20%
+해당 항목의 judge technique_grounding = 전부 5점
+```
+| 질의 | 적용됨(쓰레기) | 층 |
+|---|---|---|
+| 환불 거절 이메일 | Fallback Response Handling · Adversarial Prompt Testing | system |
+| 채용 공고 | Request Normalization · Prompt Generator Pattern | meta |
+| 파이썬 코드리뷰 · 번역 · 다이어트 블로그 · 제품 홍보 이메일 | Meta-Prompting | meta |
+
+**`technique_grounding` 은 "검색된 것을 반영했나"만 묻고 "그게 맞는 기법이었나"는 묻지 않는다.** 검색이 쓰레기를 주고 생성기가 충실히 따르면 → 5점. **검색 품질에 구조적으로 눈이 멀었다.**
+
+### 진단 4 — ask 모드의 2~3점은 구조의 산물
+- 출력 스키마: ask 는 `{mode, questions, summary}` — **기법 필드가 없다** (적용 기법 0/0)
+- SYSTEM_PROMPT [질문 모드] 절: **[참고 기법]을 쓰라는 지시가 없다** (improve 절에만 있다)
+- 게다가 설계상 ask 는 (A)작업종류·(B)주제만 물어야 하고 톤·분량 같은 보조 항목은 **질문 사유가 아니다**. 기법(Audience·Length 등)을 질문에 반영하게 만들면 **과잉 질문 → mode_fit 하락**과 충돌한다.
+→ ask 모드 technique_grounding 은 **제품 설계와 어긋난 채점축**일 가능성이 크다. judge 프롬프트는 바꾸지 않고(프롬프트 변경은 A/B 필요), **모드별로 분리 집계**만 추가해 가려지지 않게 했다.
+
+### 진단 5 — 🔴 기준선이 운영과 다른 파이프라인을 재고 있었다
+| | 운영 `/query` | gen_eval(종전) |
+|---|---|---|
+| min_score | 0.40 컷 | **없음 — 항상 5개** |
+| 예시 주입 | 최대 2개 | **없음** |
+| mode 판정 | 응답 `mode` 필드 | **improved_prompt 유무로 추측** |
+
+단서: 직전 기준선 캐시 미스 2건(1·13번)이 **정확히 min_score 가 뭔가를 잘라내는 항목**이었다. 검색은 프로세스 간에도 결정적이었으므로(3회·스레드 1/다중 동일) 원인은 인자 차이다.
+→ `app.main.retrieve_contexts()` 로 검색부를 추출해 **/query 와 gen_eval 이 같은 함수를 부른다.** 오늘 반복된 근본 원인(복제 → 드리프트)을 여기서도 끊는다.
+
+### 조치
+| 변경 | 목적 |
+|---|---|
+| `retrieve_contexts()` 추출, /query·gen_eval 공유 | 운영 파리티(min_score·예시) |
+| gen_eval 캐시 키에 **예시 식별자** 포함 | 예시 없이 만든 생성의 재사용(조용한 오염) 차단 — 이전 캐시는 전부 미스(의도) |
+| gen_eval `mode` = 응답 필드 | 운영 규약 |
+| **결정론 지표**: 반영불가 기법 적용률 · technique_grounding(improve/ask) · 404 건수 | judge 가 못 보는 것을 본다 |
+| **층 필터 retriever 배선**(기본 on, `use_layer_filter` 로 끌 수 있음) | 반영불가 카드 회수 21% 제거 |
+| gen_eval `--no-layer-filter` | A/B |
+
+**검증**: /query 리팩터 전후 동일(기법 5 + 예시 2 · 0건+첫턴 404 · 0건+후속턴 200) · LLM 없는 하네스 스모크 · 필터 on/off 로 회수 카드가 실제로 바뀜(`Request Normalization`·`Prompt Generator Pattern` → `Domain-Specific`·`Intent Classification`) · `pytest tests/ -q` **103 passed**
+
+⚠️ 테스트 도중 `/query` 가 "제주도 여행 블로그 글 써줘. 아이랑 3박4일" 에 404 를 냈다 — **변경 탓이 아니다.** 필터를 꺼도 top-5 최고가 0.368 이라 0건이다. 문서에 기록된 기존 하드 404 사례가 여전히 살아 있다(`CORPUS_STRATEGY` 1순위 "하드 404 폐지" 미착수).
+
+### A/B 설계 — 공유 캐시
+| 팔 | 설정 |
+|---|---|
+| A | `--no-layer-filter` · 운영 파리티(min_score 0.40 · 예시 2) |
+| B | 층 필터 on · 나머지 동일 |
+
+두 팔이 **같은 캐시 파일**(`eval/.gen_cache_parity.json`)을 쓴다. 필터가 검색 결과를 바꾸지 않은 항목은 입력이 완전히 같아 생성을 공유 → 처치가 닿지 않은 항목은 **동일 표본**이 되어 잡음이 준다. 분석기 입력은 질의뿐이라 필터와 무관하고, 캐시 키가 기법·예시를 모두 포함하므로 오염되지 않는다.
+쿼터: 항목당 실사용 ~10,500 토큰 → A 1회 ~190k(TPD 200k 육박). **B 는 다음 쿼터 창에서** 돌린다.
+
+**변경 파일**: `app/main.py` · `app/rag/retriever.py` · `eval/gen_eval.py`
+
+---
+
+## [2026-09-16] 평가셋 v2.1 — 캐시 결과물 대조로 드러난 오판 수정 (수정 1~5)
+**목적**: v2 초안의 코드 판정을 기존 캐시 결과물 27건(`eval/.uplift_cache.json`, 70b·8b)에 돌려보니 오판과 누락이 나왔다. 채점기를 만들기 전에 평가셋부터 고친다.
+
+**Before — v2 초안을 실제 결과물에 돌린 결과**
+| 문제 | 사례 |
+|---|---|
+| 🔴 가장 중요한 실패 누락 | up_08 딸각 결과물이 번역이 아닌 "영수증 안내" 메일인데 언어·격식체 판정 모두 합격 |
+| 🔴 빈칸 감점이 지어내기와 충돌 | 회사명을 안 줬으면 `[회사명]` 이 정답 동작. 감점하면 지어낸 쪽이 유리. raw 결과물 대부분에도 있음 |
+| 🟠 맞는 결과를 불합격 | up_02 "경력 무관"이 `경력: 무관` 표기를 못 잡음 — 6건 중 2건 오판 |
+| 🟠 줄 수가 머리말까지 셈 | up_04 "3줄": 머리말 한 줄 때문에 5건 중 3건 불합격. 합격한 1건은 "네트워크 모듈"을 지어낸 결과물 |
+| 🟠 틀린 사실 통과 | up_02 마감 "**2024년** 7월 31일"이 "7월 31일" 포함으로 합격 |
+| 🟡 정규식 오탐 | 코드 `rows[0]`을 빈칸으로(3건), 끝인사 "알려주시면"을 거부로(1건) |
+| 🟠 변별력 없음 | 8문항 중 4문항은 모든 결과물이 모든 판정 합격 |
+
+**After — `eval/uplift_set_v2.json` v2.1-draft (48문항)**
+1. **빈칸 재정의** — `global_checks`(정규식) 삭제 → `defects.placeholder_defect`(judge): 요청에 준 값을 비운 것·핵심 내용 자체를 비운 것만 결함. 주지 않은 정보의 빈칸은 정상.
+2. **지어내기 전역 판정** — `defects.fabrication`(judge), transform=원문 밖 사실 추가 금지 / generate=사용자 사실 변경·요청 주체 사실 날조 금지. 문항별 "지어내지 않는다" gold 8건 삭제(이중 계산 방지). `defects.refusal` 도 judge 로.
+3. **코드 판정 축소** — `max_lines`·`max_sentences`·`char_range` 삭제(요구사항 문구에 "머리말은 세지 않는다" 명시하고 judge 로). 표기가 흔들리는 확인값 삭제(경력 무관·7월 말·공식 사이트·습니다·HAVING/GROUP BY·`->`·`% 2` 등). 코드 판정 75개 → 57개.
+4. **주관 요구사항 표시** — `requirements` 를 객체로, 18개에 `subjective: true`(톤·어조·쉬운 말·가독성 등) → 충족률에서 제외하고 따로 보고. 애매한 gold 정리(up_03 TypeError 삭제, 조건부 2건 `conditional: true`). 집계 규칙(`aggregation`: 문항 단위 paired, macro 주·micro 보조, 지표 합산 금지, 3회 반복) 명문화.
+5. **트랙 분리** — `track` A(조건 충분, 31문항: 망치지 않는가) / B(조건 부족, 17문항: 도움이 되는가). B 는 up_41~48 8문항 추가(gen_set·halluc_set 과 겹치지 않게). up_01~08 은 gen_set 1~8 과 같은 작업 → `tuning_overlap: exact_task`, up_33·38 → `similar`(따로 보고).
+
+**검증**
+- `pytest tests/ -q` **107 passed**. 테스트 추가: 트랙↔구체성 일치 · 오판 확인된 판정 방식 재유입 금지 · gold 에 지어내기 중복 금지 · 조정용 셋 문항이 표시 없이 들어오지 않음 · 트랙별 15문항 이상.
+- 같은 캐시 결과물 재판정: up_04 머리말 오판 3건 → 0건, 실제 거부 1건은 계속 잡음 · up_02 경력 표기 오판 2건 → 판정 삭제 · up_02 재택 누락 1건은 정상 검출.
+
+**결정·근거 / 남은 일**
+- 코드 판정만으로는 가장 심각한 실패(up_08 엉뚱한 메일, up_04 "네트워크" 날조, up_02 "2024년")를 못 잡는다 → 이 세 건 + up_06 제목 빈칸(`[정중한 환불 거절 안내]`)을 **judge 결함 판정의 검증용 표본**으로 쓴다. judge 가 이 4건을 못 잡으면 채점기에 쓰지 않는다.
+- `max_chars` 머리말 떼기 규칙은 채점기 구현 때 캐시 결과물로 검증 필요.
+- up_41~48 은 Claude 작성 — 팀원이 딸각 결과를 보지 않고 쓴 문항으로 교체 권장. 사람 2인 라벨 대조(κ ≥ 0.6) 전까지 잠정.
+
+### A팔 결과 (운영 파리티 · 층필터 off) — 16/18
+| 지표 | 값 |
+|---|---:|
+| mode_accuracy | 0.85 (11/13) *(첫 실행분)* |
+| **반영불가 기법 적용률** | **0.30** (7/23) |
+| technique_grounding(improve) | **5.00** |
+| technique_grounding(ask) | 3.71 |
+| 404 | 0/18 |
+
+→ **운영 파리티 파이프라인에서도 judge 의 맹점이 그대로 재현된다**: 적용 기법의 30%가 반영불가 카드인데 improve 는 만점.
+누락 2건(6·15)은 아래 ② 때문이며, 공유 캐시 `eval/.gen_cache_parity.json` 에 16건이 남아 있다.
+
+### ① 항목 4 의 모드 뒤집힘(improve→ask)은 **분석기**가 원인
+```
+fields(분석기): ('원문', 'required', 'empty')
+```
+분석기가 **자기 규칙 5번**(*"원문을 붙여넣지 않고 '~하는 프롬프트를 만들어줘'라고 한 경우 원문은 required 가 아니다"*)을 어겼다. 생성기는 그 신호대로 "원문에도 없음 → 질문"으로 갔다. 직전 기준선에선 같은 항목이 improve ✓ → **분석기 비결정성**(temp 0.2 · reasoning_effort low). 빈도 측정은 미실시.
+
+⚠️ 부수: 이 항목에 주입된 예시가 **의미상 무관**했다 — "회의록 요약 프롬프트"에 *"회의 일정표 3개"*(0.574)·*"영어 면접 대비"*(0.563). "회의"라는 표면만 맞았다. `example_min_score=0.40` 이 아무것도 거르지 못한다(기존 백로그 "예시 코퍼스 기준 재측정 필요"와 같은 문제).
+
+### ② 🔴 운영 생성기가 **큰 입력에서 400 으로 실패**한다 (같은 추론 토큰 버그, 여섯 번째)
+누락 2건이 계속 실패해서 원인을 팠다. 처음엔 Gemini 503 만 보였다 — **Generator 폴백이 Groq 쪽 원인을 버리고 있었기 때문이다**(`except RuntimeError:` 후 사유 없이 "Groq 실패" 출력 → 오늘 네 번째 '폴백이 원인을 숨김' 사례). 원인 로깅을 넣자:
+```
+[Generator] Groq 실패 → Gemini 폴백 — 원인: Groq 요청 실패(HTTP 400)
+```
+직접 재현:
+```
+항목 6 · _fit_max_tokens=805 → 400 json_validate_failed · failed_generation ''
+```
+**원인 사슬**
+| 요인 | 효과 |
+|---|---|
+| gpt-oss TPM **8,000** (llama 시절 12,000) | 출력 여유 축소 |
+| `SYSTEM_PROMPT` 4,605(추정) + 기법 + **예시(이번에 파리티로 추가)** + **분석 블록(09-13 분석기 복구로 되살아남)** | 입력 증가 |
+| `_fit_max_tokens = TPM − 추정입력 − 200` | 출력 예산 **~800~1,000** 으로 축소 |
+| 🔴 **`_est_tokens` 가 llama 토크나이저 기준으로 보정돼 있음** | gpt-oss 입력을 **19.5% 과대추정**(추정 6,303 / 실제 5,273, 항목 1) → 예산을 더 깎는다 |
+| gpt-oss 는 출력 앞에 추론 토큰을 쓴다 | 남은 ~800 을 추론이 먹고 JSON 미완성 → **400** |
+
+→ **분석기를 고친 것(09-13)이 생성기 예산을 줄여 이 실패를 드러냈다.** 개별로 맞는 수정이 합쳐져서 새 실패를 만든 사례다.
+→ 운영 영향: 입력이 큰 요청은 간헐적으로 400 → Gemini 폴백(무료 RPD 20·고부하 503) → 사용자에겐 503. **gen_set 에서 2/18(11%)** 가 이 경로로 떨어졌다.
+
+측정된 것 (1건 · 항목 1): `max_tokens 1497 · 완료 1172 · finish=stop · structured=True` — 예산이 충분하면 정상 동작한다.
+
+### 오늘 못 한 것 — Groq TPD 소진 (198,765 / 200,000)
+| 남은 측정 | 목적 |
+|---|---|
+| **B팔**(층필터 on, 공유 캐시) | 층 필터의 생성 단계 효과 — 반영불가 적용률 0.30 → ? |
+| **추정기 재보정**(`_est_tokens`, gpt-oss 실측) | 데이터 1점뿐 — 여러 점을 모아야 계수를 바꿀 수 있다 |
+| **생성기 `reasoning_effort` A/B — 큰 입력(6·15번) 중심** | 이 버그가 실제로 나는 곳에서 재야 의미가 있다 |
+| 분석기 규칙 5 위반 빈도 | 항목 4 반복 호출 |
+
+**변경 파일**: `app/rag/generator.py`(폴백 원인 로깅 — 동작 불변)
+**검증**: `pytest tests/ -q` 103 passed · 폴백 원인 로그 실출력 확인
+
+---
+
+## [2026-09-19] 층 필터 A/B 결과 — 반영불가 기법 29% → 0%, 품질 회귀 없음 · 모드 뒤집힘은 필터가 아니라 분석기
+
+**질문**: 09-16 에 배선한 층 필터(`retriever.use_layer_filter`, `user_instruction` 만 검색)가
+생성 단계에서 실제로 "반영할 수 없는 기법"을 없애는가, 그리고 다른 품질을 깎지 않는가.
+
+**조건**: `gen_eval` · gen_set 공통 13항목(1,3,5,7,8,9,10,11,12,13,16,17,18) · Groq 단일 백엔드
+(`GEMINI_API_KEY=""` — A팔 캐시가 전부 Groq 생성) · temp 0.7 · judge gpt-oss-120b · 두 팔 **같은 실행 조건**에서 채점.
+A = `--no-layer-filter`, B = 기본(필터 on). 캐시 `eval/.gen_cache_parity.json`.
+
+**제외 4항목(2·4·6·14)**: B 생성이 HTTP 400 을 2회 연속 → 포기. 필터 탓이 아님을 따로 확인했다 —
+필터 on/off 의 `_fit_max_tokens` 차이는 −41~+16 토큰뿐이고, 400 은 예산 ~1,100~1,250 구간에서
+**확률적으로** 난다(09-16 항목의 추론 토큰 예산 버그). 이번 재생성에서도 A·B 모두 4회 중 1회꼴로 400.
+
+### 결과 (공통 13항목, 각 1회 생성)
+| 지표 | A (필터 off) | B (필터 on) |
+|---|---|---|
+| **반영불가 기법 적용률** (결정론) | **0.29** (8/28) | **0.00** (0/14) |
+| technique_grounding(improve) | 5.00 (n=7) | 5.00 (n=4) |
+| technique_grounding(ask) | 3.67 (n=6) | 3.56 (n=9) |
+| mode_accuracy | 0.92 (12/13) | 0.85 (11/13) |
+| mode_fit | 5.00 | 4.54 |
+| intent_preservation | 5.00 | 4.77 |
+| instruction_form / faithfulness | 5.00 / 5.00 (n=7) | 5.00 / 5.00 (n=4) |
+| 환각률 · structured · 404 | 0/7 · 13/13 · 0 | 0/4 · 13/13 · 0 |
+
+### 모드 차이 3건 — 전부 필터와 무관
+| 항목 | A | B | 원인 확인 |
+|---|---|---|---|
+| 3 코드리뷰 프롬프트 | improve ✓ | **ask ✗** | B팔 그대로 **3회 재생성 → 3/3 improve**. A팔도 3/3 improve. 1회성 흔들림 |
+| 8 영어 이메일 번역 프롬프트 | improve ✓ | **ask ✗** ("원문이 제공되지 않아") | **분석기**를 5회 단독 호출 → **3/5 가 `원문=empty`(required)**. 규칙 5("~하는 프롬프트" 요청이면 원문은 required 아님) 위반. 분석기는 검색 **전**에 돌므로 필터가 영향을 줄 수 없다 |
+| 18 제품 홍보 이메일 | **improve ✗** | ask ✓ | 기대 ask. A 쪽이 틀렸다 |
+
+→ mode_fit·intent 하락(5.00→4.54/4.77)은 항목 3의 ask ✗(fit 2·intent 2) 한 건이 대부분을 만든다.
+   항목 13(제주도)의 B fit=2 는 mode 가 기대대로 improve ✓ 인데도 judge 가 낮게 줬다 — 원인 미확인(judge 1회).
+
+### 같은 질의에서 무엇이 바뀌었나 (필터의 실제 효과)
+| 항목 | A 적용 기법 | B 적용 기법 |
+|---|---|---|
+| 8 번역 (A) | Request Normalization · **Meta-Prompting** · Terminology Control · Variable Slot · **Prompt Generator Pattern** | (ask) |
+| 13 제주도 | **Meta-Prompting** · Directional Stimulus | Directional Stimulus · Analyst-Then-Writer |
+| 3 코드리뷰 (재생성) | … · **Meta-Prompting** | … · Add Clear Syntax |
+
+A팔 번역 개선안은 "1. Request Normalization Prompting 기법에 따라 정규화한다 2. Meta-Prompting 을 활용해…"처럼
+**기법 이름을 절차로 옮겨 적은 무의미한 지시문**이었다 — judge 는 이것에 tech=5·fit=5 를 줬다.
+09-16 에 적은 "judge 는 검색 품질에 눈이 멀었다"가 실물로 확인된 사례.
+
+### 판단
+- **필터 유지.** 목표 지표(반영불가 29%→0%)를 달성했고, judge 지표 차이는 전부 필터 밖 원인으로 추적됐다.
+- **한계**: 항목당 1회 생성·n=13. B 는 improve 가 4건뿐이라 improve 지표의 표본이 작다.
+- **다음 1순위 = 분석기 규칙 5 위반**(번역 템플릿 요청에 원문 required, 5회 중 3회). 이게 지금 mode_accuracy 를 가장 크게 흔든다.
+
+### 부수 발견 (미수정)
+- 🔴 A팔 항목 3 캐시: `techniques_applied` 에 `'{"name":"Checklist Prompting","reason":…}'` 처럼 **JSON 문자열이 이름째** 들어갔고,
+  마크다운 `answer` 에는 빈 글머리표(`• `)가 찍혔다. 생성기가 techniques 를 문자열화된 JSON 으로 낸 경우를 정규화하지 못한다.
+  측정 영향: 이런 이름은 카드와 매칭이 안 돼 반영불가 적용률의 **분모에만** 들어간다(과소집계 방향).
+- `gen_eval` 캐시 키에 분석기 결과가 없다 — 분석기 출력이 달라져도 같은 키면 캐시 히트. 이번엔 두 팔의 기법 목록이 달라 충돌은 없었다.
+
+**변경 파일**: 없음(측정·기록만) · 스크래치 `drive_b.py`·`replay3.py`
+
+---
+
+## [2026-09-19] CI 에 rag-server 단위 테스트 추가 · 측정 도구 3곳 `types` 미정의(NameError) 수정
+**목적**: rag-server 는 CI 에서 전혀 검사되지 않았다(통합 스모크도 가짜 RAG 만 씀). "조용히 죽어 있던" 결함이 네 번 반복된 만큼 최소한의 자동 검사를 건다.
+
+**Before**
+- `.github/workflows/ci.yml` 에 Python job 없음.
+- `eval/uplift_eval.py` 가 모듈 최상단에서 `app.main` 을 import → 헬퍼(`_loads_loose` 등)만 쓰는 `defect_canary`·테스트도 import 순간 bge-m3 로드 + MySQL 접속. 로컬에선 모델 캐시·DB 가 있어 통과, CI 에선 불가.
+- `c91201b`(측정 도구 타임아웃 추가)가 Gemini 분기 3곳에 `types.HttpOptions` 를 넣으면서 `from google.genai import types` 를 빠뜨림 → **Gemini 경로로 돌면 NameError**. Groq 우선이라 드러나지 않았다: `eval/uplift_eval.py:_get_client` · `ingestion/gen_examples.py` · `ingestion/ingest_knowledge.py`.
+
+**After**
+- CI job `rag-server`: Python 3.11(Dockerfile 과 동일) · `requirements-test.txt`(torch·sentence-transformers 제외) · `ruff check --select F821,E9`(정의 안 된 이름·문법 오류만) · `pytest tests -q`.
+- `uplift_eval` 의 `app.main` import 를 `main()` 안으로 이동(동작 불변 — `retriever`·`run_generation` 은 `main()` 에서만 쓰임, 다른 도구는 `app.main` 을 직접 import).
+- 3곳에 `from google.genai import types` 추가.
+
+**변경 파일**: `.github/workflows/ci.yml` · 신규 `requirements-test.txt` · `eval/uplift_eval.py` · `ingestion/gen_examples.py` · `ingestion/ingest_knowledge.py`
+
+**검증**
+- 커밋된 트리(HEAD + 이 수정) 를 `.env` 없는 worktree 에서 `requirements-test.txt` 만으로: ruff 통과 · `pytest` 97 passed (Python 3.10). 작업 트리 전체(미커밋 테스트 포함) 172 passed.
+- ruff F821 이 수정 전 `gen_examples.py` 의 `types` 를 잡는 것 확인.
+
+**결정·근거**
+- ruff 는 F821·E9 만 켠다. 전체 규칙은 기존 코드에서 대량 경고가 나 CI 를 소음으로 만든다.
+- ⚠️ `tests/` 가 `app.main`·`app.core.embeddings` 를 import 하게 되면 CI 가 깨진다 — `requirements-test.txt` 머리말에 명시.
+
+---
+
+## [2026-09-19] doc2query(문서측 요청 예문) A/B — ❌ 기각: 예문이 기법이 아니라 **소재**로 맞는다
+**목적**: 2026-08-09 백로그 🔴 1순위(CORPUS_STRATEGY 실행 순서 5). 기법 카드마다 사용자 말투 요청 예문을 오프라인 생성해 검색뷰로 붙이면, 카드 ↔ 거친 요청의 표현 간극이 메워져 검색·관련성 판별이 좋아지는가.
+
+**Before**: 검색뷰 = 본문 ∪ 축약뷰(이름+정의+Use When). 예문 뷰 없음.
+
+**After (측정용 산출물만 — DB·운영 무변경)**
+- 신규 `ingestion/gen_request_views.py` — 검색 대상 123장 × 5개, `openai/gpt-oss-20b`(120b 는 judge 와 하루 한도 공유라 피함), 5장씩 배치, 이어 실행. 누수 방어: 기법명 포함 요청은 코드로 버림, `leak_score ≥ 0.5` 버림.
+- 신규 `ingestion/request_views.json` — 123장 · 572개(버림 41 · 예문 0개 카드 2) · 평균 leak 0.096.
+- 신규 `eval/doc2query_eval.py` — `Retriever._load_collection` 결과에 예문 벡터를 **메모리에서만** 덧붙여 base vs +req 비교. `rag_chunk` 은 읽기만.
+- 신규 `tests/test_request_views.py`(파싱·정제 4개).
+
+**측정** (운영 설정: 층 필터 ON · fetch_k 50)
+
+| 셋 | rerank | 지표 | base | +req | Δ |
+|---|---|---|---:|---:|---:|
+| realistic(사람 라벨, 59) | off | Hit@1 | 0.610 | **0.220** | −0.390 |
+| | off | R@5 | 0.681 | 0.446 | −0.234 |
+| | on | Hit@1 | 0.576 | 0.542 | −0.034 |
+| | on | R@5 | 0.749 | 0.723 | −0.025 |
+| coverage(LLM 생성, 57) | off | R@5 | 0.333 | 0.439 | +0.105 |
+| | on | R@5 | 0.456 | 0.439 | −0.018 |
+
+관련성 판별(정상 = `gen_set` 18 · 무관 = WORKLOG 에 기록된 7개, top1 dense):
+
+| | AUC | 정상 최저 | 무관 최고 | τ=0.40 무관 통과 |
+|---|---:|---:|---:|---:|
+| base | 0.857 | 0.433 | 0.543 | 6/7 |
+| +req | 0.849 | 0.530 | 0.663 | **7/7** |
+
+- 변형: 예문 벡터를 카드당 평균 1개(centroid)로 합쳐도 realistic dense Hit@1 **0.322**, AUC 0.802 — 역시 악화.
+- 오염 점검(질의 ↔ 정답 카드 예문 최대 코사인): realistic 중앙값 0.672 · coverage 0.603, ≥0.85 는 각 1·0건 → coverage 개선(+0.105)은 근접 중복 때문은 아니나, 둘 다 LLM 이 카드 → 요청으로 만든 문장이라는 **같은 분포**다. 사람 라벨 셋이 반대 부호이므로 채택 근거가 못 된다.
+
+**원인 (max-pool 오답 top1 이 어떤 예문으로 이겼나)**
+| 질의 | 이긴 카드 | 이긴 예문 |
+|---|---|---|
+| 이 회의록을 핵심만 세 줄로 줄여줘 | Prompt Compression | 핵심 내용만 3줄로 정리해줘 |
+| 이 문서들에서 가격 정보만 뽑아줘 | Avoid Conflicting Tool-Call Instructions | 이 URL에서 가격 정보를 추출해 주세요 |
+| 추천 영화 순위를 매겨줘 | Markdown Tables | 내가 모아둔 영화 리스트를 표로 정리해줘 |
+| 영어 계약서 번역하는데 용어를 일관되게 해줘 | Domain-Specific Prompting | 법률 문서 스타일로 계약서를 작성해줘 |
+
+예문 하나하나는 그럴듯하지만 **소재**(회의록·가격·영화·계약서)를 담는다. 질의와 소재가 겹치는 아무 카드가 이긴다 — 2026-08-15 진단("형태 괴리가 아니라 관계 종류가 문제")과 같은 현상이 문서 쪽에서 재현됐다. CORPUS_STRATEGY 가 적어 둔 함정("제네릭 예문이 오답 attractor")이 그대로 일어났다.
+
+**결정·근거**
+- **적용하지 않는다.** 백필(`backfill_views`)·`views.py` 등록 안 함. 사람 라벨 셋에서 dense 는 크게, rerank 는 작게 악화하고 AUC 는 그대로다.
+- 산출물(생성기·예문 JSON·A/B 도구)은 음성 결과의 재현 근거로 남긴다. 필요 없으면 지워도 운영 영향 없음.
+- 관측: **base AUC 가 0.857** 이다(2026-08-09 의 0.575 는 축약뷰·층 필터 이전 + 다른 양성 10개 기준). 그러나 무관 입력 6/7 이 여전히 τ=0.40 을 통과 — 판별 순위는 나아졌어도 **임계치 게이트는 여전히 못 쓴다**. 음성셋(100건) 없이는 확정 불가.
+
+**변경 파일**: 신규 `ingestion/gen_request_views.py` · `ingestion/request_views.json` · `eval/doc2query_eval.py` · `tests/test_request_views.py` · `CORPUS_STRATEGY.md`(doc2query ❌ 기각 표기)
+**검증**: `pytest tests/test_request_views.py` 4 passed(로컬·CI 조건) · A/B 2조건 × 116문항 × rerank on/off 실행 완료
+
+---
+
+## [2026-09-19] 분석기 규칙 5 를 코드로 강제 — 템플릿 요청의 '원문'을 required 로 잡던 것 (13/24 → 0/24)
+
+**문제**: 층 필터 A/B 에서 gen_set #8("영어 이메일 번역 프롬프트 만들어줘")이 ask("원문이 제공되지 않아")로
+뒤집혔다. 분석기가 규칙 5("~하는 프롬프트 만들어줘"면 원문은 required 아님)를 어긴 탓이었다.
+
+**원인**: 분석기 `_SYSTEM` 안에서 두 지시가 정면으로 충돌한다.
+- `[작업유형별 required — 이 목록이 기준이다]` … `요약: 요약할 원문 | 번역: 원문, 목표 언어`
+- `5. … "~하는 프롬프트를 만들어줘"라고 한 경우, 그 원문은 required 가 아니다`
+
+모델은 '기준'이라고 못박힌 목록 쪽을 따른다.
+
+**측정 도구 신설**: `eval/analyzer_rule5_set.json`(템플릿 8 + 대조군 7) · `eval/analyzer_rule5_eval.py`
+(`--from` 으로 저장한 원본 출력에 가드를 오프라인 적용 가능).
+
+### Before — gpt-oss-20b, 템플릿 8건 × 3회
+| | 결과 |
+|---|---|
+| 원문 계열 required+empty (규칙 5 위반) | **13/24 (54%)** — gen_set #4(회의록)·#8(번역) 포함 |
+| 그로 인해 derive_mode = ask | 13/24 |
+
+### 변경
+- `analyzer.is_template_request(query)` — 프롬프트를 꾸미는 **현재형 관형절**(`는/위한/용 프롬프트`)이면 템플릿.
+  과거형("내가 작성한 프롬프트")·지시어("이 프롬프트")는 기존 프롬프트라 제외, 뒤에 개선 동사가 오면
+  ("요약하는 프롬프트 개선해줘") 제외. gen_set 18건에 적용: 기대 improve 템플릿 7건 전부 True, 기대 ask 7건 전부 False.
+- `_exempt_template_source` — 템플릿 요청에서 **비어 있는** 원문 계열(`원문`·`원본`·`본문`·`텍스트`) required 를
+  **삭제가 아니라 `fact` 로 강등**. fact·empty 는 생성기에서 "지어내지 말고 빈칸"으로 렌더되므로 원문 날조는 여전히 막힌다.
+  사용자가 붙여넣은(filled) 원문은 건드리지 않는다. 발동은 `sanitize_stats()['template_source_demoted']`.
+- 분석 결과에 `templateRequest` 추가(응답 `fields` 스키마는 불변 — 테스트로 고정).
+- 프롬프트(`_SYSTEM`)는 **안 건드렸다** — 한 번에 한 변수.
+
+### After
+| | 결과 |
+|---|---|
+| 가드 적용 후 잔여 위반 (Before 출력 24건에 오프라인 적용 = 운영과 동일한 결정론 경로) | **0/24** |
+| 가드 후에도 ask 로 막힘 | 1/24 — "파이썬 코드 리뷰 프롬프트"의 `구현할 기능`(아래) |
+| end-to-end gen_set #4 (회의록 요약 프롬프트) | **improve 2/2** (강등 발동 1회 포함) |
+| end-to-end gen_set #8 (번역 프롬프트) | 🔴 **ask 2/2 — 분석기를 고쳐도 안 풀린다** (아래) |
+
+### 🔴 #8 은 생성기 쪽에도 원인이 있다 — 미검증 수정은 커밋하지 않음
+원문이 `fact·empty` 로 넘어가도(강등 1회 + 모델이 처음부터 fact 1회) 생성기는 "번역할 원문이 제공되지 않아" ask.
+- 분석 블록 렌더가 `원문 [fact] = (없음 → … 빈칸 + 질문)` — '템플릿 요청'이라는 사실이 생성기에 안 간다.
+- 주입되는 참고 예시 2개가 **둘 다 원문을 붙여넣은 번역 예시**다(`ex_translate_5c01185c`, `ex_translate_6ad0f014`).
+- SYSTEM_PROMPT 의 템플릿 예외(※ 문단)는 분석 블록과 연결돼 있지 않다.
+
+수정안: `templateRequest` 면 빈 원문을 `[template] = (템플릿 요청 — 되묻지 말고 [원문 붙여넣기] 빈칸 + 개선 모드)`로
+렌더(`build_analysis_block`). **작업 트리에만 있고 커밋하지 않았다** — 생성기 입력 문구 변경이라 라이브 A/B 가 필요한데,
+재생 도중 **gpt-oss-120b TPD 소진**(공유 한도, 재시도 ~25분)으로 한 건도 못 쟀다.
+게다가 #8 은 **400(생성기 예산 버그)이 3회 중 3회** — 예산 문제(다음 과제)가 이 항목의 측정 자체를 막고 있다.
+
+### 부수 발견 (미수정)
+- **대조군 3/7 이 improve** — 가드와 무관(템플릿 판별 False, 가드 미발동). 모델이 "이 이메일 번역해줘"·"이 글 요약해줘"의
+  원문을 처음부터 `fact` 로 잡고, "내가 작성한 프롬프트 다듬어줘"는 `prompt_text` 를 fact 로 잡는다.
+  **규칙 5 와 반대 방향의 오판**(되물어야 할 걸 안 되물음).
+- `코드: 구현할 기능` 목록이 '코드 리뷰'에도 적용된다(3회 중 1회 `구현할 기능=empty`). 리뷰 대상 코드는 원문 계열이지만
+  "코드 짜는 프롬프트"(되물어야 함)와 이름으로 구분이 안 돼 가드에 넣지 않았다.
+
+**변경 파일**: `app/rag/analyzer.py` · `eval/analyzer_rule5_set.json`(신규) · `eval/analyzer_rule5_eval.py`(신규) ·
+`tests/test_analyzer.py`(+7) · `RAG_PIPELINE.md`
+**검증**: `pytest tests/ -q` 185 passed(작업 트리) · 커밋 상태 격리 복사본에서 analyzer/layers/concurrency 42 passed

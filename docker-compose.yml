@@ -74,7 +74,10 @@ services:
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}   # MySQL root 비밀번호와 동일 소스
     ports:
-      - "8000:8000"
+      # 루프백 전용. 백엔드는 컨테이너 네트워크(http://rag-server:8000)로 부르므로
+      # 이 게시 포트는 로컬 디버깅용일 뿐이다. 0.0.0.0 에 열면 같은 네트워크의
+      # 누구나 /query 로 LLM 쿼터를 태우고 /index 로 코퍼스를 오염시킬 수 있다.
+      - "127.0.0.1:8000:8000"
     volumes:
       - hf-cache:/root/.cache/huggingface   # bge-m3 모델 캐시(재다운로드 방지)
     healthcheck:
