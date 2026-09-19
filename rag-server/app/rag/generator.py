@@ -25,25 +25,48 @@ def _strip_cjk_noise(text: str) -> str:
     return _CJK_NOISE_RE.sub("", text)
 
 
-# ── 토큰 추정 (llama 토크나이저 실측 기반) ───────────────────
-# 2026-07-23 usage.prompt_tokens 실측: 한국어 0.9~1.7 chars/tok(문체 편차 큼 — 고유명사
-# 많은 구어체가 최악), 영어 5.4 chars/tok. 종전의 일괄 chars/3 은 한국어를 최대 2.3배
-# 과소추정 → 413 방어가 뚫릴 수 있었다. 계수는 '과소추정 금지' 우선으로 최악 케이스에
-# 맞춤(한글 /1.0, 영문·숫자·공백 /4, 기호·기타 /1.5) — 실측 4샘플에서 과소추정 ≤5%,
-# 과대추정 +21~36%. 과대추정은 출력 예약만 줄이고(want=4096 여유로 평시 무영향) 413은
-# 못 내므로 안전한 방향이다.
+# ── 토큰 추정 (gpt-oss 토크나이저 실측 기반) ─────────────────
+# 과소추정하면 입력+출력예약이 TPM 을 넘어 413, 과대추정하면 출력 예약이 괜히 깎여
+# gpt-oss 가 추론 토큰에 예산을 다 쓰고 JSON 을 못 끝내 400 — **둘 다 실패**다.
+#
+# 2026-09-20 재보정(usage.prompt_tokens, gpt-oss-20b — 120b 와 같은 o200k 토크나이저):
+#   종전 계수(한글 /1.0 · 영숫자 /4 · 기타 /1.5)는 2026-07-23 **llama** 실측 기준이라
+#   gpt-oss 에서 운영 요청(한국어 위주)을 **17~18% 과대추정**했다(8건 비율 0.823~0.832).
+#   요청당 출력 예약 ~1,000~1,240 토큰이 헛되이 깎여, 예산 777~1,515 로 추론만으로도 모자랐다.
+#   그렇다고 일괄 ×0.83 은 위험하다 — 문자 유형별로 비율이 크게 다르다:
+#     한국어 0.73 · 영어 0.76 · 코드 0.82 · JSON/기호 0.97 · **일본어 1.07(종전도 과소추정)**
+#   게다가 **한국어 자체가 문체에 따라 0.62~1.0 토큰/글자**로 갈린다(격식체 회의록 0.62,
+#   고유명사 많은 구어체 1.0). 한 계수로는 둘 다 안전하게 못 맞춘다.
+#
+# → 텍스트를 출처로 나눈다.
+#   · 사용자 입력(질의·대화·분석값) — 문체를 모른다 → **보수 계수**(한글 1.0). `_est_tokens`
+#   · 고정 입력(SYSTEM_PROMPT·코퍼스 기법 카드·예시) — 우리가 쓴 텍스트라 **전량을 실측 검증**할 수
+#     있다(eval/token_calib.py --corpus) → **보정 계수**(한글 0.75). `_est_known_tokens`
+#   요청 입력의 ~85% 가 고정 입력이라 이것만으로 예산이 요청당 ~+1,000 돌아온다.
+#   기타 문자는 둘 다 0.8(일본어 0.71·JSON 기호 0.68 — 종전 1/1.5=0.67 은 일본어를 과소추정했다).
 _HANGUL_RE = re.compile(r"[가-힣]")
 _ASCII_RE  = re.compile(r"[a-zA-Z0-9 \n]")
+_USER_HANGUL  = 1.0    # 구어체·고유명사 최악 0.999 (tests/test_token_budget.py)
+_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 전량 실측으로 검증
 
 
-def _est_tokens(text: str) -> int:
-    """텍스트의 llama 토큰 수 추정 — 한글/영숫자·공백/기타를 분리해 계산."""
+def _est_by_class(text: str, hangul_rate: float) -> int:
     if not text:
         return 0
     hangul = len(_HANGUL_RE.findall(text))
     ascii_ = len(_ASCII_RE.findall(text))
     other  = len(text) - hangul - ascii_
-    return int(hangul / 1.0 + ascii_ / 4 + other / 1.5)
+    return int(hangul * hangul_rate + ascii_ * 0.25 + other * 0.8)
+
+
+def _est_tokens(text: str) -> int:
+    """문체를 모르는 텍스트(사용자 입력)의 gpt-oss 토큰 수 — 보수 추정(과소추정 금지)."""
+    return _est_by_class(text, _USER_HANGUL)
+
+
+def _est_known_tokens(text: str) -> int:
+    """우리가 쓴 고정 텍스트(SYSTEM_PROMPT·코퍼스 카드·예시)의 gpt-oss 토큰 수 — 실측 보정 계수."""
+    return _est_by_class(text, _KNOWN_HANGUL)
 
 
 def _gen_reasoning_effort() -> str | None:
@@ -387,12 +410,16 @@ class GroqGenerator:
     }
 
     @classmethod
-    def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int) -> int:
-        """입력 길이를 추정(_est_tokens — 한글/비한글 분리 실측 계수)해 TPM 예산 안에
-        들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을 포함한 요청이 413(Request
-        too large)으로 즉사하는 것을 방지하고, 짧은 입력이면 want(기본 4096)를 그대로
-        쓴다. 하한 512. (종전 chars//3 일괄 추정은 한국어 과소추정 — 2026-07-23 보정)"""
-        est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
+    def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int,
+                        est_input: int | None = None) -> int:
+        """입력 길이를 추정해 TPM 예산 안에 들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을
+        포함한 요청이 413(Request too large)으로 즉사하는 것을 방지하고, 짧은 입력이면
+        want(기본 4096)를 그대로 쓴다. 하한 512.
+
+        est_input 을 주면 그 값을 쓴다 — generate() 는 출처별 추정(`estimate_input`)을 넘긴다.
+        없으면 messages 전체를 사용자 입력으로 보고 보수 추정한다(출처를 모를 때의 안전한 기본)."""
+        if est_input is None:
+            est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
         tpm = cls.TPM_LIMIT.get(groq_model, 12000)
         return max(512, min(want, tpm - est_input - 200))
 
@@ -404,12 +431,27 @@ class GroqGenerator:
         self.client = Groq(api_key=api_key, timeout=GEN_SECONDS)
         print("[Generator] Groq 백엔드 초기화 완료")
 
-    def generate(self, query: str, contexts: list[dict],
-                 model: str = "gemini-2.0-flash", max_tokens: int = 4096,
-                 history: list[dict] | None = None,
-                 analysis: dict | None = None) -> str:
-        groq_model = self.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
+    @staticmethod
+    def estimate_input(query: str, contexts: list[dict],
+                       history: list[dict] | None = None,
+                       analysis: dict | None = None) -> int:
+        """build_messages 가 만드는 입력의 토큰 추정 — **출처별로** 계수를 달리한다.
 
+        고정 입력(SYSTEM_PROMPT·기법/예시 블록)은 실측 보정 계수, 사용자에게서 온 것(질의·
+        대화 이력·분석 블록 — 분석값은 질의를 옮겨 적은 것)은 보수 계수. +100 은 대화 템플릿
+        오버헤드(실측 1메시지 71토큰)와 블록 라벨·구분자 몫이다."""
+        known = _est_known_tokens(SYSTEM_PROMPT)
+        if contexts:
+            known += _est_known_tokens(_build_context_blocks(contexts))
+        user = _est_tokens(query) + _est_tokens(build_analysis_block(analysis))
+        user += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
+        return known + user + 100
+
+    @staticmethod
+    def build_messages(query: str, contexts: list[dict],
+                       history: list[dict] | None = None,
+                       analysis: dict | None = None) -> list[dict]:
+        """Groq 에 보내는 messages 조립. 예산 보정 측정(eval)도 이 함수를 써서 운영과 같은 입력을 잰다."""
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
 
@@ -422,9 +464,18 @@ class GroqGenerator:
             # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
             user_msg = query
         messages.append({"role": "user", "content": user_msg})
+        return messages
 
-        # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력·8b TPM 6k에서 413 방지)
-        max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens)
+    def generate(self, query: str, contexts: list[dict],
+                 model: str = "gemini-2.0-flash", max_tokens: int = 4096,
+                 history: list[dict] | None = None,
+                 analysis: dict | None = None) -> str:
+        groq_model = self.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
+        messages = self.build_messages(query, contexts, history, analysis)
+
+        # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력에서 413 방지 · 과대추정 시 400)
+        est_input = self.estimate_input(query, contexts, history, analysis)
+        max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens, est_input=est_input)
 
         # 429는 대기시간이 짧으면 1회 재시도, 그 외 API 에러는 RuntimeError 로 변환
         # → main.run_generation 이 503 으로 매핑 (기존엔 groq 예외가 그대로 500).
@@ -441,6 +492,13 @@ class GroqGenerator:
                     response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
                     **({"reasoning_effort": effort} if effort else {}),
                 )
+                # 예산이 실제로 충분했는지 운영 로그로 보인다 — 종전엔 400 이 나도 배정 예산·실사용을
+                # 알 길이 없어 원인 규명에 재현 스크립트가 필요했다(2026-09-16·09-20).
+                u = getattr(response, "usage", None)
+                if u is not None:
+                    print(f"[Generator] 예산 max_tokens={max_tokens} · 입력 추정 {est_input}/실제 "
+                          f"{u.prompt_tokens} · 완료 {u.completion_tokens} "
+                          f"({response.choices[0].finish_reason})")
                 return _strip_cjk_noise(response.choices[0].message.content)
             except RateLimitError as e:
                 wait = _retry_after_seconds(e)
@@ -454,6 +512,8 @@ class GroqGenerator:
             except APIConnectionError as e:
                 raise RuntimeError(f"Groq 연결 실패: {e}") from e
             except APIStatusError as e:   # 413(Request too large)·5xx 등
+                print(f"[Generator] Groq HTTP {e.status_code} — 예산 max_tokens={max_tokens} · "
+                      f"입력 추정 {est_input}")
                 raise RuntimeError(f"Groq 요청 실패(HTTP {e.status_code})") from e
 
 
