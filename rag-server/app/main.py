@@ -12,11 +12,7 @@ from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
 from app.rag import query_transform, analyzer
-# 파싱·복원 순수 함수 (eval 스크립트 하위호환 위해 동일 이름 재노출)
-from app.rag.postprocess import (
-    parse_generation, build_answer, assemble_fields,
-    extract_improved_prompt, extract_applied_techniques, extract_changes,
-)
+from app.rag.postprocess import assemble_fields
 
 app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
 
@@ -125,12 +121,16 @@ class QueryResponse(BaseModel):
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
-                   history: list[dict], use_analyzer: bool = True) -> dict:
+                   history: list[dict], use_analyzer: bool = True,
+                   analysis: dict | None = None) -> dict:
     """검색 결과 → (1단계 분석) → 생성 → 구조화 필드 조립 (/query·eval 공유).
 
     규약 v3: 1단계 분석기(temp 0.2)가 요청에 필요한 필드를 동적으로 도출하고,
     2단계 생성기(temp 0.7)가 그 필드 상태를 소비해 개선안·빈칸·질문을 만든다.
     분석 실패(키 없음·한도 초과 등)면 analysis=None 으로 기존 단일 단계와 동일 동작.
+
+    analysis 를 주면 1단계를 건너뛰고 그 결과를 쓴다 — 평가 하네스가 **생성 전에** 분석을 알아야
+    캐시 키에 넣을 수 있기 때문이다(eval/gen_eval.py). 운영(/query)은 종전대로 넘기지 않는다.
 
     반환: {mode, answer, improved_prompt, techniques_applied, changes, score,
            summary, questions, fields, structured}.
@@ -141,7 +141,8 @@ def run_generation(query: str, contexts: list[dict], model: str,
     # 429 → Gemini 폴백 → Gemini RPD 20 소진 → 두 백엔드 동시 차단. 줄을 세우는 편이
     # 폴백 쿼터까지 태우는 것보다 낫다. 검색·리랭크는 게이트 밖(병렬 유지).
     with generation_gate.enter():
-        analysis = analyzer.analyze(query, history) if use_analyzer else None
+        if analysis is None and use_analyzer:
+            analysis = analyzer.analyze(query, history)
 
         raw = generator.generate(query=query, contexts=contexts, model=model,
                                  history=history, analysis=analysis)
@@ -234,8 +235,8 @@ def query(req: QueryRequest):
     retrieved, examples = retrieve_contexts(req, history)
 
     # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
-    # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
-    # 이 404는 실질적으로 hyde 폴백(Groq 한도 초과 등) + 원본마저 0.40 미만인 드문 경우에만 발동한다.
+    # 기본은 원본 쿼리 그대로 검색(use_hyde=False)이라 dense 점수가 좁은 띠에 눌려, 정상 요청도
+    # min_score(0.40) 아래로 떨어지면 여기서 막힌다(실사용 약 6% — RAG_PIPELINE.md §4).
     # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
     # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
     if not retrieved and not history:

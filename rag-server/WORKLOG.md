@@ -3388,3 +3388,26 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 **변경 파일**: `app/rag/postprocess.py` · `tests/test_postprocess.py`(+5)
 **검증**: `pytest tests/ -q` 226 passed
+
+---
+
+## [2026-09-20] gen_eval 캐시 키에 1단계 분석 결과 추가 — 다른 분석의 생성을 재사용하던 것
+
+캐시 키는 `모델·온도·SYSTEM_PROMPT·질의·기법명·예시id` 였다. **1단계 분석 결과가 빠져 있었다.**
+같은 질의라도 분석기가 원문을 `required` 로 잡았는지 `fact` 로 잡았는지에 따라 생성기의 mode 가
+갈리는데(이번 세션에서 #8 이 정확히 그 이유로 뒤집혔다), 키가 같아 **이전 생성이 그대로 재사용**될 수 있었다.
+분석기 비결정성을 재는 측정에서는 치명적이다 — 바뀐 입력의 효과가 캐시에 가려진다.
+
+**변경**
+- `_analysis_sig()` — 작업유형 + (필드명·role·status·value) 정렬 + `templateRequest` 를 키에 넣는다.
+  필드 순서는 무시(정렬), 값이 다르면 다른 키.
+- 분석을 **생성 전에** 돌리고 그 결과를 `run_generation(..., use_analyzer=False, analysis=…)` 로 넘긴다.
+  `use_analyzer=False` 가 없으면 분석 실패(None) 때 `run_generation` 이 분석기를 **다시** 불러
+  키가 가정한 것과 다른 분석으로 생성된다. 평가에서 분석기 호출도 1회로 준다(쿼터 절약).
+- `app/main.run_generation` 에 `analysis` 선택 인자 추가 — 주면 1단계를 건너뛴다. **운영(/query)은 종전 그대로**.
+
+**대가**: 분석기가 비결정적이라 캐시 적중률이 떨어진다. 그게 정직한 동작이다 — 입력이 달랐으면 다른 생성이다.
+⚠️ 기존 캐시 파일(`eval/.gen_cache_parity.json` 26건)은 이 변경으로 **전부 미스**가 난다(다른 파이프라인의 산출물).
+
+**변경 파일**: `eval/gen_eval.py` · `app/main.py` · `tests/test_gen_eval_cache.py`(신규 7)
+**검증**: `pytest tests/ -q` 234 passed · 라이브 스모크 `--items 17 --no-judge` 정상(캐시 0/1 · mode=ask ✓)

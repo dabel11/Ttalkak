@@ -40,8 +40,9 @@ from pathlib import Path
 # 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
 # 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
 from app.core.timeouts import GEN_SECONDS
-from app.main import (retriever, generator, extract_improved_prompt, run_generation,
-                      retrieve_contexts, QueryRequest)
+from app.main import retriever, run_generation, retrieve_contexts, QueryRequest
+from app.rag import analyzer
+from app.rag.postprocess import extract_improved_prompt
 from app.rag.generator import SYSTEM_PROMPT
 from app.rag.layers import is_searchable
 
@@ -56,9 +57,24 @@ _cards_by_name: dict = {}
 # (모델 미포함 시 8b 실험 응답이 70b 측정으로 오인되는 사고가 실제 있었음 — 2026-07-09.
 #  temperature 도 같은 이유로 포함 — 온도 비교 실험 캐시가 서로 오염되지 않게. 2026-07-23)
 
+def _analysis_sig(analysis: dict | None) -> str:
+    """분석 결과의 캐시 서명 — 생성 입력으로 들어가는 것만(작업유형·필드 상태·템플릿 여부)."""
+    if not analysis:
+        return "none"
+    fields = sorted((str(f.get("name")), str(f.get("role")), str(f.get("status")),
+                     str(f.get("value") or "")) for f in analysis.get("fields") or [])
+    return f"{analysis.get('taskType')}|{fields}|tpl={bool(analysis.get('templateRequest'))}"
+
+
 def _cache_key(query: str, technique_names: list[str], model: str = "",
-               temperature: str = "", example_ids: list[str] | None = None) -> str:
+               temperature: str = "", example_ids: list[str] | None = None,
+               analysis: dict | None = None) -> str:
     """생성 캐시 키. **생성 입력을 바꾸는 것은 전부 들어가야 한다.**
+
+    ⚠️ 2026-09-20: **분석 결과(1단계)** 도 생성 입력이다 — 같은 질의라도 분석기가 원문을
+    required 로 잡았는지 fact 로 잡았는지에 따라 생성기의 mode 가 갈린다. 빠져 있던 탓에
+    분석이 달라져도 이전 생성이 재사용될 수 있었다. 대신 분석기가 비결정적이라 캐시 적중률은
+    떨어진다 — 그게 정직한 동작이다(입력이 달랐으면 다른 생성이다).
 
     ⚠️ 2026-09-16: 예시(prompt_examples) 주입을 평가에도 넣으면서 예시 식별자를 키에
     추가했다. 빠지면 '예시 없이 만든 생성'이 '예시 있는 입력'에 재사용돼 조용히 오염된다.
@@ -67,7 +83,8 @@ def _cache_key(query: str, technique_names: list[str], model: str = "",
     """
     payload = (str(model) + "|t" + str(temperature) + "|" + SYSTEM_PROMPT + "|"
                + query + "|" + str(sorted(technique_names))
-               + "|ex" + str(sorted(example_ids or [])))
+               + "|ex" + str(sorted(example_ids or []))
+               + "|an" + _analysis_sig(analysis))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -298,7 +315,10 @@ def main():
             print(f"  [{i:>2}] 404(근거 없음) — 운영에서는 생성하지 않음  | {query[:30]}")
             continue
 
-        ckey = (_cache_key(query, techniques, args.model, temperature, example_ids)
+        # 분석(1단계)을 **생성 전에** 돌려야 캐시 키에 넣을 수 있다. 운영(/query)은 run_generation
+        # 안에서 같은 호출을 하므로 파이프라인은 동일하다 — 여기서는 순서만 앞당긴다.
+        analysis = _retry(lambda: analyzer.analyze(query, []), tries=2)
+        ckey = (_cache_key(query, techniques, args.model, temperature, example_ids, analysis)
                 if args.cache_file else None)
         if ckey and ckey in cache:
             cached = cache[ckey]
@@ -311,7 +331,10 @@ def main():
         else:
             try:
                 # 운영과 동일 경로(JSON 구조화 + 폴백) — /query 와 같은 run_generation 사용
-                gen = _retry(lambda: run_generation(query, retrieved + examples, args.model, []))
+                # use_analyzer=False: 분석은 위에서 이미 했다. 안 끄면 분석 실패(None) 때
+                # run_generation 이 분석기를 **다시** 불러, 캐시 키가 가정한 것과 다른 분석으로 생성된다.
+                gen = _retry(lambda: run_generation(query, retrieved + examples, args.model, [],
+                                                    use_analyzer=False, analysis=analysis))
             except Exception as e:
                 print(f"  [{i}] 생성 실패: {e}")
                 continue
