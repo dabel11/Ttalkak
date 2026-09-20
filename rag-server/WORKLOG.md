@@ -3319,3 +3319,48 @@ python3 /…/scratchpad/ab_template.py        # 같은 분석 고정 · 렌더�
 
 **변경 파일**: `app/rag/generator.py`(`build_analysis_block`) · `tests/test_analyzer.py`(+2) · `RAG_PIPELINE.md`
 **검증**: 커밋 상태 격리 복사본 `pytest tests/ -q` 114 passed
+
+---
+
+## [2026-09-20] 분석기 가드 두 개 더 — 가리킨 원문은 required(4/7 → 14/14) · 리뷰에 '구현할 기능' 제거
+
+규칙 5 가드(09-19)를 넣고 대조군을 보다가 **반대 방향 오판**을 발견했다.
+
+### ① 가리켰지만 붙여넣지 않은 원문 → `required` (규칙 5 의 대칭)
+실측(대조군 원본 출력):
+```
+"이 이메일 한국어로 번역해줘"  → 원문 [fact] empty   → improve   ← 되물어야 한다
+"이 글 3줄로 요약해줘"        → 원문 [fact] empty   → improve   ← 되물어야 한다
+"아래 문서 요약해줘"          → 원문 [required] empty → ask      ← 맞음
+"번역해줘"                  → 원문 [required] empty → ask      ← 맞음
+```
+지시어로 가리킨 경우에 특히 약했다. `references_missing_source` 로 판별해
+(**독립 낱말** 지시어 + 재료 명사, 200자 이하·줄바꿈 없음 = 붙여넣지 않음) 빈 원문을 `fact` → `required` 로 올린다.
+원문 계열이 하나라도 `filled` 면(붙여넣은 경우) 발동하지 않는다.
+
+⚠️ 정규식 오탐 하나를 실측으로 잡았다 — 부분 문자열로 보면 "블로그 **그**"가 지시어가 되어
+"제주도 여행 블로그 글 써줘"(개선 모드가 맞음)까지 되묻게 된다. gen_set 18건 전부에 대해 **0건 발동**을 테스트로 고정했다.
+
+| | 종전 | 이번 |
+|---|---:|---:|
+| 가리킨 원문 → ask (실측) | **4/7** | **14/14** (승격 가드 발동 6회, 나머지는 모델이 스스로 맞힘) |
+
+### ② 코드 '리뷰'에 '구현할 기능'을 요구하던 것
+`[작업유형별 required]` 에 `코드: 구현할 기능` 하나뿐이라 모델이 리뷰 요청에도 적용했다
+(실측: "파이썬 코드를 성능 관점에서 리뷰하는 프롬프트" 3회 중 1회 `구현할 기능=empty` → 잘못된 ask).
+리뷰에 필요한 재료는 '무슨 기능을 만들지'가 아니라 **리뷰할 코드**다 —
+`is_review_request` 면 빈 `구현할 기능` required 를 `fact` 로 내린다. 새로 짜는 요청("코드 짜줘")은 그대로 required.
+⚠️ 이건 단위 테스트로만 고정했고 **라이브 재측정은 안 했다**(템플릿 묶음 측정에 쿼터가 필요).
+
+### 세 가드의 관계 (발동 조건 배타적)
+| 요청 | 판별 | 원문 필드 |
+|---|---|---|
+| "~하는 프롬프트 만들어줘" | `is_template_request` | required → **fact**(빈칸으로 두고 개선) |
+| "이 이메일 번역해줘" | `references_missing_source` | fact → **required**(되묻기) |
+| "리뷰하는 …" | `is_review_request` | `구현할 기능` required → **fact** |
+
+`_SOURCE_WORDS` 에 `회의록·코드·함수·text·source·_text` 를 추가했다(실측에 나온 영문 필드명 `prompt_text` 포함).
+
+**변경 파일**: `app/rag/analyzer.py` · `tests/test_analyzer.py`(+10) · `eval/analyzer_rule5_set.json`(referenced 라벨 + 3건) ·
+`eval/analyzer_rule5_eval.py`(`--only`, 대칭 지표) · `RAG_PIPELINE.md`
+**검증**: `pytest tests/ -q` 221 passed · 라이브 `--only referenced --rounds 2` 14/14(분석 실패 2 는 20b TPD)

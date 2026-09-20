@@ -244,7 +244,8 @@ def _sanitize(fields: list) -> list:
 # 오면("요약하는 프롬프트 개선해줘") 고칠 대상이 따로 있다는 뜻이라 역시 제외한다.
 _TEMPLATE_RE = re.compile(r"(?:는|위한|용)\s*프롬프트")
 _IMPROVE_AFTER_RE = re.compile(r"프롬프트\S*\s*(?:좀\s*)?(?:개선|고쳐|고치|다듬|수정|손봐|손 봐)")
-_SOURCE_WORDS = ("원문", "원본", "본문", "텍스트")
+# 영문 필드명도 실측에 나온다("내가 작성한 프롬프트 다듬어줘" → prompt_text·desired_output).
+_SOURCE_WORDS = ("원문", "원본", "본문", "텍스트", "회의록", "코드", "함수", "_text", "text", "source")
 
 
 def is_template_request(query: str) -> bool:
@@ -268,6 +269,74 @@ def _exempt_template_source(query: str, fields: list[dict]) -> list[dict]:
         if (f["role"] == "required" and f["status"] == "empty"
                 and is_source_field(f["name"])):
             _record_drop("template_source_demoted", f["name"])
+            f["role"] = "fact"
+    return fields
+
+
+# ── 규칙 5 의 대칭: '가리켰지만 붙여넣지 않은' 원문은 required 다 ──────────
+# "이 이메일 번역해줘"는 사용자가 **특정 원문을 가리키고 있는데** 그 원문이 없다 → 되물어야 한다.
+# 그런데 분석기는 이 경우 원문을 fact 로 잡아 mode 를 막지 않았다(실측 2026-09-19 대조군):
+#   "이 이메일 한국어로 번역해줘" → 원문 [fact] empty  → improve   ← 되물어야 함
+#   "이 글 3줄로 요약해줘"        → 원문 [fact] empty  → improve   ← 되물어야 함
+#   "아래 문서 요약해줘" / "번역해줘" → 원문 [required] empty → ask  ← 맞음
+# 지시어로 가리킨 경우에 특히 약하다. 규칙 5 가 '템플릿 요청의 원문을 내리는' 가드라면
+# 이건 '가리킨 원문을 올리는' 가드다 — 두 가드의 발동 조건은 서로 배타적이다(템플릿이면 발동 안 함).
+# ⚠️ 지시어는 **독립된 낱말**일 때만 — 부분 문자열로 보면 "블로그 글"의 '그'가 지시어로 잡혀
+#    "제주도 여행 블로그 글 써줘"(개선 모드가 맞음)까지 되묻게 된다(실측 오탐).
+_REFERENCE_RE = re.compile(
+    r"(?:^|\s)(?:이|그|저|요|아래|위|다음)\s+[가-힣A-Za-z]*\s*"
+    r"(?:글|문장|문서|이메일|메일|코드|함수|회의록|원문|본문|텍스트|프롬프트|기사|내용|대본|자료)"
+    r"|(?:내가|제가)\s*(?:쓴|작성한|만든)"
+)
+# 붙여넣은 원문이 있으면 요청이 길거나 줄바꿈이 있다 — 그때는 분석기가 filled 로 잡으므로 건드리지 않는다.
+_PASTE_HINT = 200
+
+
+def references_missing_source(query: str) -> bool:
+    """'이 글/이 이메일/내가 쓴 …' 처럼 **특정 원문을 가리키지만 붙여넣지 않은** 요청인가."""
+    q = query or ""
+    if is_template_request(q):          # "~하는 프롬프트 만들어줘"는 규칙 5 영역
+        return False
+    return bool(_REFERENCE_RE.search(q)) and len(q) <= _PASTE_HINT and "\n" not in q
+
+
+def _require_referenced_source(query: str, fields: list[dict]) -> list[dict]:
+    """가리킨 원문이 비어 있으면 fact → required 로 올린다(생성기가 되묻게).
+
+    원문 계열 필드가 **하나라도 채워져 있으면**(붙여넣은 경우) 아무것도 하지 않는다."""
+    if not references_missing_source(query):
+        return fields
+    if any(is_source_field(f["name"]) and f["status"] == "filled" for f in fields):
+        return fields
+    for f in fields:
+        if f["role"] == "fact" and f["status"] == "empty" and is_source_field(f["name"]):
+            _record_drop("referenced_source_required", f["name"])
+            f["role"] = "required"
+    return fields
+
+
+# ── '코드 리뷰'에 '구현할 기능'을 요구하던 것 ──────────────────────────
+# SYSTEM 의 [작업유형별 required] 는 `코드: 구현할 기능` 하나뿐이라, 모델이 **리뷰·검토 요청**에도
+# 그대로 적용한다(실측 2026-09-19: "파이썬 코드를 성능 관점에서 리뷰하는 프롬프트" 3회 중 1회
+# `구현할 기능=empty` → 잘못된 ask). 리뷰에 필요한 재료는 '무슨 기능을 만들지'가 아니라
+# **리뷰할 코드**다. 코드를 붙여넣었으면 그건 이미 filled 이고, 안 붙여넣었으면 위 두 가드가
+# (템플릿이면 내리고, 가리켰으면 올려서) 판단한다 — '구현할 기능'은 여기서 걸림돌일 뿐이다.
+_REVIEW_RE = re.compile(r"리뷰|검토|리팩터|리팩토링|디버(?:그|깅)|버그\s*찾|코드\s*평가|품질\s*점검")
+_IMPLEMENT_FIELD = "구현할 기능"
+
+
+def is_review_request(query: str) -> bool:
+    """코드를 **새로 짜는** 요청이 아니라 이미 있는 코드를 보는 요청인가."""
+    return bool(_REVIEW_RE.search(query or ""))
+
+
+def _drop_implement_field_for_review(query: str, fields: list[dict]) -> list[dict]:
+    """리뷰 요청이면 비어 있는 '구현할 기능' required 를 fact 로 내린다(mode 를 막지 않게)."""
+    if not is_review_request(query):
+        return fields
+    for f in fields:
+        if f["role"] == "required" and f["status"] == "empty" and f["name"] == _IMPLEMENT_FIELD:
+            _record_drop("review_not_implementation", f["name"])
             f["role"] = "fact"
     return fields
 
@@ -308,6 +377,8 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
     # 판별은 **이번 입력**만 본다 — 멀티턴 후속 입력("격식체로")에는 관형절이 없어 적용되지
     # 않는다. 첫 턴에서 이미 강등돼 improve 로 갔다면 후속 턴은 개선안 다듬기라 무관하다.
     fields = _exempt_template_source(query, fields)
+    fields = _require_referenced_source(query, fields)
+    fields = _drop_implement_field_for_review(query, fields)
     # 통제 어휘 밖의 값은 버린다. 비면 호출자가 기존 유사도 경로로 폴백한다.
     axes = normalize_axes(data.get("techniqueAxes"))
 

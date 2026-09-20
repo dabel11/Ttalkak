@@ -285,3 +285,82 @@ def test_template_flag_only_in_analysis_not_fields() -> None:
     got = _analyze_with(payload, query="긴 뉴스 기사를 5줄로 요약해주는 프롬프트")
     assert got["templateRequest"] is True
     assert set(got["fields"][0]) == {"name", "role", "status", "value"}
+
+
+# ── F. 규칙 5 의 대칭 — 가리켰지만 붙여넣지 않은 원문은 required ─
+def test_reference_detection_matches_labeled_set() -> None:
+    wrong = [it["query"] for it in _RULE5_SET
+             if analyzer.references_missing_source(it["query"]) != it.get("referenced", False)]
+    assert wrong == []
+
+
+def test_reference_never_fires_on_gen_set() -> None:
+    """gen_set 은 전부 '가리킨 원문 없음' — 하나라도 걸리면 개선 모드가 질문 모드로 바뀐다.
+    (실측 오탐: '블로그 글'의 '그'를 지시어로 본 정규식)"""
+    fired = [it["query"] for it in _GEN_SET if analyzer.references_missing_source(it["query"])]
+    assert fired == []
+
+
+def test_referenced_source_promoted_to_required() -> None:
+    analyzer.reset_sanitize_stats()
+    out = analyzer._require_referenced_source("이 이메일 한국어로 번역해줘",
+                                              [_f("원문", role="fact"),
+                                               _f("목표 언어", role="fact", status="filled", value="한국어")])
+    assert [(f["name"], f["role"]) for f in out] == [("원문", "required"), ("목표 언어", "fact")]
+    assert analyzer.derive_mode(out) == "ask"
+    assert analyzer.sanitize_stats() == {"referenced_source_required": 1}
+
+
+def test_pasted_source_is_not_promoted() -> None:
+    """원문 계열이 하나라도 채워져 있으면(붙여넣은 경우) 건드리지 않는다."""
+    analyzer.reset_sanitize_stats()
+    fields = [_f("원문", role="fact", status="filled", value="Hello"), _f("본문", role="fact")]
+    out = analyzer._require_referenced_source("이 문장 번역해줘: Hello", fields)
+    assert [f["role"] for f in out] == ["fact", "fact"]
+    assert analyzer.sanitize_stats() == {}
+
+
+def test_template_request_is_not_promoted() -> None:
+    """두 가드는 배타적이다 — 템플릿 요청이면 승격 가드가 발동하지 않는다."""
+    q = "이 회의록을 3줄로 요약하는 프롬프트 만들어줘"
+    assert analyzer.is_template_request(q) and not analyzer.references_missing_source(q)
+
+
+def test_analyze_applies_reference_promotion() -> None:
+    payload = {"taskType": "번역",
+               "fields": [{"name": "원문", "role": "fact", "status": "empty", "value": None}],
+               "techniqueAxes": []}
+    got = _analyze_with(payload, query="이 글 영어로 번역해줘")
+    assert got["fields"][0]["role"] == "required"
+
+
+# ── G. 코드 '리뷰'에 '구현할 기능'을 요구하던 것 ───────────
+def test_review_request_detection() -> None:
+    assert analyzer.is_review_request("파이썬 코드를 성능 관점에서 리뷰하는 프롬프트 만들어줘")
+    assert analyzer.is_review_request("이 함수 리팩터링 해줘")
+    assert not analyzer.is_review_request("로그인 기능 구현하는 코드 짜는 프롬프트 만들어줘")
+    assert not analyzer.is_review_request("코드 짜줘")
+
+
+def test_implement_field_dropped_for_review() -> None:
+    analyzer.reset_sanitize_stats()
+    out = analyzer._drop_implement_field_for_review(
+        "파이썬 코드를 리뷰하는 프롬프트 만들어줘", [_f("구현할 기능")])
+    assert out[0]["role"] == "fact"
+    assert analyzer.derive_mode(out) == "improve"
+    assert analyzer.sanitize_stats() == {"review_not_implementation": 1}
+
+
+def test_implement_field_kept_when_writing_code() -> None:
+    """새로 짜는 요청이면 '구현할 기능'은 여전히 required — 비면 되물어야 한다."""
+    analyzer.reset_sanitize_stats()
+    out = analyzer._drop_implement_field_for_review("코드 짜줘", [_f("구현할 기능")])
+    assert out[0]["role"] == "required"
+    assert analyzer.derive_mode(out) == "ask"
+    assert analyzer.sanitize_stats() == {}
+
+
+def test_filled_implement_field_untouched() -> None:
+    out = analyzer._drop_implement_field_for_review(
+        "이 코드 리뷰해줘", [_f("구현할 기능", status="filled", value="두 수 더하기")])
+    assert out[0]["role"] == "required"

@@ -10,13 +10,16 @@ eval/analyzer_rule5_eval.py
   가드 후 잔여  — 가드를 거친 뒤에도 원문 계열 required 가 empty 로 남은 템플릿 실행.
                   (가드의 필드명 매칭이 놓친 이름을 찾는 창)
   대조군 ask    — 특정 원문을 가리키는 요청("이 이메일 번역해줘")의 derive_mode 가 ask 인가.
-                  가드가 과하게 발동하면 여기서 드러난다.
+                  템플릿 가드가 과하게 발동하면 여기서 드러난다.
+  가리킨 원문   — 규칙 5 의 **대칭**: 가리켰지만 붙여넣지 않은 원문은 required 여야 한다
+                  (`_require_referenced_source`). 승격 가드 발동 횟수도 함께 센다.
 
 --from 으로 저장된 원본 출력(가드 이전 수집본)을 넣으면 API 없이 가드를 오프라인 적용한다.
 
 사용:
   python -m eval.analyzer_rule5_eval --rounds 3
   python -m eval.analyzer_rule5_eval --from path/to/raw.json
+  python -m eval.analyzer_rule5_eval --only referenced --rounds 2   # 대칭 가드만(쿼터 절약)
 """
 
 import argparse
@@ -40,12 +43,17 @@ def _any_required_empty(fields: list[dict]) -> list[str]:
     return [f["name"] for f in fields if f.get("role") == "required" and f.get("status") == "empty"]
 
 
-def _collect(rounds: int, sleep: float) -> list[dict]:
+def _collect(rounds: int, sleep: float, only: str = "all") -> list[dict]:
     items = json.loads(_SET.read_text(encoding="utf-8"))["items"]
+    if only == "template":
+        items = [i for i in items if i["template"]]
+    elif only == "referenced":     # 규칙 5 의 대칭 — 가리켰지만 안 붙여넣은 요청
+        items = [i for i in items if i.get("referenced")]
     runs = []
     for r in range(rounds):
         for it in items:
             before = analyzer.sanitize_stats().get("template_source_demoted", 0)
+            before_up = analyzer.sanitize_stats().get("referenced_source_required", 0)
             a = None
             for _ in range(4):
                 a = analyzer.analyze(it["query"], [])
@@ -53,8 +61,10 @@ def _collect(rounds: int, sleep: float) -> list[dict]:
                     break
                 time.sleep(20)
             demoted = analyzer.sanitize_stats().get("template_source_demoted", 0) - before
+            promoted = analyzer.sanitize_stats().get("referenced_source_required", 0) - before_up
             runs.append({"round": r + 1, "query": it["query"], "template": it["template"],
-                         "analysis": a, "demoted": demoted})
+                         "referenced": it.get("referenced", False),
+                         "analysis": a, "demoted": demoted, "promoted": promoted})
             time.sleep(sleep)
     return runs
 
@@ -81,6 +91,9 @@ def _report(runs: list[dict]) -> None:
     residual = [r for r in tpl if _source_required_empty(r["analysis"]["fields"])]
     blocked = [r for r in tpl if analyzer.derive_mode(r["analysis"]["fields"]) == "ask"]
     ctl_ask = [r for r in ctl if analyzer.derive_mode(r["analysis"]["fields"]) == "ask"]
+    ref = [r for r in runs if r.get("referenced") and r["analysis"]]
+    ref_ask = [r for r in ref if analyzer.derive_mode(r["analysis"]["fields"]) == "ask"]
+    promoted = sum(1 for r in ref if r.get("promoted"))
 
     print("═" * 60)
     print(f"  템플릿 실행 {len(tpl)} · 대조군 실행 {len(ctl)} · 분석 실패 {failed}")
@@ -88,6 +101,8 @@ def _report(runs: list[dict]) -> None:
     print(f"  가드 후 잔여 위반                  : {len(residual)}/{len(tpl)}")
     print(f"  가드 후에도 ask 로 막힘(derive_mode): {len(blocked)}/{len(tpl)}")
     print(f"  대조군 ask 유지                    : {len(ctl_ask)}/{len(ctl)}")
+    if ref:
+        print(f"  가리킨 원문 → ask(되물음)          : {len(ref_ask)}/{len(ref)}  (승격 가드 발동 {promoted}회)")
     print("═" * 60)
     for r in residual + blocked:
         print(f"  [막힘] {r['query'][:40]}  required-empty={_any_required_empty(r['analysis']['fields'])}")
@@ -103,13 +118,15 @@ def main() -> None:
     ap.add_argument("--from", dest="src", default=None,
                     help="가드 이전 원본 출력 JSON — 가드를 오프라인 적용해 집계")
     ap.add_argument("--save", default=None, help="이번 실행 원본을 저장할 경로")
+    ap.add_argument("--only", choices=("all", "template", "referenced"), default="all",
+                    help="일부만 측정 — 쿼터 절약")
     args = ap.parse_args()
 
     analyzer.reset_sanitize_stats()
     if args.src:
         runs = _apply_guard_offline(json.loads(Path(args.src).read_text(encoding="utf-8")))
     else:
-        runs = _collect(args.rounds, args.sleep)
+        runs = _collect(args.rounds, args.sleep, args.only)
     if args.save:
         Path(args.save).write_text(json.dumps(runs, ensure_ascii=False, indent=1), encoding="utf-8")
     _report(runs)
