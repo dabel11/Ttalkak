@@ -73,6 +73,36 @@ def normalize_questions(raw_questions) -> list[dict]:
     return out
 
 
+def normalize_techniques(raw) -> list[dict]:
+    """모델이 낸 techniques 를 `[{"name", "reason"}]` 로 정규화한다.
+
+    🔴 실측(2026-09-19 gen_set #3): 모델이 원소를 **문자열화된 JSON**으로 내는 경우가 있다 —
+    `'{"name":"Checklist Prompting","reason":"…"}'`. 종전엔 그 문자열이 그대로 기법명이 되어
+    화면에 원본 JSON 이 찍히고, 이름이 카드와 매칭되지 않아 `반영불가 기법 적용률` 의
+    분모에만 들어갔다(과소집계). 빈 이름은 버린다 — 종전엔 빈 글머리표(`• `)가 남았다.
+
+    표시용(build_answer)과 필드용(assemble_fields)이 **같은 변환**을 쓰도록 한 곳에 둔다.
+    """
+    out = []
+    for t in raw or []:
+        if not t:                      # None·""·[]·{} — 종전엔 "None" 같은 이름이 남았다
+            continue
+        if isinstance(t, str):
+            stripped = t.strip()
+            if stripped.startswith("{"):
+                try:
+                    t = json.loads(stripped)
+                except ValueError:
+                    pass
+        if isinstance(t, dict):
+            name, reason = str(t.get("name") or "").strip(), str(t.get("reason") or "").strip()
+        else:
+            name, reason = str(t).strip(), ""
+        if name:
+            out.append({"name": name, "reason": reason})
+    return out
+
+
 def build_answer(p: dict) -> str:
     """구조화 JSON → 기존 화면 표시용 마크다운 복원.
     익스텐션 UI·history 왕복(assistant 턴 저장) 형식을 기존과 동일하게 유지한다."""
@@ -90,10 +120,8 @@ def build_answer(p: dict) -> str:
 
     parts = ["---", "**개선된 프롬프트:**", "", str(p.get("improved_prompt") or ""), "",
              "---", "**적용한 기법:**"]
-    for t in p.get("techniques") or []:
-        name   = t.get("name", "") if isinstance(t, dict) else str(t)
-        reason = t.get("reason", "") if isinstance(t, dict) else ""
-        parts.append(f"• {name}: {reason}" if reason else f"• {name}")
+    for t in normalize_techniques(p.get("techniques")):
+        parts.append(f"• {t['name']}: {t['reason']}" if t["reason"] else f"• {t['name']}")
     changes = p.get("changes") or []
     if changes:
         parts += ["", "**개선 포인트:**"] + [f"- {c}" for c in changes]
@@ -122,14 +150,13 @@ def assemble_fields(raw: str) -> dict:
     p = parse_generation(raw)
     if p is not None:
         improved = str(p.get("improved_prompt") or "") if p["mode"] == "improve" else ""
-        techs = [t.get("name", "") if isinstance(t, dict) else str(t)
-                 for t in (p.get("techniques") or [])]
+        techs = [t["name"] for t in normalize_techniques(p.get("techniques"))]
         score = p.get("score")
         return {
             "mode":               p["mode"],
             "answer":             build_answer(p),
             "improved_prompt":    improved.strip(),
-            "techniques_applied": [t for t in techs if t],
+            "techniques_applied": techs,
             "changes":            [str(c) for c in (p.get("changes") or [])],
             "score":              int(score) if isinstance(score, (int, float)) else None,
             "summary":            str(p.get("summary") or ""),

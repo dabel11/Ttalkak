@@ -8,6 +8,8 @@ tests/test_postprocess.py
     python3 -m tests.test_postprocess
 """
 
+import json  # noqa: E402
+
 from app.rag.postprocess import (
     parse_generation, build_answer, assemble_fields,
     extract_improved_prompt, extract_applied_techniques, extract_changes,
@@ -130,3 +132,46 @@ check("폴백 ask: 개선블록 없으면 ask", f_fb_ask["mode"] == "ask" and f_
 check("폴백 ask: answer 원문 보존", "무슨 글을 원하세요?" in f_fb_ask["answer"])
 
 print(f"\n전부 통과 ({_passed}개)")
+
+
+# ── 기법 목록 정규화 (2026-09-20) ────────────────────────────
+# 실측(gen_set #3): 모델이 원소를 문자열화된 JSON 으로 냈다 —
+# 화면에 원본 JSON 이 찍히고, 이름이 카드와 매칭 안 돼 지표가 과소집계됐다.
+_JSON_TECH = '{"name":"Checklist Prompting","reason":"리뷰 완료 여부를 체크리스트로 검증"}'
+
+
+def test_normalize_techniques_parses_stringified_json():
+    from app.rag.postprocess import normalize_techniques
+    got = normalize_techniques([_JSON_TECH])
+    assert got == [{"name": "Checklist Prompting", "reason": "리뷰 완료 여부를 체크리스트로 검증"}]
+
+
+def test_normalize_techniques_keeps_plain_and_dict_forms():
+    from app.rag.postprocess import normalize_techniques
+    got = normalize_techniques(["Role Prompting", {"name": "Meta-Prompting", "reason": "이유"}])
+    assert got == [{"name": "Role Prompting", "reason": ""},
+                   {"name": "Meta-Prompting", "reason": "이유"}]
+
+
+def test_normalize_techniques_drops_empty_names():
+    """빈 이름은 버린다 — 종전엔 마크다운에 빈 글머리표(`• `)가 남았다."""
+    from app.rag.postprocess import normalize_techniques
+    assert normalize_techniques(["", {"name": ""}, None, []]) == []
+
+
+def test_normalize_techniques_tolerates_broken_json():
+    from app.rag.postprocess import normalize_techniques
+    assert normalize_techniques(["{깨진 json"]) == [{"name": "{깨진 json", "reason": ""}]
+
+
+def test_answer_and_fields_share_normalized_names():
+    """표시용(answer)과 필드용(techniques_applied)이 같은 이름을 쓴다."""
+    from app.rag.postprocess import assemble_fields
+    raw = json.dumps({"mode": "improve", "improved_prompt": "지시문",
+                      "techniques": [_JSON_TECH, "Role Prompting", ""],
+                      "changes": [], "score": 7, "summary": "s", "questions": []},
+                     ensure_ascii=False)
+    out = assemble_fields(raw)
+    assert out["techniques_applied"] == ["Checklist Prompting", "Role Prompting"]
+    assert "• Checklist Prompting: 리뷰 완료 여부를 체크리스트로 검증" in out["answer"]
+    assert '{"name"' not in out["answer"] and "• \n" not in out["answer"]

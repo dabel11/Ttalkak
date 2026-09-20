@@ -3364,3 +3364,27 @@ python3 /…/scratchpad/ab_template.py        # 같은 분석 고정 · 렌더�
 **변경 파일**: `app/rag/analyzer.py` · `tests/test_analyzer.py`(+10) · `eval/analyzer_rule5_set.json`(referenced 라벨 + 3건) ·
 `eval/analyzer_rule5_eval.py`(`--only`, 대칭 지표) · `RAG_PIPELINE.md`
 **검증**: `pytest tests/ -q` 221 passed · 라이브 `--only referenced --rounds 2` 14/14(분석 실패 2 는 20b TPD)
+
+---
+
+## [2026-09-20] 기법 목록 정규화 — 문자열화된 JSON 이 기법명으로 나가던 것
+
+**실측**(층 필터 A/B 캐시 `82d3756f`, gen_set #3 코드리뷰):
+```
+techniques_applied = ['Code Review Prompting',
+                      '{"name":"Checklist Prompting","reason":"리뷰 완료 여부를 체크리스트로 검증"}',
+                      '{"name":"Prompt Optimization Prompting","reason":"…"}', …]
+answer  … • {"name":"Checklist Prompting","reason":"…"}
+        … •                     ← 빈 글머리표
+```
+모델이 `techniques` 원소를 **문자열화된 JSON**으로 내는 경우가 있는데, 파서는 dict 와 순수 문자열만
+다뤘다. 그래서 (a) 화면에 원본 JSON 이 그대로 찍히고, (b) 그 이름은 카드와 매칭이 안 돼
+`반영불가 기법 적용률` 의 **분모에만** 들어갔다(과소집계 방향), (c) 빈 이름이 빈 글머리표로 남았다.
+
+**수정**: `postprocess.normalize_techniques()` 신설 — 문자열이 `{` 로 시작하면 JSON 파싱을 시도하고,
+실패하면 그 문자열을 이름으로 쓴다. 빈 값(`None`·`""`·`[]`)은 버린다.
+표시용(`build_answer`)과 필드용(`assemble_fields`)이 **같은 변환**을 쓰도록 한 곳으로 합쳤다 —
+종전엔 같은 로직이 두 벌이라 한쪽만 고치면 드리프트하는 구조였다(이번 세션에서 반복 확인된 패턴).
+
+**변경 파일**: `app/rag/postprocess.py` · `tests/test_postprocess.py`(+5)
+**검증**: `pytest tests/ -q` 226 passed
