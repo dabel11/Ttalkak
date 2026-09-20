@@ -7,6 +7,7 @@ from google.genai import types
 from google.genai.errors import ClientError
 
 from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
+from app.rag.analyzer import is_source_field
 
 # 한글 단어에 '직접 붙어' 끼어든 한자(Han) 노이즈만 제거한다.
 # (Groq 70b가 한글 출력에 간혹 한자를 글자에 붙여 토해내는 현상 대응)
@@ -374,10 +375,18 @@ def build_analysis_block(analysis: dict | None) -> str:
     if not analysis or not analysis.get("fields"):
         return ""
     lines = [f"작업유형: {analysis.get('taskType') or '(미상)'}"]
+    template = bool(analysis.get("templateRequest"))
     for f in analysis["fields"]:
         role, status = f.get("role"), f.get("status")
         if status == "filled":
             lines.append(f"- {f['name']} [{role}] = {f.get('value')}")
+        elif template and is_source_field(f["name"]):
+            # 템플릿 요청("~하는 프롬프트 만들어줘")의 빈 원문은 되물을 대상이 아니다.
+            # 종전 렌더("[fact] = 없음 → 빈칸 + 질문")로는 생성기가 "원문이 제공되지 않아"라며
+            # ask 로 갔다(2026-09-19 gen_set #8 — 분석기 교정 후에도 2/2 ask).
+            # SYSTEM_PROMPT 의 템플릿 예외 규칙과 같은 말을 이 요청에 붙여서 준다.
+            lines.append(f"- {f['name']} [template] = (템플릿 요청 — 원문은 사용자가 나중에 붙여넣는다. "
+                         f"되묻지 말고 [{f['name']} 붙여넣기] 빈칸을 둔 채 개선 모드)")
         elif role == "fact":
             lines.append(f"- {f['name']} [fact] = (없음 → 지어내지 말고 [{f['name']} 입력] 빈칸 + 질문)")
         elif role == "required":

@@ -257,6 +257,26 @@ def test_analyze_applies_template_exemption() -> None:
     assert got["fields"][0]["role"] == "fact"
 
 
+def test_template_source_renders_as_paste_slot() -> None:
+    """템플릿 요청의 빈 원문은 '되물을 것'이 아니라 '나중에 붙여넣을 빈칸'으로 렌더된다."""
+    from app.rag.generator import build_analysis_block
+    fields = [_f("원문", role="fact"), _f("목표 언어", status="filled", value="한국어")]
+    block = build_analysis_block({"taskType": "번역", "fields": fields, "templateRequest": True})
+    assert "[template]" in block and "되묻지 말고" in block
+    assert "[fact] = (없음" not in block
+
+
+def test_non_template_render_unchanged() -> None:
+    """템플릿이 아니면 종전 렌더 그대로(fact·empty → 빈칸 + 질문)."""
+    from app.rag.generator import build_analysis_block
+    fields = [_f("원문", role="fact")]
+    for analysis in ({"taskType": "번역", "fields": fields},
+                     {"taskType": "번역", "fields": fields, "templateRequest": False}):
+        block = build_analysis_block(analysis)
+        assert "[template]" not in block
+        assert "- 원문 [fact] = (없음 → 지어내지 말고 [원문 입력] 빈칸 + 질문)" in block
+
+
 def test_template_flag_only_in_analysis_not_fields() -> None:
     """templateRequest 는 분석 dict 최상위에만 — 클라이언트로 나가는 fields 스키마는 불변."""
     payload = {"taskType": "요약",

@@ -108,7 +108,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 - **멀티턴**: `history`를 함께 넣어 매 턴 필드 상태를 재구성 → 이전 턴에 답한 항목은 `filled`가 되어 **같은 질문 반복을 구조적으로 차단**
 
 ### [C] 생성 (2단계) — `generator.py`
-- **`[요청 분석]` 블록 소비**(`build_analysis_block`): filled=재료 / empty·fact=**`[항목명 입력]` 빈칸 + 질문** / empty·framing=가정 후 `changes` 명시
+- **`[요청 분석]` 블록 소비**(`build_analysis_block`): filled=재료 / empty·fact=**`[항목명 입력]` 빈칸 + 질문** / empty·framing=가정 후 `changes` 명시 / **템플릿 요청의 빈 원문=`[template]` — 되묻지 말고 `[원문 붙여넣기]` 빈칸 + 개선 모드**(2026-09-19. 종전 렌더로는 분석기를 고쳐도 생성기가 "원문이 제공되지 않아" ask)
 - **환각 방지 핵심 규칙**: 사용자가 **주지 않은** 구체 사실은 창작 금지·빈칸. 사용자가 **준** 원문(회의록·코드)은 verbatim·빈칸 금지 (두 규칙이 충돌하지 않도록 SYSTEM_PROMPT에서 명시 구분)
 - **백엔드 자동선택 + 요청 단위 라우팅** (`Generator`, `generator.py:391`)
   - `GROQ_API_KEY` 있으면 **Groq 우선**, 없으면 Gemini (현재 `.env`엔 Groq만 → Groq)
