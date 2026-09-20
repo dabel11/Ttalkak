@@ -12,7 +12,8 @@ Groq 무료 티어는 요청 크기를 '입력 + max_tokens(출력 예약)'로 �
 실행: python3 -m tests.test_token_budget
 """
 
-from app.rag.generator import (SYSTEM_PROMPT, GroqGenerator, _build_context_blocks,
+from app.rag.generator import (_EXAMPLE_HANGUL, _KNOWN_HANGUL, _USER_HANGUL, SYSTEM_PROMPT,
+                               GroqGenerator, _build_context_blocks, _est_example_tokens,
                                _est_known_tokens, _est_tokens)
 
 fit = GroqGenerator._fit_max_tokens
@@ -80,9 +81,16 @@ check("estimate_input: 운영 규모 입력에서 전량 보수 추정보다 작
 # (코퍼스 전량 실측 2026-09-20: 보정 계수로는 예시 33묶음 중 3묶음이 과소추정 0.976~)
 _EX = [{"text": "[개선 예시 — 번역]\n거친 요청: 이거 일어로 바꿔줘.\n개선된 프롬프트: …",
         "metadata": {"kind": "example", "task_type": "translate"}}]
-check("예시 블록은 보수 추정(고정 입력 취급 금지)",
+check("예시 블록은 예시 계수로 추정(고정 입력 취급 금지)",
       GroqGenerator.estimate_input("q", _EX) - GroqGenerator.estimate_input("q", [])
-      == _est_tokens(_build_context_blocks(_EX)))
+      == _est_example_tokens(_build_context_blocks(_EX)))
+# 계수의 근거는 코퍼스 전량 실측(eval/token_calib.py --corpus, 2026-09-20)의 '필요 한글계수' 최댓값.
+# 코퍼스를 다시 만들면(ingest_knowledge·gen_examples) 다시 재고 이 값을 갱신할 것.
+check("예시 계수는 실측 필요값(0.774) 위 + 여유", _EXAMPLE_HANGUL >= 0.774 * 1.05,
+      f"got {_EXAMPLE_HANGUL}")
+check("기법 계수는 실측 필요값(0.678) 위 + 여유", _KNOWN_HANGUL >= 0.678 * 1.05,
+      f"got {_KNOWN_HANGUL}")
+check("예시 계수 < 사용자 계수(코퍼스라 전량 실측 가능)", _EXAMPLE_HANGUL < _USER_HANGUL)
 check("기법 블록은 보정 추정",
       GroqGenerator.estimate_input("q", _ctx) - GroqGenerator.estimate_input("q", [])
       == _est_known_tokens(_build_context_blocks(_ctx)))

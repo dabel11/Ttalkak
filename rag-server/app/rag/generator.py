@@ -42,13 +42,17 @@ def _strip_cjk_noise(text: str) -> str:
 #   · 사용자 입력(질의·대화·분석값) — 문체를 모른다 → **보수 계수**(한글 1.0). `_est_tokens`
 #   · 고정 입력(SYSTEM_PROMPT·코퍼스 기법 카드) — 우리가 쓴 텍스트라 **전량을 실측 검증**할 수
 #     있다(eval/token_calib.py --corpus) → **보정 계수**(한글 0.75). `_est_known_tokens`
-#     단 **예시 카드는 제외** — 사용자의 거친 요청을 말투째 인용하므로 사용자 입력과 같이 잰다.
+#     단 **예시 카드는 따로** — 사용자의 거친 요청을 말투째 인용하므로 계수가 더 높다(`_est_example_tokens`).
 #   요청 입력의 ~85% 가 고정 입력이라 이것만으로 예산이 요청당 ~+1,000 돌아온다.
 #   기타 문자는 둘 다 0.8(일본어 0.71·JSON 기호 0.68 — 종전 1/1.5=0.67 은 일본어를 과소추정했다).
 _HANGUL_RE = re.compile(r"[가-힣]")
 _ASCII_RE  = re.compile(r"[a-zA-Z0-9 \n]")
 _USER_HANGUL  = 1.0    # 구어체·고유명사 최악 0.999 (tests/test_token_budget.py)
-_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 기법 카드 34묶음 실측 1.053~1.196(과소 0)
+_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 기법 카드 34묶음 실측 필요값 최대 0.678(여유 10%)
+# 예시 카드는 사용자 말투를 인용하지만 **코퍼스라 전량 실측할 수 있다** — 보수 계수(1.0)로 재면
+# 실제보다 23~36% 크게 잡혀 출력 예산을 그만큼 깎는다. 33묶음 실측 필요값 최대 0.774 → 0.85(여유 10%).
+# 예시를 다시 생성하면(ingestion/gen_examples.py) `token_calib --corpus` 로 재검증할 것.
+_EXAMPLE_HANGUL = 0.85
 
 
 def _est_by_class(text: str, hangul_rate: float) -> int:
@@ -63,6 +67,11 @@ def _est_by_class(text: str, hangul_rate: float) -> int:
 def _est_tokens(text: str) -> int:
     """문체를 모르는 텍스트(사용자 입력)의 gpt-oss 토큰 수 — 보수 추정(과소추정 금지)."""
     return _est_by_class(text, _USER_HANGUL)
+
+
+def _est_example_tokens(text: str) -> int:
+    """예시 카드 블록의 gpt-oss 토큰 수 — 사용자 말투 인용이라 고정 입력보다 높게, 실측 보정."""
+    return _est_by_class(text, _EXAMPLE_HANGUL)
 
 
 def _est_known_tokens(text: str) -> int:
@@ -397,6 +406,14 @@ def _build_context_blocks(contexts: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+class _BudgetShort(Exception):
+    """출력 예산 부족 — 400(JSON 시작 전 소진) 또는 finish_reason='length'(중간 잘림)."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 # ── Groq 백엔드 ───────────────────────────────────────────────
 class GroqGenerator:
     """Groq API 사용 (무료 14,400회/일, 매우 빠름)"""
@@ -452,7 +469,7 @@ class GroqGenerator:
             known += _est_known_tokens(_build_context_blocks(techs))
         user = _est_tokens(query) + _est_tokens(build_analysis_block(analysis))
         if exs:
-            user += _est_tokens(_build_context_blocks(exs))
+            user += _est_example_tokens(_build_context_blocks(exs))
         user += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
         return known + user + 100
 
@@ -490,25 +507,22 @@ class GroqGenerator:
         # → main.run_generation 이 503 으로 매핑 (기존엔 groq 예외가 그대로 500).
         from groq import APIConnectionError, APIStatusError, RateLimitError
 
+        # 🔴 출력 예산 부족의 두 얼굴 — 둘 다 gpt-oss 가 JSON 앞에 쓰는 **추론 토큰** 탓이다.
+        #   ① 400 json_validate_failed : 추론이 예산을 다 먹어 JSON 이 시작도 못 함
+        #   ② finish_reason="length"   : JSON 이 중간에 잘림 → 정규식 폴백으로 **조용히** 깨진 개선안
+        # 실측(2026-09-20 #6): 예산 1,817·1,845 를 완료가 전부 소진하고 length 로 끝났다.
+        # 무료 티어에선 입력 5.6k 라 여유가 2.4k 뿐이라 예산을 더 늘릴 수 없다 →
+        # **그 요청만** 추론량을 낮춰 1회 재시도한다(기본 경로의 추론량은 그대로 — 품질 미검증 영역).
         for attempt in range(2):
             try:
-                effort = _gen_reasoning_effort()
-                response = self.client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=_gen_temperature(),
-                    response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
-                    **({"reasoning_effort": effort} if effort else {}),
-                )
-                # 예산이 실제로 충분했는지 운영 로그로 보인다 — 종전엔 400 이 나도 배정 예산·실사용을
-                # 알 길이 없어 원인 규명에 재현 스크립트가 필요했다(2026-09-16·09-20).
-                u = getattr(response, "usage", None)
-                if u is not None:
-                    print(f"[Generator] 예산 max_tokens={max_tokens} · 입력 추정 {est_input}/실제 "
-                          f"{u.prompt_tokens} · 완료 {u.completion_tokens} "
-                          f"({response.choices[0].finish_reason})")
-                return _strip_cjk_noise(response.choices[0].message.content)
+                return self._complete(groq_model, messages, max_tokens, est_input,
+                                      _gen_reasoning_effort())
+            except _BudgetShort as e:
+                print(f"[Generator] 출력 예산 부족({e.reason}) → reasoning_effort=low 로 1회 재시도")
+                try:
+                    return self._complete(groq_model, messages, max_tokens, est_input, "low")
+                except _BudgetShort as e2:
+                    raise RuntimeError(f"Groq 요청 실패({e2.reason} — 출력 예산 부족)") from e2
             except RateLimitError as e:
                 wait = _retry_after_seconds(e)
                 if attempt == 0 and wait <= _RETRY_WAIT_CAP:
@@ -524,6 +538,40 @@ class GroqGenerator:
                 print(f"[Generator] Groq HTTP {e.status_code} — 예산 max_tokens={max_tokens} · "
                       f"입력 추정 {est_input}")
                 raise RuntimeError(f"Groq 요청 실패(HTTP {e.status_code})") from e
+
+    def _complete(self, groq_model: str, messages: list[dict], max_tokens: int,
+                  est_input: int, effort: str | None) -> str:
+        """Groq 1회 호출. 출력 예산이 모자라면 `_BudgetShort` 를 올린다(호출자가 재시도 판단).
+
+        배정 예산·입력 추정/실제·완료 토큰·종료 사유를 매 호출 남긴다 — 종전엔 400 이 나도
+        배정 예산을 알 길이 없어 원인 규명에 재현 스크립트가 필요했다(2026-09-16·09-20)."""
+        from groq import APIStatusError
+
+        try:
+            response = self.client.chat.completions.create(
+                model=groq_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=_gen_temperature(),
+                response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
+                **({"reasoning_effort": effort} if effort else {}),
+            )
+        except APIStatusError as e:
+            if e.status_code == 400 and effort != "low":
+                raise _BudgetShort("HTTP 400") from e
+            raise
+
+        u = getattr(response, "usage", None)
+        finish = response.choices[0].finish_reason
+        if u is not None:
+            print(f"[Generator] 예산 max_tokens={max_tokens} · 입력 추정 {est_input}/실제 "
+                  f"{u.prompt_tokens} · 완료 {u.completion_tokens} ({finish}"
+                  f"{', effort=' + effort if effort else ''})")
+        if finish == "length" and effort != "low":
+            raise _BudgetShort("출력 잘림(length)")
+        if finish == "length":
+            print("[Generator] ⚠️ reasoning_effort=low 로도 출력이 잘렸다 — 개선안이 불완전할 수 있다")
+        return _strip_cjk_noise(response.choices[0].message.content)
 
 
 # ── Gemini 백엔드 ─────────────────────────────────────────────
