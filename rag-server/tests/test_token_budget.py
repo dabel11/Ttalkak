@@ -12,7 +12,8 @@ Groq 무료 티어는 요청 크기를 '입력 + max_tokens(출력 예약)'로 �
 실행: python3 -m tests.test_token_budget
 """
 
-from app.rag.generator import SYSTEM_PROMPT, GroqGenerator, _est_known_tokens, _est_tokens
+from app.rag.generator import (SYSTEM_PROMPT, GroqGenerator, _build_context_blocks,
+                               _est_known_tokens, _est_tokens)
 
 fit = GroqGenerator._fit_max_tokens
 M70 = "llama-3.3-70b-versatile"   # TPM 12,000
@@ -74,6 +75,17 @@ check("estimate_input: 질의 몫은 보수 추정", _est_q - _est_empty == _est
       f"got {_est_q - _est_empty}")
 check("estimate_input: 운영 규모 입력에서 전량 보수 추정보다 작다(예산 회복)",
       _est_q < sum(_est_tokens(m["content"]) for m in GroqGenerator.build_messages(_KO_CASUAL, _ctx)) + 100)
+
+# 예시 카드는 '거친 요청'을 사용자 말투째 인용한다 → 고정 입력이 아니라 보수 추정.
+# (코퍼스 전량 실측 2026-09-20: 보정 계수로는 예시 33묶음 중 3묶음이 과소추정 0.976~)
+_EX = [{"text": "[개선 예시 — 번역]\n거친 요청: 이거 일어로 바꿔줘.\n개선된 프롬프트: …",
+        "metadata": {"kind": "example", "task_type": "translate"}}]
+check("예시 블록은 보수 추정(고정 입력 취급 금지)",
+      GroqGenerator.estimate_input("q", _EX) - GroqGenerator.estimate_input("q", [])
+      == _est_tokens(_build_context_blocks(_EX)))
+check("기법 블록은 보정 추정",
+      GroqGenerator.estimate_input("q", _ctx) - GroqGenerator.estimate_input("q", [])
+      == _est_known_tokens(_build_context_blocks(_ctx)))
 
 
 # ── _fit_max_tokens ──────────────────────────────────────────

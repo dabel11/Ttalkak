@@ -40,14 +40,15 @@ def _strip_cjk_noise(text: str) -> str:
 #
 # → 텍스트를 출처로 나눈다.
 #   · 사용자 입력(질의·대화·분석값) — 문체를 모른다 → **보수 계수**(한글 1.0). `_est_tokens`
-#   · 고정 입력(SYSTEM_PROMPT·코퍼스 기법 카드·예시) — 우리가 쓴 텍스트라 **전량을 실측 검증**할 수
+#   · 고정 입력(SYSTEM_PROMPT·코퍼스 기법 카드) — 우리가 쓴 텍스트라 **전량을 실측 검증**할 수
 #     있다(eval/token_calib.py --corpus) → **보정 계수**(한글 0.75). `_est_known_tokens`
+#     단 **예시 카드는 제외** — 사용자의 거친 요청을 말투째 인용하므로 사용자 입력과 같이 잰다.
 #   요청 입력의 ~85% 가 고정 입력이라 이것만으로 예산이 요청당 ~+1,000 돌아온다.
 #   기타 문자는 둘 다 0.8(일본어 0.71·JSON 기호 0.68 — 종전 1/1.5=0.67 은 일본어를 과소추정했다).
 _HANGUL_RE = re.compile(r"[가-힣]")
 _ASCII_RE  = re.compile(r"[a-zA-Z0-9 \n]")
 _USER_HANGUL  = 1.0    # 구어체·고유명사 최악 0.999 (tests/test_token_budget.py)
-_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 전량 실측으로 검증
+_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 기법 카드 34묶음 실측 1.053~1.196(과소 0)
 
 
 def _est_by_class(text: str, hangul_rate: float) -> int:
@@ -65,7 +66,8 @@ def _est_tokens(text: str) -> int:
 
 
 def _est_known_tokens(text: str) -> int:
-    """우리가 쓴 고정 텍스트(SYSTEM_PROMPT·코퍼스 카드·예시)의 gpt-oss 토큰 수 — 실측 보정 계수."""
+    """우리가 쓴 고정 텍스트(SYSTEM_PROMPT·기법 카드)의 gpt-oss 토큰 수 — 실측 보정 계수.
+    예시 카드는 사용자 말투를 인용하므로 여기에 쓰지 않는다(`estimate_input` 참조)."""
     return _est_by_class(text, _KNOWN_HANGUL)
 
 
@@ -440,10 +442,17 @@ class GroqGenerator:
         고정 입력(SYSTEM_PROMPT·기법/예시 블록)은 실측 보정 계수, 사용자에게서 온 것(질의·
         대화 이력·분석 블록 — 분석값은 질의를 옮겨 적은 것)은 보수 계수. +100 은 대화 템플릿
         오버헤드(실측 1메시지 71토큰)와 블록 라벨·구분자 몫이다."""
+        # ⚠️ 예시 카드는 '거친 요청'을 사용자 말투 그대로 인용한다 → 고정 입력이 아니라 사용자 문체다.
+        # 코퍼스 전량 실측(2026-09-20): 기법 카드 34묶음은 보정 계수로 1.053~1.196(과소 0)인데
+        # 예시 33묶음은 0.976~1.074 로 **3묶음이 과소추정**이었다. 예시는 보수 계수로 잰다.
+        techs = [c for c in (contexts or []) if not _is_example(c)]
+        exs   = [c for c in (contexts or []) if _is_example(c)]
         known = _est_known_tokens(SYSTEM_PROMPT)
-        if contexts:
-            known += _est_known_tokens(_build_context_blocks(contexts))
+        if techs:
+            known += _est_known_tokens(_build_context_blocks(techs))
         user = _est_tokens(query) + _est_tokens(build_analysis_block(analysis))
+        if exs:
+            user += _est_tokens(_build_context_blocks(exs))
         user += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
         return known + user + 100
 

@@ -92,16 +92,20 @@ def _corpus(client: Groq, sleep: float, start: int = 0, out: str | None = None) 
             continue
         block = _build_context_blocks(g)
         actual = _prompt_tokens(client, [{"role": "user", "content": block}]) - overhead
-        est = _est_known_tokens(block)
+        # 운영(estimate_input)과 같은 기준: 기법 카드는 보정, 예시는 보수(사용자 말투 인용)
+        est = _est_known_tokens(block) if kind == "기법" else _est_tokens(block)
         rows.append({"group": gi, "kind": kind, "n": len(g), "est": est, "actual": actual})
         if out:                                   # 묶음마다 저장 — 한도로 끊겨도 --start 로 이어간다
             Path(out).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"  [{gi:>2}] {kind} ×{len(g)}  est={est:>5}  actual={actual:>5}  여유={est - actual:+5} "
               f"({est / actual - 1:+.0%})", flush=True)
         time.sleep(sleep)
-    worst = min(rows, key=lambda r: r["est"] / r["actual"])
-    print(f"  최악 묶음: {worst['kind']} est/actual={worst['est'] / worst['actual']:.3f} "
-          f"— 1 미만이면 _KNOWN_HANGUL 을 올려야 한다 · 템플릿 오버헤드 {overhead}")
+    for kind in ("기법", "예시"):
+        rs = [r["est"] / r["actual"] for r in rows if r["kind"] == kind]
+        if rs:
+            print(f"  {kind} {len(rs)}묶음: 최소 {min(rs):.3f} 최대 {max(rs):.3f} "
+                  f"과소추정 {sum(1 for x in rs if x < 1)}건")
+    print(f"  최소가 1 미만이면 그 종류의 계수를 올려야 한다 · 템플릿 오버헤드 {overhead}")
     return rows
 
 
