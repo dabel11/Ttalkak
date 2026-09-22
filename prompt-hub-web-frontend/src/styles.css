@@ -651,6 +651,13 @@ h1 {
   transform-origin: right center;
 }
 
+.search-help.expand-right .help-text {
+  right: auto;
+  left: 0;
+  padding: 0 12px 0 32px;
+  transform-origin: left center;
+}
+
 .popular-tags {
   display: flex;
   flex-wrap: wrap;

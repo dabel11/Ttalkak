@@ -276,6 +276,15 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
   expect(shareLayout.previewTop).toBeGreaterThanOrEqual(shareLayout.formBottom);
   expect(shareLayout.titleDisplay).toBe("flex");
   expect(shareLayout.titleCenterDelta).toBeLessThanOrEqual(2);
+  const shareHelp = page.getByRole("button", { name: "해시태그 도움말" });
+  await shareHelp.focus();
+  await page.waitForTimeout(220);
+  const shareHelpBounds = await shareHelp.locator(".help-text").evaluate((tooltip) => {
+    const bounds = tooltip.getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right, viewportWidth: document.documentElement.clientWidth };
+  });
+  expect(shareHelpBounds.left).toBeGreaterThanOrEqual(0);
+  expect(shareHelpBounds.right).toBeLessThanOrEqual(shareHelpBounds.viewportWidth);
 
   await page.getByRole("button", { name: "메뉴" }).click();
   await page.locator('#topbar-action-menu [data-route="saved"]').click();

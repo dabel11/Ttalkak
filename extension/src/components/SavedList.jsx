@@ -10,21 +10,12 @@ export function PromptList({ items, emptyText, mode, isSaved = (_item) => false,
         const saved = isSaved?.(item);
         return (
           <div className="saved-item-wrap" key={item.id}>
-            <div
-              className="saved-item"
-              role="button"
-              tabIndex={0}
-              onClick={() => onOpenPrompt(item)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenPrompt(item);
-                }
-              }}
-            >
-              <strong>{item.title}</strong>
-              <span>{item.preview}</span>
-              {item.tags?.length > 0 && <small>{item.tags.map((tag) => `#${tag}`).join(" ")}</small>}
+            <div className="saved-item">
+              <button className="saved-item-open" type="button" onClick={() => onOpenPrompt(item)}>
+                <strong>{item.title}</strong>
+                <span>{item.preview}</span>
+                {item.tags?.length > 0 && <small>{item.tags.map((tag) => `#${tag}`).join(" ")}</small>}
+              </button>
               {mode === "search" && (
                 <button
                   className={`save-card-action ${saved ? "saved" : ""}`}

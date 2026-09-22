@@ -45,25 +45,38 @@ test("Google demo login persists local likes, saves, folders, and My Page", asyn
   await expect(page.locator("[data-auth-form]")).toHaveCount(0);
 
   await page.locator('.sidebar [data-route="make"]').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "대화 목록", exact: true }).click();
   await page.locator("[data-show-folder-form]").click();
+  await expect(page.locator(".make-page")).toHaveClass(/drawer-open/);
+  await expect(page.locator("[data-folder-create-form]")).toBeVisible();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("데모 폴더");
   await page.locator('[data-folder-create-form] button[type="submit"]').click();
+  await expect(page.locator(".make-page")).not.toHaveClass(/drawer-open/);
+  await page.getByRole("button", { name: "대화 목록", exact: true }).click();
   await expect(page.locator("[data-folder-item]").filter({ hasText: "데모 폴더" })).toBeVisible();
+  await page.getByRole("button", { name: "대화 목록 닫기" }).click();
 
-  await page.locator('.sidebar [data-route="saved"]').click();
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
+  await expect(page.locator(".demo-library-prompt")).toContainText("데모 계정 · 이 기기에 저장됨");
   await expect(page.getByText("데모 계정 기능 확인", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".demo-library-prompt.is-error")).toHaveCount(0);
 
   await page.reload();
   await waitForAppHydration(page);
   await expect(page.locator("[data-auth-form]")).toHaveCount(0);
-  await page.locator('.sidebar [data-route="saved"]').click();
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
+  await expect(page.locator(".demo-library-prompt")).toContainText("데모 계정 · 이 기기에 저장됨");
   await expect(page.getByText("데모 계정 기능 확인", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".demo-library-prompt.is-error")).toHaveCount(0);
 
-  await page.locator('.sidebar [data-route="make"]').click();
+  await page.getByRole("button", { name: "메뉴" }).click();
+  await page.locator('#topbar-action-menu [data-route="make"]').click();
+  await page.getByRole("button", { name: "대화 목록", exact: true }).click();
   await expect(page.locator("[data-folder-item]").filter({ hasText: "데모 폴더" })).toBeVisible();
   expect(protectedRequests).toEqual([]);
 });

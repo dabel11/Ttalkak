@@ -31,48 +31,48 @@ export const EXAMPLE_QUERIES = [
 export const PROMPT_LIBRARY = [
   {
     id: "library-marketing-campaign",
-    title: "Marketing Campaign Strategy",
-    preview: "Plan campaign channels and execution steps from product and audience details.",
+    title: "마케팅 캠페인 전략",
+    preview: "제품과 고객 정보를 바탕으로 채널별 전략과 실행 단계를 구성합니다.",
     content:
-      "You are a professional marketing strategist. Based on the product value, target audience, budget, and timeline, propose channel-specific campaign strategies and an execution schedule.",
-    tags: ["marketing", "campaign", "strategy"],
+      "당신은 전문 마케팅 전략가입니다. 제품 가치, 목표 고객, 예산과 일정을 바탕으로 채널별 캠페인 전략과 실행 일정을 제안하세요.",
+    tags: ["마케팅", "캠페인", "전략"],
   },
   {
     id: "library-blog-seo",
-    title: "SEO Blog Writing",
-    preview: "Suggest keyword intent, title options, structure, and CTA direction.",
+    title: "SEO 블로그 작성",
+    preview: "검색 의도와 제목, 글 구조, 행동 유도 방향을 제안합니다.",
     content:
-      "You are an SEO content editor. Based on the primary keyword, suggest search intent, title options, heading structure, body direction, and CTA.",
-    tags: ["SEO", "blog", "writing"],
+      "당신은 SEO 콘텐츠 편집자입니다. 핵심 키워드를 바탕으로 검색 의도, 제목 후보, 소제목 구조, 본문 방향과 행동 유도 문구를 제안하세요.",
+    tags: ["SEO", "블로그", "글쓰기"],
   },
   {
     id: "library-email",
-    title: "Business Email Draft",
-    preview: "Write a concise and polite email for the recipient and purpose.",
+    title: "비즈니스 이메일 초안",
+    preview: "수신자와 목적에 맞는 간결하고 정중한 이메일을 작성합니다.",
     content:
-      "You are a business communication expert. Based on the email purpose, recipient, and desired outcome, draft a concise and polite business email.",
-    tags: ["email", "business", "communication"],
+      "당신은 비즈니스 커뮤니케이션 전문가입니다. 이메일 목적, 수신자와 원하는 결과를 바탕으로 간결하고 정중한 비즈니스 이메일 초안을 작성하세요.",
+    tags: ["이메일", "비즈니스", "커뮤니케이션"],
   },
   {
     id: "library-code-question",
-    title: "Coding Question Builder",
-    preview: "Structure a coding question with context, error, and attempted solutions.",
+    title: "코딩 질문 구성",
+    preview: "상황과 오류, 시도한 방법을 포함해 답변하기 쉬운 질문으로 정리합니다.",
     content:
-      "You are a development mentor. Organize the problem, expected result, actual result, error message, and attempted solutions into a clear question that is easy to answer.",
-    tags: ["coding", "question", "debugging"],
+      "당신은 개발 멘토입니다. 문제 상황, 기대 결과, 실제 결과, 오류 메시지와 시도한 방법을 답변하기 쉬운 명확한 질문으로 정리하세요.",
+    tags: ["코딩", "질문", "디버깅"],
   },
   {
     id: "library-summary",
-    title: "Long Text Summary",
-    preview: "Summarize long text by claims, evidence, key points, and next actions.",
+    title: "긴 글 요약",
+    preview: "핵심 주장과 근거, 놓치기 쉬운 내용과 다음 행동으로 요약합니다.",
     content:
-      "You are a professional summarizer. Summarize the text into core claims, key evidence, easily missed points, and next actions.",
-    tags: ["summary", "analysis", "organizing"],
+      "당신은 전문 요약가입니다. 입력한 글을 핵심 주장, 주요 근거, 놓치기 쉬운 내용과 다음 행동으로 나누어 요약하세요.",
+    tags: ["요약", "분석", "정리"],
   },
 ];
 
 export const TIPS = [
-  { icon: "1", title: "Set A Clear Goal", description: "Describe the desired output and usage context clearly." },
-  { icon: "2", title: "Add Context", description: "Include audience, tone, constraints, and output criteria." },
-  { icon: "3", title: "Specify Format", description: "Ask for bullets, tables, steps, or another concrete format." },
+  { icon: "1", title: "명확한 목표 설정", description: "원하는 결과와 사용 맥락을 분명하게 설명하세요." },
+  { icon: "2", title: "필요한 맥락 추가", description: "대상, 말투, 제약 조건과 판단 기준을 포함하세요." },
+  { icon: "3", title: "결과 형식 지정", description: "글머리표, 표, 단계 등 구체적인 형식을 요청하세요." },
 ];

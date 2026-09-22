@@ -1192,6 +1192,14 @@ function DemoLibraryPrompt() {
       </div>
     `;
   }
+  if (isDemoAuthToken()) {
+    return `
+      <div class="demo-library-prompt">
+        <div><strong>데모 계정 · 이 기기에 저장됨</strong>
+          <p>저장과 좋아요 활동은 서버로 보내지 않고 현재 브라우저에만 보관합니다.</p></div>
+      </div>
+    `;
+  }
   if (state.myBackendStatus === "connected") {
     return `
       <div class="demo-library-prompt">
