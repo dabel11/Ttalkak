@@ -1,0 +1,35 @@
+:root {
+  --bg: #f6f5f4;
+  --sidebar: #f7f7f5;
+  --panel: #ffffff;
+  --soft: #eeedeb;
+  --line: #e3e1de;
+  --line-soft: #ebe9e6;
+  --text: #191919;
+  --muted: #56544f;
+  --muted-dark: #373633;
+  --cta: #0068c5;
+  --cta-soft: #b8d9f4;
+  --brand-green: #0068c5;
+  --accent: #0068c5;
+  --brand-ink: #24356d;
+  --brand-accent: #1769c2;
+  --brand-paper: #f6f5f4;
+  --radius-control: 7px;
+  --radius-surface: 10px;
+  --shadow: 0 24px 70px rgba(23, 32, 48, .12);
+  --edge-shadow: 0 1px 2px rgba(23, 32, 48, .04);
+  --edge-shadow-hover: 0 10px 28px rgba(23, 32, 48, .09);
+  --section-shadow: 14px 0 34px -30px rgba(5, 5, 16, .5);
+  --motion-fast: .14s ease;
+  --motion-menu: .18s cubic-bezier(.2, .8, .2, 1);
+  color: var(--text);
+  font-family: "Pretendard Variable", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.5;
+  background: var(--bg);
+  text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
+}
