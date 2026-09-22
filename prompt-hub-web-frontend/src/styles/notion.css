@@ -347,6 +347,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .topbar-tool, .backend-status { background: transparent; }
 .topbar-tool:hover { background: var(--soft); color: var(--text); }
 .backend-status { color: var(--muted); font-size: 11px; }
+.backend-status-popover { width: min(276px, calc(100vw - 32px)); }
 .topbar { align-items: center; }
 .topbar-auth { display: flex; align-items: center; justify-content: flex-end; gap: 12px; max-width: none; }
 .account-actions { align-items: center; }
