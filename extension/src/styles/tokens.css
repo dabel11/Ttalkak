@@ -1,0 +1,28 @@
+:root {
+  --bg: #f6f5f4;
+  --sidebar: #f7f7f5;
+  --panel: #ffffff;
+  --line: #e3e1de;
+  --line-soft: #ebe9e6;
+  --text: #191919;
+  --muted: #56544f;
+  --muted-dark: #373633;
+  --brand-green: #0068c5;
+  --brand-green-soft: #e7f1fa;
+  --brand-green-hover: rgba(0, 104, 197, .11);
+  --brand-shadow: 0 1px 2px rgba(23, 32, 48, .04);
+  --brand-shadow-hover: 0 8px 22px rgba(23, 32, 48, .10);
+  --cta: var(--brand-green);
+  --cta-soft: var(--brand-green);
+  --brand-ink: #24356d;
+  --brand-accent: #1769c2;
+  color: var(--text);
+  font-family: "Pretendard Variable", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  font-synthesis: none;
+  line-height: 1.5;
+  background: var(--bg);
+  text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
+}

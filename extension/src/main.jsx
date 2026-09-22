@@ -13,8 +13,10 @@ import { useSavedLibrary } from "./hooks/useSavedLibrary";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
 import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
+import "./styles/tokens.css";
 import "./styles.css";
 import "./styles/response.css";
+import "./styles/notion.css";
 
 function App() {
   const [activeTab, setActiveTab] = useState("search");
