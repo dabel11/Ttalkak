@@ -709,7 +709,7 @@ async function ensureMakeRuntime() {
       normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
       getMakeServerSyncContext, getMakeControllerContext, submitMakePrompt, openAuth, deleteMakeThreadState,
       createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState,
-      MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext,
+      MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, isDemoAuthToken, deleteMakeFolderState, getMakeMutationStateContext,
       toggleSavedMakeMessageState, updateRecentMakeThreadState, openRecentMakeThreadState,
       openSavedMakePromptState, startNewMakeChatState, autosizeTextarea, hasBackendAuthToken,
       handleBackendAccessError, reportWarning,
@@ -2228,9 +2228,10 @@ async function runPromptStateMutation(action, promptId, fallbackMessage) {
   const handler = api?.[action];
   if (typeof handler !== "function") return true;
   const token = getAuthToken();
-  if (!token || isDemoAuthToken(token)) {
+  if (isDemoAuthToken(token)) return true;
+  if (!token) {
     openAuth("login");
-    showNotice("실제 로그인 토큰이 있어야 처리할 수 있습니다.");
+    showNotice("로그인 후 처리할 수 있습니다.");
     return false;
   }
   try {
@@ -2450,7 +2451,7 @@ appBootstrap = createAppBootstrap({
   api: apiClient, state, popularPrompts, savedPrompts, isBackendNumericId, makePreview, normalizeMakeFolders,
   makeState: makeStateModule,
   normalizePersistedLikeCounts, normalizeRecentThreads, updateBackendHomePageMeta, upsertPrompt,
-  canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken,
+  canUseDemoFallback, clearAuthenticatedSession, getApiFailureMessage, getAuthToken, isDemoAuthToken,
   hasBackendAuthToken, getMakeApi, getMakeApiToken, getMakeInteractionVersion: () => makeInteractionVersion,
   getValidSearchScope, handleBackendAccessError, homePageSize: HOME_PAGE_SIZE, render, renderAfterBackendUpdate,
   isMakeThinking: () => isMakeThinking, hydrateBackendMakeDataEffect, hydrateBackendMyPageDataEffect,

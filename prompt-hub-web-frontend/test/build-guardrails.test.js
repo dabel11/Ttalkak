@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { assertBundleBudgets } = require("../../scripts/check-web-bundle-size.cjs");
+const { assertBundleBudgets, collectAssetSizes } = require("../../scripts/check-web-bundle-size.cjs");
 const { assertLegacyGlobalBaseline, auditLegacyGlobals } = require("../../scripts/check-web-legacy-globals.cjs");
 const { assertConsoleWarningBoundary } = require("../../scripts/check-web-observability.cjs");
 const { assertLocalReference, isBundleInput } = require("../../scripts/create-web-bundle-report.cjs");
@@ -165,6 +165,20 @@ test("bundle budgets accept values at the limit and reject regressions", () => {
   assert.throws(() => assertBundleBudgets({ javascript: { files: 2, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 11, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.rawBytes/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files: required asset is missing/);
+});
+
+test("bundle budgets track font declarations separately from component styles", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ttalkak-bundle-assets-"));
+  try {
+    fs.mkdirSync(path.join(root, "fonts"));
+    fs.writeFileSync(path.join(root, "styles.css"), "body{color:#111}");
+    fs.writeFileSync(path.join(root, "fonts", "pretendard.css"), "@font-face{font-family:Pretendard}");
+    const totals = collectAssetSizes(root);
+    assert.equal(totals.styles.files, 1);
+    assert.equal(totals.fontStyles.files, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("bundle reference permits unrelated commits and rejects stale bundle inputs", () => {

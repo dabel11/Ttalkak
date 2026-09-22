@@ -39,6 +39,35 @@ test("Make folders execution recent threads and backend sync are delegated", () 
 test("Make workflow composition bundles its four focused submodules behind one lazy boundary", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.mjs"), "utf8"); ["make-folder-workflows.mjs", "make-execution-workflows.mjs", "make-sync-workflows.mjs", "make-recent-workflows.mjs"].forEach((file) => assert.match(composite, new RegExp(`(?:from\\s+)?["']\\./${file.replaceAll(".", "\\.")}["']`))); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
 test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
 
+test("demo accounts retain local folders without calling the backend", async () => {
+  const state = { isLoggedIn: true, makeFolders: [{ id: "all", name: "전체" }], recentThreads: [], activeFolderId: "all", creatingFolder: true };
+  let backendCalls = 0;
+  const workflows = createMakeWorkflows({
+    state,
+    render() {},
+    showNotice() {},
+    guardAdminUserAction: () => false,
+    createLocalMakeFolderState(current, name) {
+      const folder = { id: "local-folder", name };
+      current.makeFolders.push(folder);
+      return folder;
+    },
+    removeLocalMakeFolderState() {},
+    restoreMakeThreadFolderState() {},
+    MAX_CUSTOM_MAKE_FOLDERS: 5,
+    canUseDemoFallback: () => false,
+    isDemoAuthToken: (token) => token === "demo-token",
+    getMakeApiToken: () => "demo-token",
+    getMakeApi: () => ({ createMakeFolder: async () => { backendCalls += 1; return { id: 99 }; } }),
+  });
+
+  await workflows.createMakeFolder("업무");
+
+  assert.equal(state.makeFolders.at(-1).name, "업무");
+  assert.equal(state.activeFolderId, "local-folder");
+  assert.equal(backendCalls, 0);
+});
+
 test("Make state mutations use named helpers", () => {
   const state = {};
   const api = makeStateApi;

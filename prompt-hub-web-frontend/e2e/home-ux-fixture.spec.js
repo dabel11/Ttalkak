@@ -30,6 +30,25 @@ test("narrow Home search help expands left without leaving the viewport", async 
   expect(positions.whiteSpace).toBe("nowrap");
   await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
 
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await help.focus();
+  await page.waitForTimeout(250);
+  const desktopPositions = await help.evaluate((button) => {
+    const trigger = button.getBoundingClientRect();
+    const tooltipElement = button.querySelector(".help-text");
+    const tooltip = tooltipElement.getBoundingClientRect();
+    return {
+      triggerRight: trigger.right,
+      tooltipLeft: tooltip.left,
+      tooltipRight: tooltip.right,
+      clipped: tooltipElement.scrollWidth > tooltipElement.clientWidth,
+    };
+  });
+  expect(desktopPositions.tooltipLeft).toBeGreaterThanOrEqual(0);
+  expect(desktopPositions.tooltipRight).toBeLessThanOrEqual(desktopPositions.triggerRight + 1);
+  expect(desktopPositions.tooltipRight).toBeLessThanOrEqual(1280);
+  expect(desktopPositions.clipped).toBe(false);
+
   const sort = page.locator(".sort-select");
   const sortWidth = await sort.evaluate((element) => element.getBoundingClientRect().width);
   expect(sortWidth).toBeLessThan(200);

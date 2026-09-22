@@ -313,8 +313,15 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
   }
 
   async function hydrateBackendMyPageDataEffect(ctx, { force = false } = {}) {
-    const { api, applyContext, canUseDemoFallback, getAuthToken, render, state } = ctx;
+    const { api, applyContext, canUseDemoFallback, getAuthToken, isDemoAuthToken, render, state } = ctx;
     if (state.route !== "saved" || !state.isLoggedIn || (!force && state.myBackendStatus !== "idle")) return;
+
+    const token = getAuthToken() || undefined;
+    if (typeof isDemoAuthToken === "function" && isDemoAuthToken(token)) {
+      state.myBackendStatus = "connected";
+      render?.();
+      return;
+    }
 
     if (!api?.getMyLibrary) {
       state.myBackendStatus = canUseDemoFallback() ? "idle" : "fallback";
@@ -323,7 +330,6 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     }
 
     state.myBackendStatus = "checking";
-    const token = getAuthToken() || undefined;
     const hydrationController = new AbortController();
     let hydrationTimeoutId;
     try {
