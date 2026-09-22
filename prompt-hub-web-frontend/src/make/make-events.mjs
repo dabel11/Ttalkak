@@ -97,6 +97,14 @@
     if (restoreFocus && wasOpen) toggle?.focus();
     return wasOpen;
   }
+  function syncMakeDrawerState(root, open) {
+    const page = root.querySelector?.(".make-page");
+    if (!page) return false;
+    page.classList.toggle("drawer-open", Boolean(open));
+    page.querySelector?.("[data-toggle-make-drawer]")?.setAttribute?.("aria-expanded", String(Boolean(open)));
+    setMakeDrawerA11yState(page, Boolean(open));
+    return true;
+  }
   function bindDelegatedMakeEvents(root, handlers) {
     if (!root || boundRoots.has(root)) return;
     boundRoots.add(root);
@@ -115,14 +123,10 @@
     const { actions, state } = ctx;
     const renderPreservingDrawer = () => {
       const root = ctx.root;
-      const wasOpen = root?.querySelector?.(".make-page")?.classList?.contains?.("drawer-open");
+      const wasOpen = Boolean(state.makeDrawerOpen || root?.querySelector?.(".make-page")?.classList?.contains?.("drawer-open"));
+      state.makeDrawerOpen = wasOpen;
       actions.render();
-      if (!wasOpen) return;
-      const page = root?.querySelector?.(".make-page");
-      if (!page) return;
-      page.classList.add("drawer-open");
-      page.querySelector?.("[data-toggle-make-drawer]")?.setAttribute?.("aria-expanded", "true");
-      setMakeDrawerA11yState(page, true);
+      syncMakeDrawerState(root, wasOpen);
     };
     const requireFolderAccess = () => {
       if (actions.guard() || !state.isLoggedIn) { actions.notice("로그인하면 대화를 폴더로 정리할 수 있습니다."); return false; }
@@ -131,6 +135,7 @@
     return {
       viewportChange() {
         state.mobileTemplateExpanded = false;
+        state.makeDrawerOpen = false;
         actions.render();
       },
       input(event) {
@@ -150,6 +155,7 @@
         const makePage = event.target.closest?.(".make-page") || (ctx.root || event.currentTarget).querySelector?.(".make-page");
         if (trapMakeDrawerFocus(event, makePage)) return;
         if (event.key === "Escape" && closeMakeDrawer(ctx.root || event.currentTarget, { restoreFocus: true })) {
+          state.makeDrawerOpen = false;
           event.preventDefault();
           return;
         }
@@ -207,13 +213,13 @@
         if (drawerControl?.dataset && "toggleMakeDrawer" in drawerControl.dataset) {
           const page = drawerControl.closest?.(".make-page");
           const willOpen = !page?.classList.contains("drawer-open");
-          page?.classList.toggle("drawer-open", willOpen);
-          setMakeDrawerA11yState(page, willOpen);
-          drawerControl.setAttribute("aria-expanded", String(willOpen));
+          state.makeDrawerOpen = willOpen;
+          syncMakeDrawerState(ctx.root || event.currentTarget, willOpen);
           if (willOpen) page?.querySelector(".make-drawer-close")?.focus?.({ preventScroll: true });
           return;
         }
         if (drawerControl?.dataset && "closeMakeDrawer" in drawerControl.dataset) {
+          state.makeDrawerOpen = false;
           closeMakeDrawer(ctx.root || event.currentTarget, { restoreFocus: true });
           return;
         }
@@ -259,4 +265,4 @@
       },
     };
   }
-export { bindDelegatedMakeEvents, clearRecentThreadSearch, createDelegatedMakeHandlers, updateAskProgress, updateRecentThreadSearch };
+export { bindDelegatedMakeEvents, clearRecentThreadSearch, createDelegatedMakeHandlers, syncMakeDrawerState, updateAskProgress, updateRecentThreadSearch };

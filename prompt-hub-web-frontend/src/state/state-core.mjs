@@ -109,6 +109,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     composerDraft: "",
     templateCollapsed: false,
     mobileTemplateExpanded: false,
+    makeDrawerOpen: false,
     guestImproveCount: 0,
     shareDraft: null,
     savedFilter: { community: true, mine: true, liked: false },

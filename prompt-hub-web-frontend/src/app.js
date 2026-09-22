@@ -932,9 +932,7 @@ function navigateTo(route) {
   if (route === "make" && !makeWorkflows) {
     ensureMakeRuntime().then((loaded) => { if (loaded && state.route === "make") render(); });
   }
-  if (state.route === "make" && route !== "make" && activeMakeRequestController) {
-    activeMakeRequestController.abort();
-  }
+  if (state.route === "make" && route !== "make") { state.makeDrawerOpen = false; activeMakeRequestController?.abort(); }
   if (state.adminMode && route !== "admin") {
     state.route = "admin";
     render();
@@ -1755,6 +1753,7 @@ function toggleLibraryDemoData() {
 function bindMakeEvents() {
   if (!makeEventsModule) return;
   bindDelegatedMakeEvents();
+  makeEventsModule.syncMakeDrawerState(document, Boolean(state.makeDrawerOpen));
   bindMakeFeedScrollEvents({ state });
   document.querySelectorAll("[data-autosize-textarea]").forEach(autosizeTextarea);
   document.querySelectorAll("[data-ask-answer-input]").forEach((input) => makeEventsModule.updateAskProgress(input));

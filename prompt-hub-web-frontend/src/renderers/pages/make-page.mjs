@@ -37,6 +37,7 @@ import { parts } from "./make-message-parts.mjs";
   function MakePageView(ctx, data) {
     const {
       composerHtml,
+      drawerOpen,
       feedHtml,
       hasMessages,
       hasResponseLessConversation,
@@ -44,8 +45,8 @@ import { parts } from "./make-message-parts.mjs";
     } = data;
 
     return `
-      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"} ${hasResponseLessConversation ? "has-response-less-conversation" : ""}" aria-label="프롬프트 첨삭">
-        <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="false">
+      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"} ${hasResponseLessConversation ? "has-response-less-conversation" : ""} ${drawerOpen ? "drawer-open" : ""}" aria-label="프롬프트 첨삭">
+        <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="${drawerOpen ? "true" : "false"}">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
             <path d="M6.5 4.5h11a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H10l-4.5 3v-3.25a3 3 0 0 1-2-2.75v-7a3 3 0 0 1 3-3Z"></path>
             <path d="M8 9h8M8 13h6"></path>

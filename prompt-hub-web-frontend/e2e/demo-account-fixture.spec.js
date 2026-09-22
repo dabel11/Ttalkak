@@ -52,9 +52,23 @@ test("Google demo login persists local likes, saves, folders, and My Page", asyn
   await expect(page.locator("[data-folder-create-form]")).toBeVisible();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("데모 폴더");
   await page.locator('[data-folder-create-form] button[type="submit"]').click();
-  await expect(page.locator(".make-page")).not.toHaveClass(/drawer-open/);
-  await page.getByRole("button", { name: "대화 목록", exact: true }).click();
-  await expect(page.locator("[data-folder-item]").filter({ hasText: "데모 폴더" })).toBeVisible();
+  await expect(page.locator(".make-page")).toHaveClass(/drawer-open/);
+  const demoFolder = page.locator("[data-folder-item]").filter({ hasText: "데모 폴더" });
+  await expect(demoFolder).toBeVisible();
+  await demoFolder.locator("[data-folder-menu]").click();
+  await expect(page.locator(".make-page")).toHaveClass(/drawer-open/);
+  await expect(demoFolder.locator(".make-folder-menu")).toBeVisible();
+  const folderMenuBounds = await demoFolder.locator(".make-folder-menu").evaluate((menu) => {
+    const bounds = menu.getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right, viewportWidth: document.documentElement.clientWidth };
+  });
+  expect(folderMenuBounds.left).toBeGreaterThanOrEqual(0);
+  expect(folderMenuBounds.right).toBeLessThanOrEqual(folderMenuBounds.viewportWidth);
+  await demoFolder.locator("[data-delete-folder]").click();
+  await expect(page.locator(".confirm-modal")).toBeVisible();
+  await page.locator("[data-cancel-confirm]").click();
+  await expect(page.locator(".confirm-modal")).toHaveCount(0);
+  await expect(page.locator(".make-page")).toHaveClass(/drawer-open/);
   await page.getByRole("button", { name: "대화 목록 닫기" }).click();
 
   await page.getByRole("button", { name: "메뉴" }).click();
