@@ -23,7 +23,8 @@ async function stabilizeStatusPopover(page) {
 
 async function expectStatusScreenshot(page, name) {
   const menu = await stabilizeStatusPopover(page);
-  await expect(menu).toHaveScreenshot(name, { animations: "disabled", maxDiffPixelRatio: 0.08, threshold: 0.3 });
+  const platformSnapshot = name.replace(/\.png$/, `-${process.platform}.png`);
+  await expect(menu).toHaveScreenshot(platformSnapshot, { animations: "disabled", maxDiffPixelRatio: 0.08, threshold: 0.3 });
 }
 
 test("development backend error popover visual", async ({ page }) => {
