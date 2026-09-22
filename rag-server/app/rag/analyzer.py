@@ -142,7 +142,7 @@ def _get_client():
 # 규약의 '하드 제약'은 프롬프트가 아니라 코드로 강제한다.
 # `llama-3.1-8b-instant` 는 프롬프트에 넣은 예시를 무관한 요청의 필드명으로 복사하는 성향이
 # 강해서(실측: "환불 거절 이메일"→"글 써줘", "자기소개서"→"부산 여행 일정표"), 규칙을 문장으로만
-# 주면 계속 새어나왔다. 아래 세 가지는 결정적으로 교정한다.
+# 주면 계속 새어나왔다. `_sanitize` 는 그런 교정을 결정적으로 한다(이후 추가된 원문·리뷰 가드는 아래 각 절).
 #
 # 🔴 근거의 유효기간 주의 — 위 실측은 **폐기된 모델(llama-3.1-8b-instant)** 기준이다.
 #    현재 `_MODEL` 은 `openai/gpt-oss-20b`(2026-08-21 교체)이고, 이 모델이 같은 오염 성향을
@@ -245,7 +245,9 @@ def _sanitize(fields: list) -> list:
 _TEMPLATE_RE = re.compile(r"(?:는|위한|용)\s*프롬프트")
 _IMPROVE_AFTER_RE = re.compile(r"프롬프트\S*\s*(?:좀\s*)?(?:개선|고쳐|고치|다듬|수정|손봐|손 봐)")
 # 영문 필드명도 실측에 나온다("내가 작성한 프롬프트 다듬어줘" → prompt_text·desired_output).
-_SOURCE_WORDS = ("원문", "원본", "본문", "텍스트", "회의록", "코드", "함수", "_text", "text", "source")
+# 영문 필드명도 실측에 나온다(`prompt_text`·`function_code`·`source_text`).
+_SOURCE_WORDS = ("원문", "원본", "본문", "텍스트", "회의록", "코드", "함수",
+                 "_text", "text", "source", "code", "function")
 
 
 def is_template_request(query: str) -> bool:
@@ -322,7 +324,10 @@ def _require_referenced_source(query: str, fields: list[dict]) -> list[dict]:
 # **리뷰할 코드**다. 코드를 붙여넣었으면 그건 이미 filled 이고, 안 붙여넣었으면 위 두 가드가
 # (템플릿이면 내리고, 가리켰으면 올려서) 판단한다 — '구현할 기능'은 여기서 걸림돌일 뿐이다.
 _REVIEW_RE = re.compile(r"리뷰|검토|리팩터|리팩토링|디버(?:그|깅)|버그\s*찾|코드\s*평가|품질\s*점검")
-_IMPLEMENT_FIELD = "구현할 기능"
+# 필드명은 한글만 오지 않는다 — 실측에서 `implementation feature` 가 나와 가드를 빠져나갔다.
+_IMPLEMENT_FIELD_RE = re.compile(r"구현할\s*기능|implementation\s*feature|feature\s*to\s*implement",
+                                 re.IGNORECASE)
+_IMPLEMENT_FIELD = "구현할 기능"   # 로그·테스트용 대표 이름
 
 
 def is_review_request(query: str) -> bool:
@@ -331,11 +336,15 @@ def is_review_request(query: str) -> bool:
 
 
 def _drop_implement_field_for_review(query: str, fields: list[dict]) -> list[dict]:
-    """리뷰 요청이면 비어 있는 '구현할 기능' required 를 fact 로 내린다(mode 를 막지 않게)."""
-    if not is_review_request(query):
+    """리뷰 요청이면 비어 있는 '구현할 기능' required 를 fact 로 내린다(mode 를 막지 않게).
+
+    ⚠️ **가리킨 코드가 없는 리뷰 요청("이 함수 버그 찾아줘")에는 발동하지 않는다** — 그건
+    되물어야 하는 경우인데, 여기서 내려 버리면 오히려 개선 모드로 새어나간다(실측 2026-09-22).
+    가드 우선순위: 가리킴(되묻기) > 리뷰(막지 않기)."""
+    if not is_review_request(query) or references_missing_source(query):
         return fields
     for f in fields:
-        if f["role"] == "required" and f["status"] == "empty" and f["name"] == _IMPLEMENT_FIELD:
+        if f["role"] == "required" and f["status"] == "empty" and _IMPLEMENT_FIELD_RE.search(f["name"]):
             _record_drop("review_not_implementation", f["name"])
             f["role"] = "fact"
     return fields
@@ -386,7 +395,7 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
     # 뽑혔어도 함께 폐기**됐다 — 축 라우팅이 배선되면 이건 조회 경로를 통째로 못 쓰게
     # 만드는 실질 버그가 된다. 이제 둘 다 비었을 때만 '분석 실패'로 본다.
     # 필드만 비는 경우의 생성 경로는 종전과 동일하다(build_analysis_block 이 빈 fields 를
-    # analysis=None 과 똑같이 "" 로 처리 — generator.py:323).
+    # analysis=None 과 똑같이 "" 로 처리 — generator.build_analysis_block).
     if not fields and not axes:
         return None
     return {
@@ -409,8 +418,3 @@ def derive_mode(fields: list[dict]) -> str:
     if not reqs:
         return "improve"          # required 를 못 뽑았으면 막지 않는다(개선 우선)
     return "ask" if any(f.get("status") == "empty" for f in reqs) else "improve"
-
-
-def empty_facts(fields: list[dict]) -> list[dict]:
-    """빈칸(플레이스홀더)+질문 대상 — 비어 있는 fact 필드."""
-    return [f for f in fields if f.get("role") == "fact" and f.get("status") == "empty"]

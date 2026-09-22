@@ -364,3 +364,28 @@ def test_filled_implement_field_untouched() -> None:
     out = analyzer._drop_implement_field_for_review(
         "이 코드 리뷰해줘", [_f("구현할 기능", status="filled", value="두 수 더하기")])
     assert out[0]["role"] == "required"
+
+
+def test_implement_field_matches_english_names() -> None:
+    """실측: 모델이 `implementation feature` 로 냈다 — 한글 이름만 보면 가드를 빠져나간다."""
+    analyzer.reset_sanitize_stats()
+    out = analyzer._drop_implement_field_for_review(
+        "파이썬 함수를 리팩터링하는 프롬프트 만들어줘", [_f("implementation feature")])
+    assert out[0]["role"] == "fact"
+    assert analyzer.sanitize_stats() == {"review_not_implementation": 1}
+
+
+def test_referenced_review_is_not_dropped() -> None:
+    """가리킨 코드가 없는 리뷰("이 함수 버그 찾아줘")는 되물어야 한다 —
+    리뷰 가드가 내려 버리면 개선 모드로 새어나간다(실측 2026-09-22)."""
+    analyzer.reset_sanitize_stats()
+    out = analyzer._drop_implement_field_for_review("이 함수 버그 찾아줘", [_f("구현할 기능")])
+    assert out[0]["role"] == "required"
+    assert analyzer.derive_mode(out) == "ask"
+    assert analyzer.sanitize_stats() == {}
+
+
+def test_english_source_field_is_promoted() -> None:
+    """실측 필드명 `function_code`·`prompt_text` 도 원문 계열로 본다."""
+    out = analyzer._require_referenced_source("이 함수 버그 찾아줘", [_f("function_code", role="fact")])
+    assert out[0]["role"] == "required"

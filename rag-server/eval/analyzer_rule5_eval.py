@@ -49,11 +49,14 @@ def _collect(rounds: int, sleep: float, only: str = "all") -> list[dict]:
         items = [i for i in items if i["template"]]
     elif only == "referenced":     # 규칙 5 의 대칭 — 가리켰지만 안 붙여넣은 요청
         items = [i for i in items if i.get("referenced")]
+    elif only == "review":         # 리뷰·리팩터 + 새로 짜는 대조군
+        items = [i for i in items if i.get("review") or i.get("write_code")]
     runs = []
     for r in range(rounds):
         for it in items:
             before = analyzer.sanitize_stats().get("template_source_demoted", 0)
             before_up = analyzer.sanitize_stats().get("referenced_source_required", 0)
+            before_rv = analyzer.sanitize_stats().get("review_not_implementation", 0)
             a = None
             for _ in range(4):
                 a = analyzer.analyze(it["query"], [])
@@ -64,6 +67,10 @@ def _collect(rounds: int, sleep: float, only: str = "all") -> list[dict]:
             promoted = analyzer.sanitize_stats().get("referenced_source_required", 0) - before_up
             runs.append({"round": r + 1, "query": it["query"], "template": it["template"],
                          "referenced": it.get("referenced", False),
+                         "review": it.get("review", False), "write_code": it.get("write_code", False),
+                         "expected_mode": it.get("expected_mode"),
+                         "review_dropped": (analyzer.sanitize_stats().get("review_not_implementation", 0)
+                                            - before_rv),
                          "analysis": a, "demoted": demoted, "promoted": promoted})
             time.sleep(sleep)
     return runs
@@ -103,6 +110,21 @@ def _report(runs: list[dict]) -> None:
     print(f"  대조군 ask 유지                    : {len(ctl_ask)}/{len(ctl)}")
     if ref:
         print(f"  가리킨 원문 → ask(되물음)          : {len(ref_ask)}/{len(ref)}  (승격 가드 발동 {promoted}회)")
+    rv = [r for r in runs if r.get("review") and r["analysis"]]
+    if rv:
+        impl = sum(1 for r in rv
+                   if any(analyzer._IMPLEMENT_FIELD_RE.search(f["name"]) for f in r["analysis"]["fields"]))
+        print(f"  리뷰 요청에 '구현할 기능' 도출      : {impl}/{len(rv)}  "
+              f"(가드 발동 {sum(1 for r in rv if r.get('review_dropped'))}회)")
+    exp = [r for r in runs if r.get("expected_mode") and r["analysis"]]
+    if exp:
+        hit = [r for r in exp if analyzer.derive_mode(r["analysis"]["fields"]) == r["expected_mode"]]
+        print(f"  코드 묶음 mode 정확도               : {len(hit)}/{len(exp)}")
+        for r in exp:
+            got = analyzer.derive_mode(r["analysis"]["fields"])
+            if got != r["expected_mode"]:
+                print(f"    ✗ {r['query'][:34]:36} 기대 {r['expected_mode']:8} → {got}  "
+                      f"{[(f['name'], f['role'], f['status']) for f in r['analysis']['fields']]}"[:150])
     print("═" * 60)
     for r in residual + blocked:
         print(f"  [막힘] {r['query'][:40]}  required-empty={_any_required_empty(r['analysis']['fields'])}")
@@ -118,7 +140,7 @@ def main() -> None:
     ap.add_argument("--from", dest="src", default=None,
                     help="가드 이전 원본 출력 JSON — 가드를 오프라인 적용해 집계")
     ap.add_argument("--save", default=None, help="이번 실행 원본을 저장할 경로")
-    ap.add_argument("--only", choices=("all", "template", "referenced"), default="all",
+    ap.add_argument("--only", choices=("all", "template", "referenced", "review"), default="all",
                     help="일부만 측정 — 쿼터 절약")
     args = ap.parse_args()
 

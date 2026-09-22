@@ -3411,3 +3411,41 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 **변경 파일**: `eval/gen_eval.py` · `app/main.py` · `tests/test_gen_eval_cache.py`(신규 7)
 **검증**: `pytest tests/ -q` 234 passed · 라이브 스모크 `--items 17 --no-judge` 정상(캐시 0/1 · mode=ask ✓)
+
+---
+
+## [2026-09-22] 리뷰 가드 라이브 재측정 — 실제로는 11/15 로 잦았고, 가드 순서가 틀려 있었다
+
+09-20 에 단위 테스트로만 고정했던 리뷰 가드(`_drop_implement_field_for_review`)를 실측했다
+(`analyzer_rule5_eval --only review`, 리뷰 5 + 새로 짜는 대조군 2 × 3회 = 21건).
+
+### 드러난 것
+| | 결과 |
+|---|---|
+| 리뷰 요청에 `구현할 기능` 도출 | **11/15** — 09-19 관측(3회 중 1회)보다 훨씬 잦다. 가드 11회 발동, 잔여 0 |
+| 🔴 영문 필드명 누락 | "리팩터링하는 프롬프트" 에서 모델이 `implementation feature` 로 내 **가드를 빠져나갔다**(잘못된 ask) |
+| 🔴 가드 순서 오류 | **"이 함수 버그 찾아줘" → improve 3/3** — 가리킨 코드가 없어 되물어야 하는데 리뷰 가드가 `구현할 기능`을 내려 버렸다 |
+
+두 번째가 실질 버그다. 09-20 에 "세 가드는 배타적"이라고 적었지만 **리뷰 ∩ 가리킴** 교집합을 빠뜨렸다.
+
+### 수정
+- `_IMPLEMENT_FIELD_RE` — 한글/영문(`implementation feature`·`feature to implement`) 대소문자 무시 매칭.
+- **가드 우선순위 명시: 가리킴 > 리뷰.** `references_missing_source` 면 리뷰 가드는 발동하지 않는다.
+- `_SOURCE_WORDS` 에 `code`·`function` 추가(실측 필드명 `function_code`).
+
+### 결과
+| | 수정 전 | 수정 후 |
+|---|---:|---:|
+| 저장된 21건 재집계(오프라인) | 18/21 | **21/21** |
+| 라이브 재측정 코드 묶음 mode 정확도 | — | **14/14** (리뷰 5 + 대조군 2 × 2회) |
+| 가리킨 원문 → ask | — | 4/4 |
+
+항목별: 템플릿 리뷰 3종 → improve 전부 ✓ · "이 파이썬 코드 리뷰해줘"·"이 함수 버그 찾아줘" → ask ✓ ·
+"코드 짜줘" → ask ✓ · "파이썬으로 로그인 기능 구현하는 코드 짜줘"(기능 명시) → improve ✓
+
+회귀셋에 `review`·`write_code`·`expected_mode` 라벨과 항목 5건을 추가했고, 지표를 '막힘 수' 대신
+**기대 mode 대비 정확도**로 바꿨다(종전 지표는 정상 동작인 ask 까지 '막힘'으로 셌다).
+
+**변경 파일**: `app/rag/analyzer.py` · `tests/test_analyzer.py`(+3) · `eval/analyzer_rule5_set.json` ·
+`eval/analyzer_rule5_eval.py`(`--only review`, 정확도 지표) · `RAG_PIPELINE.md`
+**검증**: `pytest tests/ -q` 237 passed · 라이브 14/14
