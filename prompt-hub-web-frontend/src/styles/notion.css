@@ -1,11 +1,4 @@
 /* TTALKAK paper workspace direction, inspired by Notion's design analysis. */
-@font-face {
-  font-family: "Pretendard Variable";
-  src: url("../../assets/fonts/PretendardVariable.woff2") format("woff2-variations");
-  font-weight: 45 920;
-  font-style: normal;
-  font-display: swap;
-}
 body, .app-shell, .main-area, .content-area { background: var(--bg); }
 body, button, input, textarea, select { font-family: "Pretendard Variable", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
 button, input, textarea, select { accent-color: var(--brand-green); }
@@ -309,6 +302,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   color: var(--muted-dark);
   border: 1px solid var(--line);
 }
+.home-page > .section-title .sort-select { background: var(--panel); }
 .home-page > .section-title .sort-select::after { border-color: var(--muted-dark); }
 .home-page .search-field { box-shadow: none; }
 .home-lead-label {

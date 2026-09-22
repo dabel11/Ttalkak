@@ -146,6 +146,19 @@ test("Make styles are declared but not loaded before the Make route", () => {
   assert.doesNotMatch(html, /<link[^>]+href=["'][^"']*make\.css/);
 });
 
+test("production build publishes every design stylesheet and local font asset", () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
+  const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
+  ["tokens.css", "notion.css"].forEach((file) => {
+    const escaped = file.replace(".", "\\.");
+    assert.match(html, new RegExp(`src/styles/${escaped}`));
+    assert.match(build, new RegExp(`writeProductionStyles\\([^\\n]+${escaped}`));
+    assert.match(build, new RegExp(`replaceAll\\(\\"\\./src/styles/${escaped}\\"`));
+  });
+  assert.match(html, /assets\/fonts\/pretendard-dynamic-subset\.css/);
+  assert.match(build, /copyDirectory\(path\.join\(webRoot, "assets", "fonts"\)/);
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));

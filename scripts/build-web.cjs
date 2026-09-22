@@ -66,6 +66,16 @@ async function writeProductionStyles(source, destination) {
   fs.writeFileSync(destination, result.code, "utf8");
 }
 
+function copyDirectory(source, destination) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    if (entry.isDirectory()) copyDirectory(sourcePath, destinationPath);
+    else if (entry.isFile()) fs.copyFileSync(sourcePath, destinationPath);
+  }
+}
+
 function assertSafeOutputPath() {
   if (path.dirname(outputRoot) !== webRoot || path.basename(outputRoot) !== outputDirectory) {
     throw new Error(`Unsafe web build output path: ${outputRoot}`);
@@ -137,8 +147,15 @@ async function build() {
     html = html.replace('./src/app-entry.js', `./${bundle}`);
     fs.mkdirSync(path.join(outputRoot, "assets", "styles"), { recursive: true });
     await writeProductionStyles(path.join(webRoot, "src", "styles.css"), path.join(outputRoot, "assets", "styles.css"));
+    await writeProductionStyles(path.join(webRoot, "src", "styles", "tokens.css"), path.join(outputRoot, "assets", "styles", "tokens.css"));
     await writeProductionStyles(path.join(webRoot, "src", "styles", "make.css"), path.join(outputRoot, "assets", "styles", "make.css"));
-    html = html.replaceAll("./src/styles.css", "./assets/styles.css").replaceAll("./src/styles/make.css", "./assets/styles/make.css");
+    await writeProductionStyles(path.join(webRoot, "src", "styles", "notion.css"), path.join(outputRoot, "assets", "styles", "notion.css"));
+    copyDirectory(path.join(webRoot, "assets", "fonts"), path.join(outputRoot, "assets", "fonts"));
+    html = html
+      .replaceAll("./src/styles.css", "./assets/styles.css")
+      .replaceAll("./src/styles/tokens.css", "./assets/styles/tokens.css")
+      .replaceAll("./src/styles/make.css", "./assets/styles/make.css")
+      .replaceAll("./src/styles/notion.css", "./assets/styles/notion.css");
   } else {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });
   }
