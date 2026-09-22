@@ -3,7 +3,8 @@ const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 const HEADERS = { "access-control-allow-origin": "*", "content-type": "application/json; charset=utf-8" };
 
-test("Google demo login supports local likes, folders, and My Page", async ({ page }) => {
+test("Google demo login persists local likes, saves, folders, and My Page", async ({ page }) => {
+  test.setTimeout(60_000);
   const protectedRequests = [];
   await page.route("http://localhost:8080/**", async (route) => {
     const request = route.request();
@@ -38,6 +39,11 @@ test("Google demo login supports local likes, folders, and My Page", async ({ pa
   await expect(like).toHaveClass(/liked/);
   await expect(page.locator("[data-auth-form]")).toHaveCount(0);
 
+  const save = page.locator('[data-save-prompt="88"]').first();
+  await save.click();
+  await expect(save).toHaveClass(/saved/);
+  await expect(page.locator("[data-auth-form]")).toHaveCount(0);
+
   await page.locator('.sidebar [data-route="make"]').click();
   await page.locator("[data-show-folder-form]").click();
   await page.locator('[data-folder-create-form] input[name="folderName"]').fill("데모 폴더");
@@ -46,6 +52,18 @@ test("Google demo login supports local likes, folders, and My Page", async ({ pa
 
   await page.locator('.sidebar [data-route="saved"]').click();
   await expect(page.locator(".saved-page")).toBeVisible();
+  await expect(page.getByText("데모 계정 기능 확인", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".demo-library-prompt.is-error")).toHaveCount(0);
+
+  await page.reload();
+  await waitForAppHydration(page);
+  await expect(page.locator("[data-auth-form]")).toHaveCount(0);
+  await page.locator('.sidebar [data-route="saved"]').click();
+  await expect(page.locator(".saved-page")).toBeVisible();
+  await expect(page.getByText("데모 계정 기능 확인", { exact: true }).first()).toBeVisible();
+  await expect(page.locator(".demo-library-prompt.is-error")).toHaveCount(0);
+
+  await page.locator('.sidebar [data-route="make"]').click();
+  await expect(page.locator("[data-folder-item]").filter({ hasText: "데모 폴더" })).toBeVisible();
   expect(protectedRequests).toEqual([]);
 });
