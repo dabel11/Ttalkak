@@ -76,9 +76,14 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
   }
 
   function applyBackendHomePromptsResult(ctx, result, page) {
-    const { popularPrompts, state, updateBackendHomePageMeta, normalizePersistedLikeCounts } = ctx;
+    const { normalizePersistedLikeCounts, popularPrompts, state, updateBackendHomePageMeta } = ctx;
     if (!Array.isArray(result?.items)) return false;
 
+    if (page === 1 && state.popularSort === "latest" && !state.searchQuery) {
+      result.items.unshift(...ctx.savedPrompts.filter(({ id, source, isShared }) =>
+        source === "mine" && isShared && !ctx.isBackendNumericId(id),
+      ));
+    }
     popularPrompts.splice(
       0,
       popularPrompts.length,
@@ -446,7 +451,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
     if (promptsResult.status === "fulfilled" && applyBackendHomePromptsResult(backendDataContext, promptsResult.value, state.popularPage)) {
       state.backendStatus = "connected";
-      state.backendStatusMessage = "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+      state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
       shouldRender = true;
     } else if (promptsResult.status === "rejected") {
       state.backendStatus = "fallback";
@@ -458,7 +463,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
     if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
       if (state.backendStatus === "connected") {
-        state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
+        state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
       }
       shouldRender = true;
     } else if (tagsResult.status === "rejected") {
@@ -476,7 +481,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const scope = getValidSearchScope(state.searchScope);
     const page = Math.max(1, Number(state.popularPage) || 1);
     const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort, page });
-    state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
+    state.backendStatusMessage = "Home 목록을 불러오는 중입니다.";
 
     try {
       const result = await api.searchCommunityPosts({
@@ -499,9 +504,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       }
       if (applyBackendHomePromptsResult(applyContext(), result, page)) {
         state.backendStatus = "connected";
-        state.backendStatusMessage = query
-          ? "GET /api/prompts?scope=" + scope + "&query=... 검색 결과를 Home에 반영 중입니다."
-          : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+        state.backendStatusMessage = query ? "검색 결과를 표시했습니다." : "Home 목록을 새로 고쳤습니다.";
         render();
       }
     } catch (error) {
