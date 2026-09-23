@@ -440,13 +440,12 @@ const {
 if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw moduleLoadError("렌더러");
 }
-const { resolvePageView } = modules.routing;
-if (typeof resolvePageView !== "function") {
-  throw moduleLoadError("라우팅 헬퍼");
-}
+const { createRouteLocation, resolvePageView } = modules.routing;
+if ([createRouteLocation, resolvePageView].some((fn) => typeof fn !== "function")) throw moduleLoadError("라우팅 헬퍼");
 const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
+const routeLocation = createRouteLocation({ window, state, isAdminAccount });
 let pendingMessageScrollId = null;
 let isMakeThinking = false;
 const makeRequestState = makeStateModule.createMakeRequestState();
@@ -599,7 +598,7 @@ const shareRuntime = createLazyRuntimeFacade({
       escapeAttr, escapeHtml, render, guard: guardAdminUserAction, findPrompt: findPromptById, api: apiClient,
       hasToken: hasBackendAuthToken, getToken: getAuthToken, removePrompt: promptWorkflows.removePromptById,
       handleError: handleBackendAccessError, getMutationContext: getCommentMutationStateContext,
-      applyShared: applySharedPromptState, notice: showNotice,
+      applyShared: applySharedPromptState, notice: showNotice, navigate: navigateTo,
     });
     return { controller, events: { bindShareEvents }, model: { getShareTagSuggestions } };
   }, onError(error) {
@@ -703,7 +702,7 @@ async function ensureMakeRuntime() {
     if (typeof createMakeWorkflows !== "function" || typeof runtime.pageAdapter?.createMakePageAdapter !== "function" || !makeControllerModule || !makeEventsModule) throw moduleLoadError("Make");
     makeWorkflows = createMakeWorkflows({
       state, savedPrompts, popularPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll,
-      showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
+      showNotice, openConfirmAction, navigateTo, guardAdminUserAction, findPromptById, getFinalPromptText, makePreview,
       copyTextToClipboard, makePromptTitle, normalizeSearchText, persistState, getMakeApi, getMakeApiToken,
       handleMakeBackendSyncError, getMakeThreadById, getMakeBackendThreadId, isBackendNumericId,
       normalizeMakeFolders, normalizeRecentThreads, hydrateBackendMakeDataIfNeeded, getMakeServerSyncEffects,
@@ -729,7 +728,7 @@ async function ensureMakeRuntime() {
     makeRuntimePromise = null;
     document.documentElement.dataset.routeRuntime = "make:error";
     reportWarning("make", "load-runtime", error);
-    showNotice("Make 기능을 불러오지 못했습니다. 다시 시도해주세요.");
+    showNotice("첨삭 기능을 불러오지 못했습니다.");
     return false;
   });
   return makeRuntimePromise;
@@ -746,7 +745,7 @@ const makeWorkflowFacade = createDeferredMethodFacade(
     countThreadsInFolder: 0, getThreadFolderId: "uncategorized", getActiveFolderName: "최근 대화",
     copyMakeMessage: undefined, saveMakeMessage: undefined, resendEditedMessage: undefined,
     openShareFromMakeMessage: undefined, openExecuteModal: undefined, openPromptExecuteModal: undefined,
-    confirmPlaceholderExecution: false, hasPromptPlaceholders: false, executeMakeMessage: undefined,
+    executeMakeMessage: undefined,
     getExecuteTarget: null, updateRecentThread: undefined, openRecentThread: undefined,
     openSavedMakePrompt: undefined, startNewChat: undefined, getRecentThreadKeyFromThread: "",
     getRecentThreadKey: "", applyTemplate: undefined, toggleTemplateBar: undefined,
@@ -763,7 +762,7 @@ const {
   moveThreadToFolder, moveThreadToFolderOnBackend, performTemplateApply, splitThreadFromMessage,
   countThreadsInFolder, getThreadFolderId, getActiveFolderName, copyMakeMessage, saveMakeMessage,
   resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal,
-  confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget,
+  executeMakeMessage, getExecuteTarget,
   updateRecentThread, openRecentThread, openSavedMakePrompt, startNewChat, getRecentThreadKeyFromThread,
   getRecentThreadKey, applyTemplate, toggleTemplateBar, createBackendMakeFolder,
   updateBackendMakeFolderName, deleteBackendMakeFolder, createBackendMakeThread,
@@ -788,6 +787,8 @@ const {
 const confirmActionHandlers = {
   "apply-template-new-chat": (action) => performTemplateApply(action.targetId, true),
   "apply-template-current-chat": (action) => performTemplateApply(action.targetId, false),
+  "execute-placeholder-message": (action) => openExecuteModal(action.targetId, true),
+  "execute-placeholder-prompt": (action) => openPromptExecuteModal(action.targetId, true),
   "delete-prompt": (action) => performDeletePrompt(action.targetId),
   "unshare-prompt": (action) => performUnsharePrompt(action.targetId),
   "delete-comment": (action) => promptEngagementController.performDeleteComment(action.targetId),
@@ -830,7 +831,7 @@ const icons = {
   close: `<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
 };
 function render() {
-  return renderAppShell({
+  const result = renderAppShell({
     state,
     escapeHtml,
     persistState,
@@ -854,6 +855,7 @@ function render() {
     hydrateBackendMyPageDataIfNeeded,
     hydrateBackendAdminDataIfNeeded,
   });
+  routeLocation.sync(state.route, { replace: true }); return result;
 }
 document.addEventListener("ttalkak:route-renderers-changed", (event) => {
   if (!(event instanceof CustomEvent)) return;
@@ -922,7 +924,7 @@ function waitForThinkingIndicatorPaint() {
     window.setTimeout(resolve, 120);
   });
 }
-function navigateTo(route) {
+function navigateTo(route, { historyMode = "push", animate = true } = {}) {
   if (route === "admin" && !adminRuntime.isReady()) {
     ensureAdminRuntime().then((loaded) => { if (loaded && state.route === "admin") render(); });
   }
@@ -935,12 +937,14 @@ function navigateTo(route) {
   if (state.route === "make" && route !== "make") { state.makeDrawerOpen = false; activeMakeRequestController?.abort(); }
   if (state.adminMode && route !== "admin") {
     state.route = "admin";
+    routeLocation.sync("admin", { replace: true });
     render();
     return;
   }
   if (isAdminAccount() && !["home", "admin"].includes(route)) {
     state.route = "home";
-    showNotice("관리자 계정은 Admin 운영 기능과 Home 검토 화면만 사용할 수 있습니다.");
+    routeLocation.sync("home", { replace: historyMode !== "push" });
+    showNotice("관리자 계정은 관리자 운영 기능과 홈 검토 화면만 사용할 수 있습니다.");
     render();
     return;
   }
@@ -948,27 +952,28 @@ function navigateTo(route) {
     state.adminMode = true;
   }
   if (route === "home" && state.route === "home") {
+    if (historyMode !== "none") routeLocation.sync("home", { replace: historyMode !== "push" });
     resetHomeView();
     render();
     return;
   }
   if (state.route === route) return;
-  const content = document.querySelector(".content-area");
-  if (!content) {
+  const commitRoute = () => {
     commitPendingUnsaves(route);
     state.route = route;
+    if (historyMode !== "none") routeLocation.sync(route, { replace: historyMode === "replace" });
     if (route === "home") resetHomeView();
     render();
+  };
+  const content = document.querySelector(".content-area");
+  if (!content || !animate) {
+    commitRoute();
     return;
   }
   content.classList.add("is-leaving");
-  window.setTimeout(() => {
-    commitPendingUnsaves(route);
-    state.route = route;
-    if (route === "home") resetHomeView();
-    render();
-  }, 90);
+  window.setTimeout(commitRoute, 90);
 }
+routeLocation.bind((route) => navigateTo(route, { historyMode: "none", animate: false }));
 function resetHomeView() {
   homeController.cancelSearchCommit();
   resetHomeViewState(state);
@@ -1212,7 +1217,7 @@ function DemoLibraryPrompt() {
     return `
       <div class="demo-library-prompt is-error" role="alert">
         <div>
-          <strong>My page 데이터를 불러오지 못했습니다</strong>
+          <strong>마이페이지 데이터를 불러오지 못했습니다</strong>
           <p>네트워크 상태를 확인한 뒤 잠시 후 다시 시도해 주세요.</p>
         </div>
         <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
@@ -1301,7 +1306,7 @@ function SavedEmptyMessage() {
 }
 function SharePage() {
   if (!shareRuntime.isReady()) {
-    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="share">Share 기능을 불러오는 중입니다.</section>';
+    return '<section class="route-module-status" role="status" aria-live="polite" data-route-runtime-loading="share">공유 기능을 불러오는 중입니다.</section>';
   }
   const draft = state.shareDraft || {};
   const draftTags = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
@@ -2033,11 +2038,7 @@ function fallbackCopyText(text) {
   textarea.remove();
   return copied;
 }
-function makePromptTitle(text) {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (!clean) return "Make에서 저장한 프롬프트";
-  return clean.length > 26 ? `${clean.slice(0, 26)}...` : clean;
-}
+function makePromptTitle(text) { const clean = text.replace(/\s+/g, " ").trim(); return !clean ? "저장한 프롬프트" : clean.length > 26 ? `${clean.slice(0, 26)}...` : clean; }
 const restoreSearchFocus = () => homeController.restoreSearchFocus();
 const getSavedPagePrompts = () => savedLibraryController.getPagePrompts();
 const matchesSavedFilter = (prompt) => savedLibraryController.matchesFilter(prompt);
@@ -2388,6 +2389,7 @@ function loadPersistedState() {
   } catch (_error) {
     clearPersistedPayload();
   }
+  routeLocation.apply();
 }
 function normalizeMakeFolders(folders) {
   const base = [{ id: "uncategorized", name: "미분류" }];

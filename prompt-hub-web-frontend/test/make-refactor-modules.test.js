@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 let createMakeWorkflows;
+let createMakeExecutionWorkflows;
 let makeStateApi;
 let makeController;
 let makeEvents;
@@ -12,6 +13,7 @@ let makeServerSyncEffects;
 let makePageRenderers;
 test.before(async () => {
   ({ createMakeWorkflows } = await import("../src/make/make-workflows.mjs"));
+  ({ createMakeExecutionWorkflows } = await import("../src/make/make-execution-workflows.mjs"));
   makeStateApi = await import("../src/make/make-state.mjs");
   makeController = await import("../src/make/make-controller.mjs");
   makeEvents = await import("../src/make/make-events.mjs");
@@ -38,6 +40,32 @@ test("Make request state transitions are centralized", () => {
 test("Make folders execution recent threads and backend sync are delegated", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createMakeWorkflows/); ["createMakeFolder", "performDeleteFolder", "executeMakeMessage", "openRecentThread", "createBackendMakeFolder", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(app, new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`))); });
 test("Make workflow composition bundles its four focused submodules behind one lazy boundary", () => { const root = path.resolve(__dirname, ".."); const entry = fs.readFileSync(path.join(root, "src/app-entry.js"), "utf8"); const makeEntry = fs.readFileSync(path.join(root, "src/make/index.js"), "utf8"); assert.match(entry, /make\/index\.js/); assert.match(makeEntry, /import\(["']\.\/make-runtime\.mjs["']\)/); assert.match(makeEntry, /export const make/); const composite = fs.readFileSync(path.join(root, "src/make/make-workflows.mjs"), "utf8"); ["make-folder-workflows.mjs", "make-execution-workflows.mjs", "make-sync-workflows.mjs", "make-recent-workflows.mjs"].forEach((file) => assert.match(composite, new RegExp(`(?:from\\s+)?["']\\./${file.replaceAll(".", "\\.")}["']`))); ["createMakeFolder", "executeMakeMessage", "openRecentThread", "refreshMakeThreadsFromBackend"].forEach((name) => assert.doesNotMatch(composite, new RegExp(`function\\s+${name}\\s*\\(`))); });
 test("recent thread keys preserve the pre-refactor normalization contract", () => { const workflows = createMakeWorkflows({}); assert.equal(workflows.getRecentThreadKey("  Hello   WORLD  "), "hello world"); assert.equal(workflows.getRecentThreadKey("x".repeat(150)).length, 150); });
+
+test("placeholder execution opens the product confirmation flow", () => {
+  const state = { messages: [{ id: "message-1", content: "[주제]에 관한 글을 작성해줘" }], executeMessageId: null, executePromptId: null };
+  const confirmations = [];
+  const workflows = createMakeExecutionWorkflows({
+    state,
+    findPromptById: () => null,
+    getFinalPromptText: (message) => message.content,
+    openConfirmAction: (action) => confirmations.push(action),
+    renderPreservingMakeScroll() {},
+  });
+
+  workflows.openExecuteModal("message-1");
+  assert.equal(state.executeMessageId, null);
+  assert.deepEqual(confirmations[0], {
+    type: "execute-placeholder-message",
+    targetId: "message-1",
+    title: "입력할 정보가 남아 있습니다",
+    message: "채워지지 않은 정보가 있습니다. 그대로 실행하거나 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
+    confirmLabel: "그대로 실행",
+    danger: false,
+  });
+
+  workflows.openExecuteModal("message-1", true);
+  assert.equal(state.executeMessageId, "message-1");
+});
 
 test("demo accounts retain local folders without calling the backend", async () => {
   const state = { isLoggedIn: true, makeFolders: [{ id: "all", name: "전체" }], recentThreads: [], activeFolderId: "all", creatingFolder: true };

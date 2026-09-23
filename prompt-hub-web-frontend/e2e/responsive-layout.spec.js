@@ -288,7 +288,7 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
 
   await page.getByRole("button", { name: "메뉴" }).click();
   await page.locator('#topbar-action-menu [data-route="saved"]').click();
-  await expect(page.getByRole("heading", { name: "My page" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "마이페이지" })).toBeVisible();
   await expect(page.locator(".saved-empty")).toBeVisible();
   const savedLayout = await page.evaluate(() => {
     const filters = document.querySelector(".filter-groups").getBoundingClientRect();
@@ -405,6 +405,13 @@ test("desktop Share centers its side-by-side form and preview", async ({ page })
   expect(layout.topDelta).toBeLessThanOrEqual(4);
   expect(layout.centerDelta).toBeLessThanOrEqual(1);
   await expectNoDocumentOverflow(page);
+
+  await page.getByRole("button", { name: "공유하기" }).click();
+  await expect(page.locator("#share-submit-help")).toHaveAttribute("role", "alert");
+  const titleInput = page.locator('.share-form input[name="title"]');
+  await expect(titleInput).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator('.share-form textarea[name="prompt"]')).toHaveAttribute("aria-invalid", "true");
+  await expect(titleInput).toBeFocused();
 });
 
 test("mobile My page offers an inline retry and refreshes after the backend recovers", async ({ page }) => {
@@ -441,7 +448,7 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
 
   const prompt = page.locator(".demo-library-prompt.is-error");
   await expect(prompt).toBeVisible();
-  await expect(prompt).toContainText("My page 데이터를 불러오지 못했습니다");
+  await expect(prompt).toContainText("마이페이지 데이터를 불러오지 못했습니다");
   await expect(page.locator(".my-page-panel")).toHaveCount(0);
   const retry = prompt.getByRole("button", { name: "다시 연결" });
   await expect(retry).toBeVisible();
@@ -486,7 +493,7 @@ test("My page exits recovery when an authenticated data request does not settle"
   await page.locator('#topbar-action-menu [data-route="saved"]').click();
 
   const errorPrompt = page.locator(".demo-library-prompt.is-error");
-  await expect(errorPrompt).toContainText("My page 데이터를 불러오지 못했습니다");
+  await expect(errorPrompt).toContainText("마이페이지 데이터를 불러오지 못했습니다");
   await expect(errorPrompt.getByRole("button", { name: "다시 연결" })).toBeVisible();
   await expect(page.locator(".my-page-panel")).toHaveCount(0);
 });
@@ -495,7 +502,7 @@ test("conversation drawer clears modal state when the viewport becomes desktop-s
   await page.setViewportSize({ width: 640, height: 720 });
   await gotoApp(page);
   await page.getByRole("button", { name: "메뉴" }).click();
-  await page.getByRole("button", { name: "Make" }).click();
+  await page.getByRole("button", { name: "첨삭" }).click();
   const templateToggle = page.locator("[data-toggle-templates]");
   await templateToggle.click();
   await expect(templateToggle).toHaveAttribute("aria-expanded", "true");

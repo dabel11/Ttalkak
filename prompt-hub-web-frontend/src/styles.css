@@ -2016,6 +2016,16 @@ h1 {
   box-shadow: none;
 }
 
+.share-helper.is-error {
+  color: #9f2f2f;
+}
+
+.share-form input[aria-invalid="true"],
+.share-form textarea[aria-invalid="true"] {
+  border-color: rgba(159, 47, 47, 0.58);
+  box-shadow: 0 0 0 2px rgba(159, 47, 47, 0.08);
+}
+
 .login-required {
   display: grid;
   place-items: center;

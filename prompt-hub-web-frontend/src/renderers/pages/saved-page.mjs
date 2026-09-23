@@ -9,10 +9,10 @@
         <div class="page-head my-page-head">
           <div class="page-title">
             <span>${icons.user}</span>
-            <h1 id="my-page-heading">My page</h1>
+            <h1 id="my-page-heading">마이페이지</h1>
           </div>
         </div>
-        <nav class="my-page-tabs" aria-label="My page 메뉴">
+        <nav class="my-page-tabs" aria-label="마이페이지 메뉴">
           ${tabs
             .map(
               (tab) => `
@@ -65,7 +65,7 @@
         </div>
         ${
           pendingUnsaveCount
-            ? `<p class="saved-pending-hint">저장 취소 예정 ${pendingUnsaveCount}개가 있습니다. 같은 저장 아이콘을 다시 누르면 되돌릴 수 있고, Home, Make, Share로 이동하면 목록에서 제거됩니다.</p>`
+            ? `<p class="saved-pending-hint">저장 취소 예정 ${pendingUnsaveCount}개가 있습니다. 같은 저장 아이콘을 다시 누르면 되돌릴 수 있고, 홈, 첨삭, 공유로 이동하면 목록에서 제거됩니다.</p>`
             : ""
         }
         ${

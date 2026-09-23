@@ -29,11 +29,11 @@
           <form class="share-form">
             <label>
               <span>제목</span>
-              <input name="title" type="text" value="${escapeAttr(draft.title || "")}" placeholder="예: SEO 블로그 포스팅 프롬프트" />
+              <input name="title" type="text" value="${escapeAttr(draft.title || "")}" placeholder="예: SEO 블로그 포스팅 프롬프트" aria-describedby="share-submit-help" ${shareError && !String(draft.title || "").trim() ? 'aria-invalid="true"' : ""} />
             </label>
             <label>
               <span>프롬프트</span>
-              <textarea name="prompt" rows="6" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요...">${escapeHtml(draft.text || "")}</textarea>
+              <textarea name="prompt" rows="6" placeholder="다른 사용자들과 공유하고 싶은 프롬프트를 입력하세요..." aria-describedby="share-submit-help" ${shareError && !String(draft.text || "").trim() ? 'aria-invalid="true"' : ""}>${escapeHtml(draft.text || "")}</textarea>
             </label>
             <div class="share-field-block">
               <div class="share-label-with-help">
@@ -66,8 +66,8 @@
                 }
               </div>
             </div>
-            <div class="share-helper">
-              <span>${escapeHtml(shareError || "공유 후 Home으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다.")}</span>
+            <div class="share-helper${shareError ? " is-error" : ""}" id="share-submit-help" ${shareError ? 'role="alert" aria-live="assertive"' : ""}>
+              <span>${escapeHtml(shareError || "공유 후 홈으로 이동하며, 최신 정렬에서 방금 공유한 프롬프트를 확인할 수 있습니다.")}</span>
             </div>
             <div class="form-actions">
               <button class="primary-button" type="submit">공유하기</button>
@@ -87,14 +87,14 @@
     return `
       <aside class="share-preview" aria-label="공유 미리보기">
         <div class="share-preview-head">
-          <strong>Home 카드 미리보기</strong>
+          <strong>홈 카드 미리보기</strong>
           <span>공유 후 노출되는 모습</span>
         </div>
         <article class="prompt-card share-preview-card">
           <div class="card-head">
             <h2 data-share-preview-title>${escapeHtml(draft.title || "프롬프트 제목 미리보기")}</h2>
           </div>
-          <p data-share-preview-text>${escapeHtml(draft.text || "공유할 프롬프트 내용을 입력하면 이곳에서 Home 카드 형태로 미리 확인할 수 있습니다.")}</p>
+          <p data-share-preview-text>${escapeHtml(draft.text || "공유할 프롬프트 내용을 입력하면 이곳에서 홈 카드 형태로 미리 확인할 수 있습니다.")}</p>
           <div class="tag-row" data-share-preview-tags>
             ${tags.length ? tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("") : `<span class="tag-chip-empty">태그 없음</span>`}
           </div>

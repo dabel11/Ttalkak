@@ -198,7 +198,7 @@ import { parts } from "./make-message-parts.mjs";
     } = data;
 
     return `
-      <aside class="make-side-panel" id="make-conversation-drawer" aria-label="Make 최근 대화" tabindex="-1">
+      <aside class="make-side-panel" id="make-conversation-drawer" aria-label="첨삭 최근 대화" tabindex="-1">
         <div class="make-drawer-head">
           <strong>대화</strong>
           <button class="make-drawer-close" type="button" data-close-make-drawer aria-label="대화 목록 닫기">&times;</button>
@@ -435,7 +435,7 @@ import { parts } from "./make-message-parts.mjs";
     return `<footer class="message-actions">
       <button type="button" data-copy-message="${messageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
       <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${messageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-      <button type="button" data-share-message="${messageId}">${icons.share}<span>Share</span></button>
+      <button type="button" data-share-message="${messageId}">${icons.share}<span>공유</span></button>
       <button type="button" data-execute-message="${messageId}">${icons.play}<span>Execute</span></button>
     </footer>`;
   }

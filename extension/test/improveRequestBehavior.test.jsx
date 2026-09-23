@@ -71,6 +71,22 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("unfilled placeholders use the product confirmation dialog before execution", () => {
+    const setConfirmAction = vi.fn();
+    const { result } = renderHook(() => useConversation(createProps()));
+    const message = { id: "placeholder-result", executablePrompt: "[주제]에 관한 글을 작성해줘" };
+
+    act(() => result.current.executeMessage(message, setConfirmAction));
+
+    expect(setConfirmAction).toHaveBeenCalledOnce();
+    expect(setConfirmAction.mock.calls[0][0]).toMatchObject({
+      title: "입력할 정보가 남아 있습니다",
+      confirmLabel: "그대로 실행",
+      danger: false,
+      onConfirm: expect.any(Function),
+    });
+  });
+
   test("a logged-in first request receives an id before the server thread exists", async () => {
     api.getThreads.mockResolvedValue([]);
     api.improve.mockResolvedValue({ ...improveResponse("first stored response"), threadId: "42" });

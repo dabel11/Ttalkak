@@ -36,6 +36,15 @@ function App() {
     return () => recoveryCoordinator.dispose();
   }, [recoveryCoordinator]);
 
+  useEffect(() => {
+    const compactViewport = window.matchMedia("(max-width: 760px)");
+    const collapseForCompactViewport = (event) => {
+      if (event.matches) setCollapsed(true);
+    };
+    compactViewport.addEventListener("change", collapseForCompactViewport);
+    return () => compactViewport.removeEventListener("change", collapseForCompactViewport);
+  }, []);
+
   const {
     authMode,
     authSession,
@@ -198,8 +207,23 @@ function App() {
     focusRestoredComposer(prompt);
   }
 
+  function returnToComposerOnCompactScreen() {
+    if (window.matchMedia("(max-width: 760px)").matches) setCollapsed(true);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  function handleOpenPrompt(item) {
+    openPrompt(item);
+    returnToComposerOnCompactScreen();
+  }
+
+  function handleOpenRecentThread(item) {
+    openRecentThread(item);
+    returnToComposerOnCompactScreen();
+  }
+
   return (
-    <main className="extension-frame" aria-label="TTALKAK Chrome extension">
+    <main className="extension-frame" aria-label="TTALKAK 크롬 확장 프로그램">
       <section className="extension-shell">
         <Sidebar
           activeTab={activeTab}
@@ -213,9 +237,9 @@ function App() {
           recentItems={filteredRecentThreads}
           activeRecentId={activeRecentId}
           isSaved={isSaved}
-          onOpenPrompt={openPrompt}
+          onOpenPrompt={handleOpenPrompt}
           onSavePrompt={saveLibraryPrompt}
-          onOpenRecentThread={openRecentThread}
+          onOpenRecentThread={handleOpenRecentThread}
           onDeleteSaved={requestDeleteSavedItem}
           onDeleteRecent={(id) => requestDeleteRecentThread(id, setConfirmAction)}
         />
@@ -236,7 +260,7 @@ function App() {
             editingDraft={editingDraft}
             onCopy={copyMessage}
             onSave={toggleSave}
-            onExecute={executeMessage}
+            onExecute={(message) => executeMessage(message, setConfirmAction)}
             onStartEdit={startEditMessage}
             onChangeEditDraft={setEditingDraft}
             onCancelEdit={cancelEditMessage}
@@ -283,6 +307,7 @@ function App() {
           title={confirmAction.title}
           message={confirmAction.message}
           confirmLabel={confirmAction.confirmLabel}
+          danger={confirmAction.danger !== false}
           onCancel={() => setConfirmAction(null)}
           onConfirm={() => {
             confirmAction.onConfirm();
