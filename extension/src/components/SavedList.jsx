@@ -1,13 +1,14 @@
 import { Bookmark, BookmarkCheck, X } from "lucide-react";
 import { getMakeRecentDateGroup } from "../../../shared/make-message-model.js";
 
-export function PromptList({ items, emptyText, mode, isSaved = (_item) => false, onOpenPrompt, onSavePrompt = (_item) => {}, onDelete = (_id) => {} }) {
+export function PromptList({ items, emptyText, mode, isSaved = (_item) => false, isSavePending = (_item) => false, onOpenPrompt, onSavePrompt = (_item) => {}, onDelete = (_id) => {} }) {
   if (items.length === 0) return <p className="empty-list">{emptyText}</p>;
 
   return (
     <div className="prompt-list" aria-label={mode === "search" ? "전체 프롬프트 검색 결과" : "저장한 프롬프트 목록"}>
       {items.map((item) => {
         const saved = isSaved?.(item);
+        const pending = isSavePending?.(item);
         return (
           <div className="saved-item-wrap" key={item.id}>
             <div className="saved-item">
@@ -24,11 +25,13 @@ export function PromptList({ items, emptyText, mode, isSaved = (_item) => false,
                     e.stopPropagation();
                     onSavePrompt(item);
                   }}
-                  aria-label={saved ? "보관 취소" : "보관"}
-                  title={saved ? "보관 취소" : "보관"}
+                  disabled={pending}
+                  aria-busy={pending || undefined}
+                  aria-label={pending ? "처리 중" : saved ? "보관 취소" : "보관"}
+                  title={pending ? "저장 상태를 변경하는 중입니다." : saved ? "보관 취소" : "보관"}
                 >
-                  {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
-                  {saved ? "보관됨" : "보관"}
+                  {pending ? null : saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                  {pending ? "처리 중…" : saved ? "보관됨" : "보관"}
                 </button>
               )}
             </div>

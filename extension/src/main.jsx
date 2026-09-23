@@ -64,9 +64,12 @@ function App() {
 
   const {
     filteredSavedItems,
+    isSavePending,
     isSaved,
+    refreshSavedItems,
     requestDeleteSavedItem,
     saveLibraryPrompt,
+    savedStatus,
     searchItems,
     setSavedItems,
   } = useSavedLibrary({
@@ -236,9 +239,12 @@ function App() {
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
           activeRecentId={activeRecentId}
+          savedStatus={savedStatus}
           isSaved={isSaved}
+          isSavePending={isSavePending}
           onOpenPrompt={handleOpenPrompt}
           onSavePrompt={saveLibraryPrompt}
+          onRetrySaved={refreshSavedItems}
           onOpenRecentThread={handleOpenRecentThread}
           onDeleteSaved={requestDeleteSavedItem}
           onDeleteRecent={(id) => requestDeleteRecentThread(id, setConfirmAction)}
