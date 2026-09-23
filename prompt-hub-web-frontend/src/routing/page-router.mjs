@@ -1,12 +1,12 @@
   "use strict";
 
-  const routeHashes = Object.freeze({
+  const routeHashes = {
     home: "#/home",
     make: "#/make",
     saved: "#/mypage",
     share: "#/share",
     admin: "#/admin",
-  });
+  };
 
   function getRouteHash(route) {
     return routeHashes[route] || routeHashes.home;
@@ -14,12 +14,7 @@
 
   function resolveRouteHash(hash) {
     const normalized = String(hash || "").replace(/^#\/?/, "");
-    if (!normalized || normalized === "home") return "home";
-    if (normalized === "make") return "make";
-    if (normalized === "mypage") return "saved";
-    if (normalized === "share") return "share";
-    if (normalized === "admin") return "admin";
-    return "home";
+    return { make: "make", mypage: "saved", share: "share", admin: "admin" }[normalized] || "home";
   }
 
   function createRouteLocation({ window, state, isAdminAccount }) {
@@ -41,7 +36,7 @@
       sync(requestedRoute, { replace: true });
     }
 
-    const read = () => resolveRouteHash(window.location.hash);
+    const read = () => resolveRouteHash(window.location.hash || getRouteHash(state.route));
     function bind(navigate) {
       const handleLocationNavigation = () => {
         const route = read();
