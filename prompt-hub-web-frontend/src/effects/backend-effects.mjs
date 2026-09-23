@@ -504,13 +504,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       }
       if (applyBackendHomePromptsResult(applyContext(), result, page)) {
         state.backendStatus = "connected";
-        state.backendStatusMessage = query ? "검색 결과를 표시했습니다." : "Home 목록을 새로 고쳤습니다.";
+        state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
         render();
       }
     } catch (error) {
       state.backendStatus = "fallback";
       state.backendStatusMessage = canUseDemoFallback()
-        ? "검색 API 호출 실패로 현재 화면의 로컬 목록을 유지합니다."
+        ? "검색 결과를 불러오지 못했습니다."
         : getApiFailureMessage("Home 검색 API");
       ctx.reportWarning("backend-hydration", "refresh-home-prompts", error);
       render();

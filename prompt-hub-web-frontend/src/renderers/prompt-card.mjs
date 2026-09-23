@@ -66,9 +66,9 @@
                 : ""
             }
             ${hasMakeHistory ? `<button class="history-card-button" data-open-make-history="${safePromptId}" aria-label="첨삭 대화 보기">${icons.make}<span>대화 보기</span></button>` : ""}
-            <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${safePromptId}" aria-label="좋아요">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
+            <button class="icon-button metric-action like-card-button ${isLiked ? "liked" : ""}" data-like-prompt="${safePromptId}" aria-label="${isLiked ? "좋아요 취소" : "좋아요"}">${icons.heart}<span>${formatNumber(getPromptLikes(prompt))}</span></button>
             <button class="icon-button metric-action comment-card-button" data-open-comments="${safePromptId}" aria-label="댓글 보기">${icons.comment}<span>${formatNumber(commentCount)}</span></button>
-            <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${safePromptId}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
+            <button class="icon-button metric-action save-card-button ${isSaved ? "saved" : ""} ${isPendingUnsave ? "pending-unsave" : ""}" data-save-prompt="${safePromptId}" aria-label="${isPendingUnsave ? "저장 취소 되돌리기" : isSaved ? "저장 취소" : "저장"}">${icons.bookmark}<span>${formatNumber(getPromptSaveCount(prompt))}</span></button>
           </div>
         </div>
         ${showStatus && statusBadges ? `<div class="status-row">${statusBadges}</div>` : ""}

@@ -214,7 +214,7 @@ import { parts } from "./make-message-parts.mjs";
           ${
             creatingFolder
               ? `<form class="make-folder-form" data-folder-create-form>
-                  <input name="folderName" type="text" placeholder="폴더 이름" autocomplete="off" />
+                  <input name="folderName" type="text" placeholder="폴더 이름" aria-label="폴더 이름" autocomplete="off" />
                   <button type="submit">추가</button>
                   <button type="button" data-cancel-folder-create>취소</button>
                 </form>`
@@ -265,7 +265,7 @@ import { parts } from "./make-message-parts.mjs";
                               ${
                                 creatingThreadFolderId === thread.id
                                   ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${escapeAttr(thread.id)}">
-                                      <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
+                                      <input name="folderName" type="text" placeholder="새 폴더 이름" aria-label="폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
                                       <div>
                                         <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
                                         <button type="button" data-cancel-thread-folder-create>취소</button>
@@ -338,7 +338,7 @@ import { parts } from "./make-message-parts.mjs";
     if (isEditing) {
       return `
         <form class="make-folder-edit-form" data-folder-edit-form="${safeFolderId}">
-          <input name="folderName" value="${escapeAttr(name)}" />
+          <input name="folderName" value="${escapeAttr(name)}" aria-label="폴더 이름" />
           <button type="submit">저장</button>
           <button type="button" data-cancel-folder-edit>취소</button>
         </form>
