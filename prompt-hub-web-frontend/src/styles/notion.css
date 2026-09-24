@@ -302,12 +302,15 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   min-width: 104px;
   height: 40px;
   padding: 0 32px 0 12px;
+  appearance: none;
+  -webkit-appearance: none;
   color: var(--muted-dark);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
 }
 .home-page > .section-title .sort-select {
+  position: relative;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -315,7 +318,18 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   background: transparent;
 }
 .home-page > .section-title .sort-select:focus-within { box-shadow: none; }
-.home-page > .section-title .sort-select::after { border-color: var(--muted-dark); }
+.home-page > .section-title .sort-select::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--muted-dark);
+  border-bottom: 2px solid var(--muted-dark);
+  pointer-events: none;
+  transform: translateY(-70%) rotate(45deg);
+}
 .home-page .search-field { box-shadow: none; }
 .home-page .search-field:focus-within {
   border-color: rgba(0, 117, 222, .45);
