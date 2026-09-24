@@ -1025,7 +1025,7 @@ function getPageRouteContext() {
 function HomePage() {
   const isBackendHome = state.backendStatus === "connected";
   const canShowDemoHome = !isBackendHome && canUseDemoFallback();
-  const prompts = applyReportedVisibility(isBackendHome ? popularPrompts : canShowDemoHome ? getVisiblePopularPrompts() : []);
+  const prompts = applyReportedVisibility(isBackendHome || canShowDemoHome ? getVisiblePopularPrompts() : []);
   const popularTags = getPopularTags(applyReportedVisibility(sortPopularPrompts(uniquePrompts(popularPrompts))));
   const displayTags = isBackendHome ? state.backendPopularTags : canShowDemoHome ? popularTags.length ? popularTags : fallbackPopularTags : [];
   const searchCriteria = parsePromptSearchQuery(state.searchQuery, state.searchScope);

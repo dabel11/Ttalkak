@@ -79,7 +79,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const { normalizePersistedLikeCounts, popularPrompts, state, updateBackendHomePageMeta } = ctx;
     if (!Array.isArray(result?.items)) return false;
 
-    if (page === 1 && state.popularSort === "latest" && !state.searchQuery) {
+    if (page === 1) {
       result.items.unshift(...ctx.savedPrompts.filter(({ id, source, isShared }) =>
         source === "mine" && isShared && !ctx.isBackendNumericId(id),
       ));
