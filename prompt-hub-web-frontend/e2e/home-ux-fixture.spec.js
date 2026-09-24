@@ -11,8 +11,12 @@ test("narrow Home search help expands left without leaving the viewport", async 
     const trigger = button.getBoundingClientRect();
     const tooltipElement = button.querySelector(".help-text");
     const tooltip = tooltipElement.getBoundingClientRect();
+    const scope = button.closest(".search-field").querySelector("[data-search-scope]").getBoundingClientRect();
     return {
       triggerLeft: trigger.left,
+      triggerRight: trigger.right,
+      triggerHeight: trigger.height,
+      scopeHeight: scope.height,
       tooltipLeft: tooltip.left,
       tooltipRight: tooltip.right,
       clippedHorizontally: tooltipElement.scrollWidth > tooltipElement.clientWidth,
@@ -22,11 +26,12 @@ test("narrow Home search help expands left without leaving the viewport", async 
     };
   });
   expect(positions.tooltipLeft).toBeGreaterThanOrEqual(0);
-  expect(positions.tooltipRight).toBeLessThanOrEqual(positions.triggerLeft + 25);
+  expect(positions.tooltipRight).toBeLessThanOrEqual(positions.triggerRight + 1);
   expect(positions.tooltipRight).toBeLessThanOrEqual(390);
   expect(positions.clippedHorizontally).toBe(false);
   expect(positions.clippedVertically).toBe(false);
-  expect(positions.height).toBeLessThanOrEqual(30);
+  expect(positions.height).toBeCloseTo(positions.triggerHeight, 0);
+  expect(positions.height).toBeCloseTo(positions.scopeHeight, 0);
   expect(positions.whiteSpace).toBe("nowrap");
   await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
 
