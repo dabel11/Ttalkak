@@ -523,6 +523,7 @@ summary[aria-label="화면 설정"] span,
   .account-actions { width: auto; }
   .home-page > .section-title { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 0 0 18px; }
   .home-page > .section-title .sort-select { width: auto; }
+  .saved-sort-select select { min-width: 68px; height: 36px; }
   .home-page .search-field { height: 52px; min-height: 52px; flex-wrap: nowrap; padding: 5px 10px; gap: 8px; }
   .home-page .search-field input { flex: 1 1 auto; min-width: 0; }
   .home-page .search-scope-select select { min-width: 72px; }
