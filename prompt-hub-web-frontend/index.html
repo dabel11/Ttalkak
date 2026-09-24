@@ -14,9 +14,11 @@
     <script>
       // 로컬 디자인 미리보기는 백엔드가 꺼져 있어도 데모 데이터로 계속 사용할 수 있습니다.
       // 프로덕션 빌드는 app-entry에서 이 값을 무시해 실제 연결 오류를 그대로 표시합니다.
-      window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
-      if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-        window.TTALKAK_DEMO_FALLBACK_ENABLED = true;
+      if (typeof window.TTALKAK_DEMO_FALLBACK_ENABLED !== "boolean") {
+        window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+        if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+          window.TTALKAK_DEMO_FALLBACK_ENABLED = true;
+        }
       }
     </script>
     <script type="module" src="./src/app-entry.js"></script>
