@@ -733,6 +733,7 @@ h1 {
 }
 
 .prompt-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 360px;
@@ -802,6 +803,10 @@ h1 {
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.prompt-card.mine-card .card-head h2 {
+  padding-right: 38px;
 }
 
 .prompt-card-open {
@@ -901,7 +906,10 @@ h1 {
 }
 
 .prompt-card-menu-wrap {
-  position: relative;
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
   flex: 0 0 auto;
 }
 
@@ -912,7 +920,7 @@ h1 {
 .prompt-card-menu {
   position: absolute;
   top: calc(100% + 7px);
-  left: 0;
+  right: 0;
   z-index: 95;
   display: grid;
   gap: 4px;
@@ -922,7 +930,7 @@ h1 {
   background: #fff;
   color: var(--brand-green);
   box-shadow: var(--edge-shadow-hover);
-  transform-origin: top left;
+  transform-origin: top right;
   animation: menu-island-in var(--motion-menu) both;
 }
 

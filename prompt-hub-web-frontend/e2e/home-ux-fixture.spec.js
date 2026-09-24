@@ -78,6 +78,13 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   expect(await sort.locator("select").evaluate((element) => getComputedStyle(element).appearance)).toBe("none");
   expect(Number.parseFloat(await sort.evaluate((element) => getComputedStyle(element, "::after").right))).toBeGreaterThanOrEqual(12);
 
+  const scope = page.locator(".search-scope-select");
+  expect(await scope.locator("select").evaluate((element) => getComputedStyle(element).appearance)).toBe("none");
+  expect(await scope.locator("select").evaluate((element) => getComputedStyle(element).borderRadius))
+    .toBe(await sort.locator("select").evaluate((element) => getComputedStyle(element).borderRadius));
+  expect(await scope.evaluate((element) => getComputedStyle(element, "::after").right))
+    .toBe(await sort.evaluate((element) => getComputedStyle(element, "::after").right));
+
   const empty = page.locator(".search-error");
   await expect(empty).toBeVisible();
   await expect(empty.getByRole("heading", { name: "프롬프트를 불러오지 못했습니다" })).toBeVisible();
@@ -108,6 +115,29 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   await expect(page.locator(".backend-status-popover")).toContainText("개발 서버에 연결할 수 없습니다");
   await expect(page.locator(".backend-status-popover")).toContainText("로컬 백엔드가 실행 중인지 확인한 뒤 다시 연결해 주세요");
   await expect(page.locator(".backend-status-popover [data-retry-home-load]")).toBeVisible();
+});
+
+test("sidebar keeps the current page distinct from a hovered destination", async ({ page }) => {
+  await gotoApp(page);
+  const current = page.locator('.sidebar [data-route="home"]');
+  const destination = page.locator('.sidebar [data-route="make"]');
+  await destination.hover();
+
+  const [currentStyle, destinationStyle] = await Promise.all([
+    current.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).color,
+    })),
+    destination.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).color,
+      transform: getComputedStyle(element).transform,
+    })),
+  ]);
+
+  expect(destinationStyle.background).not.toBe(currentStyle.background);
+  expect(destinationStyle.color).not.toBe(currentStyle.color);
+  expect(destinationStyle.transform).toBe("none");
 });
 
 test("Backend status reconnects manually and automatically after connectivity returns", async ({ page }) => {
