@@ -305,6 +305,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .home-page > .section-title .sort-select { background: var(--panel); }
 .home-page > .section-title .sort-select::after { border-color: var(--muted-dark); }
 .home-page .search-field { box-shadow: none; }
+.home-page .search-field:focus-within {
+  border-color: rgba(0, 117, 222, .45);
+  box-shadow: 0 0 0 2px rgba(0, 117, 222, .11);
+}
 .home-lead-label {
   display: flex;
   justify-content: space-between;
