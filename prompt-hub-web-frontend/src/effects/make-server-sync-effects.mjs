@@ -1,5 +1,6 @@
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
+import { classifyUsageError, normalizeEntitlement } from "../usage/usage-entitlement.mjs";
 
   "use strict";
 
@@ -196,13 +197,20 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         const code = String(error?.payload?.code || error?.code || "").toUpperCase();
         if (code === "REQUEST_ABORTED") throw error;
         const normalizedError = classifyMakeError(error);
+        const usageError = classifyUsageError(error, state.entitlement);
+        if (usageError) {
+          const errorEntitlement = normalizeEntitlement(error?.payload, { fallbackPlan: state.isLoggedIn ? state.entitlement?.plan || "FREE" : "GUEST" });
+          if (errorEntitlement.known) state.entitlement = errorEntitlement;
+          makeState.setMakeBackendState(state, "connected", usageError.message);
+          handleBackendAccessError(error, usageError.message);
+          reportWarning("make-sync", "usage-limit", error);
+          throw error;
+        }
         let fallbackMessage = normalizedError.message;
         if (status === 404) {
           fallbackMessage = canUseDemoFallback()
             ? "요청한 프롬프트 또는 리소스를 찾지 못해 데모 첨삭을 표시합니다."
             : "요청한 프롬프트 또는 리소스를 찾지 못했습니다.";
-        } else if (status === 429 && (code === "FREE_TRIAL_LIMIT_EXCEEDED" || code === "TRIAL_LIMIT_EXCEEDED")) {
-          fallbackMessage = "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
         } else if (canUseDemoFallback()) {
           fallbackMessage = `${normalizedError.message} 지금은 데모 첨삭을 표시합니다.`;
         }

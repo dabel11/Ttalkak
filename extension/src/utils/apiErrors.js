@@ -19,6 +19,11 @@ export function getApiErrorMessage(status, body) {
   if (code === "FREE_TRIAL_LIMIT_EXCEEDED") {
     return body?.message || "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
   }
+  if (["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(code)) {
+    return body?.message || "오늘의 사용량을 모두 사용했습니다. 요금제를 확인하거나 자정 이후 다시 이용해주세요.";
+  }
+  if (code === "SUBSCRIPTION_PAST_DUE") return body?.message || "결제 상태를 확인해주세요.";
+  if (code === "PAYMENT_VERIFICATION_FAILED") return body?.message || "결제를 확인하지 못했습니다. 결제 내역을 확인해주세요.";
   if (code === "RATE_LIMIT_EXCEEDED") return body?.message || "요청이 많습니다. 잠시 후 다시 시도해주세요.";
   if (status === 400) return body?.message || "요청 내용을 확인해주세요.";
   if (status === 401 || code === "LOGIN_REQUIRED") return body?.message || "로그인이 필요하거나 세션이 만료되었습니다.";

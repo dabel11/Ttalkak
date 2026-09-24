@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import { assertProductionBackendApiUrl } from "./scripts/build-policy.mjs";
+import { assertProductionBackendApiUrl, assertProductionWebAppUrl } from "./scripts/build-policy.mjs";
 
 function toHostPermission(url) {
   try {
@@ -49,6 +49,11 @@ export default defineConfig(({ mode }) => {
     mode === "development"
       ? env.VITE_BACKEND_API_URL || "http://localhost:8080"
       : process.env.VITE_BACKEND_API_URL || env.VITE_BACKEND_API_URL || "";
+  const webAppUrl =
+    mode === "development"
+      ? env.VITE_WEB_APP_URL || "http://127.0.0.1:4200"
+      : process.env.VITE_WEB_APP_URL || env.VITE_WEB_APP_URL || (isVerificationBuild ? "https://web.example.invalid" : "");
+  assertProductionWebAppUrl(mode, webAppUrl, isVerificationBuild);
   return {
     plugins: [
       react(),
@@ -56,6 +61,7 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       "import.meta.env.VITE_BACKEND_API_URL": JSON.stringify(backendApiUrl),
+      "import.meta.env.VITE_WEB_APP_URL": JSON.stringify(webAppUrl),
     },
     build: {
       outDir,

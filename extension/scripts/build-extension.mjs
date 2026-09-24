@@ -15,6 +15,10 @@ const backendApiUrl =
   kind === "dev"
     ? "http://localhost:8080"
     : process.env.VITE_BACKEND_API_URL || (kind === "verify" ? "https://api.example.invalid" : "");
+const webAppUrl =
+  kind === "dev"
+    ? process.env.VITE_WEB_APP_URL || "http://127.0.0.1:4200"
+    : process.env.VITE_WEB_APP_URL || (kind === "verify" ? "https://web.example.invalid" : "");
 
 const result = spawnSync(process.execPath, [viteEntry, "build", "--mode", mode], {
   cwd: extensionRoot,
@@ -22,6 +26,7 @@ const result = spawnSync(process.execPath, [viteEntry, "build", "--mode", mode],
     ...process.env,
     TTALKAK_EXTENSION_BUILD_KIND: kind,
     VITE_BACKEND_API_URL: backendApiUrl,
+    VITE_WEB_APP_URL: webAppUrl,
   },
   stdio: "inherit",
 });

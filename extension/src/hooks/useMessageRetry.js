@@ -17,10 +17,29 @@ export function useMessageRetry({
   setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
   setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
   isLifecycleActive = () => true,
+  onEntitlement,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
   const serverEditRequests = useRef(new Map());
+
+  function syncUsageError(error) {
+    onEntitlement?.(error?.payload);
+    const code = String(error?.code || error?.payload?.code || "").toUpperCase();
+    if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) {
+      setAuthMode("login");
+      return true;
+    }
+    if (["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(code)) {
+      showNotice("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
+      return true;
+    }
+    if (["SUBSCRIPTION_PAST_DUE", "PAYMENT_VERIFICATION_FAILED"].includes(code)) {
+      showNotice("결제 상태를 확인해주세요.");
+      return true;
+    }
+    return false;
+  }
 
   function startEditMessage(message) {
     if (!message || message.role !== "user" || isLoading) return;
@@ -64,7 +83,8 @@ export function useMessageRetry({
         prompt,
         restoreComposer: true,
         payload: { accessToken: authSession.accessToken, threadId, messageId, requestId, prompt, category: "prompt_techniques" },
-        onSuccess: async () => {
+        onSuccess: async (data) => {
+          onEntitlement?.(data);
           serverEditRequests.current.delete(String(messageId));
           resetConcurrency?.(threadId);
           setRagStatus("connected");
@@ -77,6 +97,7 @@ export function useMessageRetry({
             await onAuthExpired?.();
             return;
           }
+          if (syncUsageError(error)) return;
           if (isRequestIdReusedError(error)) {
             serverEditRequests.current.delete(String(messageId));
             await refreshActiveServerThread(String(threadId)).catch(() => false);
@@ -130,6 +151,7 @@ export function useMessageRetry({
       restoreComposer: true,
       payload: { prompt, category: "prompt_techniques", sessionUuid: guestSessionUuid, history },
       onSuccess: async (data) => {
+        onEntitlement?.(data);
         setRagStatus("connected");
         const assistantMessage = createAssistantMessage(prompt, data);
         const nextMessages = [...baseMessages, editedUserMessage, assistantMessage];
@@ -144,7 +166,7 @@ export function useMessageRetry({
       },
       onError: async (error) => {
         setRagStatus("error");
-        if (error?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+        syncUsageError(error);
         setMessages((items) => [...items, createImproveErrorMessage(prompt, error)]);
       },
     });

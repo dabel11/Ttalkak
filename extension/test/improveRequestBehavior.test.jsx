@@ -99,6 +99,26 @@ describe("Extension improve request behavior", () => {
     expect(payload.requestId.length).toBeLessThanOrEqual(128);
   });
 
+  test("quota failures update usage without running thread recovery", async () => {
+    const usage = { plan: "FREE", dailyLimit: 10, usedToday: 10, remainingToday: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("quota"), {
+      status: 429,
+      code: "DAILY_USAGE_LIMIT_EXCEEDED",
+      payload: { code: "DAILY_USAGE_LIMIT_EXCEEDED", usage },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ authSession: { accessToken: "token" }, onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+
+    act(() => result.current.setComposerValue("over quota"));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage });
+    expect(props.showNotice).toHaveBeenCalledWith("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
+    expect(api.getThread).not.toHaveBeenCalled();
+    expect(result.current.messages.at(-1)).toMatchObject({ isError: true });
+  });
+
   test("logged-in follow-up retries reuse one request id without duplicating the user turn", async () => {
     api.getThreads.mockResolvedValue([]);
     const unavailable = Object.assign(new Error("unavailable"), { status: 503, code: "AI_SERVICE_UNAVAILABLE" });
@@ -399,6 +419,27 @@ describe("Extension improve request behavior", () => {
 
     expect(result.current.activeRecentId).toMatch(/^thread-/);
     expect(result.current.messages.at(-1)?.content).toBe("edited response");
+  });
+
+  test("edited resend synchronizes quota errors and points to plan management", async () => {
+    const quota = { plan: "FREE", dailyLimit: 10, usedToday: 10, remainingToday: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("quota"), {
+      status: 429,
+      code: "DAILY_USAGE_LIMIT_EXCEEDED",
+      payload: { code: "DAILY_USAGE_LIMIT_EXCEEDED", usage: quota },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+    const userMessage = { id: "quota-user", role: "user", content: "old" };
+
+    act(() => result.current.openRecentThread({ id: "local-quota", messages: [userMessage] }));
+    act(() => result.current.startEditMessage(userMessage));
+    act(() => result.current.setEditingDraft("retry after quota"));
+    await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, userMessage.id); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage: quota });
+    expect(props.showNotice).toHaveBeenCalledWith("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
   });
 
   test("server refresh canonicalizes the selected recent thread through the shared setter", async () => {

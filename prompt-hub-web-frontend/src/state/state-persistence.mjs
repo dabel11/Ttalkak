@@ -94,7 +94,7 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
       searchScope: state.searchScope,
       popularSort: state.popularSort,
       savedSort: state.savedSort,
-      guestImproveCount: state.guestImproveCount,
+      entitlement: state.entitlement,
       recentThreads: state.recentThreads,
       makeFolders: state.makeFolders,
       activeFolderId: state.activeFolderId,
@@ -187,7 +187,17 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
   state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(savedState.savedSort)
     ? savedState.savedSort
     : "recent";
-  state.guestImproveCount = Number(savedState.guestImproveCount || 0);
+  if (savedState.entitlement && typeof savedState.entitlement === "object") {
+    const entitlement = /** @type {Record<string, unknown>} */ (savedState.entitlement);
+    state.entitlement = state.isLoggedIn && !entitlement.known && entitlement.plan === "GUEST"
+      ? { ...entitlement, plan: "FREE" }
+      : entitlement;
+  } else {
+    const entitlement = state.entitlement && typeof state.entitlement === "object"
+      ? /** @type {Record<string, unknown>} */ (state.entitlement)
+      : {};
+    state.entitlement = { ...entitlement, plan: state.isLoggedIn ? "FREE" : "GUEST" };
+  }
   state.recentThreads = Array.isArray(savedState.recentThreads) ? savedState.recentThreads : [];
   state.makeFolders = normalizeMakeFolders(savedState.makeFolders);
   state.activeFolderId =

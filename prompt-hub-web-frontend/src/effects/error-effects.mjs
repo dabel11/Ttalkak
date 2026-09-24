@@ -1,4 +1,5 @@
 import { classifyMakeError } from "../utils/make-message-model.mjs";
+import { classifyUsageError } from "../usage/usage-entitlement.mjs";
 
   "use strict";
 
@@ -16,6 +17,13 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     const code = getBackendErrorCode(error);
     const backendMessage = getBackendErrorMessage(error);
     const normalized = classifyMakeError(error);
+    const usageError = classifyUsageError(error, state.entitlement);
+
+    if (usageError) {
+      if (usageError.requiresLogin) state.authView = "login";
+      showNotice(backendMessage || usageError.message);
+      return true;
+    }
 
     if (code === "ACCOUNT_BLOCKED") {
       clearAuthenticatedSession({ keepRoute: true });
@@ -51,7 +59,6 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     if (status === 404 || code === "RESOURCE_NOT_FOUND") return "요청한 대상을 찾을 수 없습니다.";
     if (status === 400 || ["VALIDATION_FAILED", "INVALID_REQUEST", "BLOCK_REASON_REQUIRED"].includes(code)) return "입력값을 확인해주세요.";
     if (status === 409 || ["CONFLICT", "INVALID_STATE", "ACCOUNT_WITHDRAWN"].includes(code)) return "현재 상태에서는 처리할 수 없습니다.";
-    if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) return "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
     return "";
   }
 

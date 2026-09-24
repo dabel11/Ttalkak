@@ -25,6 +25,7 @@ export function useConversation({
   setSessionUuid,
   showNotice,
   onAuthExpired,
+  onEntitlement,
 }) {
   const [messages, setMessages] = useState([]);
   const [composerValue, setComposerValue] = useState("");
@@ -87,6 +88,7 @@ export function useConversation({
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
     setActiveThreadId, setRagStatus, setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
     isLifecycleActive: () => lifecycleActive.current,
+    onEntitlement,
   });
 
   function openPrompt(item) {
@@ -272,6 +274,7 @@ export function useConversation({
       payload: improvePayload,
       restoreComposer: true,
       onSuccess: async (data) => {
+        onEntitlement?.(data);
         pendingRetry.current = null;
         resetConcurrency(data.threadId || activeServerThreadId);
         setRagStatus("connected");
@@ -296,7 +299,20 @@ export function useConversation({
           await onAuthExpired();
           return;
         }
-        if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
+        onEntitlement?.(err?.payload);
+        const usageCode = String(err?.code || err?.payload?.code || "").toUpperCase();
+        const isTrialLimit = ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(usageCode);
+        const isDailyLimit = ["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(usageCode);
+        const isBillingError = ["SUBSCRIPTION_PAST_DUE", "PAYMENT_VERIFICATION_FAILED"].includes(usageCode);
+        if (isTrialLimit) setAuthMode("login");
+        if (isDailyLimit) {
+          showNotice("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
+        }
+        if (isBillingError) showNotice("결제 상태를 확인해주세요.");
+        if (isTrialLimit || isDailyLimit || isBillingError) {
+          setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err, { requestId })]);
+          return;
+        }
         if (isRequestIdReusedError(err)) {
           pendingRetry.current = null;
           await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => false);

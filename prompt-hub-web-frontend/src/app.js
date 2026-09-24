@@ -3,6 +3,8 @@ import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
 import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
+import { formatUsageSummary } from "./usage/usage-entitlement.mjs";
+import { createUsageController } from "./usage/usage-controller.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -433,16 +435,17 @@ const {
   SavedLibraryPanelView,
   SavedPageView,
   SharePageView,
+  PricingPageView,
   HeaderView,
   SidebarView,
   renderAppShell,
 } = modules.renderers;
-if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
+if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, AdminReportsPanelView, AdminPageView, AdminTagsPanelView, AdminUsersPanelView, AuthModalView, ExecuteModalView, HeaderView, HomePageView, MakeComposerView, MakeFeedView, MakeFolderButtonView, MakePageView, MakeSidePanelView, MakeTemplateBarView, MessageBubbleView, MyCommentsPanelView, MyPromptsPanelView, MyReportsPanelView, PricingPageView, PromptCardView, PromptDetailModalView, PromptEditModalView, ReportModalView, SavedLibraryPanelView, SavedPageView, SharePageView, SidebarView, renderAppShell].some((fn) => typeof fn !== "function")) {
   throw moduleLoadError("렌더러");
 }
 const { createRouteLocation, resolvePageView } = modules.routing;
 if ([createRouteLocation, resolvePageView].some((fn) => typeof fn !== "function")) throw moduleLoadError("라우팅 헬퍼");
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 const routeLocation = createRouteLocation({ window, state, isAdminAccount });
@@ -613,8 +616,9 @@ const getCurrentAccountScopeKey = authSession.key;
 const saveCurrentAccountScope = authSession.saveScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
-const clearAuthenticatedSession = authSession.clear;
-const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const clearAuthenticatedSession = (...args) => (cancelActiveMakeRequest(), authSession.clear(...args));
+const usageController = createUsageController({ state, api: apiClient, hasBackendToken: hasBackendAuthToken, getToken: getAuthToken, handleError: handleBackendAccessError, notice: showNotice, render, window });
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded, hydrateEntitlement: usageController.refresh });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
 const { AuthModal } = authView;
 const adminRuntime = createLazyRuntimeFacade({
@@ -916,9 +920,7 @@ function scrollToPendingLatestMessage() {
     hasPendingMessageScroll: () => Boolean(pendingMessageScrollId),
   });
 }
-function scheduleMakeLatestScroll({ behavior = "smooth" } = {}) {
-  scheduleMakeLatestScrollEffect(state, { behavior });
-}
+function scheduleMakeLatestScroll({ behavior = "smooth" } = {}) { scheduleMakeLatestScrollEffect(state, { behavior }); }
 function waitForThinkingIndicatorPaint() {
   return new Promise((resolve) => {
     window.setTimeout(resolve, 120);
@@ -974,11 +976,7 @@ function navigateTo(route, { historyMode = "push", animate = true } = {}) {
   window.setTimeout(commitRoute, 90);
 }
 routeLocation.bind((route) => navigateTo(route, { historyMode: "none", animate: false }));
-function resetHomeView() {
-  homeController.cancelSearchCommit();
-  resetHomeViewState(state);
-  if (state.backendStatus === "connected") refreshBackendHomePrompts();
-}
+function resetHomeView() { homeController.cancelSearchCommit(); resetHomeViewState(state); if (state.backendStatus === "connected") refreshBackendHomePrompts(); }
 function Sidebar() {
   return SidebarView(
     { icons, state, escapeAttr, escapeHtml, formatNumber },
@@ -989,7 +987,7 @@ function Sidebar() {
   );
 }
 function Header() {
-  const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
+  const usageSummary = formatUsageSummary(state.entitlement);
   const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
@@ -1001,16 +999,13 @@ function Header() {
     {
       adminAccessButton,
       authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
-      freeMakeLimit: FREE_MAKE_LIMIT,
       hasReportedPrompts,
-      remaining,
+      usageSummary,
       showPromptTools,
     },
   );
 }
-function Page() {
-  return resolvePageView(getPageRouteContext());
-}
+function Page() { return resolvePageView(getPageRouteContext()); }
 function getPageRouteContext() {
   return {
     state,
@@ -1020,6 +1015,7 @@ function getPageRouteContext() {
     MakePage,
     SavedPage,
     SharePage,
+    PricingPage: () => PricingPageView({ escapeHtml }, { entitlement: state.entitlement, isLoggedIn: state.isLoggedIn, subscriptionActionPending: state.subscriptionActionPending, usageSummary: formatUsageSummary(state.entitlement) }),
   };
 }
 function HomePage() {
@@ -1434,6 +1430,8 @@ function bindGlobalActionEvents() {
       });
     });
   });
+  document.querySelectorAll("[data-subscription-checkout]").forEach((button) => button.addEventListener("click", () => usageController.openDestination("checkout")));
+  document.querySelectorAll("[data-subscription-manage]").forEach((button) => button.addEventListener("click", () => usageController.openDestination("portal")));
   document.querySelectorAll("[data-toggle-admin-view]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!state.isLoggedIn) {
@@ -1913,7 +1911,6 @@ function cancelActiveMakeRequest() {
 function getMakeControllerContext() {
   return {
     state,
-    freeLimit: FREE_MAKE_LIMIT,
     guard: guardAdminUserAction,
     isBusy: () => isMakeThinking || makeRequestState.inFlight,
     notice: showNotice,
@@ -1972,6 +1969,8 @@ function getMakeControllerContext() {
       client: "web",
       });
     },
+    getEntitlementOwner: () => state.isLoggedIn ? `member:${getAuthToken()}` : "guest",
+    applyEntitlement: (entitlement, owner) => { if (entitlement?.known && owner === (state.isLoggedIn ? `member:${getAuthToken()}` : "guest")) state.entitlement = entitlement; },
     reportFailure: (error, requestId, durationMs) => {
       const failure = makeMessageModel.classifyMakeError(error);
       return modules.observability.report(new Error("Make request failed"), {
@@ -2470,6 +2469,7 @@ appBootstrap = createAppBootstrap({
   normalizeAssistantPromptOutputs,
 });
 const bootstrapResult = appBootstrap.bootstrap();
+const entitlementHydration = Promise.resolve(bootstrapResult).then(() => usageController.refresh({ quiet: true, shouldRender: true }));
 const needsAdminRuntime = state.adminMode || state.route === "admin";
 const needsShareRuntime = state.route === "share";
 const needsMakeRuntime = state.route === "make";
@@ -2484,7 +2484,7 @@ const routeReady = routeRuntime.then((loaded) => {
   if (loaded) render();
   return loaded;
 });
-const hydration = Promise.all([Promise.resolve(bootstrapResult), routeReady]).then(([result]) => result);
+const hydration = Promise.all([Promise.resolve(bootstrapResult), routeReady, entitlementHydration]).then(([result]) => result);
 const markApplicationReady = () => {
   document.documentElement.dataset.ttalkakReady = "true";
   document.dispatchEvent(new CustomEvent("ttalkak:ready"));

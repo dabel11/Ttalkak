@@ -73,7 +73,7 @@ interface TtalkakApplicationState {
   creatingFolder: boolean; creatingThreadFolderId: TtalkakId | null; editingFolderId: TtalkakId | null; openFolderMenuId: TtalkakId | null;
   openPromptCardMenuId: TtalkakId | null; openThreadMenuId: TtalkakId | null; activeFolderId: TtalkakId; activeThreadId: TtalkakId | null;
   composerDraft: string; makeBackendStatus: string; myBackendStatus: string; adminBackendStatus: string; myPageTab: string;
-  shareError: string; shareDraft: TtalkakStateEntity | null; libraryDemoSeeded: boolean;
+  shareError: string; shareDraft: TtalkakStateEntity | null; libraryDemoSeeded: boolean; subscriptionActionPending: string;
   messages: TtalkakStateEntity[]; recentThreads: TtalkakStateEntity[]; makeFolders: TtalkakStateEntity[];
   backendLibraryPrompts: TtalkakStateEntity[]; backendLikedPrompts: TtalkakStateEntity[]; backendMyPrompts: TtalkakStateEntity[];
   backendMyComments: TtalkakStateEntity[]; backendMyReports: TtalkakStateEntity[]; backendAdminReports: TtalkakStateEntity[]; backendAdminTags: TtalkakStateEntity[];
@@ -313,6 +313,9 @@ interface TtalkakApi {
   deleteAdminComment(commentId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   hideAdminPrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   restoreAdminPrompt(promptId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  getSubscription(token: TtalkakToken): Promise<unknown>;
+  createSubscriptionCheckout(token: TtalkakToken): Promise<unknown>;
+  createBillingPortal(token: TtalkakToken): Promise<unknown>;
   [method: string]: unknown;
 }
 

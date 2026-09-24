@@ -12,8 +12,27 @@ test("page routes have stable hashes", () => {
   assert.equal(routing.getRouteHash("make"), "#/make");
   assert.equal(routing.getRouteHash("saved"), "#/mypage");
   assert.equal(routing.getRouteHash("share"), "#/share");
+  assert.equal(routing.getRouteHash("pricing"), "#/pricing");
+  assert.equal(routing.resolveRouteHash("#/pricing"), "pricing");
   assert.equal(routing.resolveRouteHash("#/mypage"), "saved");
   assert.equal(routing.resolveRouteHash("#/unknown"), "home");
+});
+
+test("route location reacts to both browser history and direct hash changes", () => {
+  const listeners = {};
+  const window = {
+    location: { hash: "#/home" },
+    history: { pushState() {}, replaceState() {} },
+    addEventListener: (name, listener) => { listeners[name] = listener; },
+  };
+  const state = { route: "home", isLoggedIn: true, authView: null };
+  const location = routing.createRouteLocation({ window, state, isAdminAccount: () => false });
+  const routes = [];
+  location.bind((route) => routes.push(route));
+  window.location.hash = "#/pricing";
+  listeners.hashchange();
+  assert.deepEqual(routes, ["pricing"]);
+  assert.equal(typeof listeners.popstate, "function");
 });
 
 test("route location redirects protected routes and writes stable history", () => {
