@@ -12,9 +12,12 @@
   <body>
     <div id="app"></div>
     <script>
-      // 개발 중 API 실패 시 데모 데이터를 보고 싶을 때만 true로 바꾸세요.
-      // 통합 테스트와 시연 환경에서는 false를 유지해 실제 서버 연동 실패가 드러나게 합니다.
+      // 로컬 디자인 미리보기는 백엔드가 꺼져 있어도 데모 데이터로 계속 사용할 수 있습니다.
+      // 프로덕션 빌드는 app-entry에서 이 값을 무시해 실제 연결 오류를 그대로 표시합니다.
       window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+      if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+        window.TTALKAK_DEMO_FALLBACK_ENABLED = true;
+      }
     </script>
     <script type="module" src="./src/app-entry.js"></script>
   </body>
