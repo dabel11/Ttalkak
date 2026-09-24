@@ -50,7 +50,6 @@
             <h1 id="popular-heading">${isSearching ? "검색 결과" : "인기 프롬프트"}</h1>
           </div>
           <label class="sort-select">
-            <span aria-hidden="true">정렬</span>
             <select data-popular-sort aria-label="프롬프트 정렬 기준">
               ${SortOption("popular", "인기순")}
               ${SortOption("saves", "저장순")}

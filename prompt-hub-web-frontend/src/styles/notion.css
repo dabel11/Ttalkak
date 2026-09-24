@@ -299,10 +299,22 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .home-page > .section-title h1 { color: var(--text); font-size: clamp(34px, 3.1vw, 46px); }
 .home-page > .section-title .section-icon { color: var(--brand-accent); }
 .home-page > .section-title .sort-select select {
+  min-width: 104px;
+  height: 40px;
+  padding: 0 32px 0 12px;
   color: var(--muted-dark);
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
 }
-.home-page > .section-title .sort-select { background: var(--panel); }
+.home-page > .section-title .sort-select {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.home-page > .section-title .sort-select:focus-within { box-shadow: none; }
 .home-page > .section-title .sort-select::after { border-color: var(--muted-dark); }
 .home-page .search-field { box-shadow: none; }
 .home-page .search-field:focus-within {

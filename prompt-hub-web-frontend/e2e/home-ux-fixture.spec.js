@@ -71,9 +71,10 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   await gotoApp(page);
 
   const sort = page.locator(".sort-select");
-  await expect(sort).toContainText("정렬");
+  await expect(sort).not.toContainText("정렬");
   await expect(sort.locator("select")).toHaveValue(/popular|saves|comments|likes|latest/);
-  expect(await sort.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("0px");
+  expect(await sort.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect(await sort.locator("select").evaluate((element) => getComputedStyle(element).borderTopWidth)).not.toBe("0px");
 
   const empty = page.locator(".search-error");
   await expect(empty).toBeVisible();
