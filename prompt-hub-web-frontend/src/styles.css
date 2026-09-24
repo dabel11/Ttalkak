@@ -2849,11 +2849,13 @@ input[type="checkbox"] {
 
 .detail-tags {
   margin-top: 18px;
+  padding-inline: 18px;
   padding-top: 0;
 }
 
 .detail-meta {
   border-top: 0;
+  padding-inline: 18px;
   padding-top: 0;
   margin-bottom: 18px;
 }
