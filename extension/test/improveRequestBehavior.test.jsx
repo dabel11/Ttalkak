@@ -114,9 +114,28 @@ describe("Extension improve request behavior", () => {
     await act(async () => { await result.current.submitPrompt(); });
 
     expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage });
-    expect(props.showNotice).toHaveBeenCalledWith("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
     expect(api.getThread).not.toHaveBeenCalled();
     expect(result.current.messages.at(-1)).toMatchObject({ isError: true });
+  });
+
+  test("logged-in token budget failures use the account fallback when the response omits its plan", async () => {
+    const usage = { usageUnit: "TOKEN", tokenLimit: 100000, tokensUsed: 100000, tokensRemaining: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("token quota"), {
+      status: 429,
+      code: "TOKEN_BUDGET_EXCEEDED",
+      payload: { code: "TOKEN_BUDGET_EXCEEDED", usage },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ authSession: { accessToken: "token" }, onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+
+    act(() => result.current.setComposerValue("over token budget"));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "TOKEN_BUDGET_EXCEEDED", usage });
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
+    expect(api.getThread).not.toHaveBeenCalled();
   });
 
   test("logged-in follow-up retries reuse one request id without duplicating the user turn", async () => {
@@ -439,7 +458,7 @@ describe("Extension improve request behavior", () => {
     await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, userMessage.id); });
 
     expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage: quota });
-    expect(props.showNotice).toHaveBeenCalledWith("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
   });
 
   test("server refresh canonicalizes the selected recent thread through the shared setter", async () => {

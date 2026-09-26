@@ -27,25 +27,25 @@ function PricingPageView(ctx, data) {
       <header class="pricing-hero">
         <span class="pricing-eyebrow">요금제</span>
         <h1 id="pricing-title">필요한 만큼 프롬프트를 다듬으세요</h1>
-        <p>모든 요금제는 같은 첨삭 품질을 제공합니다. 하루 사용량만 달라집니다.</p>
+        <p>모든 요금제는 같은 첨삭 품질을 제공하며 사용량만 다릅니다.</p>
       </header>
       <div class="pricing-grid">
         <article class="pricing-card ${isLoggedIn && !isPro && !isPastDue ? "current" : ""}">
           <div><span>FREE</span><strong>₩0</strong><small>계속 무료</small></div>
           <p>가볍게 시작하고 매일 다시 사용할 수 있습니다.</p>
-          <ul><li>하루 10회 첨삭</li><li>웹과 확장 프로그램에서 사용</li><li>대화와 보관함 저장</li></ul>
+          <ul><li>기본 사용량 제공</li><li>웹과 확장 프로그램에서 사용</li><li>대화와 보관함 저장</li></ul>
           ${!isPro && !isPastDue && isLoggedIn ? `<span class="pricing-current-badge">현재 요금제 · ${escapeHtml(usageSummary)}</span>` : ""}
         </article>
         <article class="pricing-card featured ${isPro || isPastDue ? "current" : ""}">
           <div><span>PRO</span><strong>₩4,900</strong><small>월</small></div>
           <p>더 많은 프롬프트를 꾸준히 다듬는 사용자를 위한 요금제입니다.</p>
-          <ul><li>하루 100회 첨삭</li><li>FREE와 동일한 첨삭 품질</li><li>언제든 결제 관리 및 취소</li></ul>
+          <ul><li>FREE보다 넉넉한 사용량</li><li>FREE와 동일한 첨삭 품질</li><li>언제든 결제 관리 및 취소</li></ul>
           ${isPro ? `<span class="pricing-current-badge">현재 요금제 · ${escapeHtml(usageSummary)}</span>` : ""}
           ${action}
           ${cancelNotice}
         </article>
       </div>
-      <p class="pricing-footnote">사용량은 매일 자정(KST)에 초기화됩니다. 취소 후에도 현재 결제 기간이 끝날 때까지 PRO 한도가 유지됩니다.</p>
+      <p class="pricing-footnote">사용량과 초기화 시점은 계정 기준을 따릅니다. 취소 후에도 현재 결제 기간이 끝날 때까지 PRO 한도가 유지됩니다.</p>
     </section>
   `;
 }

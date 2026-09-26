@@ -1,9 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-let classifyUsageError; let createPromptApi; let createUsageController; let formatUsageSummary; let hasActiveProAccess; let normalizeEntitlement; let getOrCreateGuestSessionUuid;
+let classifyUsageError; let createPromptApi; let createUsageController; let formatUsageAccessibilityLabel; let formatUsageSummary; let hasActiveProAccess; let normalizeEntitlement; let getOrCreateGuestSessionUuid;
 test.before(async () => {
-  ({ classifyUsageError, formatUsageSummary, hasActiveProAccess, normalizeEntitlement } = await import("../src/usage/usage-entitlement.mjs"));
+  ({ classifyUsageError, formatUsageAccessibilityLabel, formatUsageSummary, hasActiveProAccess, normalizeEntitlement } = await import("../src/usage/usage-entitlement.mjs"));
   ({ getOrCreateGuestSessionUuid } = await import("../src/usage/guest-session.mjs"));
   ({ createPromptApi } = await import("../src/api/prompt-api.mjs"));
   ({ createUsageController } = await import("../src/usage/usage-controller.mjs"));
@@ -16,6 +16,33 @@ test("normalizes nested usage data from backend responses", () => {
   assert.equal(formatUsageSummary(value), "FREE · 오늘 3/10회 남음");
 });
 
+test("normalizes and formats token usage without breaking count responses", () => {
+  const value = normalizeEntitlement({ data: { usage: {
+    plan: "FREE",
+    usageUnit: "TOKEN",
+    usagePeriod: "DAY",
+    tokenLimit: 100000,
+    tokensUsed: 31500,
+    tokensRemaining: 68500,
+  } } });
+
+  assert.equal(value.unit, "TOKEN");
+  assert.equal(value.period, "DAY");
+  assert.equal(value.limit, 100000);
+  assert.equal(value.used, 31500);
+  assert.equal(value.remaining, 68500);
+  assert.equal(formatUsageSummary(value), "FREE · 오늘 68.5K/100K 토큰 남음");
+  assert.equal(formatUsageAccessibilityLabel(value), "FREE · 오늘 68,500/100,000 토큰 남음");
+});
+
+test("accepts generic usage fields when the backend declares the token unit", () => {
+  const value = normalizeEntitlement({ plan: "PRO", status: "ACTIVE", usageUnit: "TOKEN", usagePeriod: "MONTH", limit: 2000000, used: 750000 });
+  assert.equal(value.unit, "TOKEN");
+  assert.equal(value.period, "MONTH");
+  assert.equal(value.remaining, 1250000);
+  assert.equal(formatUsageSummary(value), "PRO · 이번 달 1.3M/2M 토큰 남음");
+});
+
 test("labels guest allowance as a total trial instead of a daily limit", () => {
   const value = normalizeEntitlement({ plan: "GUEST", limit: 3, used: 1, remaining: 2 });
   assert.equal(formatUsageSummary(value), "체험 · 2/3회 남음");
@@ -26,7 +53,7 @@ test("treats only active or cancellation-pending PRO subscriptions as accessible
   assert.equal(hasActiveProAccess({ plan: "PRO", status: "CANCELED", cancelAtPeriodEnd: true }), true);
   assert.equal(hasActiveProAccess({ plan: "PRO", status: "PAST_DUE" }), false);
   assert.equal(hasActiveProAccess({ plan: "PRO", status: "EXPIRED" }), false);
-  assert.equal(formatUsageSummary({ plan: "PRO", status: "PAST_DUE" }), "PRO · 결제 확인 필요");
+  assert.equal(formatUsageSummary(normalizeEntitlement({ plan: "PRO", status: "PAST_DUE" })), "PRO · 결제 확인 필요");
 });
 
 test("distinguishes guest login and free upgrade quota actions", () => {
@@ -37,6 +64,28 @@ test("distinguishes guest login and free upgrade quota actions", () => {
   const proLimit = classifyUsageError({ code: "DAILY_USAGE_LIMIT_EXCEEDED" }, normalizeEntitlement({ plan: "PRO" }));
   assert.equal(proLimit.requiresUpgrade, false);
   assert.equal(classifyUsageError({ code: "PAYMENT_VERIFICATION_FAILED" }).requiresBillingManagement, true);
+});
+
+test("classifies token budget errors from the response plan", () => {
+  const guest = classifyUsageError(
+    { code: "TOKEN_BUDGET_EXCEEDED" },
+    normalizeEntitlement({ plan: "GUEST", usageUnit: "TOKEN" }),
+  );
+  assert.equal(guest.requiresLogin, true);
+
+  const free = classifyUsageError(
+    { code: "TOKEN_BUDGET_EXCEEDED" },
+    normalizeEntitlement({ plan: "FREE", usageUnit: "TOKEN" }),
+  );
+  assert.equal(free.kind, "free-limit");
+  assert.equal(free.requiresUpgrade, true);
+
+  const pro = classifyUsageError(
+    { code: "MONTHLY_TOKEN_LIMIT_EXCEEDED" },
+    normalizeEntitlement({ plan: "PRO", usageUnit: "TOKEN" }),
+  );
+  assert.equal(pro.kind, "pro-limit");
+  assert.equal(pro.requiresUpgrade, false);
 });
 
 test("reuses the same guest session UUID from storage", () => {

@@ -1,4 +1,5 @@
 const PLANS = Object.freeze({ GUEST: "GUEST", FREE: "FREE", PRO: "PRO" });
+const TOKEN_FIELD_NAMES = ["tokenLimit", "tokensUsed", "tokensRemaining"];
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -30,8 +31,10 @@ function findEntitlementSource(payload) {
     root,
   ].map(asRecord);
   return candidates.find((candidate) => [
-    "plan", "tier", "dailyLimit", "daily_limit", "limit", "usedToday", "used_today",
+    "plan", "tier",
+    "dailyLimit", "daily_limit", "limit", "usedToday", "used_today",
     "remainingToday", "remaining_today", "remaining", "cancelAtPeriodEnd", "cancel_at_period_end",
+    ...TOKEN_FIELD_NAMES,
   ].some((key) => candidate[key] !== undefined)) || {};
 }
 
@@ -41,14 +44,20 @@ function normalizeEntitlement(payload, options = {}) {
   const source = findEntitlementSource(payload);
   const known = Object.keys(source).length > 0;
   const plan = normalizePlan(firstDefined(source.plan, source.tier, source.subscriptionPlan), fallbackPlan);
-  const limit = toNonNegativeNumber(firstDefined(source.dailyLimit, source.daily_limit, source.limit, source.quota));
-  const used = toNonNegativeNumber(firstDefined(source.usedToday, source.used_today, source.used, source.usageCount));
-  const explicitRemaining = toNonNegativeNumber(firstDefined(source.remainingToday, source.remaining_today, source.remaining));
+  const rawUnit = String(firstDefined(source.usageUnit, "")).toUpperCase();
+  const unit = rawUnit.startsWith("TOKEN") || TOKEN_FIELD_NAMES.some((key) => source[key] !== undefined) ? "TOKEN" : "REQUEST";
+  const period = String(firstDefined(source.usagePeriod, source.period, plan === PLANS.GUEST ? "LIFETIME" : "DAY")).toUpperCase();
+  const tokenValues = unit === "TOKEN";
+  const limit = toNonNegativeNumber(firstDefined(tokenValues ? source.tokenLimit : undefined, source.dailyLimit, source.daily_limit, source.limit, source.quota));
+  const used = toNonNegativeNumber(firstDefined(tokenValues ? source.tokensUsed : undefined, source.usedToday, source.used_today, source.used, source.usageCount));
+  const explicitRemaining = toNonNegativeNumber(firstDefined(tokenValues ? source.tokensRemaining : undefined, source.remainingToday, source.remaining_today, source.remaining));
   const remaining = explicitRemaining ?? (limit !== null && used !== null ? Math.max(0, limit - used) : null);
   return Object.freeze({
     known,
     plan,
     status: String(firstDefined(source.status, source.subscriptionStatus, known ? "ACTIVE" : "UNKNOWN")).toUpperCase(),
+    unit,
+    period,
     limit,
     used,
     remaining,
@@ -62,13 +71,17 @@ function getUsageErrorCode(error) {
   return String(error?.code || error?.payload?.code || "").trim().toUpperCase();
 }
 
-function classifyUsageError(error, entitlement = normalizeEntitlement(null)) {
+function classifyUsageError(error, entitlement = normalizeEntitlement(error?.payload)) {
   const code = getUsageErrorCode(error);
-  if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) {
-    return Object.freeze({ kind: "guest-limit", code, requiresLogin: true, requiresUpgrade: false, retryable: false, message: "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요." });
+  const plan = entitlement?.plan || PLANS.GUEST;
+  const isTokenLimit = code.includes("TOKEN") && (code.includes("LIMIT") || code.includes("BUDGET"));
+  const isGuestLimit = ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "GUEST_TOKEN_BUDGET_EXCEEDED"].includes(code)
+    || (isTokenLimit && plan === PLANS.GUEST);
+  if (isGuestLimit) {
+    return Object.freeze({ kind: "guest-limit", code, requiresLogin: true, requiresUpgrade: false, retryable: false, message: "무료 체험 사용량을 모두 사용했습니다. 로그인 후 계속 이용해주세요." });
   }
-  if (["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(code)) {
-    const requiresUpgrade = entitlement.plan !== PLANS.PRO;
+  if (isTokenLimit || ["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(code)) {
+    const requiresUpgrade = plan !== PLANS.PRO;
     return Object.freeze({
       kind: requiresUpgrade ? "free-limit" : "pro-limit",
       code,
@@ -76,8 +89,8 @@ function classifyUsageError(error, entitlement = normalizeEntitlement(null)) {
       requiresUpgrade,
       retryable: false,
       message: requiresUpgrade
-        ? "오늘의 무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 자정 이후 다시 이용해주세요."
-        : "오늘의 PRO 사용량을 모두 사용했습니다. 자정 이후 다시 이용해주세요.",
+        ? "무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요."
+        : "PRO 사용량을 모두 사용했습니다. 초기화 이후 다시 이용해주세요.",
     });
   }
   if (code === "SUBSCRIPTION_PAST_DUE") {
@@ -90,19 +103,43 @@ function classifyUsageError(error, entitlement = normalizeEntitlement(null)) {
 }
 
 function hasActiveProAccess(entitlement) {
-  const value = normalizeEntitlement(entitlement, { fallbackPlan: entitlement?.plan || PLANS.GUEST });
-  if (value.plan !== PLANS.PRO) return false;
-  return value.status === "ACTIVE" || (value.status === "CANCELED" && value.cancelAtPeriodEnd);
+  return entitlement?.plan === PLANS.PRO
+    && (entitlement.status === "ACTIVE" || (entitlement.status === "CANCELED" && entitlement.cancelAtPeriodEnd));
+}
+
+function formatTokenNumber(number, compact) {
+  return Math.round(number).toLocaleString(compact ? "en" : "ko-KR", compact ? { notation: "compact", maximumFractionDigits: 1 } : undefined);
+}
+
+function formatUsageSummaryWith(entitlement, compactTokens) {
+  const value = entitlement;
+  const activePro = value.plan === PLANS.PRO && (value.status === "ACTIVE" || (value.status === "CANCELED" && value.cancelAtPeriodEnd));
+  if (value.plan === PLANS.PRO && value.status === "PAST_DUE") return "PRO · 결제 확인 필요";
+  if (value.plan === PLANS.PRO && !activePro) return "FREE · PRO 이용 종료";
+  const planLabel = activePro ? "PRO" : value.plan === PLANS.FREE ? "FREE" : "체험";
+  if (!value.known || value.remaining === null || value.limit === null) return planLabel;
+  const periodLabel = value.period === "DAY" ? "오늘 " : value.period === "MONTH" ? "이번 달 " : "";
+  const tokenValues = value.unit === "TOKEN";
+  const remaining = tokenValues ? formatTokenNumber(value.remaining, compactTokens) : value.remaining;
+  const limit = tokenValues ? formatTokenNumber(value.limit, compactTokens) : value.limit;
+  return `${planLabel} · ${periodLabel}${remaining}/${limit}${tokenValues ? " 토큰" : "회"} 남음`;
 }
 
 function formatUsageSummary(entitlement) {
-  const value = normalizeEntitlement(entitlement, { fallbackPlan: entitlement?.plan || PLANS.GUEST });
-  if (value.plan === PLANS.PRO && value.status === "PAST_DUE") return "PRO · 결제 확인 필요";
-  if (value.plan === PLANS.PRO && !hasActiveProAccess(value)) return "FREE · PRO 이용 종료";
-  const planLabel = hasActiveProAccess(value) ? "PRO" : value.plan === PLANS.FREE ? "FREE" : "체험";
-  if (!value.known || value.remaining === null || value.limit === null) return planLabel;
-  const periodLabel = value.plan === PLANS.GUEST ? "" : "오늘 ";
-  return `${planLabel} · ${periodLabel}${value.remaining}/${value.limit}회 남음`;
+  return formatUsageSummaryWith(entitlement, true);
 }
 
-export { PLANS, classifyUsageError, formatUsageSummary, getUsageErrorCode, hasActiveProAccess, normalizeEntitlement, normalizePlan };
+function formatUsageAccessibilityLabel(entitlement) {
+  return formatUsageSummaryWith(entitlement, false);
+}
+
+export {
+  PLANS,
+  classifyUsageError,
+  formatUsageAccessibilityLabel,
+  formatUsageSummary,
+  getUsageErrorCode,
+  hasActiveProAccess,
+  normalizeEntitlement,
+  normalizePlan,
+};

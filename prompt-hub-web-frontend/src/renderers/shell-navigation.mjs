@@ -75,7 +75,7 @@
       : authButton;
     const makeAuthHint = state.route === "make"
       ? state.isLoggedIn
-        ? `${escapeHtml(usageSummary)}<br />사용량은 매일 자정(KST)에 초기화됩니다.`
+        ? `${escapeHtml(usageSummary)}<br />사용량과 초기화는 서버 기준입니다.`
         : `${state.entitlement?.known ? escapeHtml(usageSummary) : "비로그인 무료 체험 · 사용량은 서버에서 확인합니다."}<br />로그인하면 대화를 저장하고 이어서 사용할 수 있습니다.`
       : "";
 

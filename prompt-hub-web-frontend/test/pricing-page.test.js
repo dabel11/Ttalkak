@@ -23,6 +23,9 @@ test("FREE pricing exposes upgrade while PRO cancellation keeps management avail
   });
   assert.match(freeHtml, /data-subscription-checkout/);
   assert.match(freeHtml, /FREE · 오늘 3\/10회 남음/);
+  assert.match(freeHtml, /기본 사용량 제공/);
+  assert.match(freeHtml, /FREE보다 넉넉한 사용량/);
+  assert.doesNotMatch(freeHtml, /하루 (10|100)회 첨삭/);
 
   const proHtml = PricingPageView({ escapeHtml }, {
     entitlement: { plan: "PRO", status: "CANCELED", known: true, cancelAtPeriodEnd: true, currentPeriodEnd: "2026-10-25" },

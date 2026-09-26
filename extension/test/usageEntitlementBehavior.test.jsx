@@ -8,6 +8,7 @@ vi.mock("../src/api/subscriptions", () => ({
 }));
 
 import { useEntitlement } from "../src/hooks/useEntitlement";
+import { formatUsageAccessibilityLabel, formatUsageSummary, normalizeEntitlement } from "../src/policies/usage-entitlement.mjs";
 
 afterEach(() => {
   cleanup();
@@ -15,6 +16,20 @@ afterEach(() => {
 });
 
 describe("usage entitlement", () => {
+  test("formats token usage compactly while keeping a full accessibility label", () => {
+    const value = normalizeEntitlement({
+      plan: "FREE",
+      usageUnit: "TOKEN",
+      usagePeriod: "DAY",
+      tokenLimit: 100000,
+      tokensUsed: 31500,
+      tokensRemaining: 68500,
+    });
+
+    expect(formatUsageSummary(value)).toBe("FREE · 오늘 68.5K/100K 토큰 남음");
+    expect(formatUsageAccessibilityLabel(value)).toBe("FREE · 오늘 68,500/100,000 토큰 남음");
+  });
+
   test("shows FREE for a logged-in account while the subscription API is unavailable", async () => {
     subscriptionApi.request.mockRejectedValue({ status: 404 });
     const ragConfig = { backendApiUrl: "http://localhost:8080" };

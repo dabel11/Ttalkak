@@ -53,6 +53,31 @@ test("pricing integrates FREE, PRO, and cancellation-pending backend states", as
   await expect(page.locator("[data-subscription-checkout]")).toHaveCount(0);
 });
 
+test("pricing accepts token usage responses and renders compact values", async ({ page }) => {
+  await installAuthenticatedState(page);
+  await page.route(API_PATTERN, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/subscriptions/me") {
+      return json(route, {
+        plan: "FREE",
+        status: "ACTIVE",
+        usageUnit: "TOKEN",
+        usagePeriod: "DAY",
+        tokenLimit: 100000,
+        tokensUsed: 31500,
+        tokensRemaining: 68500,
+      });
+    }
+    if (url.pathname === "/api/prompts") return json(route, { items: [], page: 1, totalPages: 1, totalElements: 0 });
+    if (url.pathname.startsWith("/api/tags")) return json(route, { items: [] });
+    return json(route, { items: [] });
+  });
+
+  await gotoApp(page, "/#/pricing");
+  await waitForAppHydration(page);
+  await expect(page.getByText("현재 요금제 · FREE · 오늘 68.5K/100K 토큰 남음")).toBeVisible();
+});
+
 test("guest pricing asks for login and does not claim a paid account state", async ({ page }) => {
   await page.route(API_PATTERN, async (route) => {
     const url = new URL(route.request().url());

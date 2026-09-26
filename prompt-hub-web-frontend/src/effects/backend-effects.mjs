@@ -48,7 +48,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       case "INTERNAL_SERVER_ERROR":
         return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
       case "FREE_TRIAL_LIMIT_EXCEEDED":
-        return "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
+      case "GUEST_TOKEN_BUDGET_EXCEEDED":
+        return "무료 체험 사용량을 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
       case "REVISION_REQUEST_NOT_EDITABLE":
         return "현재 상태에서는 수정 요청 사유를 변경할 수 없습니다.";
       case "AUTHOR_REVISION_REQUEST_ALREADY_ACTIVE":

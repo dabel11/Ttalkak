@@ -9,6 +9,7 @@ import { makeTitle } from "../utils/promptUtils.js";
 import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 import { classifyMakeError } from "../../../shared/make-message-model.js";
+import { classifyUsageError, normalizeEntitlement } from "../policies/usage-entitlement.mjs";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -25,20 +26,11 @@ export function useMessageRetry({
 
   function syncUsageError(error) {
     onEntitlement?.(error?.payload);
-    const code = String(error?.code || error?.payload?.code || "").toUpperCase();
-    if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) {
-      setAuthMode("login");
-      return true;
-    }
-    if (["DAILY_USAGE_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "USAGE_LIMIT_EXCEEDED"].includes(code)) {
-      showNotice("오늘의 사용량을 모두 사용했습니다. 웹에서 요금제를 확인해주세요.");
-      return true;
-    }
-    if (["SUBSCRIPTION_PAST_DUE", "PAYMENT_VERIFICATION_FAILED"].includes(code)) {
-      showNotice("결제 상태를 확인해주세요.");
-      return true;
-    }
-    return false;
+    const usageError = classifyUsageError(error, normalizeEntitlement(error?.payload, { fallbackPlan: isLoggedIn ? "FREE" : "GUEST" }));
+    if (!usageError) return false;
+    if (usageError.requiresLogin) setAuthMode("login");
+    else showNotice(usageError.message);
+    return true;
   }
 
   function startEditMessage(message) {

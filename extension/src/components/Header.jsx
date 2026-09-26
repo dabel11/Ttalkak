@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import { getRagStatusText } from "../utils/ragStatus";
-import { formatUsageSummary } from "../policies/usage-entitlement.mjs";
+import { formatUsageAccessibilityLabel, formatUsageSummary } from "../policies/usage-entitlement.mjs";
 
 export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus, entitlement, onUpgrade }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const closeTimerRef = useRef(null);
+  const usageSummary = formatUsageSummary(entitlement);
+  const usageLabel = formatUsageAccessibilityLabel(entitlement);
 
   function clearCloseTimer() {
     if (!closeTimerRef.current) return;
@@ -52,8 +54,8 @@ export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus, 
       </div>
       <div className="header-actions">
         <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
-        <button className="usage-button" type="button" onClick={onUpgrade} title="웹에서 요금제와 사용량 보기">
-          {formatUsageSummary(entitlement)}
+        <button className="usage-button" type="button" onClick={onUpgrade} title={`${usageLabel} · 웹에서 요금제와 사용량 보기`} aria-label={`${usageLabel}. 웹에서 요금제와 사용량 보기`}>
+          {usageSummary}
         </button>
         {currentUser ? (
           <div
