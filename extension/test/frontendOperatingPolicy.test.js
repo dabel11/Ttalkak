@@ -33,9 +33,10 @@ test("release documentation remains discoverable and cross-platform", () => {
 
 test("release checklist requires the live GitHub production smoke before publishing", () => {
   assert.match(releaseChecklist, /Extension production release smoke/);
-  for (const input of ["backend_api_url", "extension_id", "privacy_policy_url", "support_url", "release_owner"]) {
+  for (const input of ["backend_api_url", "web_app_url", "extension_id", "privacy_policy_url", "support_url", "release_owner"]) {
     assert.match(releaseWorkflow, new RegExp(`${input}:`));
   }
+  assert.match(releaseWorkflow, /VITE_WEB_APP_URL:\s*\$\{\{ inputs\.web_app_url \}\}/);
   assert.match(releaseWorkflow, /npm run release:prepare/);
   assert.match(releaseWorkflow, /extension\/dist-prod\//);
 });

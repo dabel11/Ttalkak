@@ -7,6 +7,10 @@ on:
         description: Spring Boot production HTTPS origin
         required: true
         type: string
+      web_app_url:
+        description: TTALKAK production HTTPS web origin
+        required: true
+        type: string
       extension_id:
         description: Chrome Web Store extension ID
         required: true
@@ -34,6 +38,7 @@ jobs:
     timeout-minutes: 15
     env:
       VITE_BACKEND_API_URL: ${{ inputs.backend_api_url }}
+      VITE_WEB_APP_URL: ${{ inputs.web_app_url }}
       TTALKAK_PRODUCTION_EXTENSION_ID: ${{ inputs.extension_id }}
       TTALKAK_PRIVACY_POLICY_URL: ${{ inputs.privacy_policy_url }}
       TTALKAK_SUPPORT_URL: ${{ inputs.support_url }}

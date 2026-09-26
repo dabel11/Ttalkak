@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
+import com.ttalkak.subscription.UsageEntitlement;
+import com.ttalkak.subscription.UsageService;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -34,16 +36,19 @@ public class PromptController {
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
     private final Duration ragResponseTimeout;
+    private final UsageService usageService;
 
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PromptController(PromptRepository promptRepository,
-                            PromptSaveRepository saveRepository,
-                            PromptLikeRepository likeRepository,
-                            TagRepository tagRepository,
-                            AuthService authService,
-                            MakeThreadRepository makeThreadRepository,
+                             PromptSaveRepository saveRepository,
+                             PromptLikeRepository likeRepository,
+                             TagRepository tagRepository,
+                             AuthService authService,
+                             UsageService usageService,
+                             MakeThreadRepository makeThreadRepository,
                             ObjectMapper objectMapper,
                             WebClient.Builder webClientBuilder,
                             // application.yml 의 rag.response-timeout 을 주입한다("75s" → Duration).
@@ -56,10 +61,24 @@ public class PromptController {
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
+        this.usageService = usageService;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
 		this.ragResponseTimeout = ragResponseTimeout;
+    }
+
+    public PromptController(PromptRepository promptRepository,
+                            PromptSaveRepository saveRepository,
+                            PromptLikeRepository likeRepository,
+                            TagRepository tagRepository,
+                            AuthService authService,
+                            MakeThreadRepository makeThreadRepository,
+                            ObjectMapper objectMapper,
+                            WebClient.Builder webClientBuilder,
+                            Duration ragResponseTimeout) {
+        this(promptRepository, saveRepository, likeRepository, tagRepository, authService, null,
+                makeThreadRepository, objectMapper, webClientBuilder, ragResponseTimeout);
     }
 
     @GetMapping
@@ -698,10 +717,27 @@ public class PromptController {
     }
 
     @PostMapping("/improve")
-    public Map<String, Object> improve(
+    public Map<String, Object> improveWithUsage(
             @RequestBody ImproveRequest request,
             @RequestHeader(value = "Authorization", required = false)
+            String authorization,
+            @RequestHeader(value = "X-Session-UUID", required = false)
+            String sessionUuid
+    ) {
+        return improve(request, authorization, sessionUuid);
+    }
+
+    public Map<String, Object> improve(
+            ImproveRequest request,
             String authorization
+    ) {
+        return improve(request, authorization, null);
+    }
+
+    private Map<String, Object> improve(
+            ImproveRequest request,
+            String authorization,
+            String sessionUuid
     ) {
         String prompt = request.prompt() == null
                 ? ""
@@ -717,6 +753,14 @@ public class PromptController {
 
         Long memberId =
                 authService.currentMemberIdOrNull(authorization);
+
+        if (memberId == null && authorization != null && !authorization.isBlank()) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "LOGIN_REQUIRED",
+                    "로그인이 만료되었거나 올바르지 않습니다."
+            );
+        }
 
 	Long requestedThreadId = resolveRequestedThreadId(request);
 
@@ -770,13 +814,13 @@ public class PromptController {
                     prompt
             );
             if (previousResponse != null) {
-                return replayResponse(
+                return attachCurrentUsage(replayResponse(
                         previousResponse,
                         initialThread,
                         requestId,
                         messageId,
                         editingMessage
-                );
+                ), memberId);
             }
         }
     }
@@ -805,13 +849,13 @@ public class PromptController {
         );
 
     if (previousResponse != null) {
-        return replayResponse(
+        return attachCurrentUsage(replayResponse(
                 previousResponse,
                 thread,
                 requestId,
                 messageId,
                 editingMessage
-        );
+        ), memberId);
     }
 
 		if (editingMessage) {
@@ -824,6 +868,10 @@ public class PromptController {
 	} else {
 		messages = copyHistory(request.history());
 	}
+
+    UsageEntitlement usage = usageService == null
+            ? null
+            : usageService.consume(memberId, sessionUuid);
 
 	List<Map<String, String>> ragHistory;
 
@@ -942,13 +990,13 @@ public class PromptController {
                                     prompt
                             );
                             if (previousResponse != null) {
-                                return replayResponse(
+                                return attachCurrentUsage(replayResponse(
                                         previousResponse,
                                         existingThread,
                                         requestId,
                                         messageId,
                                         editingMessage
-                                );
+                                ), memberId);
                             }
                         }
                     }
@@ -969,11 +1017,19 @@ public class PromptController {
         body.put("threadId", savedThreadId);
         body.put("requestId", requestId);
         body.put("replayed", false);
+        if (usage != null) body.put("usage", usage.toMap());
 
 		if (editingMessage) {
 			body.put("editedMessageId", messageId);
 		}
 
+        return body;
+    }
+
+    private Map<String, Object> attachCurrentUsage(Map<String, Object> body, Long memberId) {
+        if (usageService != null && memberId != null) {
+            body.put("usage", usageService.currentMember(memberId).toMap());
+        }
         return body;
     }
 

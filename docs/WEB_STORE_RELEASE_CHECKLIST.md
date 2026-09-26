@@ -2,13 +2,14 @@
 
 Use this checklist for the production Extension only. The unpacked `dist-dev` Extension and its fixed development ID are not production release evidence.
 
-The release is blocked while any production value is `TBD`. Set `VITE_BACKEND_API_URL`, `TTALKAK_PRODUCTION_EXTENSION_ID`, `TTALKAK_PRIVACY_POLICY_URL`, `TTALKAK_SUPPORT_URL`, and `TTALKAK_RELEASE_OWNER`, then run `npm run release:prepare` in `extension`. The command builds the production artifact and fails unless its manifest, live CORS preflight, privacy policy, and support page match the supplied values.
+The release is blocked while any production value is `TBD`. Set `VITE_BACKEND_API_URL`, `VITE_WEB_APP_URL`, `TTALKAK_PRODUCTION_EXTENSION_ID`, `TTALKAK_PRIVACY_POLICY_URL`, `TTALKAK_SUPPORT_URL`, and `TTALKAK_RELEASE_OWNER`, then run `npm run release:prepare` in `extension`. The command builds the production artifact and fails unless its manifest, web upgrade destination, live CORS preflight, privacy policy, and support page match the supplied values.
 
-The same mandatory gate is available in GitHub Actions as **Extension production release smoke**. Run it manually with the five confirmed production values. A successful run uploads the exact `dist-prod` artifact that passed configuration, live CORS, privacy-policy, and support-page checks; do not publish artifacts from a failed or skipped run.
+The same mandatory gate is available in GitHub Actions as **Extension production release smoke**. Run it manually with the six confirmed production values. A successful run uploads the exact `dist-prod` artifact that passed configuration, live CORS, privacy-policy, and support-page checks; do not publish artifacts from a failed or skipped run.
 
 ## Configuration
 
 - [ ] Production HTTPS Spring Boot API URL is confirmed.
+- [ ] Production HTTPS Web app URL is confirmed.
 - [ ] Chrome Web Store Extension ID is recorded in `FRONTEND_OPERATING_POLICIES.md`.
 - [ ] Backend CORS allows the exact production `chrome-extension://...` origin.
 - [ ] CORS preflight permits required methods, `content-type`, `authorization`, and credentials.

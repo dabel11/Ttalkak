@@ -6,6 +6,8 @@ import com.ttalkak.auth.AuthService;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.subscription.UsageEntitlement;
+import com.ttalkak.subscription.UsageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -115,6 +117,38 @@ class PromptImproveConversationTest {
 		verify(
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void mappedAnonymousImproveConsumesSessionUsageAndReturnsIt() {
+		String sessionUuid = "0f83dfe0-1c25-4df0-b3d8-1a1a1a1a1a1a";
+		UsageService usageService = mock(UsageService.class);
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		when(usageService.consume(null, sessionUuid)).thenReturn(
+				new UsageEntitlement("GUEST", "ACTIVE", 3, 1, 2, null, null, false)
+		);
+		ReflectionTestUtils.setField(controller, "usageService", usageService);
+
+		Map<String, Object> response = controller.improveWithUsage(
+				request("운동 계획을 만들어줘", null, null), null, sessionUuid
+		);
+
+		assertEquals(2, ((Map<?, ?>) response.get("usage")).get("remainingToday"));
+		verify(usageService).consume(null, sessionUuid);
+	}
+
+	@Test
+	void mappedImproveRejectsAnInvalidAuthorizationBeforeGuestUsage() {
+		UsageService usageService = mock(UsageService.class);
+		when(authService.currentMemberIdOrNull("Bearer expired")).thenReturn(null);
+		ReflectionTestUtils.setField(controller, "usageService", usageService);
+
+		ApiException exception = assertThrows(ApiException.class, () -> controller.improveWithUsage(
+				request("운동 계획을 만들어줘", null, null), "Bearer expired", null
+		));
+
+		assertEquals("LOGIN_REQUIRED", exception.getCode());
+		verify(usageService, never()).consume(any(), any());
 	}
 
 	@Test

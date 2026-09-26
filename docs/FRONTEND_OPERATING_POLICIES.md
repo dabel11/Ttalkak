@@ -24,10 +24,10 @@ Complete every `TBD` before a production release. Values containing credentials 
 | Extension support URL | TBD | Product | Public support page |
 | Incident/contact channel | TBD | Team lead | Named monitored channel |
 | Web production command | `npm run build:prod` | Web | `npm run verify` success |
-| Extension production command | PowerShell: `$env:VITE_BACKEND_API_URL='https://...'; npm run build:prod`<br>POSIX: `VITE_BACKEND_API_URL=https://... npm run build:prod` | Extension | `dist-prod` policy check |
+| Extension production command | PowerShell: `$env:VITE_BACKEND_API_URL='https://...'; $env:VITE_WEB_APP_URL='https://...'; npm run build:prod`<br>POSIX: `VITE_BACKEND_API_URL=https://... VITE_WEB_APP_URL=https://... npm run build:prod` | Extension | `dist-prod` policy check |
 | Post-release smoke | See `WEB_STORE_RELEASE_CHECKLIST.md` | Release owner | Signed checklist |
 
-Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks both public pages; and performs an exact-origin credentialed CORS preflight. Development IDs and placeholder hosts never count as release evidence.
+Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API, Web app URL, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks both public pages; and performs an exact-origin credentialed CORS preflight. Development IDs and placeholder hosts never count as release evidence.
 
 ## 2. API change procedure
 

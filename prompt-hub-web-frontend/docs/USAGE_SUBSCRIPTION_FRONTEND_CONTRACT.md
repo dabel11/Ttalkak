@@ -46,3 +46,10 @@ Checkout 응답은 `checkoutUrl`, Portal 응답은 `portalUrl`을 반환합니�
 | `PAYMENT_VERIFICATION_FAILED` | PRO 활성화 금지 및 결제 확인 안내 |
 
 제한 오류 응답에도 최신 `usage` 또는 `entitlement`를 포함하면 UI가 즉시 잔여량을 갱신합니다. 구독 API가 아직 배포되지 않은 환경의 `404`와 `501`은 첨삭 기능을 막지 않습니다.
+
+## Backend 운영 경계
+
+- 사용량 기본값은 Guest 총 3회, FREE 하루 10회, PRO 하루 100회이며 각각 `GUEST_USAGE_LIMIT`, `FREE_DAILY_USAGE_LIMIT`, `PRO_DAILY_USAGE_LIMIT`로 조정할 수 있습니다.
+- 일일 사용량 초기화 기준은 `USAGE_TIME_ZONE`이며 기본값은 `Asia/Seoul`입니다.
+- 결제 공급자가 설정되지 않은 환경에서 Checkout과 Portal API는 `501 / BILLING_PROVIDER_NOT_CONFIGURED`를 반환합니다.
+- 실제 결제 공급자 연동은 Backend의 `BillingGateway` 구현으로 제공하고, Checkout·Portal 주소는 HTTPS만 허용합니다.

@@ -5,7 +5,6 @@ import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
 import { formatUsageSummary } from "./usage/usage-entitlement.mjs";
 import { createUsageController } from "./usage/usage-controller.mjs";
-/** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
 if (!modules) throw moduleLoadError("application");
@@ -617,7 +616,7 @@ const saveCurrentAccountScope = authSession.saveScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = (...args) => (cancelActiveMakeRequest(), authSession.clear(...args));
-const usageController = createUsageController({ state, api: apiClient, hasBackendToken: hasBackendAuthToken, getToken: getAuthToken, handleError: handleBackendAccessError, notice: showNotice, render, window });
+const usageController = createUsageController({ state, api: apiClient, hasBackendToken: hasBackendAuthToken, getToken: getAuthToken, handleError: handleBackendAccessError, notice: showNotice, render, window, document });
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded, hydrateEntitlement: usageController.refresh });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
 const { AuthModal } = authView;
@@ -2469,6 +2468,7 @@ appBootstrap = createAppBootstrap({
   normalizeAssistantPromptOutputs,
 });
 const bootstrapResult = appBootstrap.bootstrap();
+usageController.startReturnRefresh();
 const entitlementHydration = Promise.resolve(bootstrapResult).then(() => usageController.refresh({ quiet: true, shouldRender: true }));
 const needsAdminRuntime = state.adminMode || state.route === "admin";
 const needsShareRuntime = state.route === "share";

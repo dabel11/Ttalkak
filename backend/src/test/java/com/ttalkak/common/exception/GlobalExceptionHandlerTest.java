@@ -40,6 +40,19 @@ class GlobalExceptionHandlerTest {
                 );
     }
 
+    @Test
+    void apiExceptionCanExposeSafeStructuredDetails() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new ConflictController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(get("/test/usage-limit"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("DAILY_USAGE_LIMIT_EXCEEDED"))
+                .andExpect(jsonPath("$.usage.remainingToday").value(0));
+    }
+
     @RestController
     private static class ConflictController {
 
@@ -48,6 +61,16 @@ class GlobalExceptionHandlerTest {
             throw new ObjectOptimisticLockingFailureException(
                     MakeThread.class,
                     42L
+            );
+        }
+
+        @GetMapping("/test/usage-limit")
+        public void usageLimit() {
+            throw new ApiException(
+                    org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+                    "DAILY_USAGE_LIMIT_EXCEEDED",
+                    "오늘의 사용량을 모두 사용했습니다.",
+                    java.util.Map.of("usage", java.util.Map.of("remainingToday", 0))
             );
         }
     }

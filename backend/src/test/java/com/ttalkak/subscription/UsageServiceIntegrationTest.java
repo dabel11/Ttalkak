@@ -1,0 +1,70 @@
+package com.ttalkak.subscription;
+
+import com.ttalkak.common.exception.ApiException;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@DataJpaTest
+@Import(UsageService.class)
+class UsageServiceIntegrationTest {
+    @Autowired
+    private UsageService usageService;
+
+    @Test
+    void guestAllowanceIsPersistedAndRejectedAfterThreeRequests() {
+        String sessionUuid = UUID.randomUUID().toString();
+        assertEquals(2, usageService.consume(null, sessionUuid).remainingToday());
+        assertEquals(1, usageService.consume(null, sessionUuid).remainingToday());
+        assertEquals(0, usageService.consume(null, sessionUuid).remainingToday());
+
+        ApiException exception = assertThrows(ApiException.class, () -> usageService.consume(null, sessionUuid));
+        assertEquals("FREE_TRIAL_LIMIT_EXCEEDED", exception.getCode());
+        assertTrue(exception.getDetails().containsKey("usage"));
+    }
+
+    @Test
+    void memberAllowanceUsesFreeAndActiveProLimits() {
+        Long memberId = 77L;
+        UsageEntitlement free = usageService.consume(memberId, null);
+        assertEquals("FREE", free.plan());
+        assertEquals(10, free.dailyLimit());
+        assertEquals(9, free.remainingToday());
+
+        UsageEntitlement pro = usageService.applySubscription(
+                memberId, "PRO", "ACTIVE", LocalDateTime.now().plusMonths(1), false
+        );
+        assertEquals(100, pro.dailyLimit());
+        assertEquals(98, usageService.consume(memberId, null).remainingToday());
+    }
+
+    @Test
+    void pastDueSubscriptionBlocksUsageWithCurrentEntitlement() {
+        Long memberId = 88L;
+        usageService.applySubscription(memberId, "PRO", "PAST_DUE", LocalDateTime.now().plusDays(2), false);
+        ApiException exception = assertThrows(ApiException.class, () -> usageService.consume(memberId, null));
+        assertEquals("SUBSCRIPTION_PAST_DUE", exception.getCode());
+        assertTrue(exception.getDetails().containsKey("usage"));
+    }
+
+    @Test
+    void endedCancellationPeriodFallsBackToFreeAccess() {
+        Long memberId = 99L;
+        UsageEntitlement entitlement = usageService.applySubscription(
+                memberId, "PRO", "CANCELED", LocalDateTime.now().minusMinutes(1), true
+        );
+
+        assertEquals("EXPIRED", entitlement.status());
+        assertEquals(10, entitlement.dailyLimit());
+        assertFalse(entitlement.cancelAtPeriodEnd());
+    }
+}

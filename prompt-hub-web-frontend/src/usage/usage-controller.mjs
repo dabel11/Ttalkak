@@ -2,19 +2,22 @@ import { normalizeEntitlement } from "./usage-entitlement.mjs";
 
 function createUsageController(ctx) {
   let destinationInFlight = false;
+  let stopReturnRefresh = null;
+  let refreshVersion = 0;
 
   async function refresh({ quiet = true, shouldRender = false } = {}) {
     const getSubscription = /** @type {Function|undefined} */ (ctx.api?.getSubscription);
     if (!ctx.state.isLoggedIn || !ctx.hasBackendToken() || !getSubscription) return ctx.state.entitlement;
+    const requestVersion = ++refreshVersion;
     const token = ctx.getToken();
     try {
       const payload = await getSubscription.call(ctx.api, token);
-      if (!ctx.state.isLoggedIn || ctx.getToken() !== token) return ctx.state.entitlement;
+      if (requestVersion !== refreshVersion || !ctx.state.isLoggedIn || ctx.getToken() !== token) return ctx.state.entitlement;
       const entitlement = normalizeEntitlement(payload, { fallbackPlan: "FREE" });
       if (entitlement.known) ctx.state.entitlement = entitlement;
       if (shouldRender) ctx.render();
     } catch (error) {
-      if (!ctx.state.isLoggedIn || ctx.getToken() !== token) return ctx.state.entitlement;
+      if (requestVersion !== refreshVersion || !ctx.state.isLoggedIn || ctx.getToken() !== token) return ctx.state.entitlement;
       const status = Number(error?.status || error?.payload?.status || 0);
       if (!quiet && ![404, 501].includes(status)) ctx.handleError(error, "사용량 정보를 불러오지 못했습니다.", { keepSession: true });
     }
@@ -56,7 +59,34 @@ function createUsageController(ctx) {
     }
   }
 
-  return Object.freeze({ openDestination, refresh });
+  function startReturnRefresh() {
+    if (stopReturnRefresh) return stopReturnRefresh;
+    const browserWindow = ctx.window;
+    const browserDocument = ctx.document;
+    if (!browserWindow?.addEventListener || !browserDocument?.addEventListener) return () => {};
+    let wasHidden = browserDocument.visibilityState === "hidden";
+    const refreshAfterReturn = () => { void refresh({ quiet: true, shouldRender: true }); };
+    const onPageShow = (event) => { if (event?.persisted) refreshAfterReturn(); };
+    const onVisibilityChange = () => {
+      if (browserDocument.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+      if (!wasHidden) return;
+      wasHidden = false;
+      refreshAfterReturn();
+    };
+    browserWindow.addEventListener("pageshow", onPageShow);
+    browserDocument.addEventListener("visibilitychange", onVisibilityChange);
+    stopReturnRefresh = () => {
+      browserWindow.removeEventListener("pageshow", onPageShow);
+      browserDocument.removeEventListener("visibilitychange", onVisibilityChange);
+      stopReturnRefresh = null;
+    };
+    return stopReturnRefresh;
+  }
+
+  return Object.freeze({ openDestination, refresh, startReturnRefresh });
 }
 
 export { createUsageController };

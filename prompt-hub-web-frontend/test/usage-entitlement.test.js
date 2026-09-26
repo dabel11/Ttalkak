@@ -143,3 +143,44 @@ test("prevents duplicate checkout requests and exposes a pending state", async (
   assert.deepEqual(destinations, ["https://payments.example/checkout"]);
   assert.equal(state.subscriptionActionPending, "");
 });
+
+test("refreshes account usage after returning from checkout", async () => {
+  const windowListeners = new Map();
+  const documentListeners = new Map();
+  const state = { isLoggedIn: true, entitlement: normalizeEntitlement({ plan: "FREE" }) };
+  let calls = 0;
+  const browserDocument = {
+    visibilityState: "visible",
+    addEventListener: (type, listener) => documentListeners.set(type, listener),
+    removeEventListener: (type) => documentListeners.delete(type),
+  };
+  const browserWindow = {
+    addEventListener: (type, listener) => windowListeners.set(type, listener),
+    removeEventListener: (type) => windowListeners.delete(type),
+  };
+  const controller = createUsageController({
+    state,
+    api: { getSubscription: async () => { calls += 1; return { plan: "PRO", dailyLimit: 100, remainingToday: 100 }; } },
+    hasBackendToken: () => true,
+    getToken: () => "member-token",
+    handleError: () => {},
+    notice: () => {},
+    render: () => {},
+    window: browserWindow,
+    document: browserDocument,
+  });
+  const stop = controller.startReturnRefresh();
+  browserDocument.visibilityState = "hidden";
+  documentListeners.get("visibilitychange")();
+  browserDocument.visibilityState = "visible";
+  documentListeners.get("visibilitychange")();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls, 1);
+  assert.equal(state.entitlement.plan, "PRO");
+  windowListeners.get("pageshow")({ persisted: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls, 2);
+  stop();
+  assert.equal(windowListeners.size, 0);
+  assert.equal(documentListeners.size, 0);
+});
