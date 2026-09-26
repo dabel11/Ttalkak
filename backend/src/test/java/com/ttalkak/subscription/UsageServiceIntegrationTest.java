@@ -77,11 +77,13 @@ class UsageServiceIntegrationTest {
 
     @Test
     void concurrentFirstGuestRequestsRespectTheTotalAllowance() throws Exception {
-        String sessionUuid = UUID.randomUUID().toString();
-        List<String> outcomes = runConcurrently(5, () -> usageService.consume(null, sessionUuid));
+        for (int attempt = 0; attempt < 5; attempt += 1) {
+            String sessionUuid = UUID.randomUUID().toString();
+            List<String> outcomes = runConcurrently(5, () -> usageService.consume(null, sessionUuid));
 
-        assertEquals(3, outcomes.stream().filter("SUCCESS"::equals).count(), outcomes.toString());
-        assertEquals(2, outcomes.stream().filter("FREE_TRIAL_LIMIT_EXCEEDED"::equals).count(), outcomes.toString());
+            assertEquals(3, outcomes.stream().filter("SUCCESS"::equals).count(), outcomes.toString());
+            assertEquals(2, outcomes.stream().filter("FREE_TRIAL_LIMIT_EXCEEDED"::equals).count(), outcomes.toString());
+        }
     }
 
     @Test

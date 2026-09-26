@@ -18,9 +18,11 @@ import java.util.UUID;
 
 @Service
 public class UsageService {
+    private static final int INITIALIZATION_LOCK_STRIPES = 64;
     private final GuestUsageRepository guestUsageRepository;
     private final MemberEntitlementRepository memberEntitlementRepository;
     private final UsageRowInitializer rowInitializer;
+    private final Object[] initializationLocks;
     private final int guestLimit;
     private final int freeDailyLimit;
     private final int proDailyLimit;
@@ -53,6 +55,10 @@ public class UsageService {
         this.guestUsageRepository = guestUsageRepository;
         this.memberEntitlementRepository = memberEntitlementRepository;
         this.rowInitializer = rowInitializer;
+        this.initializationLocks = new Object[INITIALIZATION_LOCK_STRIPES];
+        for (int index = 0; index < initializationLocks.length; index += 1) {
+            initializationLocks[index] = new Object();
+        }
         this.guestLimit = positive(guestLimit, "guest-limit");
         this.freeDailyLimit = positive(freeDailyLimit, "free-daily-limit");
         this.proDailyLimit = positive(proDailyLimit, "pro-daily-limit");
@@ -200,21 +206,29 @@ public class UsageService {
     }
 
     private DataIntegrityViolationException initializeGuest(String sessionUuid, LocalDateTime now) {
-        try {
-            rowInitializer.ensureGuest(sessionUuid, now);
-            return null;
-        } catch (DataIntegrityViolationException exception) {
-            return exception;
+        synchronized (initializationLock(sessionUuid)) {
+            try {
+                rowInitializer.ensureGuest(sessionUuid, now);
+                return null;
+            } catch (DataIntegrityViolationException exception) {
+                return exception;
+            }
         }
     }
 
     private DataIntegrityViolationException initializeMember(Long memberId, LocalDate today, LocalDateTime now) {
-        try {
-            rowInitializer.ensureMember(memberId, today, now);
-            return null;
-        } catch (DataIntegrityViolationException exception) {
-            return exception;
+        synchronized (initializationLock(memberId)) {
+            try {
+                rowInitializer.ensureMember(memberId, today, now);
+                return null;
+            } catch (DataIntegrityViolationException exception) {
+                return exception;
+            }
         }
+    }
+
+    private Object initializationLock(Object key) {
+        return initializationLocks[Math.floorMod(key.hashCode(), initializationLocks.length)];
     }
 
     private RuntimeException initializationFailure(String message, DataIntegrityViolationException collision) {
