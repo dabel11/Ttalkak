@@ -44,6 +44,7 @@ class PromptImproveConversationTest {
 	private PromptLikeRepository likeRepository;
 	private TagRepository tagRepository;
 	private AuthService authService;
+	private GuestUsageService guestUsageService;
 	private MakeThreadRepository makeThreadRepository;
 
 	private ObjectMapper objectMapper;
@@ -56,6 +57,7 @@ class PromptImproveConversationTest {
 		likeRepository = mock(PromptLikeRepository.class);
 		tagRepository = mock(TagRepository.class);
 		authService = mock(AuthService.class);
+		guestUsageService = mock(GuestUsageService.class);
 		makeThreadRepository = mock(MakeThreadRepository.class);
 
 		objectMapper = new ObjectMapper();
@@ -69,7 +71,8 @@ class PromptImproveConversationTest {
 				makeThreadRepository,
 				objectMapper,
 				successfulRagWebClientBuilder(),
-				Duration.ofSeconds(75)
+				Duration.ofSeconds(75),
+				guestUsageService
 		);
 
 		ReflectionTestUtils.setField(
@@ -99,7 +102,7 @@ class PromptImproveConversationTest {
 		when(
 				authService.currentMemberIdOrNull(null)).thenReturn(null);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"운동 계획을 만들어줘",
 						null,
@@ -118,6 +121,35 @@ class PromptImproveConversationTest {
 	}
 
 	@Test
+	void anonymousImproveCompletesReservedGuestUse() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		String session = "00000000-0000-4000-8000-000000000002";
+		GuestUsageService.Permit permit = new GuestUsageService.Permit("hash", "reservation-1");
+		when(guestUsageService.reserve(session)).thenReturn(permit);
+
+		controller.improve(request("운동 계획을 만들어줘", null, null), null, session);
+
+		verify(guestUsageService).reserve(session);
+		verify(guestUsageService).complete(permit);
+		verify(guestUsageService, never()).release(permit);
+	}
+
+	@Test
+	void aiFailureReleasesReservedGuestUse() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		String session = "00000000-0000-4000-8000-000000000003";
+		GuestUsageService.Permit permit = new GuestUsageService.Permit("hash", "reservation-2");
+		when(guestUsageService.reserve(session)).thenReturn(permit);
+		useRagResponse(HttpStatus.SERVICE_UNAVAILABLE, "{}");
+
+		assertThrows(ApiException.class,
+				() -> controller.improve(request("운동 계획을 만들어줘", null, null), null, session));
+
+		verify(guestUsageService).release(permit);
+		verify(guestUsageService, never()).complete(permit);
+	}
+
+	@Test
 	void loggedInFirstImproveCreatesThread()
 			throws Exception {
 		when(
@@ -125,7 +157,7 @@ class PromptImproveConversationTest {
 						AUTHORIZATION))
 				.thenReturn(7L);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"운동 계획을 만들어줘",
 						null,
@@ -202,7 +234,7 @@ class PromptImproveConversationTest {
 								7L))
 				.thenReturn(Optional.of(existingThread));
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"두 번째 요청",
 						null,
@@ -275,7 +307,7 @@ class PromptImproveConversationTest {
 		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
 				.thenReturn(Optional.of(existingThread));
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				new PromptController.ImproveRequest(
 						"운동 계획을 만들어줘",
 						"prompt_techniques",
@@ -305,7 +337,7 @@ class PromptImproveConversationTest {
 		when(authService.currentMemberIdOrNull(AUTHORIZATION))
 				.thenReturn(7L);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				new PromptController.ImproveRequest(
 						"운동 계획을 만들어줘",
 						"prompt_techniques",
@@ -360,7 +392,7 @@ class PromptImproveConversationTest {
 						List.of()
 				);
 
-		Map<String, Object> first = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> first = improve(request, AUTHORIZATION);
 		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(MakeThread.class);
 		verify(makeThreadRepository).save(captor.capture());
 		MakeThread created = captor.getValue();
@@ -370,7 +402,7 @@ class PromptImproveConversationTest {
 				"initial-request-123"
 		)).thenReturn(Optional.of(created));
 
-		Map<String, Object> replay = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> replay = improve(request, AUTHORIZATION);
 
 		assertEquals(first.get("threadId"), replay.get("threadId"));
 		assertEquals(true, replay.get("replayed"));
@@ -418,7 +450,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						new PromptController.ImproveRequest(
 								"다른 요청",
 								"prompt_techniques",
@@ -452,7 +484,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						new PromptController.ImproveRequest(
 								"운동 계획을 만들어줘",
 								"prompt_techniques",
@@ -486,7 +518,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"이어서 개선해줘",
 								null,
@@ -518,7 +550,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"이어서 개선해줘",
 								null,
@@ -569,7 +601,7 @@ class PromptImproveConversationTest {
 						List.of()
 				);
 
-		Map<String, Object> response = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> response = improve(request, AUTHORIZATION);
 
 		assertEquals(42L, response.get("conversationId"));
 		assertEquals(42L, response.get("threadId"));
@@ -600,7 +632,8 @@ class PromptImproveConversationTest {
 				makeThreadRepository,
 				objectMapper,
 				webClientBuilder,
-				Duration.ofSeconds(75)
+				Duration.ofSeconds(75),
+				guestUsageService
 		);
 
 		ReflectionTestUtils.setField(
@@ -622,7 +655,8 @@ class PromptImproveConversationTest {
 					makeThreadRepository,
 					objectMapper,
 					webClientBuilder,
-					timeout
+					timeout,
+					guestUsageService
 			);
 
 			ReflectionTestUtils.setField(
@@ -679,7 +713,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(request, AUTHORIZATION));
+				() -> improve(request, AUTHORIZATION));
 
 		assertEquals(400, exception.getStatusCode().value());
 		assertEquals("THREAD_ID_MISMATCH", exception.getCode());
@@ -712,7 +746,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request("이어서 개선해줘", null, 42L),
 						AUTHORIZATION));
 
@@ -731,7 +765,7 @@ class PromptImproveConversationTest {
 	void rejectsBlankPrompt() {
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"   ",
 								null,
@@ -764,7 +798,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map response = controller.improve(
+		Map response = improve(
 				request(
 						"자기소개서 프롬프트를 만들어줘",
 						null,
@@ -810,7 +844,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"글 써줘",
 						null,
@@ -847,7 +881,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"좋은 글 써줘",
 						null,
@@ -875,7 +909,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request("글을 써줘", null, null),
 				null);
 
@@ -902,7 +936,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request("온보딩 글을 써줘", null, null),
 				AUTHORIZATION);
 
@@ -937,7 +971,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"프롬프트를 개선해줘",
 								null,
@@ -966,7 +1000,7 @@ class PromptImproveConversationTest {
 
 			ApiException exception = assertThrows(
 					ApiException.class,
-					() -> controller.improve(
+					() -> improve(
 							request(
 									"프롬프트를 개선해줘",
 									null,
@@ -1002,7 +1036,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"프롬프트를 개선해줘",
 								null,
@@ -1088,7 +1122,7 @@ class PromptImproveConversationTest {
 		).thenReturn(Optional.of(thread));
 
 		Map<String, Object> response =
-				controller.improve(
+				improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1204,7 +1238,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"답변을 수정",
 								42L,
@@ -1264,7 +1298,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1295,7 +1329,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								null,
@@ -1324,7 +1358,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1359,6 +1393,11 @@ class PromptImproveConversationTest {
 				messageId,
 				List.of()
 		);
+	}
+
+	private Map<String, Object> improve(PromptController.ImproveRequest request, String authorization) {
+		return controller.improve(request, authorization,
+				"00000000-0000-4000-8000-000000000001");
 	}
 
 	private PromptController.ImproveRequest request(
