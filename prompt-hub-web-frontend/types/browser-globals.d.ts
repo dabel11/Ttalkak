@@ -66,7 +66,7 @@ interface TtalkakApplicationState {
   [key: string]: unknown;
   route: string; searchQuery: string; searchScope: string; popularSort: string; popularPage: number; savedSort: string; savedPage: number;
   isLoggedIn: boolean; currentUser: string | null; currentUserId: TtalkakId | null; currentUserRole: string; authToken: string; token: string;
-  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; guestImproveCount: number; templateCollapsed: boolean;
+  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; templateCollapsed: boolean;
   detailPromptId: TtalkakId | null; detailHighlightCommentId: TtalkakId | null; editingPromptId: TtalkakId | null; editingCommentId: TtalkakId | null;
   replyingCommentId: TtalkakId | null; reportPromptId: TtalkakId | null; reportCommentId: TtalkakId | null; executePromptId: TtalkakId | null;
   executeMessageId: TtalkakId | null; editingMessageId: TtalkakId | null; copiedMessageId: TtalkakId | null; confirmAction: TtalkakStateEntity | null;

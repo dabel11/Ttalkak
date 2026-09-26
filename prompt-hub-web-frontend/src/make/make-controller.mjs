@@ -91,8 +91,6 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const prompt = String(new FormData(composer).get("prompt") || "").trim();
     if (!prompt) return;
     ctx.bumpInteraction();
-    if (!ctx.state.isLoggedIn && ctx.state.guestImproveCount >= ctx.freeLimit) { ctx.state.authView = "login"; ctx.renderPreservingScroll(); return; }
-    if (!ctx.state.isLoggedIn) ctx.state.guestImproveCount += 1;
     const now = Date.now();
     const threadId = ctx.state.activeThreadId || `thread-${now}`;
     const userMessageId = `user-${now}`;
@@ -133,7 +131,6 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
       ctx.failRequest(userMessageId, ctx.classifyError(error));
-      if (!ctx.state.isLoggedIn) ctx.state.guestImproveCount = Math.max(0, ctx.state.guestImproveCount - 1);
       ctx.setBackendFailure();
       ctx.handleError(error, "프롬프트 개선 요청에 실패했습니다.");
       ctx.render();

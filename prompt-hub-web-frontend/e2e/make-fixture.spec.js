@@ -6,7 +6,7 @@ const TOKEN_KEY = "ttalkak_access_token";
 const API_PATTERN = "http://localhost:8080/**";
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "content-type, authorization",
+  "access-control-allow-headers": "content-type, authorization, x-session-uuid",
   "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "content-type": "application/json; charset=utf-8",
 };
@@ -57,7 +57,6 @@ function persistedState(messages = [], extra = {}) {
     : []);
   return JSON.stringify({
     state: {
-      guestImproveCount: 0,
       messages,
       recentThreads,
       activeThreadId: threadId,
@@ -993,6 +992,34 @@ for (const scenario of errorCases) {
     }
   });
 }
+
+test("Guest trial exhaustion preserves the failed prompt and opens login", async ({ page }) => {
+  let guestSessionUuid = "";
+  await openMake(page, [], {}, async (route) => {
+    guestSessionUuid = route.request().headers()["x-session-uuid"] || "";
+    await route.fulfill({
+      status: 429,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({
+        code: "FREE_TRIAL_LIMIT_EXCEEDED",
+        message: "무료 체험 횟수를 모두 사용했습니다.",
+      }),
+    });
+  });
+
+  const prompt = "Keep this prompt available after the trial limit";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.locator("[data-auth-form]")).toBeVisible();
+  const failedMessage = page.locator(".message.user").filter({ hasText: prompt });
+  await expect(failedMessage.locator(".message-failure-status")).toContainText("무료 체험 3회");
+  await expect(failedMessage.locator("[data-make-login]")).toHaveText("로그인");
+  await expect(failedMessage.locator("[data-retry-message]")).toHaveCount(0);
+  expect(guestSessionUuid).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+  await page.locator('[data-close-auth]').first().click();
+  await expect(failedMessage).toContainText(prompt);
+});
 
 test.describe("Make component visual regressions", () => {
   test("selected folder and recent conversation", async ({ page }) => {
