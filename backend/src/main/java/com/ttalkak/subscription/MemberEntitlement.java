@@ -62,6 +62,13 @@ public class MemberEntitlement {
         return usedToday;
     }
 
+    public boolean decrementUsage(LocalDate usageDate, LocalDateTime now) {
+        if (!this.usageDate.equals(usageDate) || usedToday < 1) return false;
+        usedToday -= 1;
+        updatedAt = now;
+        return true;
+    }
+
     public void applySubscription(String plan, String status, LocalDateTime currentPeriodEnd, boolean cancelAtPeriodEnd, LocalDateTime now) {
         this.plan = plan;
         this.status = status;

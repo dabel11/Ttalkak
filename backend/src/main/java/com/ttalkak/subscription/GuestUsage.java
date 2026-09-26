@@ -42,6 +42,13 @@ public class GuestUsage {
         return usedCount;
     }
 
+    public boolean decrement(LocalDateTime now) {
+        if (usedCount < 1) return false;
+        usedCount -= 1;
+        updatedAt = now;
+        return true;
+    }
+
     public String getSessionUuid() { return sessionUuid; }
     public int getUsedCount() { return usedCount; }
 }

@@ -62,7 +62,22 @@ public class UsageService {
 
     @Transactional
     public UsageEntitlement consume(Long memberId, String sessionUuid) {
-        return memberId == null ? consumeGuest(sessionUuid) : consumeMember(memberId);
+        return reserve(memberId, sessionUuid).entitlement();
+    }
+
+    @Transactional
+    public UsageReservation reserve(Long memberId, String sessionUuid) {
+        return memberId == null ? reserveGuest(sessionUuid) : reserveMember(memberId);
+    }
+
+    @Transactional
+    public void release(UsageReservation reservation) {
+        if (reservation == null) return;
+        if (reservation.memberId() == null) {
+            releaseGuest(reservation.sessionUuid());
+            return;
+        }
+        releaseMember(reservation.memberId(), reservation.usageDate());
     }
 
     @Transactional
@@ -84,7 +99,7 @@ public class UsageService {
         return snapshot(entitlement);
     }
 
-    private UsageEntitlement consumeGuest(String sessionUuid) {
+    private UsageReservation reserveGuest(String sessionUuid) {
         String normalizedUuid = normalizeSessionUuid(sessionUuid);
         LocalDateTime now = now();
         DataIntegrityViolationException collision = initializeGuest(normalizedUuid, now);
@@ -96,10 +111,12 @@ public class UsageService {
         }
         usage.increment(now);
         guestUsageRepository.saveAndFlush(usage);
-        return guestSnapshot(usage);
+        UsageEntitlement entitlement = guestSnapshot(usage);
+        return new UsageReservation(null, normalizedUuid, null, entitlement);
     }
 
-    private UsageEntitlement consumeMember(Long memberId) {
+    private UsageReservation reserveMember(Long memberId) {
+        LocalDate usageDate = LocalDate.now(clock);
         MemberEntitlement entitlement = loadMember(memberId);
         UsageEntitlement before = snapshot(entitlement);
         if ("PAST_DUE".equals(before.status())) {
@@ -110,7 +127,21 @@ public class UsageService {
         }
         entitlement.incrementUsage(now());
         memberEntitlementRepository.saveAndFlush(entitlement);
-        return snapshot(entitlement);
+        return new UsageReservation(memberId, null, usageDate, snapshot(entitlement));
+    }
+
+    private void releaseGuest(String sessionUuid) {
+        if (sessionUuid == null) return;
+        guestUsageRepository.findForUpdate(sessionUuid).ifPresent(usage -> {
+            if (usage.decrement(now())) guestUsageRepository.saveAndFlush(usage);
+        });
+    }
+
+    private void releaseMember(Long memberId, LocalDate usageDate) {
+        if (memberId == null || usageDate == null) return;
+        memberEntitlementRepository.findForUpdate(memberId).ifPresent(entitlement -> {
+            if (entitlement.decrementUsage(usageDate, now())) memberEntitlementRepository.saveAndFlush(entitlement);
+        });
     }
 
     private MemberEntitlement loadMember(Long memberId) {

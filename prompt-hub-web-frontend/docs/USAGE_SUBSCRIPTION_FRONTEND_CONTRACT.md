@@ -51,5 +51,6 @@ Checkout 응답은 `checkoutUrl`, Portal 응답은 `portalUrl`을 반환합니�
 
 - 사용량 기본값은 Guest 총 3회, FREE 하루 10회, PRO 하루 100회이며 각각 `GUEST_USAGE_LIMIT`, `FREE_DAILY_USAGE_LIMIT`, `PRO_DAILY_USAGE_LIMIT`로 조정할 수 있습니다.
 - 일일 사용량 초기화 기준은 `USAGE_TIME_ZONE`이며 기본값은 `Asia/Seoul`입니다.
+- 동시 요청은 사용 가능 횟수를 먼저 예약하되, AI/RAG 오류나 응답 저장 실패가 발생하면 예약을 반환해 실제 사용량을 증가시키지 않습니다.
 - 결제 공급자가 설정되지 않은 환경에서 Checkout과 Portal API는 `501 / BILLING_PROVIDER_NOT_CONFIGURED`를 반환합니다.
 - 실제 결제 공급자 연동은 Backend의 `BillingGateway` 구현으로 제공하고, Checkout·Portal 주소는 HTTPS만 허용합니다.

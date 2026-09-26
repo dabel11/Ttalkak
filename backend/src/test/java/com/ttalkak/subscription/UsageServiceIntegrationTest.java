@@ -84,6 +84,25 @@ class UsageServiceIntegrationTest {
         assertEquals(2, outcomes.stream().filter("FREE_TRIAL_LIMIT_EXCEEDED"::equals).count(), outcomes.toString());
     }
 
+    @Test
+    void releasedGuestReservationDoesNotConsumeTheAllowance() {
+        String sessionUuid = UUID.randomUUID().toString();
+        UsageReservation reservation = usageService.reserve(null, sessionUuid);
+
+        usageService.release(reservation);
+
+        assertEquals(2, usageService.consume(null, sessionUuid).remainingToday());
+    }
+
+    @Test
+    void releasedMemberReservationDoesNotConsumeTheDailyAllowance() {
+        UsageReservation reservation = usageService.reserve(701L, null);
+
+        usageService.release(reservation);
+
+        assertEquals(9, usageService.consume(701L, null).remainingToday());
+    }
+
     private List<String> runConcurrently(int count, ThrowingCall call) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(count);
         CountDownLatch ready = new CountDownLatch(count);

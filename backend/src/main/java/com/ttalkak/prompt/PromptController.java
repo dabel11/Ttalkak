@@ -9,6 +9,7 @@ import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
 import com.ttalkak.subscription.UsageEntitlement;
+import com.ttalkak.subscription.UsageReservation;
 import com.ttalkak.subscription.UsageService;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -869,9 +870,15 @@ public class PromptController {
 		messages = copyHistory(request.history());
 	}
 
-    UsageEntitlement usage = usageService == null
+    UsageReservation usageReservation = usageService == null
             ? null
-            : usageService.consume(memberId, sessionUuid);
+            : usageService.reserve(memberId, sessionUuid);
+    UsageEntitlement usage = usageReservation == null
+            ? null
+            : usageReservation.entitlement();
+    boolean usageCompleted = false;
+
+    try {
 
 	List<Map<String, String>> ragHistory;
 
@@ -990,6 +997,8 @@ public class PromptController {
                                     prompt
                             );
                             if (previousResponse != null) {
+                                usageService.release(usageReservation);
+                                usageReservation = null;
                                 return attachCurrentUsage(replayResponse(
                                         previousResponse,
                                         existingThread,
@@ -1023,7 +1032,13 @@ public class PromptController {
 			body.put("editedMessageId", messageId);
 		}
 
+        usageCompleted = true;
         return body;
+    } finally {
+        if (!usageCompleted && usageReservation != null) {
+            usageService.release(usageReservation);
+        }
+    }
     }
 
     private Map<String, Object> attachCurrentUsage(Map<String, Object> body, Long memberId) {
