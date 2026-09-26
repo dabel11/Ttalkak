@@ -24,9 +24,9 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       return true;
     }
 
-    const domainMessage = getDomainErrorMessage(status, code);
-    if (domainMessage) {
-      showNotice(backendMessage || domainMessage);
+    if (normalized.kind === "guest_limit") {
+      state.authView = "login";
+      showNotice(backendMessage || normalized.message);
       return true;
     }
 
@@ -43,6 +43,12 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       });
     }
 
+    const domainMessage = getDomainErrorMessage(status, code);
+    if (domainMessage) {
+      showNotice(backendMessage || domainMessage);
+      return true;
+    }
+
     return handleNormalizedError({ backendMessage, fallbackMessage, normalized, showNotice });
   }
 
@@ -51,7 +57,6 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     if (status === 404 || code === "RESOURCE_NOT_FOUND") return "요청한 대상을 찾을 수 없습니다.";
     if (status === 400 || ["VALIDATION_FAILED", "INVALID_REQUEST", "BLOCK_REASON_REQUIRED"].includes(code)) return "입력값을 확인해주세요.";
     if (status === 409 || ["CONFLICT", "INVALID_STATE", "ACCOUNT_WITHDRAWN"].includes(code)) return "현재 상태에서는 처리할 수 없습니다.";
-    if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) return "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
     return "";
   }
 

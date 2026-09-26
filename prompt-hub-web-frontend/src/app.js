@@ -444,7 +444,7 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
@@ -986,7 +986,6 @@ function Sidebar() {
   );
 }
 function Header() {
-  const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
   const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
@@ -998,9 +997,7 @@ function Header() {
     {
       adminAccessButton,
       authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
-      freeMakeLimit: FREE_MAKE_LIMIT,
       hasReportedPrompts,
-      remaining,
       showPromptTools,
     },
   );
@@ -1901,7 +1898,6 @@ function cancelActiveMakeRequest() {
 function getMakeControllerContext() {
   return {
     state,
-    freeLimit: FREE_MAKE_LIMIT,
     guard: guardAdminUserAction,
     isBusy: () => isMakeThinking || makeRequestState.inFlight,
     notice: showNotice,
