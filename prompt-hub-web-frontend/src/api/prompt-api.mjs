@@ -1,5 +1,7 @@
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
 import { MAKE_API_PATHS } from "../utils/make-api-contract.mjs";
+import { getOrCreateGuestSessionUuid } from "../usage/guest-session.mjs";
+import { normalizeEntitlement } from "../usage/usage-entitlement.mjs";
 const IMPROVE_TIMEOUT_MS = runtimeConfig.improveTimeoutMs;
 export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normalizers }) {
     const {
@@ -49,9 +51,12 @@ export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normaliz
       },
       /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
       improvePrompt(payload, token, { signal } = {}) {
-        return request(MAKE_API_PATHS.improve, { method: "POST", token, signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
-          normalizeImproveResult(result, payload?.prompt || ""),
-        );
+        const headers = token ? {} : { "X-Session-UUID": getOrCreateGuestSessionUuid() };
+        return request(MAKE_API_PATHS.improve, { method: "POST", token, headers, signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) => {
+          const normalized = normalizeImproveResult(result, payload?.prompt || "");
+          const entitlement = normalizeEntitlement(result, { fallbackPlan: token ? "FREE" : "GUEST" });
+          return entitlement.known ? { ...normalized, entitlement } : normalized;
+        });
       },
       savePrompt(promptId, token) {
         return request(`/api/prompts/${promptId}/save`, { method: "POST", token });

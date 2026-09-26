@@ -6,7 +6,7 @@
       "addComment", "addReply", "updateComment", "requestPromptRevision", "getAdminUserActivitySummary",
       "getAdminUserActivity", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
       "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
-      "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
+      "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt", "getSubscription",
     ],
     collection: [
       "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
@@ -19,6 +19,7 @@
       "withdrawAccount", "viewPrompt", "savePrompt", "unsavePrompt", "likePrompt", "unlikePrompt", "updateMakeFolder",
       "moveMakeThread", "unsharePrompt", "reportPrompt", "reportComment", "deletePrompt", "deleteMakeThread",
       "deleteMakeFolder", "deleteComment", "likeComment", "unlikeComment", "deleteAdminComment",
+      "createSubscriptionCheckout", "createBillingPortal",
     ],
   });
 

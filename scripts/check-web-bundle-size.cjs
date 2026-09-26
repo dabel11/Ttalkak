@@ -7,11 +7,20 @@ const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
 const distRoot = path.join(webRoot, process.env.TTALKAK_WEB_OUTPUT_DIR || "dist");
 
 function collectAssetSizes(assetRoot) {
-  const totals = { javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 0, rawBytes: 0, gzipBytes: 0 } };
+  const totals = {
+    javascript: { files: 0, rawBytes: 0, gzipBytes: 0 },
+    styles: { files: 0, rawBytes: 0, gzipBytes: 0 },
+    fontStyles: { files: 0, rawBytes: 0, gzipBytes: 0 },
+  };
   const visit = (directory) => fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) return visit(target);
-    const category = entry.name.endsWith(".js") ? "javascript" : entry.name.endsWith(".css") ? "styles" : null;
+    const relative = path.relative(assetRoot, target).replaceAll("\\", "/");
+    const category = entry.name.endsWith(".js")
+      ? "javascript"
+      : entry.name.endsWith(".css")
+        ? relative.startsWith("fonts/") ? "fontStyles" : "styles"
+        : null;
     if (!category) return;
     const content = fs.readFileSync(target);
     totals[category].files += 1;

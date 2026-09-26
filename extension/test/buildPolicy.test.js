@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertProductionBackendApiUrl } from "../scripts/build-policy.mjs";
+import { assertProductionBackendApiUrl, assertProductionWebAppUrl } from "../scripts/build-policy.mjs";
 
 test("production extension rejects reserved, local, and loopback backend hosts", () => {
   const blocked = [
@@ -34,4 +34,11 @@ test("verification build permits only its dedicated invalid host exception", () 
     () => assertProductionBackendApiUrl("production", "https://api.example.test", true),
     /HTTPS URL/
   );
+});
+
+test("production extension requires a public HTTPS web app URL", () => {
+  assert.throws(() => assertProductionWebAppUrl("production", "http://localhost:4200", false), /VITE_WEB_APP_URL/);
+  assert.throws(() => assertProductionWebAppUrl("production", "", false), /VITE_WEB_APP_URL/);
+  assert.doesNotThrow(() => assertProductionWebAppUrl("production", "https://ttalkak.com", false));
+  assert.doesNotThrow(() => assertProductionWebAppUrl("production", "https://web.example.invalid", true));
 });

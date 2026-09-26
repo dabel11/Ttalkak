@@ -90,9 +90,8 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     if (ctx.isBusy()) { ctx.notice("이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요."); return; }
     const prompt = String(new FormData(composer).get("prompt") || "").trim();
     if (!prompt) return;
+    const entitlementOwner = ctx.getEntitlementOwner?.();
     ctx.bumpInteraction();
-    if (!ctx.state.isLoggedIn && ctx.state.guestImproveCount >= ctx.freeLimit) { ctx.state.authView = "login"; ctx.renderPreservingScroll(); return; }
-    if (!ctx.state.isLoggedIn) ctx.state.guestImproveCount += 1;
     const now = Date.now();
     const threadId = ctx.state.activeThreadId || `thread-${now}`;
     const userMessageId = `user-${now}`;
@@ -133,7 +132,6 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
       ctx.failRequest(userMessageId, ctx.classifyError(error));
-      if (!ctx.state.isLoggedIn) ctx.state.guestImproveCount = Math.max(0, ctx.state.guestImproveCount - 1);
       ctx.setBackendFailure();
       ctx.handleError(error, "프롬프트 개선 요청에 실패했습니다.");
       ctx.render();
@@ -144,6 +142,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.setThinking(false);
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
+    ctx.applyEntitlement?.(result.entitlement, entitlementOwner);
     resetConcurrency(threadId);
     ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.updateThread(threadId);

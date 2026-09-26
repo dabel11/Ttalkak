@@ -23,7 +23,7 @@ function createContext(overrides = {}) {
       isHiddenDemoPrompt: () => false, isBackendId: () => false, refreshMyPage: () => calls.push("refresh"), callApi: () => Promise.resolve(), hasBackendToken: () => false,
       hydrateComments() {}, revisionKey: () => "revision", applyExistingSaved() {}, applyBackendUnsaved() {}, togglePendingUnsave() {}, applyUnsaved() {}, applyNewSaved() {},
       applyPromptLiked: () => calls.push("liked"), applyPromptUnliked: () => calls.push("unliked"), toggleCommentLiked() {}, addPromptCommentState() {}, addReplyState() {},
-      toggleReplyState() {}, toggleEditState() {}, updateCommentState: () => false, ...overrides,
+      toggleReplyState() {}, toggleEditState() {}, updateCommentState: () => false, commentsByPrompt: {}, api: {}, syncCommentCount() {}, getToken: () => "", warn() {}, ...overrides,
     },
   };
 }
@@ -42,6 +42,51 @@ test("engagement controller redirects guests before mutations", async () => {
   await createPromptEngagementController(ctx).toggleSavedPrompt("42");
   assert.equal(ctx.state.authView, "login");
   assert.equal(calls.some((item) => item === "savePrompt"), false);
+});
+
+test("demo comment activity is not overwritten by a public backend refresh", async () => {
+  const localComment = { id: "comment-local", author: "Demo", owner: "Demo", text: "local", replies: [] };
+  const commentsByPrompt = { "42": [localComment] };
+  let backendCalls = 0;
+  const { ctx } = createContext({
+    commentsByPrompt,
+    isBackendId: (id) => /^\d+$/.test(String(id)),
+    canDeleteComment: (comment) => comment.owner === "Demo",
+    getToken: () => "demo-token",
+    api: { getPromptComments: async () => { backendCalls += 1; return []; } },
+  });
+  ctx.state.currentUser = "Demo";
+
+  const result = await createPromptEngagementController(ctx).hydratePromptComments("42");
+
+  assert.equal(result, true);
+  assert.equal(backendCalls, 0);
+  assert.deepEqual(commentsByPrompt["42"], [localComment]);
+});
+
+test("backend comments still load before a demo account has a cached thread", async () => {
+  const commentsByPrompt = {};
+  const fresh = [{ id: "2", author: "Server", text: "fresh" }];
+  const { ctx } = createContext({
+    commentsByPrompt,
+    isBackendId: (id) => /^\d+$/.test(String(id)),
+    api: { getPromptComments: async () => fresh },
+  });
+
+  const result = await createPromptEngagementController(ctx).hydratePromptComments("42", { render: false });
+
+  assert.equal(result, true);
+  assert.deepEqual(commentsByPrompt["42"], fresh);
+});
+
+test("prompt controls expose their current action and the comment field has a name", () => {
+  const card = fs.readFileSync(path.resolve(__dirname, "../src/renderers/prompt-card.mjs"), "utf8");
+  const modal = fs.readFileSync(path.resolve(__dirname, "../src/renderers/prompt-modals.mjs"), "utf8");
+  const makePage = fs.readFileSync(path.resolve(__dirname, "../src/renderers/pages/make-page.mjs"), "utf8");
+  assert.match(card, /isLiked \? "좋아요 취소" : "좋아요"/);
+  assert.match(card, /isSaved \? "저장 취소" : "저장"/);
+  assert.match(modal, /aria-label="댓글을 입력하세요\."/);
+  assert.match(makePage, /name="folderName"[^>]+aria-label="폴더 이름"/);
 });
 
 test("engagement event binder delegates save and like controls", () => {

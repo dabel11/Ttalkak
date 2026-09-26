@@ -7,6 +7,7 @@ import { createCommentApi } from "./comment-api.mjs";
 import { createMyPageApi } from "./mypage-api.mjs";
 import { createMakeApi } from "./make-api.mjs";
 import { createAdminApi } from "./admin-api.mjs";
+import { createSubscriptionApi } from "./subscription-api.mjs";
 import * as apiContract from "./api-contract.mjs";
 
 const context = Object.freeze({ request: core.request, unwrapItems: core.unwrapItems, unwrapPageMeta: core.unwrapPageMeta, normalizers });
@@ -19,6 +20,7 @@ const rawApi = /** @type {TtalkakApi} */ (/** @type {unknown} */ ({
   ...createMyPageApi(context),
   ...createMakeApi(context),
   ...createAdminApi(context),
+  ...createSubscriptionApi(context),
 }));
 
 export const api = /** @type {TtalkakApi} */ (apiContract.wrapApiResponses(rawApi));

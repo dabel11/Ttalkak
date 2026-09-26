@@ -110,6 +110,9 @@
 
     async function hydratePromptComments(promptId, options = {}) {
       if (!ctx.api?.getPromptComments || !promptId || !ctx.isBackendId(promptId)) return false;
+      if (ctx.getToken() && !ctx.hasBackendToken() && ctx.commentsByPrompt[promptId]?.length) {
+        return true;
+      }
       try {
         const comments = await ctx.api.getPromptComments(promptId, ctx.getToken() || undefined);
         if (!Array.isArray(comments)) return false;

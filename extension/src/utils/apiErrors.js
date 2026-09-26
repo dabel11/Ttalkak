@@ -16,9 +16,8 @@ export function getApiErrorMessage(status, body) {
     return body?.message || "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
   }
   if (code === "AI_INVALID_RESPONSE" || code === "AI_SERVICE_UNAVAILABLE" || code === "AI_RATE_LIMIT_EXCEEDED" || code === "AI_TIMEOUT") return body?.message || classifyMakeError({ status, payload: body }).message;
-  if (code === "FREE_TRIAL_LIMIT_EXCEEDED") {
-    return body?.message || "무료 체험 횟수를 모두 사용했습니다. 로그인 후 계속 이용해주세요.";
-  }
+  const usageError = classifyUsageError({ status, code, payload: body }, normalizeEntitlement(body, { fallbackPlan: "FREE" }));
+  if (usageError) return body?.message || usageError.message;
   if (code === "RATE_LIMIT_EXCEEDED") return body?.message || "요청이 많습니다. 잠시 후 다시 시도해주세요.";
   if (status === 400) return body?.message || "요청 내용을 확인해주세요.";
   if (status === 401 || code === "LOGIN_REQUIRED") return body?.message || "로그인이 필요하거나 세션이 만료되었습니다.";
@@ -29,3 +28,4 @@ export function getApiErrorMessage(status, body) {
   return body?.message || `요청 처리 중 오류가 발생했습니다. (${status})`;
 }
 import { classifyMakeError } from "../../../shared/make-message-model.js";
+import { classifyUsageError, normalizeEntitlement } from "../policies/usage-entitlement.mjs";

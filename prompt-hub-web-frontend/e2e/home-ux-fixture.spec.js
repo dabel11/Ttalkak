@@ -11,8 +11,12 @@ test("narrow Home search help expands left without leaving the viewport", async 
     const trigger = button.getBoundingClientRect();
     const tooltipElement = button.querySelector(".help-text");
     const tooltip = tooltipElement.getBoundingClientRect();
+    const scope = button.closest(".search-field").querySelector("[data-search-scope]").getBoundingClientRect();
     return {
       triggerLeft: trigger.left,
+      triggerRight: trigger.right,
+      triggerHeight: trigger.height,
+      scopeHeight: scope.height,
       tooltipLeft: tooltip.left,
       tooltipRight: tooltip.right,
       clippedHorizontally: tooltipElement.scrollWidth > tooltipElement.clientWidth,
@@ -22,13 +26,33 @@ test("narrow Home search help expands left without leaving the viewport", async 
     };
   });
   expect(positions.tooltipLeft).toBeGreaterThanOrEqual(0);
-  expect(positions.tooltipRight).toBeLessThanOrEqual(positions.triggerLeft + 25);
+  expect(positions.tooltipRight).toBeLessThanOrEqual(positions.triggerRight + 1);
   expect(positions.tooltipRight).toBeLessThanOrEqual(390);
   expect(positions.clippedHorizontally).toBe(false);
   expect(positions.clippedVertically).toBe(false);
-  expect(positions.height).toBeLessThanOrEqual(30);
+  expect(positions.height).toBeCloseTo(positions.triggerHeight, 0);
+  expect(positions.height).toBeCloseTo(positions.scopeHeight, 0);
   expect(positions.whiteSpace).toBe("nowrap");
   await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await help.focus();
+  await page.waitForTimeout(250);
+  const desktopPositions = await help.evaluate((button) => {
+    const trigger = button.getBoundingClientRect();
+    const tooltipElement = button.querySelector(".help-text");
+    const tooltip = tooltipElement.getBoundingClientRect();
+    return {
+      triggerRight: trigger.right,
+      tooltipLeft: tooltip.left,
+      tooltipRight: tooltip.right,
+      clipped: tooltipElement.scrollWidth > tooltipElement.clientWidth,
+    };
+  });
+  expect(desktopPositions.tooltipLeft).toBeGreaterThanOrEqual(0);
+  expect(desktopPositions.tooltipRight).toBeLessThanOrEqual(desktopPositions.triggerRight + 1);
+  expect(desktopPositions.tooltipRight).toBeLessThanOrEqual(1280);
+  expect(desktopPositions.clipped).toBe(false);
 
   const sort = page.locator(".sort-select");
   const sortWidth = await sort.evaluate((element) => element.getBoundingClientRect().width);
@@ -47,9 +71,19 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   await gotoApp(page);
 
   const sort = page.locator(".sort-select");
-  await expect(sort).toContainText("정렬");
+  await expect(sort).not.toContainText("정렬");
   await expect(sort.locator("select")).toHaveValue(/popular|saves|comments|likes|latest/);
-  expect(await sort.evaluate((element) => getComputedStyle(element).borderRadius)).not.toBe("0px");
+  expect(await sort.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect(await sort.locator("select").evaluate((element) => getComputedStyle(element).borderTopWidth)).not.toBe("0px");
+  expect(await sort.locator("select").evaluate((element) => getComputedStyle(element).appearance)).toBe("none");
+  expect(Number.parseFloat(await sort.evaluate((element) => getComputedStyle(element, "::after").right))).toBeGreaterThanOrEqual(12);
+
+  const scope = page.locator(".search-scope-select");
+  expect(await scope.locator("select").evaluate((element) => getComputedStyle(element).appearance)).toBe("none");
+  expect(await scope.locator("select").evaluate((element) => getComputedStyle(element).borderRadius))
+    .toBe(await sort.locator("select").evaluate((element) => getComputedStyle(element).borderRadius));
+  expect(await scope.evaluate((element) => getComputedStyle(element, "::after").right))
+    .toBe(await sort.evaluate((element) => getComputedStyle(element, "::after").right));
 
   const empty = page.locator(".search-error");
   await expect(empty).toBeVisible();
@@ -81,6 +115,29 @@ test("Home exposes styled sorting and compact backend recovery", async ({ page }
   await expect(page.locator(".backend-status-popover")).toContainText("개발 서버에 연결할 수 없습니다");
   await expect(page.locator(".backend-status-popover")).toContainText("로컬 백엔드가 실행 중인지 확인한 뒤 다시 연결해 주세요");
   await expect(page.locator(".backend-status-popover [data-retry-home-load]")).toBeVisible();
+});
+
+test("sidebar keeps the current page distinct from a hovered destination", async ({ page }) => {
+  await gotoApp(page);
+  const current = page.locator('.sidebar [data-route="home"]');
+  const destination = page.locator('.sidebar [data-route="make"]');
+  await destination.hover();
+
+  const [currentStyle, destinationStyle] = await Promise.all([
+    current.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).color,
+    })),
+    destination.evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).color,
+      transform: getComputedStyle(element).transform,
+    })),
+  ]);
+
+  expect(destinationStyle.background).not.toBe(currentStyle.background);
+  expect(destinationStyle.color).not.toBe(currentStyle.color);
+  expect(destinationStyle.transform).toBe("none");
 });
 
 test("Backend status reconnects manually and automatically after connectivity returns", async ({ page }) => {

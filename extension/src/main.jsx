@@ -10,6 +10,8 @@ import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
 import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
+import { useEntitlement } from "./hooks/useEntitlement";
+import { openWebPricingPage } from "./config/webAppConfig";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
 import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
@@ -36,6 +38,15 @@ function App() {
     return () => recoveryCoordinator.dispose();
   }, [recoveryCoordinator]);
 
+  useEffect(() => {
+    const compactViewport = window.matchMedia("(max-width: 760px)");
+    const collapseForCompactViewport = (event) => {
+      if (event.matches) setCollapsed(true);
+    };
+    compactViewport.addEventListener("change", collapseForCompactViewport);
+    return () => compactViewport.removeEventListener("change", collapseForCompactViewport);
+  }, []);
+
   const {
     authMode,
     authSession,
@@ -53,11 +64,20 @@ function App() {
     setSessionUuid,
   } = useAuth({ ragConfig, showNotice });
 
+  const { entitlement, updateEntitlement } = useEntitlement({
+    authSession,
+    ragConfig,
+    onAuthExpired: handleAuthExpired,
+  });
+
   const {
     filteredSavedItems,
+    isSavePending,
     isSaved,
+    refreshSavedItems,
     requestDeleteSavedItem,
     saveLibraryPrompt,
+    savedStatus,
     searchItems,
     setSavedItems,
   } = useSavedLibrary({
@@ -106,6 +126,7 @@ function App() {
     setSessionUuid,
     showNotice,
     onAuthExpired: handleAuthExpired,
+    onEntitlement: updateEntitlement,
   });
   const focusedConflictId = useRef("");
   useEffect(() => {
@@ -198,8 +219,41 @@ function App() {
     focusRestoredComposer(prompt);
   }
 
+  async function handleOpenPricing() {
+    try {
+      await openWebPricingPage();
+    } catch (error) {
+      showNotice(error?.message || "웹 요금제 페이지를 열지 못했습니다.");
+    }
+  }
+
+  async function handleLogoutWithRequestCancellation() {
+    cancelImproveRequest();
+    await handleLogout();
+  }
+
+  async function handleWithdrawWithRequestCancellation(password) {
+    cancelImproveRequest();
+    return handleWithdraw(password);
+  }
+
+  function returnToComposerOnCompactScreen() {
+    if (window.matchMedia("(max-width: 760px)").matches) setCollapsed(true);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  function handleOpenPrompt(item) {
+    openPrompt(item);
+    returnToComposerOnCompactScreen();
+  }
+
+  function handleOpenRecentThread(item) {
+    openRecentThread(item);
+    returnToComposerOnCompactScreen();
+  }
+
   return (
-    <main className="extension-frame" aria-label="TTALKAK Chrome extension">
+    <main className="extension-frame" aria-label="TTALKAK 크롬 확장 프로그램">
       <section className="extension-shell">
         <Sidebar
           activeTab={activeTab}
@@ -212,10 +266,13 @@ function App() {
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
           activeRecentId={activeRecentId}
+          savedStatus={savedStatus}
           isSaved={isSaved}
-          onOpenPrompt={openPrompt}
+          isSavePending={isSavePending}
+          onOpenPrompt={handleOpenPrompt}
           onSavePrompt={saveLibraryPrompt}
-          onOpenRecentThread={openRecentThread}
+          onRetrySaved={refreshSavedItems}
+          onOpenRecentThread={handleOpenRecentThread}
           onDeleteSaved={requestDeleteSavedItem}
           onDeleteRecent={(id) => requestDeleteRecentThread(id, setConfirmAction)}
         />
@@ -223,9 +280,11 @@ function App() {
           <Header
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
-            onLogout={() => handleLogout()}
+            onLogout={handleLogoutWithRequestCancellation}
             onWithdraw={() => setAuthMode("withdraw")}
             ragStatus={ragStatus}
+            entitlement={entitlement}
+            onUpgrade={handleOpenPricing}
           />
           <ChatFeed
             messages={messages}
@@ -236,7 +295,7 @@ function App() {
             editingDraft={editingDraft}
             onCopy={copyMessage}
             onSave={toggleSave}
-            onExecute={executeMessage}
+            onExecute={(message) => executeMessage(message, setConfirmAction)}
             onStartEdit={startEditMessage}
             onChangeEditDraft={setEditingDraft}
             onCancelEdit={cancelEditMessage}
@@ -273,7 +332,7 @@ function App() {
           onSignup={handleSignup}
           onFindId={handleFindId}
           onPasswordReset={handlePasswordReset}
-          onWithdraw={handleWithdraw}
+          onWithdraw={handleWithdrawWithRequestCancellation}
           onCheckDuplicate={handleCheckDuplicate}
           isLoggedIn={Boolean(authSession?.accessToken)}
         />
@@ -283,6 +342,7 @@ function App() {
           title={confirmAction.title}
           message={confirmAction.message}
           confirmLabel={confirmAction.confirmLabel}
+          danger={confirmAction.danger !== false}
           onCancel={() => setConfirmAction(null)}
           onConfirm={() => {
             confirmAction.onConfirm();

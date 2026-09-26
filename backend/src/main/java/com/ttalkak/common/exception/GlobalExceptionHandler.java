@@ -17,6 +17,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -30,7 +33,7 @@ public class GlobalExceptionHandler {
     ) {
         HttpStatusCode status = exception.getStatusCode();
 
-        return build(
+        ResponseEntity<ApiErrorResponse> response = build(
             status,
                 exception.getCode(),
                 messageOrDefault(
@@ -39,6 +42,17 @@ public class GlobalExceptionHandler {
                 ),
                 request
         );
+        if (exception.getDetails().isEmpty()) return response;
+        ApiErrorResponse error = response.getBody();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.putAll(exception.getDetails());
+        body.put("timestamp", error.timestamp());
+        body.put("status", error.status());
+        body.put("error", error.error());
+        body.put("code", error.code());
+        body.put("message", error.message());
+        body.put("path", error.path());
+        return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(ResponseStatusException.class)

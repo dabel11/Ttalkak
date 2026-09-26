@@ -6,6 +6,9 @@ import com.ttalkak.auth.AuthService;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.subscription.UsageEntitlement;
+import com.ttalkak.subscription.UsageReservation;
+import com.ttalkak.subscription.UsageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -115,6 +118,41 @@ class PromptImproveConversationTest {
 		verify(
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
+	}
+
+	@Test
+	void mappedAnonymousImproveConsumesSessionUsageAndReturnsIt() {
+		String sessionUuid = "0f83dfe0-1c25-4df0-b3d8-1a1a1a1a1a1a";
+		UsageService usageService = mock(UsageService.class);
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		UsageReservation reservation = new UsageReservation(
+				null, sessionUuid, null,
+				new UsageEntitlement("GUEST", "ACTIVE", 3, 1, 2, null, null, false)
+		);
+		when(usageService.reserve(null, sessionUuid)).thenReturn(reservation);
+		ReflectionTestUtils.setField(controller, "usageService", usageService);
+
+		Map<String, Object> response = controller.improveWithUsage(
+				request("운동 계획을 만들어줘", null, null), null, sessionUuid
+		);
+
+		assertEquals(2, ((Map<?, ?>) response.get("usage")).get("remainingToday"));
+		verify(usageService).reserve(null, sessionUuid);
+		verify(usageService, never()).release(any());
+	}
+
+	@Test
+	void mappedImproveRejectsAnInvalidAuthorizationBeforeGuestUsage() {
+		UsageService usageService = mock(UsageService.class);
+		when(authService.currentMemberIdOrNull("Bearer expired")).thenReturn(null);
+		ReflectionTestUtils.setField(controller, "usageService", usageService);
+
+		ApiException exception = assertThrows(ApiException.class, () -> controller.improveWithUsage(
+				request("운동 계획을 만들어줘", null, null), "Bearer expired", null
+		));
+
+		assertEquals("LOGIN_REQUIRED", exception.getCode());
+		verify(usageService, never()).reserve(any(), any());
 	}
 
 	@Test
@@ -926,6 +964,12 @@ class PromptImproveConversationTest {
 				authService.currentMemberIdOrNull(
 						AUTHORIZATION))
 				.thenReturn(7L);
+		UsageService usageService = mock(UsageService.class);
+		UsageReservation reservation = new UsageReservation(
+				7L, null, java.time.LocalDate.now(),
+				new UsageEntitlement("FREE", "ACTIVE", 10, 1, 9, null, null, false)
+		);
+		when(usageService.reserve(7L, null)).thenReturn(reservation);
 
 		useRagResponse(
 				HttpStatus.SERVICE_UNAVAILABLE,
@@ -934,6 +978,7 @@ class PromptImproveConversationTest {
 						  "detail": "RAG 서버를 사용할 수 없습니다."
 						}
 						""");
+		ReflectionTestUtils.setField(controller, "usageService", usageService);
 
 		ApiException exception = assertThrows(
 				ApiException.class,
@@ -954,6 +999,7 @@ class PromptImproveConversationTest {
 		verify(
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
+		verify(usageService).release(reservation);
 	}
 
 	@Test

@@ -232,13 +232,16 @@ button:disabled {
   overflow-y: auto;
   opacity: 1;
   transform: translate(0);
-  transition: opacity 0.18s, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  visibility: visible;
+  transition: opacity 0.18s, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
 }
 
 .sidebar.collapsed .sidebar-content {
   pointer-events: none;
   opacity: 0;
   transform: translate(-8px);
+  visibility: hidden;
+  transition: opacity 0.18s, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 0.22s;
 }
 
 .search-input {
@@ -1848,6 +1851,11 @@ button:disabled {
 .confirm-danger {
   color: #fff;
   background: #8f1d1d;
+}
+
+.confirm-primary {
+  color: #fff;
+  background: var(--brand-green);
 }
 
 .auth-modal {

@@ -80,6 +80,7 @@ test("persistence state domain safely reads writes and clears payloads", () => {
     normalizeSavedPromptOwnership: () => {}, restoreCurrentAccountScope: () => {},
   });
   assert.equal(restored.isLoggedIn, true);
+  assert.equal(restored.entitlement.plan, "FREE");
 });
 
 test("prompt interaction admin and Make state domains apply representative mutations", () => {

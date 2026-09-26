@@ -33,3 +33,19 @@ export function assertProductionBackendApiUrl(mode, backendApiUrl, isVerificatio
     throw new Error("Production extension builds require VITE_BACKEND_API_URL to be set to the Spring Boot HTTPS URL.");
   }
 }
+
+export function assertProductionWebAppUrl(mode, webAppUrl, isVerificationBuild) {
+  if (mode !== "production") return;
+  const normalizedUrl = String(webAppUrl || "").trim();
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(normalizedUrl);
+  } catch {
+    parsedUrl = null;
+  }
+  const hostname = parsedUrl?.hostname.toLowerCase() || "";
+  const isAllowedVerificationHost = isVerificationBuild && hostname === "web.example.invalid";
+  if (!normalizedUrl || parsedUrl?.protocol !== "https:" || (isReservedProductionHostname(hostname) && !isAllowedVerificationHost)) {
+    throw new Error("Production extension builds require VITE_WEB_APP_URL to be set to the TTALKAK HTTPS web URL.");
+  }
+}

@@ -27,7 +27,7 @@ import { Composer } from "../src/components/Composer";
 import { useAskAnswers } from "../src/hooks/useAskAnswers";
 import { ChatFeed, orderConversationMessages } from "../src/components/ChatFeed";
 import { showTransientNotice } from "../src/utils/transientNotice";
-import { RecentList } from "../src/components/SavedList";
+import { PromptList, RecentList } from "../src/components/SavedList";
 import { createDelayedImproveFixture } from "./fixtures/delayedImprove";
 import { createAssistantMessage } from "../src/conversation/conversationState";
 
@@ -71,6 +71,22 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("unfilled placeholders use the product confirmation dialog before execution", () => {
+    const setConfirmAction = vi.fn();
+    const { result } = renderHook(() => useConversation(createProps()));
+    const message = { id: "placeholder-result", executablePrompt: "[주제]에 관한 글을 작성해줘" };
+
+    act(() => result.current.executeMessage(message, setConfirmAction));
+
+    expect(setConfirmAction).toHaveBeenCalledOnce();
+    expect(setConfirmAction.mock.calls[0][0]).toMatchObject({
+      title: "입력할 정보가 남아 있습니다",
+      confirmLabel: "그대로 실행",
+      danger: false,
+      onConfirm: expect.any(Function),
+    });
+  });
+
   test("a logged-in first request receives an id before the server thread exists", async () => {
     api.getThreads.mockResolvedValue([]);
     api.improve.mockResolvedValue({ ...improveResponse("first stored response"), threadId: "42" });
@@ -81,6 +97,45 @@ describe("Extension improve request behavior", () => {
     expect(payload.threadId).toBeUndefined();
     expect(payload.requestId).toBeTruthy();
     expect(payload.requestId.length).toBeLessThanOrEqual(128);
+  });
+
+  test("quota failures update usage without running thread recovery", async () => {
+    const usage = { plan: "FREE", dailyLimit: 10, usedToday: 10, remainingToday: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("quota"), {
+      status: 429,
+      code: "DAILY_USAGE_LIMIT_EXCEEDED",
+      payload: { code: "DAILY_USAGE_LIMIT_EXCEEDED", usage },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ authSession: { accessToken: "token" }, onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+
+    act(() => result.current.setComposerValue("over quota"));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage });
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
+    expect(api.getThread).not.toHaveBeenCalled();
+    expect(result.current.messages.at(-1)).toMatchObject({ isError: true });
+  });
+
+  test("logged-in token budget failures use the account fallback when the response omits its plan", async () => {
+    const usage = { usageUnit: "TOKEN", tokenLimit: 100000, tokensUsed: 100000, tokensRemaining: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("token quota"), {
+      status: 429,
+      code: "TOKEN_BUDGET_EXCEEDED",
+      payload: { code: "TOKEN_BUDGET_EXCEEDED", usage },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ authSession: { accessToken: "token" }, onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+
+    act(() => result.current.setComposerValue("over token budget"));
+    await act(async () => { await result.current.submitPrompt(); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "TOKEN_BUDGET_EXCEEDED", usage });
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
+    expect(api.getThread).not.toHaveBeenCalled();
   });
 
   test("logged-in follow-up retries reuse one request id without duplicating the user turn", async () => {
@@ -385,6 +440,27 @@ describe("Extension improve request behavior", () => {
     expect(result.current.messages.at(-1)?.content).toBe("edited response");
   });
 
+  test("edited resend synchronizes quota errors and points to plan management", async () => {
+    const quota = { plan: "FREE", dailyLimit: 10, usedToday: 10, remainingToday: 0 };
+    api.improve.mockRejectedValue(Object.assign(new Error("quota"), {
+      status: 429,
+      code: "DAILY_USAGE_LIMIT_EXCEEDED",
+      payload: { code: "DAILY_USAGE_LIMIT_EXCEEDED", usage: quota },
+    }));
+    const onEntitlement = vi.fn();
+    const props = createProps({ onEntitlement });
+    const { result } = renderHook(() => useConversation(props));
+    const userMessage = { id: "quota-user", role: "user", content: "old" };
+
+    act(() => result.current.openRecentThread({ id: "local-quota", messages: [userMessage] }));
+    act(() => result.current.startEditMessage(userMessage));
+    act(() => result.current.setEditingDraft("retry after quota"));
+    await act(async () => { await result.current.submitEditedMessage({ preventDefault() {} }, userMessage.id); });
+
+    expect(onEntitlement).toHaveBeenCalledWith({ code: "DAILY_USAGE_LIMIT_EXCEEDED", usage: quota });
+    expect(props.showNotice).toHaveBeenCalledWith("무료 사용량을 모두 사용했습니다. PRO로 업그레이드하거나 초기화 이후 다시 이용해주세요.");
+  });
+
   test("server refresh canonicalizes the selected recent thread through the shared setter", async () => {
     api.improve.mockResolvedValue(improveResponse("server edited response"));
     api.getThreads.mockResolvedValue([]);
@@ -515,6 +591,24 @@ describe("Extension improve request behavior", () => {
 });
 
 describe("Extension clarification UI", () => {
+  test("prompt library exposes opening and saving as separate controls", () => {
+    const item = { id: "prompt-1", title: "테스트 프롬프트", preview: "미리보기", tags: ["테스트"] };
+    const onOpenPrompt = vi.fn();
+    const onSavePrompt = vi.fn();
+    render(createElement(PromptList, { items: [item], emptyText: "없음", mode: "search", onOpenPrompt, onSavePrompt }));
+
+    const openButton = screen.getByRole("button", { name: /테스트 프롬프트/ });
+    const saveButton = screen.getByRole("button", { name: "보관" });
+    expect(openButton.contains(saveButton)).toBe(false);
+
+    fireEvent.click(saveButton);
+    expect(onSavePrompt).toHaveBeenCalledWith(item);
+    expect(onOpenPrompt).not.toHaveBeenCalled();
+
+    fireEvent.click(openButton);
+    expect(onOpenPrompt).toHaveBeenCalledWith(item);
+  });
+
   test("edited concurrency recovery stays adjacent to its target and exposes the server comparison", () => {
     const target = { id: "user-1", role: "user", content: "서버 최신 내용" };
     const unrelated = { id: "assistant-1", role: "assistant", content: "다른 응답" };

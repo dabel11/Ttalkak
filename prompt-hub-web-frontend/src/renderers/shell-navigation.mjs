@@ -31,10 +31,10 @@
             state.adminMode
               ? adminTabs.map(adminItem).join("")
               : `
-                ${item("home", "Home", icons.home)}
-                ${!isAdminAccount ? item("make", "Make", icons.make) : ""}
-                ${state.isLoggedIn && !isAdminAccount ? item("saved", "My page", icons.user) : ""}
-                ${!isAdminAccount ? item("share", "Share", icons.share) : ""}
+                ${item("home", "홈", icons.home)}
+                ${!isAdminAccount ? item("make", "첨삭", icons.make) : ""}
+                ${state.isLoggedIn && !isAdminAccount ? item("saved", "마이페이지", icons.user) : ""}
+                ${!isAdminAccount ? item("share", "공유", icons.share) : ""}
               `
           }
         </nav>
@@ -48,7 +48,7 @@
       adminAccessButton,
       authButton,
       hasReportedPrompts,
-      remaining,
+      usageSummary,
       showPromptTools,
     } = data;
     const settingsMenu = `<details class="topbar-settings">
@@ -64,6 +64,7 @@
           <summary aria-label="계정 메뉴">${escapeHtml(state.currentUser || "사용자")}님</summary>
           <div class="topbar-account-menu">
             <span class="topbar-settings-label">계정</span>
+            <button class="topbar-menu-action" type="button" data-route="pricing">요금제 및 사용량</button>
             <button class="topbar-menu-action" type="button" data-logout>로그아웃</button>
             <button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>
           </div>
@@ -72,8 +73,10 @@
     const resolvedAuthButton = state.isLoggedIn
       ? `<div class="account-actions">${adminAccessButton}${accountMenu}</div>`
       : authButton;
-    const makeAuthHint = state.route === "make" && !state.isLoggedIn
-      ? `비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.`
+    const makeAuthHint = state.route === "make"
+      ? state.isLoggedIn
+        ? `${escapeHtml(usageSummary)}<br />사용량과 초기화는 서버 기준입니다.`
+        : `${state.entitlement?.known ? escapeHtml(usageSummary) : "비로그인 무료 체험 · 사용량은 서버에서 확인합니다."}<br />로그인하면 대화를 저장하고 이어서 사용할 수 있습니다.`
       : "";
 
     return `
@@ -86,10 +89,11 @@
             <button class="topbar-mobile-toggle" type="button" aria-expanded="${state.compactHeaderOpen ? "true" : "false"}" aria-controls="topbar-action-menu">메뉴</button>
             <div class="topbar-action-menu" id="topbar-action-menu">
               <nav class="topbar-mobile-nav" aria-label="모바일 주요 메뉴">
-                <button class="${state.route === "home" ? "active" : ""}" type="button" data-route="home">Home</button>
-                <button class="${state.route === "make" ? "active" : ""}" type="button" data-route="make">Make</button>
-                ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">My page</button>` : ""}
-                <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">Share</button>
+                <button class="${state.route === "home" ? "active" : ""}" type="button" data-route="home">홈</button>
+                <button class="${state.route === "make" ? "active" : ""}" type="button" data-route="make">첨삭</button>
+                ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">마이페이지</button>` : ""}
+                <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">공유</button>
+                <button class="${state.route === "pricing" ? "active" : ""}" type="button" data-route="pricing">요금제</button>
               </nav>
               ${makeAuthHint ? `<p class="make-auth-hint make-auth-hint-mobile">${makeAuthHint}</p>` : ""}
               ${resolvedAuthButton}

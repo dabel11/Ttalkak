@@ -559,6 +559,10 @@ h1 {
   color: var(--text);
 }
 
+.search-field input:focus-visible {
+  outline: 0;
+}
+
 .search-help {
   position: relative;
   flex: 0 0 auto;
@@ -566,8 +570,8 @@ h1 {
   align-items: center;
   gap: 0;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 34px;
+  height: 34px;
   border: 0;
   border-radius: 999px;
   color: var(--brand-green);
@@ -618,8 +622,8 @@ h1 {
   min-width: 0;
   width: max-content;
   max-width: min(320px, calc(100vw - 48px));
-  height: 24px;
-  padding: 0 12px 0 32px;
+  height: 34px;
+  padding: 0 12px 0 40px;
   border-radius: 999px;
   color: #fff;
   background: var(--brand-green);
@@ -647,8 +651,15 @@ h1 {
   right: 0;
   left: auto;
   justify-content: flex-start;
-  padding: 0 32px 0 12px;
+  padding: 0 40px 0 12px;
   transform-origin: right center;
+}
+
+.search-help.expand-right .help-text {
+  right: auto;
+  left: 0;
+  padding: 0 12px 0 40px;
+  transform-origin: left center;
 }
 
 .popular-tags {
@@ -722,6 +733,7 @@ h1 {
 }
 
 .prompt-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 360px;
@@ -791,6 +803,10 @@ h1 {
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.prompt-card.mine-card .card-head h2 {
+  padding-right: 38px;
 }
 
 .prompt-card-open {
@@ -890,7 +906,10 @@ h1 {
 }
 
 .prompt-card-menu-wrap {
-  position: relative;
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
   flex: 0 0 auto;
 }
 
@@ -901,7 +920,7 @@ h1 {
 .prompt-card-menu {
   position: absolute;
   top: calc(100% + 7px);
-  left: 0;
+  right: 0;
   z-index: 95;
   display: grid;
   gap: 4px;
@@ -911,7 +930,7 @@ h1 {
   background: #fff;
   color: var(--brand-green);
   box-shadow: var(--edge-shadow-hover);
-  transform-origin: top left;
+  transform-origin: top right;
   animation: menu-island-in var(--motion-menu) both;
 }
 
@@ -2009,6 +2028,16 @@ h1 {
   box-shadow: none;
 }
 
+.share-helper.is-error {
+  color: #9f2f2f;
+}
+
+.share-form input[aria-invalid="true"],
+.share-form textarea[aria-invalid="true"] {
+  border-color: rgba(159, 47, 47, 0.58);
+  box-shadow: 0 0 0 2px rgba(159, 47, 47, 0.08);
+}
+
 .login-required {
   display: grid;
   place-items: center;
@@ -2832,11 +2861,13 @@ input[type="checkbox"] {
 
 .detail-tags {
   margin-top: 18px;
+  padding-inline: 18px;
   padding-top: 0;
 }
 
 .detail-meta {
   border-top: 0;
+  padding-inline: 18px;
   padding-top: 0;
   margin-bottom: 18px;
 }
@@ -3897,8 +3928,8 @@ input[type="checkbox"] {
     right: 0;
     left: auto;
     max-width: calc(100vw - 40px);
-    height: 28px;
-    min-height: 28px;
+    height: 34px;
+    min-height: 34px;
     padding-block: 0;
     border-radius: 999px;
     line-height: 1.2;

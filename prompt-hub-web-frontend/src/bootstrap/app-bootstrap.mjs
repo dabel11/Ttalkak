@@ -26,6 +26,7 @@
         getApiFailureMessage: ctx.getApiFailureMessage,
         getAuthToken: ctx.getAuthToken,
         hasBackendAuthToken: ctx.hasBackendAuthToken,
+        isDemoAuthToken: ctx.isDemoAuthToken,
         getMakeApi: ctx.getMakeApi,
         getMakeApiToken: ctx.getMakeApiToken,
         getMakeInteractionVersion: ctx.getMakeInteractionVersion,

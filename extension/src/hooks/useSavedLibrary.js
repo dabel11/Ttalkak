@@ -12,11 +12,18 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
   const [pendingSaveIds, setPendingSaveIds] = useState(() => new Set());
   const mergedTokenRef = useRef("");
   const isLoggedIn = Boolean(authSession?.accessToken);
-  const savedItems = isLoggedIn ? serverSavedItems : localSavedItems;
+  const savedItems = useMemo(() => {
+    if (!isLoggedIn) return localSavedItems;
+    const localDeviceItems = localSavedItems.filter((item) => !getPromptSaveId(item));
+    return [
+      ...serverSavedItems,
+      ...localDeviceItems.filter((localItem) => !serverSavedItems.some((serverItem) => serverItem.content === localItem.content)),
+    ];
+  }, [isLoggedIn, localSavedItems, serverSavedItems]);
 
   useEffect(() => {
-    if (!isLoggedIn) saveStorage(STORAGE.SAVED, localSavedItems);
-  }, [isLoggedIn, localSavedItems]);
+    saveStorage(STORAGE.SAVED, localSavedItems);
+  }, [localSavedItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +106,36 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
     });
   }
 
+  function isSavePending(item) {
+    const operationId = getPromptSaveId(item) || String(item?.id || "");
+    return Boolean(operationId && pendingSaveIds.has(operationId));
+  }
+
+  function toggleLocalPrompt(item) {
+    const sourceId = String(item?.id || "local-prompt");
+    const id = sourceId.startsWith("library-") ? sourceId : `saved-${sourceId}`;
+    setLocalSavedItems((items) => {
+      const alreadySaved = items.some((saved) => saved.id === id || saved.id === item.id || saved.content === item.content);
+      if (alreadySaved) {
+        showNotice(isLoggedIn ? "이 기기 보관함에서 제거했습니다." : "저장을 해제했습니다.");
+        return items.filter((saved) => saved.id !== id && saved.id !== item.id && saved.content !== item.content);
+      }
+      showNotice(isLoggedIn ? "이 기기 보관함에 저장했습니다." : "보관함에 저장했습니다.");
+      return [
+        {
+          id,
+          title: item.title,
+          preview: item.preview || makePreview(item.content),
+          content: item.content,
+          executablePrompt: item.content,
+          sourcePrompt: item.content,
+          tags: item.tags || [],
+        },
+        ...items,
+      ];
+    });
+  }
+
   async function refreshSavedItems() {
     if (!isLoggedIn) return localSavedItems;
     setSavedStatus("loading");
@@ -116,12 +153,12 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
   }
 
   async function saveLibraryPrompt(item) {
+    const promptId = getPromptSaveId(item);
+    if (!promptId) {
+      toggleLocalPrompt(item);
+      return;
+    }
     if (isLoggedIn) {
-      const promptId = getPromptSaveId(item);
-      if (!promptId) {
-        showNotice("서버에 등록된 프롬프트만 보관함에 저장할 수 있습니다.");
-        return;
-      }
       if (pendingSaveIds.has(promptId)) return;
       setPromptPending(promptId, true);
       try {
@@ -141,28 +178,7 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
       }
       return;
     }
-
-    const id = item.id.startsWith("library-") ? item.id : `saved-${item.id}`;
-    setLocalSavedItems((items) => {
-      const alreadySaved = items.some((saved) => saved.id === id || saved.id === item.id || saved.content === item.content);
-      if (alreadySaved) {
-        showNotice("저장을 해제했습니다.");
-        return items.filter((saved) => saved.id !== id && saved.id !== item.id && saved.content !== item.content);
-      }
-      showNotice("보관함에 저장했습니다.");
-      return [
-        {
-          id,
-          title: item.title,
-          preview: item.preview || makePreview(item.content),
-          content: item.content,
-          executablePrompt: item.content,
-          sourcePrompt: item.content,
-          tags: item.tags || [],
-        },
-        ...items,
-      ];
-    });
+    toggleLocalPrompt(item);
   }
 
   function setSavedItems(updater) {
@@ -183,8 +199,8 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
 
   function requestDeleteSavedItem(id) {
     const item = savedItems.find((saved) => saved.id === id || saved.serverId === id);
-    if (isLoggedIn) {
-      const promptId = getPromptSaveId(item || { id });
+    const promptId = getPromptSaveId(item || { id });
+    if (isLoggedIn && promptId) {
       setConfirmAction({
         title: "서버 보관함에서 제거",
         message: "이 프롬프트를 서버 보관함에서 제거할까요?",
@@ -208,15 +224,16 @@ export function useSavedLibrary({ authSession, query, ragConfig, showNotice, set
     }
 
     setConfirmAction({
-      title: "저장한 프롬프트 삭제",
-      message: "이 저장한 프롬프트를 삭제할까요?",
-      confirmLabel: "삭제",
+      title: isLoggedIn ? "기기 보관함에서 제거" : "저장한 프롬프트 삭제",
+      message: isLoggedIn ? "이 기기에 저장한 프롬프트를 보관함에서 제거할까요?" : "이 저장한 프롬프트를 삭제할까요?",
+      confirmLabel: isLoggedIn ? "제거" : "삭제",
       onConfirm: () => setLocalSavedItems((prev) => prev.filter((i) => i.id !== id)),
     });
   }
 
   return {
     filteredSavedItems,
+    isSavePending,
     isSaved,
     refreshSavedItems,
     requestDeleteSavedItem,

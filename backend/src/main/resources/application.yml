@@ -34,3 +34,9 @@ ttalkak:
     secret-base64: "${JWT_SECRET_BASE64:}"
     expiration-minutes: "${JWT_EXPIRATION_MINUTES:120}"
     issuer: "${JWT_ISSUER:ttalkak}"
+
+  usage:
+    guest-limit: "${GUEST_USAGE_LIMIT:3}"
+    free-daily-limit: "${FREE_DAILY_USAGE_LIMIT:10}"
+    pro-daily-limit: "${PRO_DAILY_USAGE_LIMIT:100}"
+    zone: "${USAGE_TIME_ZONE:Asia/Seoul}"
