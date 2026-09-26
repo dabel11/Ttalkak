@@ -69,6 +69,8 @@ test("persistence state domain safely reads writes and clears payloads", () => {
   const state = stateApi.createInitialState();
   state.isLoggedIn = true;
   state.authToken = "token";
+  state.recentThreads = [{ id: "guest-transfer", messages: [] }];
+  state.pendingGuestThreadTransferId = "guest-transfer";
   const popularPrompts = [{ id: 1 }];
   const savedPrompts = [{ id: 2, savedByMe: true, saves: 1 }];
   stateApi.persistAppState({ state, popularPrompts, savedPrompts, commentsByPrompt: {}, saveCurrentAccountScope: () => {} });
@@ -80,6 +82,7 @@ test("persistence state domain safely reads writes and clears payloads", () => {
     normalizeSavedPromptOwnership: () => {}, restoreCurrentAccountScope: () => {},
   });
   assert.equal(restored.isLoggedIn, true);
+  assert.equal(restored.pendingGuestThreadTransferId, "guest-transfer");
 });
 
 test("prompt interaction admin and Make state domains apply representative mutations", () => {

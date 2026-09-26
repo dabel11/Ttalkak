@@ -91,6 +91,10 @@ async function mockBackend(page, improveHandler = async (route) => route.fulfill
       return;
     }
     const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/auth/login" && request.method() === "POST" && fixtures.authLoginHandler) {
+      await fixtures.authLoginHandler(route);
+      return;
+    }
     if (pathname === "/api/prompts/improve") {
       await improveHandler(route);
       return;
@@ -121,6 +125,7 @@ async function openMake(page, messages = [], extra = {}, improveHandler) {
   await seedStorage(page, messages, extra);
   await mockBackend(page, improveHandler, {
     threads: extra.backendThreads,
+    authLoginHandler: extra.authLoginHandler,
     threadHandler: extra.threadHandler,
     makeHydrationHandler: extra.makeHydrationHandler,
   });
@@ -995,15 +1000,51 @@ for (const scenario of errorCases) {
 
 test("Guest trial exhaustion preserves the failed prompt and opens login", async ({ page }) => {
   let guestSessionUuid = "";
-  await openMake(page, [], {}, async (route) => {
-    guestSessionUuid = route.request().headers()["x-session-uuid"] || "";
-    await route.fulfill({
-      status: 429,
+  let improveCount = 0;
+  let memberAuthorization = "";
+  let memberPayload = null;
+  let memberSessionUuid = "";
+  const memberResult = "Member retry completed";
+  const priorMessages = [
+    { id: "guest-user-before", role: "user", content: "Earlier Guest prompt" },
+    { id: "guest-assistant-before", role: "assistant", mode: "improve", content: "Earlier Guest result", improvedPrompt: "Earlier Guest result" },
+  ];
+  const memberThread = serverThreadFixture([]);
+  await openMake(page, priorMessages, {
+    authLoginHandler: async (route) => route.fulfill({
+      status: 200,
       headers: CORS_HEADERS,
-      body: JSON.stringify({
-        code: "FREE_TRIAL_LIMIT_EXCEEDED",
-        message: "무료 체험 횟수를 모두 사용했습니다.",
-      }),
+      body: JSON.stringify({ accessToken: "fixture-token", member: { memberId: 7, username: "fixture", nickname: "Fixture User", role: "ROLE_USER" } }),
+    }),
+    backendThreads: [],
+    threadHandler: async (route) => route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify(memberThread) }),
+  }, async (route) => {
+    improveCount += 1;
+    const header = route.request().headers()["x-session-uuid"] || "";
+    if (!guestSessionUuid) guestSessionUuid = header;
+    if (improveCount === 1) {
+      await route.fulfill({
+        status: 429,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          code: "FREE_TRIAL_LIMIT_EXCEEDED",
+          message: "무료 체험 횟수를 모두 사용했습니다.",
+        }),
+      });
+      return;
+    }
+    memberAuthorization = route.request().headers().authorization || "";
+    memberSessionUuid = header;
+    memberPayload = route.request().postDataJSON();
+    memberThread.messages = [
+      ...priorMessages,
+      { id: "server-user", role: "user", content: memberPayload.prompt, requestId: memberPayload.requestId },
+      { id: "server-assistant", role: "assistant", mode: "improve", content: memberResult, improvedPrompt: memberResult, requestId: memberPayload.requestId },
+    ];
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: memberResult, threadId: Number(memberThread.id) }),
     });
   });
 
@@ -1017,8 +1058,28 @@ test("Guest trial exhaustion preserves the failed prompt and opens login", async
   await expect(failedMessage.locator("[data-make-login]")).toHaveText("로그인");
   await expect(failedMessage.locator("[data-retry-message]")).toHaveCount(0);
   expect(guestSessionUuid).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
-  await page.locator('[data-close-auth]').first().click();
+  const loginForm = page.locator("[data-auth-form]");
+  await loginForm.locator('input[name="userId"]').fill("fixture");
+  await loginForm.locator('input[name="password"]').fill("password123!");
+  await loginForm.getByRole("button", { name: "로그인", exact: true }).click();
+
   await expect(failedMessage).toContainText(prompt);
+  await expect(failedMessage.locator("[data-make-login]")).toHaveCount(0);
+  const resend = failedMessage.locator("[data-retry-message]");
+  await expect(resend).toHaveText("다시 전송");
+  await resend.click();
+  await expect(page.locator(".message.assistant").getByText(memberResult, { exact: true })).toBeVisible();
+  expect(improveCount).toBe(2);
+  expect(memberAuthorization).toBe("Bearer fixture-token");
+  expect(memberSessionUuid).toBe("");
+  expect(memberPayload.history).toEqual([
+    { role: "user", content: "Earlier Guest prompt" },
+    { role: "assistant", content: "Earlier Guest result" },
+  ]);
+  expect(memberPayload.history.some(({ content }) => content === prompt)).toBe(false);
+  expect(memberPayload.threadId).toBeUndefined();
+  expect(memberPayload.messageId).toBeUndefined();
+  expect(memberPayload.requestId).toBeTruthy();
 });
 
 test.describe("Make component visual regressions", () => {

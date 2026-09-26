@@ -24,7 +24,17 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       return true;
     }
 
+    if (code === "SESSION_UUID_REQUIRED") {
+      const pendingThreadId = state.activeThreadId || null;
+      if (getAuthToken()) clearAuthenticatedSession({ keepRoute: true });
+      state.pendingGuestThreadTransferId = pendingThreadId;
+      state.authView = "login";
+      showNotice("로그인이 만료되었습니다. 다시 로그인해주세요.");
+      return true;
+    }
+
     if (normalized.kind === "guest_limit") {
+      state.pendingGuestThreadTransferId = state.activeThreadId || null;
       state.authView = "login";
       showNotice(backendMessage || normalized.message);
       return true;

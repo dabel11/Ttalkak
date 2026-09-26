@@ -131,6 +131,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
       ctx.failRequest(userMessageId, ctx.classifyError(error));
+      ctx.updateThread(threadId);
       ctx.setBackendFailure();
       ctx.handleError(error, "프롬프트 개선 요청에 실패했습니다.");
       ctx.render();
@@ -160,14 +161,16 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const now = Date.now();
     const threadId = ctx.getActiveThreadId() || `thread-${now}`;
     const existingMessage = ctx.getMessages()[index];
-    const requestId = ctx.shouldSync() && ctx.getBackendThreadId(threadId)
+    const shouldSync = ctx.shouldSync();
+    const hasBackendThread = shouldSync && Boolean(ctx.getBackendThreadId(threadId));
+    const requestId = shouldSync
       ? resolveMakeRequestId({ previousRequestId: existingMessage?.requestId, previousPrompt: existingMessage?.requestPrompt || existingMessage?.content, prompt: cleanValue })
       : "";
-    const history = ctx.buildHistory(ctx.getMessages().slice(0, index));
+    const priorMessages = ctx.getMessages().slice(0, index);
+    const history = ctx.buildHistory(priorMessages);
     const startedAt = Date.now();
     const signal = ctx.startRequest();
-    if (ctx.shouldSync()) {
-      if (!ctx.getBackendThreadId(threadId)) { ctx.completeRequest(signal); ctx.notice(ctx.messages.missingThread); return; }
+    if (hasBackendThread) {
       existingMessage.requestId = requestId;
       existingMessage.requestPrompt = cleanValue;
       ctx.updateThread(threadId);
@@ -214,6 +217,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       return;
     }
     const assistantMessageId = `make-${now}`;
+    if (requestId) {
+      existingMessage.requestId = requestId;
+      existingMessage.requestPrompt = cleanValue;
+    }
     ctx.applyEdit(index, cleanValue, now);
     ctx.setThinking(true);
     ctx.queueScroll(messageId);
@@ -235,6 +242,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       }
       ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
       ctx.failRequest(messageId, ctx.classifyError(error));
+      ctx.updateThread(threadId);
       ctx.setBackendFailure();
       ctx.handleError(error, ctx.messages.improveFailed);
       ctx.queueScroll(messageId);
@@ -250,6 +258,14 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
+    if (shouldSync) {
+      if (ctx.getBackendThreadId(threadId)) ctx.clearPendingGuestThreadTransfer?.(threadId);
+      const refreshed = await ctx.refreshThread(threadId);
+      if (!refreshed) ctx.render();
+      ctx.notice(ctx.messages.edited);
+      if (result.mode === "ask") ctx.focusAsk();
+      return;
+    }
     ctx.syncThread(threadId);
     ctx.notice(ctx.messages.edited);
     ctx.render();

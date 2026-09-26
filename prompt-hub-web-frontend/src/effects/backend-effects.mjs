@@ -116,13 +116,21 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const { isBackendNumericId, makePreview, makeState, normalizeRecentThreads, state } = ctx;
     if (!Array.isArray(threads)) return false;
 
+    const pendingThreadId = String(state.pendingGuestThreadTransferId || "");
+    const pendingThread = pendingThreadId
+      ? state.recentThreads.find((thread) => {
+        const backendId = thread?.serverId || thread?.id;
+        return String(thread?.id || "") === pendingThreadId && !isBackendNumericId(backendId);
+      })
+      : null;
+    const preservedThreads = pendingThread ? [pendingThread] : [];
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
-      makeState.setMakeRecentThreads(state, []);
+      makeState.setMakeRecentThreads(state, preservedThreads);
       return true;
     }
 
-    makeState.setMakeRecentThreads(state, validThreads.map((thread) => ({
+    const backendThreads = validThreads.map((thread) => ({
       id: thread.id,
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
@@ -131,7 +139,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
-    })));
+    }));
+    makeState.setMakeRecentThreads(state, [...preservedThreads, ...backendThreads]);
     normalizeRecentThreads();
     return true;
   }

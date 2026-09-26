@@ -5,6 +5,7 @@ const path = require("node:path");
 
 let classifyMakeError;
 let createPromptApi;
+let backendEffects;
 let errorEffects;
 let getOrCreateGuestSessionUuid;
 let isValidGuestSessionUuid;
@@ -12,6 +13,7 @@ let isValidGuestSessionUuid;
 test.before(async () => {
   ({ classifyMakeError } = await import("../src/utils/make-message-model.mjs"));
   ({ createPromptApi } = await import("../src/api/prompt-api.mjs"));
+  ({ backendEffects } = await import("../src/effects/backend-effects.mjs"));
   ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
   ({ getOrCreateGuestSessionUuid, isValidGuestSessionUuid } = await import("../src/usage/guest-session.mjs"));
 });
@@ -40,6 +42,15 @@ function createApi(requests) {
     },
   });
 }
+
+test("creates and persists a valid Guest UUID for a first-time visitor", () => {
+  const emptyStorage = createMemoryStorage();
+  const created = getOrCreateGuestSessionUuid(emptyStorage);
+
+  assert.equal(isValidGuestSessionUuid(created), true);
+  assert.equal(emptyStorage.getItem("ttalkak_guest_session_uuid_v1"), created);
+  assert.equal(getOrCreateGuestSessionUuid(emptyStorage), created);
+});
 
 test("reuses a valid Guest UUID and replaces a corrupted stored value", () => {
   const validStorage = createMemoryStorage("00000000-0000-4000-8000-000000000001");
@@ -92,7 +103,7 @@ test("maps only the free-trial 429 to a login action", () => {
 
 test("opens the login view for an anonymous free-trial limit response", () => {
   const notices = [];
-  const state = { isLoggedIn: false, authView: null };
+  const state = { isLoggedIn: false, authView: null, activeThreadId: "local-thread", pendingGuestThreadTransferId: null };
   errorEffects.handleBackendAccessErrorEffect({
     clearAuthenticatedSession: () => {},
     getAuthToken: () => "",
@@ -110,7 +121,61 @@ test("opens the login view for an anonymous free-trial limit response", () => {
   });
 
   assert.equal(state.authView, "login");
+  assert.equal(state.pendingGuestThreadTransferId, "local-thread");
   assert.match(notices[0], /무료 체험/);
+});
+
+test("treats SESSION_UUID_REQUIRED with a bearer token as an expired login", () => {
+  const notices = [];
+  let clearCount = 0;
+  const state = { isLoggedIn: true, authView: null, activeThreadId: "stale-token-thread", pendingGuestThreadTransferId: "old-thread" };
+  errorEffects.handleBackendAccessErrorEffect({
+    clearAuthenticatedSession: () => {
+      clearCount += 1;
+      state.isLoggedIn = false;
+      state.pendingGuestThreadTransferId = null;
+    },
+    getAuthToken: () => "expired-token",
+    getBackendErrorCode: (error) => error.payload.code,
+    getBackendErrorMessage: (error) => error.payload.message,
+    isDemoAuthToken: () => false,
+    showNotice: (message) => notices.push(message),
+    state,
+  }, {
+    status: 400,
+    payload: { code: "SESSION_UUID_REQUIRED", message: "Session UUID is required" },
+  });
+
+  assert.equal(clearCount, 1);
+  assert.equal(state.authView, "login");
+  assert.equal(state.pendingGuestThreadTransferId, "stale-token-thread");
+  assert.deepEqual(notices, ["로그인이 만료되었습니다. 다시 로그인해주세요."]);
+});
+
+test("member hydration preserves only the Guest conversation awaiting transfer", () => {
+  const pendingThread = { id: "local-thread", title: "Guest draft", messages: [{ role: "user", content: "preserve me" }] };
+  const unrelatedThread = { id: "other-local-thread", title: "Other account draft", messages: [] };
+  const state = {
+    pendingGuestThreadTransferId: pendingThread.id,
+    recentThreads: [pendingThread, unrelatedThread],
+  };
+  const context = {
+    isBackendNumericId: (value) => /^\d+$/.test(String(value || "")),
+    makePreview: (value) => String(value || ""),
+    makeState: { setMakeRecentThreads: (target, threads) => { target.recentThreads = threads; } },
+    normalizeRecentThreads: () => {},
+    state,
+  };
+
+  backendEffects.applyMakeThreadsResult(context, [{ id: 42, title: "Saved thread", messages: [] }]);
+  assert.equal(state.recentThreads.length, 2);
+  assert.equal(state.recentThreads[0], pendingThread);
+  assert.equal(state.recentThreads[1].serverId, "42");
+
+  state.pendingGuestThreadTransferId = null;
+  state.recentThreads = [unrelatedThread];
+  backendEffects.applyMakeThreadsResult(context, []);
+  assert.deepEqual(state.recentThreads, []);
 });
 
 test("production Web sources do not keep a client-side Guest request counter", () => {

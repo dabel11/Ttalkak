@@ -131,6 +131,7 @@ export function createMakePageAdapter(ctx) {
         canSplit: !isAssistant && ctx.canSplitMakeThread(activeThread, ctx.isBackendNumericId)
           && ctx.state.messages.findIndex((/** @type {TtalkakStateEntity} */ item) => item.id === message.id) > 0,
         improvedPrompt: message.improvedPrompt || message.executablePrompt || "",
+        hasBackendAuth: Boolean(ctx.hasBackendAuthToken()),
         isCopied: ctx.state.copiedMessageId === message.id,
         isEditing: !isAssistant && ctx.state.editingMessageId === message.id,
         failureTitle: failurePresentation?.title || "",

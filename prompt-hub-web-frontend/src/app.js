@@ -722,6 +722,7 @@ async function ensureMakeRuntime() {
       MakeFolderButtonView, MessageBubbleView, findMakeThread, canSplitMakeThread, isBackendNumericId,
       countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
       makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
+      hasBackendAuthToken,
     });
     document.documentElement.dataset.routeRuntime = "make:ready";
     return true;
@@ -1988,10 +1989,16 @@ function getMakeControllerContext() {
     getMessages: () => state.messages,
     getActiveThreadId: () => state.activeThreadId,
     getBackendThreadId: getMakeBackendThreadId,
+    clearPendingGuestThreadTransfer: (threadId) => {
+      if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
+        state.pendingGuestThreadTransferId = null;
+        persistState();
+      }
+    },
     clearEditing: () => makeStateModule.setMakeEditingMessage(state),
     refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
     applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
-    finishEdit: finishEditedMakeMessageState,
+    finishEdit: (message) => finishEditedMakeMessageState(state, message),
     queueScroll: (messageId) => queueLatestMakeScroll(messageId, { mode: "immediate" }),
     messages: {
       busy: "이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.",

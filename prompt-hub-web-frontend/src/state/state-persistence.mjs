@@ -98,6 +98,7 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
       makeFolders: state.makeFolders,
       activeFolderId: state.activeFolderId,
       activeThreadId: state.activeThreadId,
+      pendingGuestThreadTransferId: state.pendingGuestThreadTransferId,
       messages: state.messages,
       composerDraft: state.composerDraft,
       templateCollapsed: state.templateCollapsed,
@@ -193,6 +194,10 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
       ? savedState.activeFolderId
       : "all";
   state.activeThreadId = savedState.activeThreadId || null;
+  state.pendingGuestThreadTransferId = savedState.pendingGuestThreadTransferId != null
+    && state.recentThreads.some((thread) => String(thread?.id || "") === String(savedState.pendingGuestThreadTransferId))
+    ? savedState.pendingGuestThreadTransferId
+    : null;
   state.messages = Array.isArray(savedState.messages) ? savedState.messages : [];
   state.composerDraft = savedState.composerDraft || "";
   state.templateCollapsed = Boolean(savedState.templateCollapsed);

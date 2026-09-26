@@ -144,6 +144,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       if (shouldUseImproveThreadSync()) {
         const backendThreadId = getMakeBackendThreadId(threadId);
         if (backendThreadId) payload.threadId = Number(backendThreadId);
+        else payload.history = history;
         if (messageId) payload.messageId = String(messageId);
         const normalizedRequestId = normalizeMakeRequestId(requestId);
         if (normalizedRequestId) payload.requestId = normalizedRequestId;
