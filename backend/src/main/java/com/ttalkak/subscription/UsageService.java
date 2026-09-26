@@ -3,6 +3,7 @@ package com.ttalkak.subscription;
 import com.ttalkak.common.exception.ApiException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class UsageService {
     private final GuestUsageRepository guestUsageRepository;
     private final MemberEntitlementRepository memberEntitlementRepository;
+    private final UsageRowInitializer rowInitializer;
     private final int guestLimit;
     private final int freeDailyLimit;
     private final int proDailyLimit;
@@ -29,17 +31,20 @@ public class UsageService {
     public UsageService(
             GuestUsageRepository guestUsageRepository,
             MemberEntitlementRepository memberEntitlementRepository,
+            UsageRowInitializer rowInitializer,
             @Value("${ttalkak.usage.guest-limit:3}") int guestLimit,
             @Value("${ttalkak.usage.free-daily-limit:10}") int freeDailyLimit,
             @Value("${ttalkak.usage.pro-daily-limit:100}") int proDailyLimit,
             @Value("${ttalkak.usage.zone:Asia/Seoul}") String zone
     ) {
-        this(guestUsageRepository, memberEntitlementRepository, guestLimit, freeDailyLimit, proDailyLimit, Clock.system(ZoneId.of(zone)));
+        this(guestUsageRepository, memberEntitlementRepository, rowInitializer,
+                guestLimit, freeDailyLimit, proDailyLimit, Clock.system(ZoneId.of(zone)));
     }
 
     UsageService(
             GuestUsageRepository guestUsageRepository,
             MemberEntitlementRepository memberEntitlementRepository,
+            UsageRowInitializer rowInitializer,
             int guestLimit,
             int freeDailyLimit,
             int proDailyLimit,
@@ -47,6 +52,7 @@ public class UsageService {
     ) {
         this.guestUsageRepository = guestUsageRepository;
         this.memberEntitlementRepository = memberEntitlementRepository;
+        this.rowInitializer = rowInitializer;
         this.guestLimit = positive(guestLimit, "guest-limit");
         this.freeDailyLimit = positive(freeDailyLimit, "free-daily-limit");
         this.proDailyLimit = positive(proDailyLimit, "pro-daily-limit");
@@ -81,8 +87,10 @@ public class UsageService {
     private UsageEntitlement consumeGuest(String sessionUuid) {
         String normalizedUuid = normalizeSessionUuid(sessionUuid);
         LocalDateTime now = now();
-        GuestUsage usage = guestUsageRepository.findForUpdate(normalizedUuid)
-                .orElseGet(() -> new GuestUsage(normalizedUuid, now));
+        DataIntegrityViolationException collision = initializeGuest(normalizedUuid, now);
+        GuestUsage usage = guestUsageRepository.findForUpdate(normalizedUuid).orElseThrow(() -> initializationFailure(
+                "Guest usage row was not initialized.", collision
+        ));
         if (usage.getUsedCount() >= guestLimit) {
             throw limitExceeded("FREE_TRIAL_LIMIT_EXCEEDED", "무료 체험 횟수를 모두 사용했습니다.", guestSnapshot(usage));
         }
@@ -109,8 +117,10 @@ public class UsageService {
         if (memberId == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다.");
         LocalDate today = LocalDate.now(clock);
         LocalDateTime now = now();
-        MemberEntitlement entitlement = memberEntitlementRepository.findForUpdate(memberId)
-                .orElseGet(() -> new MemberEntitlement(memberId, today, now));
+        DataIntegrityViolationException collision = initializeMember(memberId, today, now);
+        MemberEntitlement entitlement = memberEntitlementRepository.findForUpdate(memberId).orElseThrow(() -> initializationFailure(
+                "Member entitlement row was not initialized.", collision
+        ));
         entitlement.resetUsageIfNeeded(today, now);
         return memberEntitlementRepository.save(entitlement);
     }
@@ -156,6 +166,28 @@ public class UsageService {
 
     private boolean periodIsCurrent(LocalDateTime periodEnd) {
         return periodEnd != null && periodEnd.isAfter(now());
+    }
+
+    private DataIntegrityViolationException initializeGuest(String sessionUuid, LocalDateTime now) {
+        try {
+            rowInitializer.ensureGuest(sessionUuid, now);
+            return null;
+        } catch (DataIntegrityViolationException exception) {
+            return exception;
+        }
+    }
+
+    private DataIntegrityViolationException initializeMember(Long memberId, LocalDate today, LocalDateTime now) {
+        try {
+            rowInitializer.ensureMember(memberId, today, now);
+            return null;
+        } catch (DataIntegrityViolationException exception) {
+            return exception;
+        }
+    }
+
+    private RuntimeException initializationFailure(String message, DataIntegrityViolationException collision) {
+        return collision == null ? new IllegalStateException(message) : collision;
     }
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }

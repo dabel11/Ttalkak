@@ -1,5 +1,6 @@
 package com.ttalkak.common.config;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -45,6 +46,33 @@ class SecurityConfigAuthorizationTest {
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
+    @ParameterizedTest(name = "anonymous {0} {1}")
+    @MethodSource("subscriptionEndpoints")
+    void subscriptionApisRequireAuthentication(HttpMethod method, String path) throws Exception {
+        mockMvc.perform(request(method, path).contentType("application/json").content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("LOGIN_REQUIRED"));
+    }
+
+    @Test
+    void guestImproveRequiresASessionUuid() throws Exception {
+        mockMvc.perform(request(HttpMethod.POST, "/api/prompts/improve")
+                        .contentType("application/json")
+                        .content("{\"prompt\":\"운동 계획을 만들어줘\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("SESSION_UUID_INVALID"));
+    }
+
+    @Test
+    void invalidAuthorizationCannotFallBackToGuestUsage() throws Exception {
+        mockMvc.perform(request(HttpMethod.POST, "/api/prompts/improve")
+                        .header("Authorization", "Bearer expired")
+                        .contentType("application/json")
+                        .content("{\"prompt\":\"운동 계획을 만들어줘\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("LOGIN_REQUIRED"));
+    }
+
     private static Stream<Arguments> generalUserWriteEndpoints() {
         return Stream.of(
                 Arguments.of(
@@ -87,6 +115,14 @@ class SecurityConfigAuthorizationTest {
                         HttpMethod.DELETE,
                         "/api/make/folders/999999999"
                 )
+        );
+    }
+
+    private static Stream<Arguments> subscriptionEndpoints() {
+        return Stream.of(
+                Arguments.of(HttpMethod.GET, "/api/subscriptions/me"),
+                Arguments.of(HttpMethod.POST, "/api/subscriptions/checkout"),
+                Arguments.of(HttpMethod.POST, "/api/subscriptions/portal")
         );
     }
 }
