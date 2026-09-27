@@ -1,7 +1,10 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { consumeBillingRedirect, createBillingController } from "../src/billing/billing-controller.mjs";
-import { createBillingApi } from "../src/api/billing-api.mjs";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+let consumeBillingRedirect; let createBillingController; let createBillingApi;
+test.before(async () => {
+  ({ consumeBillingRedirect, createBillingController } = await import("../src/billing/billing-controller.mjs"));
+  ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
+});
 
 test("billing callback removes the one-time auth key before it can remain in browser history", () => {
   const history = { state: { from: "home" }, replaceState(state, title, url) { this.saved = { state, title, url }; } };
