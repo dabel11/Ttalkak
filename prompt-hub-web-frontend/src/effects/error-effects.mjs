@@ -25,10 +25,12 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     }
 
     if (code === "SESSION_UUID_REQUIRED") {
-      const pendingThreadId = state.activeThreadId || null;
-      if (getAuthToken()) clearAuthenticatedSession({ keepRoute: true });
-      state.pendingGuestThreadTransferId = pendingThreadId;
-      state.pendingGuestThreadTransferErrorCode = "SESSION_UUID_REQUIRED";
+      if (getAuthToken()) {
+        clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state, options.recoveryPrompt);
+      } else {
+        state.pendingGuestThreadTransferId = state.activeThreadId || null;
+        state.pendingGuestThreadTransferErrorCode = state.pendingGuestThreadTransferId ? "SESSION_UUID_REQUIRED" : "";
+      }
       state.authView = "login";
       showNotice("로그인이 만료되었습니다. 다시 로그인해주세요.");
       return true;
@@ -43,16 +45,13 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     }
 
     if (normalized.requiresLogin) {
-      return handleLoginRequired({
-        clearAuthenticatedSession,
+      return handleLoginRequired(
+        ctx,
+        backendMessage || normalized.message,
         fallbackMessage,
-        getAuthToken,
-        isDemoAuthToken,
-        keepSession: Boolean(options.keepSession),
-        message: backendMessage || normalized.message,
-        showNotice,
-        state,
-      });
+        Boolean(options.keepSession),
+        options.recoveryPrompt,
+      );
     }
 
     const domainMessage = getDomainErrorMessage(status, code);
@@ -72,33 +71,72 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     return "";
   }
 
-  function handleLoginRequired({ clearAuthenticatedSession, fallbackMessage, getAuthToken, isDemoAuthToken, keepSession, message, showNotice, state }) {
+  function handleLoginRequired(ctx, message, fallbackMessage, keepSession, recoveryPrompt) {
+    const { clearAuthenticatedSession, getAuthToken, isDemoAuthToken, showNotice, state } = ctx;
     const token = getAuthToken();
     if (keepSession) {
       showNotice(fallbackMessage || message);
       return true;
     }
-    if (!token || isDemoAuthToken(token)) {
-      if (!token && state.isLoggedIn) {
-        clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state);
-        state.authView = "login";
-      }
-      showNotice(message);
-      return true;
+    if ((!token && state.isLoggedIn) || (token && !isDemoAuthToken(token))) {
+      clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state, recoveryPrompt);
+      state.authView = "login";
     }
-    clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state);
-    state.authView = "login";
     showNotice(message);
     return true;
   }
 
-  function clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state) {
-    const pendingThreadId = state.pendingGuestThreadTransferId || null;
-    const pendingErrorCode = String(state.pendingGuestThreadTransferErrorCode || "");
+  function clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state, recoveryPrompt) {
+    const guestThread = getPendingGuestThread(state);
+    const thread = guestThread || createAuthRecoveryThread(recoveryPrompt);
+    const pendingErrorCode = guestThread
+      ? state.pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED"
+      : "AUTHENTICATION_REQUIRED";
     clearAuthenticatedSession({ keepRoute: true });
-    if (!pendingThreadId) return;
-    state.pendingGuestThreadTransferId = pendingThreadId;
-    state.pendingGuestThreadTransferErrorCode = pendingErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED";
+    if (!thread) return;
+    state.recentThreads = [thread];
+    state.activeThreadId = thread.id;
+    state.messages = thread.messages.map((message) => ({ ...message }));
+    state.pendingGuestThreadTransferId = thread.id;
+    state.pendingGuestThreadTransferErrorCode = pendingErrorCode;
+    state.route = "make";
+  }
+
+  function getPendingGuestThread(state) {
+    const pendingThreadId = String(state.pendingGuestThreadTransferId || "");
+    if (!pendingThreadId) return null;
+    const sourceThread = state.recentThreads?.find((thread) => String(thread?.id || "") === pendingThreadId);
+    if (!sourceThread) return null;
+    if (sourceThread.serverId || /^\d+$/.test(sourceThread.id)) return null;
+    const messages = String(state.activeThreadId || "") === pendingThreadId
+      ? state.messages
+      : sourceThread.messages;
+    return { ...sourceThread, messages: cloneMessages(messages) };
+  }
+
+  function createAuthRecoveryThread(recoveryPrompt) {
+    const content = String(recoveryPrompt || "").trim();
+    if (!content) return null;
+    const createdAt = Date.now();
+    const recoveryId = `auth-recovery-${createdAt}`;
+    const recoveryMessage = {
+      id: `user-${createdAt}`,
+      role: "user",
+      content,
+      retryMode: "follow-up",
+    };
+    return {
+      id: recoveryId,
+      title: content,
+      preview: content,
+      createdAt,
+      folderId: "uncategorized",
+      messages: [recoveryMessage],
+    };
+  }
+
+  function cloneMessages(messages) {
+    return Array.isArray(messages) ? messages.map((message) => ({ ...message })) : [];
   }
 
   function handleNormalizedError({ backendMessage, fallbackMessage, normalized, showNotice }) {

@@ -128,10 +128,15 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         ctx.notice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
         return;
       }
-      const recovered = await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
+      const failure = ctx.classifyError(error);
+      const recovered = failure.requiresLogin
+        ? false
+        : await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
-      ctx.failRequest(userMessageId, ctx.classifyError(error));
-      ctx.updateThread(threadId);
+      const failedMessage = ctx.state.messages.find((message) => message.id === userMessageId);
+      if (failedMessage) failedMessage.retryMode = "follow-up";
+      ctx.failRequest(userMessageId, failure);
+      ctx.updateThread(ctx.state?.activeThreadId || threadId);
       ctx.setBackendFailure();
       ctx.handleError(error, "프롬프트 개선 요청에 실패했습니다.");
       ctx.render();
@@ -146,7 +151,13 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
-    if (ctx.shouldSync()) { const refreshed = await ctx.refreshThread(threadId); if (!refreshed) ctx.render(); if (result.mode === "ask") ctx.focusAsk(); return; }
+    if (ctx.shouldSync()) {
+      if (ctx.getBackendThreadId(threadId)) ctx.clearPendingGuestThreadTransfer?.(threadId);
+      const refreshed = await ctx.refreshThread(threadId);
+      if (!refreshed) ctx.render();
+      if (result.mode === "ask") ctx.focusAsk();
+      return;
+    }
     ctx.syncThread(threadId);
     ctx.render();
     if (result.mode === "ask") ctx.focusAsk();
@@ -163,6 +174,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const existingMessage = ctx.getMessages()[index];
     const shouldSync = ctx.shouldSync();
     const hasBackendThread = shouldSync && Boolean(ctx.getBackendThreadId(threadId));
+    const isFollowUpRetry = existingMessage?.retryMode === "follow-up";
     const requestId = shouldSync
       ? resolveMakeRequestId({ previousRequestId: existingMessage?.requestId, previousPrompt: existingMessage?.requestPrompt || existingMessage?.content, prompt: cleanValue })
       : "";
@@ -170,7 +182,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const history = ctx.buildHistory(priorMessages);
     const startedAt = Date.now();
     const signal = ctx.startRequest();
-    if (hasBackendThread) {
+    if (hasBackendThread && !isFollowUpRetry) {
       existingMessage.requestId = requestId;
       existingMessage.requestPrompt = cleanValue;
       ctx.updateThread(threadId);
@@ -242,7 +254,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       }
       ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
       ctx.failRequest(messageId, ctx.classifyError(error));
-      ctx.updateThread(threadId);
+      ctx.updateThread(ctx.state?.activeThreadId || threadId);
       ctx.setBackendFailure();
       ctx.handleError(error, ctx.messages.improveFailed);
       ctx.queueScroll(messageId);
@@ -254,6 +266,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
     resetConcurrency(threadId);
+    if (isFollowUpRetry) {
+      const retriedMessage = ctx.getMessages().find((message) => message.id === messageId);
+      if (retriedMessage) delete retriedMessage.retryMode;
+    }
     ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);

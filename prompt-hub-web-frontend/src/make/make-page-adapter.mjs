@@ -13,7 +13,7 @@ function resolveMakeMessageFailure(ctx, message) {
 
   const code = String(ctx.state.pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED").toUpperCase();
   return ctx.messageModel.classifyMakeError({
-    status: code === "SESSION_UUID_REQUIRED" ? 401 : 429,
+    status: code.endsWith("_REQUIRED") ? 401 : 429,
     payload: { code },
   });
 }

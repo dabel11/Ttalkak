@@ -200,7 +200,7 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
     ? savedState.pendingGuestThreadTransferId
     : null;
   state.pendingGuestThreadTransferErrorCode = state.pendingGuestThreadTransferId
-    ? ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "SESSION_UUID_REQUIRED"].includes(String(savedState.pendingGuestThreadTransferErrorCode || "").toUpperCase())
+    ? ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "SESSION_UUID_REQUIRED", "AUTHENTICATION_REQUIRED"].includes(String(savedState.pendingGuestThreadTransferErrorCode || "").toUpperCase())
       ? String(savedState.pendingGuestThreadTransferErrorCode).toUpperCase()
       : "FREE_TRIAL_LIMIT_EXCEEDED"
     : "";

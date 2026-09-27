@@ -1092,6 +1092,177 @@ test("Guest trial exhaustion preserves the failed prompt and opens login", async
   expect(memberPayload.requestId).toBeTruthy();
 });
 
+test("an authenticated composer success clears Guest recovery even when the follow-up refresh fails", async ({ page }) => {
+  let improveCount = 0;
+  await openMake(page, [], {
+    authLoginHandler: async (route) => route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ accessToken: "fixture-token", member: { memberId: 7, username: "fixture", nickname: "Fixture User", role: "ROLE_USER" } }),
+    }),
+    backendThreads: [],
+    makeHydrationHandler: async (route) => {
+      if (improveCount >= 2) {
+        await route.fulfill({ status: 503, headers: CORS_HEADERS, body: JSON.stringify({ code: "SERVICE_UNAVAILABLE" }) });
+        return;
+      }
+      await route.fulfill({ status: 200, headers: CORS_HEADERS, body: JSON.stringify({ items: [] }) });
+    },
+    threadHandler: async (route) => route.fulfill({
+      status: 503,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ code: "SERVICE_UNAVAILABLE" }),
+    }),
+  }, async (route) => {
+    improveCount += 1;
+    if (improveCount === 1) {
+      await route.fulfill({
+        status: 429,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ code: "FREE_TRIAL_LIMIT_EXCEEDED" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "Successful member result", threadId: 44 }),
+    });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill("Guest limit prompt");
+  await page.locator('[data-composer] button[type="submit"]').click();
+  const loginForm = page.locator("[data-auth-form]");
+  await expect(loginForm).toBeVisible();
+  await loginForm.locator('input[name="userId"]').fill("fixture");
+  await loginForm.locator('input[name="password"]').fill("password123!");
+  await loginForm.getByRole("button", { name: "로그인", exact: true }).click();
+
+  const nextPrompt = "Continue with a different member request";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(nextPrompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.locator(".message.assistant").getByText("Successful member result", { exact: true })).toBeVisible();
+  const successfulMessage = page.locator(".message.user").filter({ hasText: nextPrompt });
+  await expect(successfulMessage.locator(".message-failure-status")).toHaveCount(0);
+  await expect(successfulMessage.locator("[data-retry-message]")).toHaveCount(0);
+  const persistedPendingId = await page.evaluate((key) => JSON.parse(localStorage.getItem(key))?.state?.pendingGuestThreadTransferId, STORAGE_KEY);
+  expect(persistedPendingId).toBeNull();
+});
+
+test("login hydration switches an excluded local feed back to the pending Guest conversation", async ({ page }) => {
+  const pendingMessages = [{ id: "pending-user", role: "user", content: "Pending Guest request" }];
+  const unrelatedMessages = [{ id: "other-user", role: "user", content: "Unrelated local conversation" }];
+  const pendingThread = { id: "pending-local", title: "Pending Guest", folderId: "uncategorized", createdAt: 2, messages: pendingMessages };
+  const unrelatedThread = { id: "other-local", title: "Other local", folderId: "uncategorized", createdAt: 1, messages: unrelatedMessages };
+  await openMake(page, unrelatedMessages, {
+    activeThreadId: unrelatedThread.id,
+    recentThreads: [pendingThread, unrelatedThread],
+    pendingGuestThreadTransferId: pendingThread.id,
+    pendingGuestThreadTransferErrorCode: "FREE_TRIAL_LIMIT_EXCEEDED",
+    authLoginHandler: async (route) => route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ accessToken: "fixture-token", member: { memberId: 7, username: "fixture", nickname: "Fixture User", role: "ROLE_USER" } }),
+    }),
+    backendThreads: [serverThreadFixture([])],
+  });
+
+  await page.locator('[data-open-auth="login"]').first().click();
+  const loginForm = page.locator("[data-auth-form]");
+  await loginForm.locator('input[name="userId"]').fill("fixture");
+  await loginForm.locator('input[name="password"]').fill("password123!");
+  await loginForm.getByRole("button", { name: "로그인", exact: true }).click();
+
+  await expect(page.locator(".message.user").getByText("Pending Guest request", { exact: true })).toBeVisible();
+  await expect(page.locator(".message.user").getByText("Unrelated local conversation", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".recent-thread").filter({ hasText: "Other local" })).toHaveCount(0);
+  await expect(page.locator(".recent-thread").filter({ hasText: "Pending Guest" })).toBeVisible();
+});
+
+test("logout removes account-bound Make conversations from the Guest UI and persisted state", async ({ page }) => {
+  const privateMessages = [
+    { id: "private-user", role: "user", content: "Member-only private prompt" },
+    { id: "private-assistant", role: "assistant", content: "Member-only private answer", improvedPrompt: "Member-only private answer" },
+  ];
+  const privateThread = serverThreadFixture(privateMessages);
+  await openMake(page, privateMessages, {
+    isLoggedIn: true,
+    authToken: "fixture-token",
+    token: "fixture-token",
+    currentUser: "Fixture User",
+    currentUserId: "7",
+    activeThreadId: privateThread.id,
+    recentThreads: [privateThread],
+    backendThreads: [privateThread],
+  });
+
+  await expect(page.getByText("Member-only private prompt", { exact: true })).toBeVisible();
+  await page.locator(".topbar-account > summary").click();
+  await page.locator("[data-logout]").click();
+  await page.locator("[data-confirm-action]").click();
+
+  await page.locator('.sidebar [data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(page.getByText("Member-only private prompt", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Member-only private answer", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".recent-thread")).toHaveCount(0);
+
+  const persistedMakeState = await page.evaluate((key) => {
+    const saved = JSON.parse(localStorage.getItem(key) || "{}").state || {};
+    return {
+      activeThreadId: saved.activeThreadId,
+      messages: saved.messages,
+      recentThreads: saved.recentThreads,
+    };
+  }, STORAGE_KEY);
+  expect(persistedMakeState.activeThreadId).toBeNull();
+  expect(persistedMakeState.messages).toEqual([]);
+  expect(persistedMakeState.recentThreads).toEqual([]);
+});
+
+test("an authenticated 401 preserves only the failed prompt as a reload-safe login recovery", async ({ page }) => {
+  const privateMessages = [
+    { id: "private-user", role: "user", content: "Earlier member-only history" },
+    { id: "private-assistant", role: "assistant", content: "Earlier private answer", improvedPrompt: "Earlier private answer" },
+  ];
+  const privateThread = serverThreadFixture(privateMessages);
+  await openMake(page, privateMessages, {
+    isLoggedIn: true,
+    authToken: "expired-token",
+    token: "expired-token",
+    currentUser: "Expired Member",
+    currentUserId: "7",
+    activeThreadId: privateThread.id,
+    recentThreads: [privateThread],
+    backendThreads: [privateThread],
+  }, async (route) => route.fulfill({
+    status: 401,
+    headers: CORS_HEADERS,
+    body: JSON.stringify({ code: "AUTHENTICATION_REQUIRED", message: "Session expired" }),
+  }));
+
+  const failedPrompt = "Keep only this unsent prompt";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(failedPrompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.locator("[data-auth-form]")).toBeVisible();
+  await page.locator("[data-close-auth]").first().click();
+  await expect(page.locator(".message.user").getByText(failedPrompt, { exact: true })).toBeVisible();
+  await expect(page.getByText("Earlier member-only history", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Earlier private answer", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".recent-thread")).toHaveCount(1);
+
+  await page.reload();
+  await waitForAppHydration(page);
+  await page.locator('.sidebar [data-route="make"]').click();
+  await expect(page.locator(".message.user").getByText(failedPrompt, { exact: true })).toBeVisible();
+  await expect(page.locator(".message-failure-status")).toContainText("로그인이 만료");
+  await expect(page.locator("[data-make-login]")).toHaveText("로그인");
+  await expect(page.getByText("Earlier member-only history", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".recent-thread")).toHaveCount(1);
+});
+
 test("Google demo login still sends Make improvement as a Guest request", async ({ page }) => {
   let authorization = "missing";
   let guestSessionUuid = "";

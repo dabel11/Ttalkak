@@ -265,6 +265,18 @@ function clearSessionBackendDataState(/** @type {TtalkakApplicationState} */ sta
 }
 
 
+function clearMakeSessionDataState(/** @type {TtalkakApplicationState} */ state) {
+  state.recentThreads = [];
+  state.messages = [];
+  state.activeThreadId = null;
+  state.makeFolders = [{ id: "uncategorized", name: "\uBBF8\uBD84\uB958" }];
+  state.activeFolderId = "all";
+  state.composerDraft = "";
+  state.pendingMakeImproveThread = null;
+  state.makeBackendMessage = "";
+}
+
+
 function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ state) {
   state.creatingFolder = false;
   state.editingFolderId = null;
@@ -293,6 +305,7 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);
+  clearMakeSessionDataState(state);
   clearTransientSessionUiState(state);
   if (!options.keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
 }

@@ -210,7 +210,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         makeState.setMakeBackendState(state, "fallback", canUseDemoFallback()
           ? `Make 데모 데이터 표시 중: ${fallbackMessage}`
           : getApiFailureMessage("Make 첨삭 API"));
-        handleBackendAccessError(error, fallbackMessage);
+        handleBackendAccessError(error, fallbackMessage, { recoveryPrompt: prompt });
         reportWarning("make-sync", "improve-prompt", error);
         if (!canUseDemoFallback()) throw error;
         const fallbackText = polishPrompt(prompt);

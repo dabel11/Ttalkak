@@ -116,6 +116,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const { isBackendNumericId, makePreview, makeState, normalizeRecentThreads, state } = ctx;
     if (!Array.isArray(threads)) return false;
 
+    const activeThreadId = String(state.activeThreadId || "");
+    const activeThread = activeThreadId
+      ? state.recentThreads.find((thread) => {
+        return String(thread?.id || "") === activeThreadId || String(thread?.serverId || "") === activeThreadId;
+      })
+      : null;
+    const activeLookupId = String(activeThread?.serverId || activeThreadId);
     const pendingThreadId = String(state.pendingGuestThreadTransferId || "");
     const pendingThread = pendingThreadId
       ? state.recentThreads.find((thread) => {
@@ -127,6 +134,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
       makeState.setMakeRecentThreads(state, preservedThreads);
+      reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
       return true;
     }
 
@@ -140,9 +148,25 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
     }));
-    makeState.setMakeRecentThreads(state, [...preservedThreads, ...backendThreads]);
+    const nextThreads = [...preservedThreads, ...backendThreads];
+    makeState.setMakeRecentThreads(state, nextThreads);
+    reconcileActiveMakeThread(state, nextThreads, pendingThread, activeLookupId);
     normalizeRecentThreads();
     return true;
+  }
+
+  function reconcileActiveMakeThread(state, threads, pendingThread, activeLookupId) {
+    if (!activeLookupId) return;
+    const nextActiveThread = threads.find((thread) => {
+      const id = String(thread?.id || "");
+      const serverId = String(thread?.serverId || "");
+      return id === activeLookupId || serverId === activeLookupId;
+    }) || pendingThread || null;
+
+    state.activeThreadId = nextActiveThread?.id || null;
+    state.messages = Array.isArray(nextActiveThread?.messages)
+      ? nextActiveThread.messages.map((message) => ({ ...message }))
+      : [];
   }
 
   function applyMyLibraryResult(ctx, result) {
