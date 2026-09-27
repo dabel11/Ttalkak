@@ -266,11 +266,18 @@ function clearSessionBackendDataState(/** @type {TtalkakApplicationState} */ sta
 
 
 function clearMakeSessionDataState(/** @type {TtalkakApplicationState} */ state) {
-  state.recentThreads = [];
-  state.messages = [];
-  state.activeThreadId = null;
-  state.makeFolders = [{ id: "uncategorized", name: "\uBBF8\uBD84\uB958" }];
-  state.activeFolderId = "all";
+  /** @param {unknown} id */
+  const isLocalId = (id) => Boolean(id) && !/^\d+$/.test(String(id));
+  const localThreads = state.recentThreads.filter((thread) => !thread.serverId && isLocalId(thread.id));
+  const activeThread = localThreads.find((thread) => String(thread.id) === String(state.activeThreadId || ""));
+  state.recentThreads = localThreads;
+  state.messages = activeThread?.messages?.map((message) => ({ ...message })) || [];
+  state.activeThreadId = activeThread?.id || null;
+  state.makeFolders = [
+    { id: "uncategorized", name: "\uBBF8\uBD84\uB958" },
+    ...state.makeFolders.filter((folder) => folder.id !== "uncategorized" && isLocalId(folder.id)),
+  ];
+  if (!state.makeFolders.some((folder) => String(folder.id) === String(state.activeFolderId || ""))) state.activeFolderId = "all";
   state.composerDraft = "";
   state.pendingMakeImproveThread = null;
   state.makeBackendMessage = "";

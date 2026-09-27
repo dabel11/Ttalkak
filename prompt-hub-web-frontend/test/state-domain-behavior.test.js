@@ -94,19 +94,26 @@ test("session cleanup removes account-bound Make conversations and folders", () 
     currentUser: "Member",
     currentUserId: "7",
     activeThreadId: "42",
-    recentThreads: [{ id: "42", serverId: "42", messages: [{ role: "user", content: "private prompt" }] }],
+    recentThreads: [
+      { id: "42", serverId: "42", messages: [{ role: "user", content: "private prompt" }] },
+      { id: "local-thread", messages: [{ role: "user", content: "device-only prompt" }] },
+    ],
     messages: [{ role: "user", content: "private prompt" }],
-    makeFolders: [{ id: "uncategorized", name: "미분류" }, { id: "9", name: "Private folder" }],
+    makeFolders: [
+      { id: "uncategorized", name: "미분류" },
+      { id: "9", name: "Private folder" },
+      { id: "folder-local", name: "Device folder" },
+    ],
     activeFolderId: "9",
     composerDraft: "private draft",
   });
 
   stateApi.clearAuthenticatedSessionState(state);
 
-  assert.deepEqual(state.recentThreads, []);
+  assert.deepEqual(state.recentThreads.map(({ id }) => id), ["local-thread"]);
   assert.deepEqual(state.messages, []);
   assert.equal(state.activeThreadId, null);
-  assert.deepEqual(state.makeFolders, [{ id: "uncategorized", name: "미분류" }]);
+  assert.deepEqual(state.makeFolders.map(({ id }) => id), ["uncategorized", "folder-local"]);
   assert.equal(state.activeFolderId, "all");
   assert.equal(state.composerDraft, "");
 });
