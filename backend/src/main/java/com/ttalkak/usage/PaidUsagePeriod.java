@@ -12,7 +12,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.util.Objects;
 
-/** A confirmed paid entitlement. A payment callback, not a client request, may create one. */
+/** A confirmed paid entitlement. Only a verified provider approval may create one. */
 @Entity
 @Table(name = "paid_usage_periods",
         uniqueConstraints = @UniqueConstraint(name = "uk_paid_usage_payment_ref",
@@ -27,7 +27,7 @@ public class PaidUsagePeriod {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
 
-    @Column(name = "payment_reference", nullable = false, length = 128)
+    @Column(name = "payment_reference", nullable = false, length = 200)
     private String paymentReference;
 
     @Column(name = "starts_at", nullable = false)
@@ -41,10 +41,10 @@ public class PaidUsagePeriod {
 
     protected PaidUsagePeriod() {}
 
-    PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
         if (memberId == null || memberId <= 0) throw new IllegalArgumentException("memberId");
         if (paymentReference == null || paymentReference.isBlank()
-                || paymentReference.length() > 128) throw new IllegalArgumentException("paymentReference");
+                || paymentReference.length() > 200) throw new IllegalArgumentException("paymentReference");
         if (!Objects.requireNonNull(startsAt).isBefore(Objects.requireNonNull(endsAt))) {
             throw new IllegalArgumentException("Paid period must have positive duration");
         }
