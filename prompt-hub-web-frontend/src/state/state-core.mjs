@@ -8,6 +8,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
   return {
     route: "home",
     authView: null,
+    billingOpen: false,
     detailPromptId: null,
     detailHighlightCommentId: null,
     reportPromptId: null,
@@ -188,6 +189,8 @@ function toggleReportedVisibilityState(/** @type {TtalkakApplicationState} */ st
 function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
   if (state.confirmAction) {
     state.confirmAction = null;
+  } else if (state.billingOpen) {
+    state.billingOpen = false;
   } else if (state.adminBlockTarget) {
     state.adminBlockTarget = null;
   } else if (state.executeMessageId) {
@@ -287,6 +290,7 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   clearAuthenticatedIdentityState(state);
   state.adminMode = false;
   state.authView = null;
+  state.billingOpen = false;
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);

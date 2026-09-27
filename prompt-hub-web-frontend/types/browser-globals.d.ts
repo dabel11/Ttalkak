@@ -288,6 +288,12 @@ interface TtalkakApi {
   getMyReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getMyRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getBillingStatus(token: TtalkakToken): Promise<unknown>;
+  getUsageStatus(token: TtalkakToken): Promise<unknown>;
+  setupBilling(token: TtalkakToken): Promise<unknown>;
+  completeBilling(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  cancelBilling(token: TtalkakToken): Promise<unknown>;
+  retryBilling(token: TtalkakToken): Promise<unknown>;
   getAdminReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   updateAdminReportStatus(reportId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
   getAdminPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
