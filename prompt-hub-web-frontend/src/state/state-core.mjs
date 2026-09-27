@@ -119,6 +119,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     editingFolderId: null,
     activeThreadId: null,
     pendingGuestThreadTransferId: null,
+    pendingGuestThreadTransferErrorCode: "",
     copiedMessageId: "",
   };
 }
@@ -281,6 +282,7 @@ function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ sta
   state.executeMessageId = null;
   state.executePromptId = null;
   state.pendingGuestThreadTransferId = null;
+  state.pendingGuestThreadTransferErrorCode = "";
 }
 
 

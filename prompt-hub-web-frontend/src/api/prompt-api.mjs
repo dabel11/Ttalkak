@@ -51,7 +51,7 @@ export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normaliz
       /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
       improvePrompt(payload, token, { signal } = {}) {
         const headers = token ? {} : { "X-Session-UUID": getOrCreateGuestSessionUuid() };
-        return request(MAKE_API_PATHS.improve, { method: "POST", token, headers, signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
+        return request(MAKE_API_PATHS.improve, { method: "POST", token, headers, useStoredToken: Boolean(token), signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
           normalizeImproveResult(result, payload?.prompt || ""),
         );
       },

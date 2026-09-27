@@ -1058,7 +1058,17 @@ test("Guest trial exhaustion preserves the failed prompt and opens login", async
   await expect(failedMessage.locator("[data-make-login]")).toHaveText("로그인");
   await expect(failedMessage.locator("[data-retry-message]")).toHaveCount(0);
   expect(guestSessionUuid).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+
+  await page.reload();
+  await waitForAppHydration(page);
+  await page.locator('.sidebar [data-route="make"]').click();
+  await expect(page.locator(".make-page")).toBeVisible();
+  await expect(failedMessage.locator(".message-failure-status")).toContainText("무료 체험 3회");
+  await expect(failedMessage.locator("[data-make-login]")).toHaveText("로그인");
+  await failedMessage.locator("[data-make-login]").click();
+
   const loginForm = page.locator("[data-auth-form]");
+  await expect(loginForm).toBeVisible();
   await loginForm.locator('input[name="userId"]').fill("fixture");
   await loginForm.locator('input[name="password"]').fill("password123!");
   await loginForm.getByRole("button", { name: "로그인", exact: true }).click();
@@ -1080,6 +1090,34 @@ test("Guest trial exhaustion preserves the failed prompt and opens login", async
   expect(memberPayload.threadId).toBeUndefined();
   expect(memberPayload.messageId).toBeUndefined();
   expect(memberPayload.requestId).toBeTruthy();
+});
+
+test("Google demo login still sends Make improvement as a Guest request", async ({ page }) => {
+  let authorization = "missing";
+  let guestSessionUuid = "";
+  await openMake(page, [], {
+    isLoggedIn: true,
+    authToken: "demo-token",
+    token: "demo-token",
+    currentUser: "Google 데모 사용자",
+    currentUserId: "google-demo",
+  }, async (route) => {
+    authorization = route.request().headers().authorization || "";
+    guestSessionUuid = route.request().headers()["x-session-uuid"] || "";
+    await route.fulfill({
+      status: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ mode: "improve", improvedPrompt: "Demo Guest result" }),
+    });
+  });
+
+  await page.locator('[data-composer] textarea[name="prompt"]').fill("Demo account prompt");
+  await page.locator('[data-composer] button[type="submit"]').click();
+
+  await expect(page.locator(".message.assistant").getByText("Demo Guest result", { exact: true })).toBeVisible();
+  expect(authorization).toBe("");
+  expect(guestSessionUuid).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+  await expect(page.locator("[data-auth-form]")).toHaveCount(0);
 });
 
 test.describe("Make component visual regressions", () => {

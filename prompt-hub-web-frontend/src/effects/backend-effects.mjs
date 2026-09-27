@@ -246,7 +246,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       const wasLoggedIn = Boolean(state.isLoggedIn);
       const hasAnyToken = Boolean(String(typeof getAuthToken === "function" ? getAuthToken() || "" : "").trim());
       if (wasLoggedIn && !hasAnyToken && typeof clearAuthenticatedSession === "function") {
+        const pendingGuestThreadTransferId = state.pendingGuestThreadTransferId || null;
+        const pendingGuestThreadTransferErrorCode = String(state.pendingGuestThreadTransferErrorCode || "");
         clearAuthenticatedSession({ keepRoute: true });
+        state.pendingGuestThreadTransferId = pendingGuestThreadTransferId;
+        state.pendingGuestThreadTransferErrorCode = pendingGuestThreadTransferId
+          ? pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED"
+          : "";
         state.authView = "login";
       }
       makeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
@@ -302,12 +308,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     });
 
     if (!anyConnected && unauthorizedReason && typeof handleBackendAccessError === "function") {
-      if (state.isLoggedIn && typeof clearAuthenticatedSession === "function") {
-        clearAuthenticatedSession({ keepRoute: true });
-        state.authView = "login";
-      }
-      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       render();
       return;
     }

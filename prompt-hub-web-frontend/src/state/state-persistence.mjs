@@ -99,6 +99,7 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
       activeFolderId: state.activeFolderId,
       activeThreadId: state.activeThreadId,
       pendingGuestThreadTransferId: state.pendingGuestThreadTransferId,
+      pendingGuestThreadTransferErrorCode: state.pendingGuestThreadTransferErrorCode,
       messages: state.messages,
       composerDraft: state.composerDraft,
       templateCollapsed: state.templateCollapsed,
@@ -198,6 +199,11 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
     && state.recentThreads.some((thread) => String(thread?.id || "") === String(savedState.pendingGuestThreadTransferId))
     ? savedState.pendingGuestThreadTransferId
     : null;
+  state.pendingGuestThreadTransferErrorCode = state.pendingGuestThreadTransferId
+    ? ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "SESSION_UUID_REQUIRED"].includes(String(savedState.pendingGuestThreadTransferErrorCode || "").toUpperCase())
+      ? String(savedState.pendingGuestThreadTransferErrorCode).toUpperCase()
+      : "FREE_TRIAL_LIMIT_EXCEEDED"
+    : "";
   state.messages = Array.isArray(savedState.messages) ? savedState.messages : [];
   state.composerDraft = savedState.composerDraft || "";
   state.templateCollapsed = Boolean(savedState.templateCollapsed);

@@ -71,6 +71,7 @@ test("persistence state domain safely reads writes and clears payloads", () => {
   state.authToken = "token";
   state.recentThreads = [{ id: "guest-transfer", messages: [] }];
   state.pendingGuestThreadTransferId = "guest-transfer";
+  state.pendingGuestThreadTransferErrorCode = "FREE_TRIAL_LIMIT_EXCEEDED";
   const popularPrompts = [{ id: 1 }];
   const savedPrompts = [{ id: 2, savedByMe: true, saves: 1 }];
   stateApi.persistAppState({ state, popularPrompts, savedPrompts, commentsByPrompt: {}, saveCurrentAccountScope: () => {} });
@@ -83,6 +84,7 @@ test("persistence state domain safely reads writes and clears payloads", () => {
   });
   assert.equal(restored.isLoggedIn, true);
   assert.equal(restored.pendingGuestThreadTransferId, "guest-transfer");
+  assert.equal(restored.pendingGuestThreadTransferErrorCode, "FREE_TRIAL_LIMIT_EXCEEDED");
 });
 
 test("prompt interaction admin and Make state domains apply representative mutations", () => {

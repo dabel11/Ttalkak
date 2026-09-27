@@ -1992,6 +1992,7 @@ function getMakeControllerContext() {
     clearPendingGuestThreadTransfer: (threadId) => {
       if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
         state.pendingGuestThreadTransferId = null;
+        state.pendingGuestThreadTransferErrorCode = "";
         persistState();
       }
     },
@@ -2250,7 +2251,7 @@ function getMakeApi() {
   return apiClient || {};
 }
 function getMakeApiToken() {
-  return getAuthToken() || undefined;
+  return state.isLoggedIn && hasBackendAuthToken() ? getAuthToken() : undefined;
 }
 function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
   handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);

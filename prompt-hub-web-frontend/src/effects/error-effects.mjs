@@ -28,6 +28,7 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
       const pendingThreadId = state.activeThreadId || null;
       if (getAuthToken()) clearAuthenticatedSession({ keepRoute: true });
       state.pendingGuestThreadTransferId = pendingThreadId;
+      state.pendingGuestThreadTransferErrorCode = "SESSION_UUID_REQUIRED";
       state.authView = "login";
       showNotice("로그인이 만료되었습니다. 다시 로그인해주세요.");
       return true;
@@ -35,6 +36,7 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
 
     if (normalized.kind === "guest_limit") {
       state.pendingGuestThreadTransferId = state.activeThreadId || null;
+      state.pendingGuestThreadTransferErrorCode = code || "FREE_TRIAL_LIMIT_EXCEEDED";
       state.authView = "login";
       showNotice(backendMessage || normalized.message);
       return true;
@@ -78,16 +80,25 @@ import { classifyMakeError } from "../utils/make-message-model.mjs";
     }
     if (!token || isDemoAuthToken(token)) {
       if (!token && state.isLoggedIn) {
-        clearAuthenticatedSession({ keepRoute: true });
+        clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state);
         state.authView = "login";
       }
       showNotice(message);
       return true;
     }
-    clearAuthenticatedSession({ keepRoute: true });
+    clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state);
     state.authView = "login";
     showNotice(message);
     return true;
+  }
+
+  function clearSessionPreservingPendingGuestTransfer(clearAuthenticatedSession, state) {
+    const pendingThreadId = state.pendingGuestThreadTransferId || null;
+    const pendingErrorCode = String(state.pendingGuestThreadTransferErrorCode || "");
+    clearAuthenticatedSession({ keepRoute: true });
+    if (!pendingThreadId) return;
+    state.pendingGuestThreadTransferId = pendingThreadId;
+    state.pendingGuestThreadTransferErrorCode = pendingErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED";
   }
 
   function handleNormalizedError({ backendMessage, fallbackMessage, normalized, showNotice }) {

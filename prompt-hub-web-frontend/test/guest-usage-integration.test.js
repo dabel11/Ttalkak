@@ -9,6 +9,7 @@ let backendEffects;
 let errorEffects;
 let getOrCreateGuestSessionUuid;
 let isValidGuestSessionUuid;
+let resolveMakeMessageFailure;
 
 test.before(async () => {
   ({ classifyMakeError } = await import("../src/utils/make-message-model.mjs"));
@@ -16,6 +17,7 @@ test.before(async () => {
   ({ backendEffects } = await import("../src/effects/backend-effects.mjs"));
   ({ errorEffects } = await import("../src/effects/error-effects.mjs"));
   ({ getOrCreateGuestSessionUuid, isValidGuestSessionUuid } = await import("../src/usage/guest-session.mjs"));
+  ({ resolveMakeMessageFailure } = await import("../src/make/make-page-adapter.mjs"));
 });
 
 function createMemoryStorage(initialValue = "") {
@@ -86,7 +88,9 @@ test("sends the same Guest UUID on every anonymous improve request and omits it 
     const guestIds = requests.slice(0, 4).map(({ options }) => options.headers["X-Session-UUID"]);
     assert.equal(new Set(guestIds).size, 1);
     assert.equal(isValidGuestSessionUuid(guestIds[0]), true);
+    assert.ok(requests.slice(0, 4).every(({ options }) => options.useStoredToken === false));
     assert.deepEqual(requests[4].options.headers, {});
+    assert.equal(requests[4].options.useStoredToken, true);
   } finally {
     if (previousStorage === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previousStorage;
@@ -103,7 +107,7 @@ test("maps only the free-trial 429 to a login action", () => {
 
 test("opens the login view for an anonymous free-trial limit response", () => {
   const notices = [];
-  const state = { isLoggedIn: false, authView: null, activeThreadId: "local-thread", pendingGuestThreadTransferId: null };
+  const state = { isLoggedIn: false, authView: null, activeThreadId: "local-thread", pendingGuestThreadTransferId: null, pendingGuestThreadTransferErrorCode: "" };
   errorEffects.handleBackendAccessErrorEffect({
     clearAuthenticatedSession: () => {},
     getAuthToken: () => "",
@@ -122,18 +126,20 @@ test("opens the login view for an anonymous free-trial limit response", () => {
 
   assert.equal(state.authView, "login");
   assert.equal(state.pendingGuestThreadTransferId, "local-thread");
+  assert.equal(state.pendingGuestThreadTransferErrorCode, "FREE_TRIAL_LIMIT_EXCEEDED");
   assert.match(notices[0], /무료 체험/);
 });
 
 test("treats SESSION_UUID_REQUIRED with a bearer token as an expired login", () => {
   const notices = [];
   let clearCount = 0;
-  const state = { isLoggedIn: true, authView: null, activeThreadId: "stale-token-thread", pendingGuestThreadTransferId: "old-thread" };
+  const state = { isLoggedIn: true, authView: null, activeThreadId: "stale-token-thread", pendingGuestThreadTransferId: "old-thread", pendingGuestThreadTransferErrorCode: "FREE_TRIAL_LIMIT_EXCEEDED" };
   errorEffects.handleBackendAccessErrorEffect({
     clearAuthenticatedSession: () => {
       clearCount += 1;
       state.isLoggedIn = false;
       state.pendingGuestThreadTransferId = null;
+      state.pendingGuestThreadTransferErrorCode = "";
     },
     getAuthToken: () => "expired-token",
     getBackendErrorCode: (error) => error.payload.code,
@@ -149,7 +155,84 @@ test("treats SESSION_UUID_REQUIRED with a bearer token as an expired login", () 
   assert.equal(clearCount, 1);
   assert.equal(state.authView, "login");
   assert.equal(state.pendingGuestThreadTransferId, "stale-token-thread");
+  assert.equal(state.pendingGuestThreadTransferErrorCode, "SESSION_UUID_REQUIRED");
   assert.deepEqual(notices, ["로그인이 만료되었습니다. 다시 로그인해주세요."]);
+});
+
+test("member hydration keeps the pending Guest transfer marker when a new login token is rejected", async () => {
+  const authError = { status: 401, payload: { code: "AUTHENTICATION_REQUIRED" } };
+  const state = {
+    route: "make",
+    makeBackendStatus: "idle",
+    isLoggedIn: true,
+    authView: null,
+    pendingGuestThreadTransferId: "local-thread",
+    pendingGuestThreadTransferErrorCode: "FREE_TRIAL_LIMIT_EXCEEDED",
+  };
+  let clearCount = 0;
+  let renderCount = 0;
+  let token = "expired-token";
+  const clearAuthenticatedSession = () => {
+    clearCount += 1;
+    token = "";
+    state.isLoggedIn = false;
+    state.pendingGuestThreadTransferId = null;
+    state.pendingGuestThreadTransferErrorCode = "";
+  };
+
+  await backendEffects.hydrateBackendMakeDataEffect({
+    applyContext: () => ({}),
+    canUseDemoFallback: () => false,
+    clearAuthenticatedSession,
+    getApiFailureMessage: () => "API unavailable",
+    getAuthToken: () => token,
+    getMakeApi: () => ({
+      getMakeThreads: async () => { throw authError; },
+      getMakeFolders: async () => { throw authError; },
+    }),
+    getMakeApiToken: () => "expired-token",
+    getMakeInteractionVersion: () => 0,
+    hasBackendAuthToken: () => true,
+    handleBackendAccessError: (error, fallbackMessage) => errorEffects.handleBackendAccessErrorEffect({
+      clearAuthenticatedSession,
+      getAuthToken: () => token,
+      getBackendErrorCode: (value) => value.payload.code,
+      getBackendErrorMessage: () => "",
+      isDemoAuthToken: () => false,
+      showNotice: () => {},
+      state,
+    }, error, fallbackMessage),
+    makeState: { setMakeBackendState: (target, status, message) => { target.makeBackendStatus = status; target.makeBackendMessage = message; } },
+    render: () => { renderCount += 1; },
+    reportWarning: () => {},
+    state,
+  });
+
+  assert.equal(clearCount, 1);
+  assert.equal(renderCount, 1);
+  assert.equal(state.authView, "login");
+  assert.equal(state.makeBackendStatus, "fallback");
+  assert.equal(state.pendingGuestThreadTransferId, "local-thread");
+  assert.equal(state.pendingGuestThreadTransferErrorCode, "FREE_TRIAL_LIMIT_EXCEEDED");
+});
+
+test("a persisted pending Guest transfer restores the login action on the last user message", () => {
+  const first = { id: "first-user", role: "user", content: "Earlier prompt" };
+  const pending = { id: "pending-user", role: "user", content: "Retry after login" };
+  const state = {
+    activeThreadId: "local-thread",
+    pendingGuestThreadTransferId: "local-thread",
+    pendingGuestThreadTransferErrorCode: "FREE_TRIAL_LIMIT_EXCEEDED",
+    messages: [first, { id: "first-assistant", role: "assistant", content: "Earlier result" }, pending],
+  };
+  const ctx = { state, requestState: { failedMessageId: "", failure: null }, messageModel: { classifyMakeError } };
+
+  assert.equal(resolveMakeMessageFailure(ctx, first), null);
+  const restoredFailure = resolveMakeMessageFailure(ctx, pending);
+  assert.equal(restoredFailure.kind, "guest_limit");
+  assert.equal(restoredFailure.requiresLogin, true);
+  ctx.requestState.inFlight = true;
+  assert.equal(resolveMakeMessageFailure(ctx, pending), null);
 });
 
 test("member hydration preserves only the Guest conversation awaiting transfer", () => {

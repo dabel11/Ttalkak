@@ -1,5 +1,23 @@
 // @ts-check
 
+/** @param {Record<string, any>} ctx @param {TtalkakStateEntity} message */
+function resolveMakeMessageFailure(ctx, message) {
+  if (message.role === "assistant") return null;
+  if (ctx.requestState.failedMessageId === message.id) return ctx.requestState.failure;
+  if (ctx.requestState.inFlight) return null;
+
+  const pendingThreadId = String(ctx.state.pendingGuestThreadTransferId || "");
+  if (!pendingThreadId || pendingThreadId !== String(ctx.state.activeThreadId || "")) return null;
+  const pendingMessage = [...ctx.state.messages].reverse().find((item) => item?.role === "user");
+  if (!pendingMessage || String(pendingMessage.id || "") !== String(message.id || "")) return null;
+
+  const code = String(ctx.state.pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED").toUpperCase();
+  return ctx.messageModel.classifyMakeError({
+    status: code === "SESSION_UUID_REQUIRED" ? 401 : 429,
+    payload: { code },
+  });
+}
+
 /** @param {Record<string, any>} ctx */
 export function createMakePageAdapter(ctx) {
   function render() {
@@ -117,7 +135,7 @@ export function createMakePageAdapter(ctx) {
   function messageBubble(message) {
     const isAssistant = message.role === "assistant";
     const activeThread = ctx.findMakeThread(ctx.state.recentThreads, ctx.state.activeThreadId);
-    const failure = !isAssistant && ctx.requestState.failedMessageId === message.id ? ctx.requestState.failure : null;
+    const failure = resolveMakeMessageFailure(ctx, message);
     const failurePresentation = failure ? ctx.messageModel.getMakeFailurePresentation(failure) : null;
     return ctx.MessageBubbleView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
@@ -159,3 +177,5 @@ export function createMakePageAdapter(ctx) {
 
   return Object.freeze({ render });
 }
+
+export { resolveMakeMessageFailure };
