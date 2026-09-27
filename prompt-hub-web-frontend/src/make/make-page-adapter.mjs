@@ -9,7 +9,7 @@ export function createMakePageAdapter(ctx) {
       && !ctx.state.messages.some((/** @type {TtalkakStateEntity} */ message) => message?.role === "assistant");
     return ctx.MakePageView(
       { icons: ctx.icons, escapeAttr: ctx.escapeAttr, escapeHtml: ctx.escapeHtml },
-      { composerHtml: composer(hasMessages), feedHtml: feed(hasMessages), hasMessages, hasResponseLessConversation, sidePanelHtml: sidePanel() },
+      { composerHtml: composer(hasMessages), drawerOpen: Boolean(ctx.state.makeDrawerOpen), feedHtml: feed(hasMessages), hasMessages, hasResponseLessConversation, sidePanelHtml: sidePanel() },
     );
   }
 

@@ -11,7 +11,7 @@ The same mandatory gate is available in GitHub Actions as **Extension production
 - [ ] Production HTTPS Spring Boot API URL is confirmed.
 - [ ] Chrome Web Store Extension ID is recorded in `FRONTEND_OPERATING_POLICIES.md`.
 - [ ] Backend CORS allows the exact production `chrome-extension://...` origin.
-- [ ] CORS preflight permits required methods, `content-type`, `authorization`, and credentials.
+- [ ] CORS preflight permits required methods, `content-type`, `authorization`, `x-session-uuid`, and credentials.
 - [ ] Public privacy policy URL works without authentication.
 - [ ] Public support URL and monitored contact channel are available.
 - [ ] No credential, private key, token, or local `.env` file is packaged.

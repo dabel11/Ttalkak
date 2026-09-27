@@ -31,10 +31,10 @@
             state.adminMode
               ? adminTabs.map(adminItem).join("")
               : `
-                ${item("home", "Home", icons.home)}
-                ${!isAdminAccount ? item("make", "Make", icons.make) : ""}
-                ${state.isLoggedIn && !isAdminAccount ? item("saved", "My page", icons.user) : ""}
-                ${!isAdminAccount ? item("share", "Share", icons.share) : ""}
+                ${item("home", "홈", icons.home)}
+                ${!isAdminAccount ? item("make", "첨삭", icons.make) : ""}
+                ${state.isLoggedIn && !isAdminAccount ? item("saved", "마이페이지", icons.user) : ""}
+                ${!isAdminAccount ? item("share", "공유", icons.share) : ""}
               `
           }
         </nav>
@@ -86,10 +86,10 @@
             <button class="topbar-mobile-toggle" type="button" aria-expanded="${state.compactHeaderOpen ? "true" : "false"}" aria-controls="topbar-action-menu">메뉴</button>
             <div class="topbar-action-menu" id="topbar-action-menu">
               <nav class="topbar-mobile-nav" aria-label="모바일 주요 메뉴">
-                <button class="${state.route === "home" ? "active" : ""}" type="button" data-route="home">Home</button>
-                <button class="${state.route === "make" ? "active" : ""}" type="button" data-route="make">Make</button>
-                ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">My page</button>` : ""}
-                <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">Share</button>
+                <button class="${state.route === "home" ? "active" : ""}" type="button" data-route="home">홈</button>
+                <button class="${state.route === "make" ? "active" : ""}" type="button" data-route="make">첨삭</button>
+                ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">마이페이지</button>` : ""}
+                <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">공유</button>
               </nav>
               ${makeAuthHint ? `<p class="make-auth-hint make-auth-hint-mobile">${makeAuthHint}</p>` : ""}
               ${resolvedAuthButton}

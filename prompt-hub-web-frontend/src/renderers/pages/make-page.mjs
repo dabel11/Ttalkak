@@ -37,6 +37,7 @@ import { parts } from "./make-message-parts.mjs";
   function MakePageView(ctx, data) {
     const {
       composerHtml,
+      drawerOpen,
       feedHtml,
       hasMessages,
       hasResponseLessConversation,
@@ -44,8 +45,8 @@ import { parts } from "./make-message-parts.mjs";
     } = data;
 
     return `
-      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"} ${hasResponseLessConversation ? "has-response-less-conversation" : ""}" aria-label="프롬프트 첨삭">
-        <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="false">
+      <section class="make-page ${hasMessages ? "has-conversation" : "is-empty"} ${hasResponseLessConversation ? "has-response-less-conversation" : ""} ${drawerOpen ? "drawer-open" : ""}" aria-label="프롬프트 첨삭">
+        <button class="make-drawer-toggle" type="button" data-toggle-make-drawer aria-label="대화 목록" aria-controls="make-conversation-drawer" aria-expanded="${drawerOpen ? "true" : "false"}">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
             <path d="M6.5 4.5h11a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H10l-4.5 3v-3.25a3 3 0 0 1-2-2.75v-7a3 3 0 0 1 3-3Z"></path>
             <path d="M8 9h8M8 13h6"></path>
@@ -197,7 +198,7 @@ import { parts } from "./make-message-parts.mjs";
     } = data;
 
     return `
-      <aside class="make-side-panel" id="make-conversation-drawer" aria-label="Make 최근 대화" tabindex="-1">
+      <aside class="make-side-panel" id="make-conversation-drawer" aria-label="첨삭 최근 대화" tabindex="-1">
         <div class="make-drawer-head">
           <strong>대화</strong>
           <button class="make-drawer-close" type="button" data-close-make-drawer aria-label="대화 목록 닫기">&times;</button>
@@ -213,7 +214,7 @@ import { parts } from "./make-message-parts.mjs";
           ${
             creatingFolder
               ? `<form class="make-folder-form" data-folder-create-form>
-                  <input name="folderName" type="text" placeholder="폴더 이름" autocomplete="off" />
+                  <input name="folderName" type="text" placeholder="폴더 이름" aria-label="폴더 이름" autocomplete="off" />
                   <button type="submit">추가</button>
                   <button type="button" data-cancel-folder-create>취소</button>
                 </form>`
@@ -264,7 +265,7 @@ import { parts } from "./make-message-parts.mjs";
                               ${
                                 creatingThreadFolderId === thread.id
                                   ? `<form class="thread-folder-create-form" data-thread-folder-create-form="${escapeAttr(thread.id)}">
-                                      <input name="folderName" type="text" placeholder="새 폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
+                                      <input name="folderName" type="text" placeholder="새 폴더 이름" aria-label="폴더 이름" autocomplete="off" ${canManageFolders ? "" : "disabled"} />
                                       <div>
                                         <button type="submit" ${canManageFolders ? "" : "disabled"}>이동</button>
                                         <button type="button" data-cancel-thread-folder-create>취소</button>
@@ -337,7 +338,7 @@ import { parts } from "./make-message-parts.mjs";
     if (isEditing) {
       return `
         <form class="make-folder-edit-form" data-folder-edit-form="${safeFolderId}">
-          <input name="folderName" value="${escapeAttr(name)}" />
+          <input name="folderName" value="${escapeAttr(name)}" aria-label="폴더 이름" />
           <button type="submit">저장</button>
           <button type="button" data-cancel-folder-edit>취소</button>
         </form>
@@ -434,7 +435,7 @@ import { parts } from "./make-message-parts.mjs";
     return `<footer class="message-actions">
       <button type="button" data-copy-message="${messageId}">${isCopied ? icons.check : icons.copy}<span>${isCopied ? "Copied" : "Copy"}</span></button>
       <button class="${isSaved ? "saved" : ""}" type="button" data-save-message="${messageId}">${icons.bookmark}<span>${isSaved ? "Saved" : "Save"}</span></button>
-      <button type="button" data-share-message="${messageId}">${icons.share}<span>Share</span></button>
+      <button type="button" data-share-message="${messageId}">${icons.share}<span>공유</span></button>
       <button type="button" data-execute-message="${messageId}">${icons.play}<span>Execute</span></button>
     </footer>`;
   }

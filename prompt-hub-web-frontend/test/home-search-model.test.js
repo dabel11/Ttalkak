@@ -193,7 +193,7 @@ test("Home retry exposes an actionable compact error state", async () => {
   const html = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "fallback", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
   assert.match(html, /프롬프트를 불러오지 못했습니다/);
   assert.match(html, /data-retry-home-load/);
-  assert.match(html, />정렬</);
+  assert.doesNotMatch(html, />정렬</);
   assert.match(html, />저장순</);
 
   const checkingHtml = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "checking", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
