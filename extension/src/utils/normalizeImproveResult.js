@@ -6,7 +6,6 @@ import {
   normalizeQuestions,
   normalizeTechniques,
 } from "../../../shared/make-message-model.js";
-import { normalizeEntitlement } from "../policies/usage-entitlement.mjs";
 
 export function normalizeImproveResult(payload, fallbackPrompt = "") {
   const result = payload?.result || payload?.data || payload || {};
@@ -20,8 +19,7 @@ export function normalizeImproveResult(payload, fallbackPrompt = "") {
     techniques: firstNonEmptyArray(result.techniques, result.techniquesApplied, result.techniques_applied, legacy.techniques),
   };
   const normalized = normalizeImproveResponse({ ...payload, result: enriched }, fallbackPrompt);
-  const entitlement = normalizeEntitlement(payload, { fallbackPlan: "GUEST" });
-  return { ...normalized, answer: normalized.answer || "프롬프트를 개선했습니다.", techniquesApplied: normalized.techniques, score: result.score ?? null, ...(entitlement.known ? { entitlement } : {}) };
+  return { ...normalized, answer: normalized.answer || "프롬프트를 개선했습니다.", techniquesApplied: normalized.techniques, score: result.score ?? null };
 }
 
 function firstNonEmptyArray(...values) {

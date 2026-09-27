@@ -10,8 +10,6 @@ import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
 import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
-import { useEntitlement } from "./hooks/useEntitlement";
-import { openWebPricingPage } from "./config/webAppConfig";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
 import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
@@ -63,12 +61,6 @@ function App() {
     setAuthMode,
     setSessionUuid,
   } = useAuth({ ragConfig, showNotice });
-
-  const { entitlement, updateEntitlement } = useEntitlement({
-    authSession,
-    ragConfig,
-    onAuthExpired: handleAuthExpired,
-  });
 
   const {
     filteredSavedItems,
@@ -126,7 +118,6 @@ function App() {
     setSessionUuid,
     showNotice,
     onAuthExpired: handleAuthExpired,
-    onEntitlement: updateEntitlement,
   });
   const focusedConflictId = useRef("");
   useEffect(() => {
@@ -219,24 +210,6 @@ function App() {
     focusRestoredComposer(prompt);
   }
 
-  async function handleOpenPricing() {
-    try {
-      await openWebPricingPage();
-    } catch (error) {
-      showNotice(error?.message || "웹 요금제 페이지를 열지 못했습니다.");
-    }
-  }
-
-  async function handleLogoutWithRequestCancellation() {
-    cancelImproveRequest();
-    await handleLogout();
-  }
-
-  async function handleWithdrawWithRequestCancellation(password) {
-    cancelImproveRequest();
-    return handleWithdraw(password);
-  }
-
   function returnToComposerOnCompactScreen() {
     if (window.matchMedia("(max-width: 760px)").matches) setCollapsed(true);
     requestAnimationFrame(() => composerRef.current?.focus());
@@ -280,11 +253,9 @@ function App() {
           <Header
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
-            onLogout={handleLogoutWithRequestCancellation}
+            onLogout={() => handleLogout()}
             onWithdraw={() => setAuthMode("withdraw")}
             ragStatus={ragStatus}
-            entitlement={entitlement}
-            onUpgrade={handleOpenPricing}
           />
           <ChatFeed
             messages={messages}
@@ -332,7 +303,7 @@ function App() {
           onSignup={handleSignup}
           onFindId={handleFindId}
           onPasswordReset={handlePasswordReset}
-          onWithdraw={handleWithdrawWithRequestCancellation}
+          onWithdraw={handleWithdraw}
           onCheckDuplicate={handleCheckDuplicate}
           isLoggedIn={Boolean(authSession?.accessToken)}
         />

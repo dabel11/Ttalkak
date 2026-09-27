@@ -8,7 +8,6 @@ import { validateProductionArtifact, validateReleaseConfiguration, verifyCors, v
 const valid = {
   TTALKAK_PRODUCTION_EXTENSION_ID: "abcdefghijklmnopabcdefghijklmnop",
   VITE_BACKEND_API_URL: "https://api.ttalkak.example.kr",
-  VITE_WEB_APP_URL: "https://www.ttalkak.example.kr",
   TTALKAK_SUPPORT_URL: "https://support.ttalkak.example.kr",
   TTALKAK_PRIVACY_POLICY_URL: "https://www.ttalkak.example.kr/privacy",
   TTALKAK_RELEASE_OWNER: "frontend-team",
@@ -17,7 +16,6 @@ const valid = {
 test("release configuration rejects missing placeholders and accepts explicit production values", () => {
   assert.throws(() => validateReleaseConfiguration({}), /PRODUCTION_EXTENSION_ID/);
   assert.throws(() => validateReleaseConfiguration({ ...valid, VITE_BACKEND_API_URL: "http://localhost:8080" }));
-  assert.throws(() => validateReleaseConfiguration({ ...valid, VITE_WEB_APP_URL: "http://localhost:4200" }));
   assert.equal(validateReleaseConfiguration(valid).origin, "chrome-extension://abcdefghijklmnopabcdefghijklmnop");
 });
 
@@ -38,9 +36,9 @@ test("release CORS gate requires the exact origin, POST, headers, and credential
     "access-control-allow-credentials": "true",
   });
   await assert.doesNotReject(() => verifyCors(config, async () => new Response(null, { status: 200, headers })));
-  const missingSessionHeader = new Headers(headers);
-  missingSessionHeader.set("access-control-allow-headers", "content-type, authorization");
-  await assert.rejects(() => verifyCors(config, async () => new Response(null, { status: 200, headers: missingSessionHeader })), /required method and headers/);
+  const missingGuestHeader = new Headers(headers);
+  missingGuestHeader.set("access-control-allow-headers", "content-type, authorization");
+  await assert.rejects(() => verifyCors(config, async () => new Response(null, { status: 200, headers: missingGuestHeader })), /required method and headers/);
   await assert.rejects(() => verifyCors(config, async () => new Response(null, { status: 200, headers: new Headers() })), /CORS preflight/);
 });
 

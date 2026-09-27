@@ -110,8 +110,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     templateCollapsed: false,
     mobileTemplateExpanded: false,
     makeDrawerOpen: false,
-    entitlement: { known: false, plan: "GUEST", status: "UNKNOWN", limit: null, used: null, remaining: null, resetAt: "", currentPeriodEnd: "", cancelAtPeriodEnd: false },
-    subscriptionActionPending: "",
+    guestImproveCount: 0,
     shareDraft: null,
     savedFilter: { community: true, mine: true, liked: false },
     messages: [],
@@ -225,8 +224,6 @@ function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ 
   state.authToken = authResult.token;
   state.token = authResult.token;
   state.adminMode = state.currentUserRole === "admin";
-  state.entitlement = { known: false, plan: "FREE", status: "UNKNOWN", limit: null, used: null, remaining: null, resetAt: "", currentPeriodEnd: "", cancelAtPeriodEnd: false };
-  state.subscriptionActionPending = "";
   if (state.adminMode) state.route = "admin";
 }
 
@@ -238,8 +235,6 @@ function clearAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ 
   state.currentUserRole = "user";
   state.authToken = "";
   state.token = "";
-  state.entitlement = { known: false, plan: "GUEST", status: "UNKNOWN", limit: null, used: null, remaining: null, resetAt: "", currentPeriodEnd: "", cancelAtPeriodEnd: false };
-  state.subscriptionActionPending = "";
 }
 
 

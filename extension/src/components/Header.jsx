@@ -1,12 +1,9 @@
 import { useRef, useState } from "react";
 import { getRagStatusText } from "../utils/ragStatus";
-import { formatUsageAccessibilityLabel, formatUsageSummary } from "../policies/usage-entitlement.mjs";
 
-export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus, entitlement, onUpgrade }) {
+export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const closeTimerRef = useRef(null);
-  const usageSummary = formatUsageSummary(entitlement);
-  const usageLabel = formatUsageAccessibilityLabel(entitlement);
 
   function clearCloseTimer() {
     if (!closeTimerRef.current) return;
@@ -54,9 +51,6 @@ export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus, 
       </div>
       <div className="header-actions">
         <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
-        <button className="usage-button" type="button" onClick={onUpgrade} title={`${usageLabel} · 웹에서 요금제와 사용량 보기`} aria-label={`${usageLabel}. 웹에서 요금제와 사용량 보기`}>
-          {usageSummary}
-        </button>
         {currentUser ? (
           <div
             className={`account-menu ${isAccountMenuOpen ? "open" : ""}`}
@@ -77,7 +71,6 @@ export function Header({ currentUser, onLogin, onLogout, onWithdraw, ragStatus, 
             </button>
             <div className="account-menu-popover" role="menu" onMouseEnter={openAccountMenu}>
               <p>{currentUser}</p>
-              <button type="button" onClick={onUpgrade} role="menuitem">요금제 및 사용량</button>
               <button type="button" onClick={handleLogout} role="menuitem">로그아웃</button>
               <button className="danger-menu-item" type="button" onClick={handleWithdraw} role="menuitem">회원탈퇴</button>
             </div>

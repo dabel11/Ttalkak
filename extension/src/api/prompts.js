@@ -4,7 +4,6 @@ import { getApiErrorMessage } from "../utils/apiErrors";
 import { normalizeImproveResult } from "../utils/normalizeImproveResult";
 import { IMPROVE_API_TIMEOUT_MS } from "../constants";
 import { MAKE_API_PATHS } from "../../../shared/make-api-contract.js";
-import { normalizeEntitlement } from "../policies/usage-entitlement.mjs";
 
 /**
  * @param {any} config
@@ -37,7 +36,5 @@ export async function requestPromptImprove(config, payload, { signal } = {}) {
     throw error;
   }
 
-  const normalized = normalizeImproveResult(responseBody, requestPayload.prompt);
-  const entitlement = normalizeEntitlement(responseBody, { fallbackPlan: accessToken ? "FREE" : "GUEST" });
-  return entitlement.known ? { ...normalized, entitlement } : normalized;
+  return normalizeImproveResult(responseBody, requestPayload.prompt);
 }

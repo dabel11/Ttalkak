@@ -14,7 +14,6 @@ import { useMessageRetry } from "./useMessageRetry";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 import { classifyMakeError } from "../../../shared/make-message-model.js";
-import { classifyUsageError, normalizeEntitlement } from "../policies/usage-entitlement.mjs";
 
 export function useConversation({
   authSession,
@@ -26,7 +25,6 @@ export function useConversation({
   setSessionUuid,
   showNotice,
   onAuthExpired,
-  onEntitlement,
 }) {
   const [messages, setMessages] = useState([]);
   const [composerValue, setComposerValue] = useState("");
@@ -89,7 +87,6 @@ export function useConversation({
     sessionUuid, setAuthMode, setLocalRecentThreads, setMessages,
     setActiveThreadId, setRagStatus, setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
     isLifecycleActive: () => lifecycleActive.current,
-    onEntitlement,
   });
 
   function openPrompt(item) {
@@ -275,7 +272,6 @@ export function useConversation({
       payload: improvePayload,
       restoreComposer: true,
       onSuccess: async (data) => {
-        onEntitlement?.(data);
         pendingRetry.current = null;
         resetConcurrency(data.threadId || activeServerThreadId);
         setRagStatus("connected");
@@ -300,14 +296,7 @@ export function useConversation({
           await onAuthExpired();
           return;
         }
-        onEntitlement?.(err?.payload);
-        const usageError = classifyUsageError(err, normalizeEntitlement(err?.payload, { fallbackPlan: isLoggedIn ? "FREE" : "GUEST" }));
-        if (usageError) {
-          if (usageError.requiresLogin) setAuthMode("login");
-          else showNotice(usageError.message);
-          setMessages((prev) => [...prev, createImproveErrorMessage(prompt, err, { requestId })]);
-          return;
-        }
+        if (err?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
         if (isRequestIdReusedError(err)) {
           pendingRetry.current = null;
           await refreshActiveServerThread(String(activeServerThreadId || "")).catch(() => false);

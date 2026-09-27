@@ -9,7 +9,6 @@ import { makeTitle } from "../utils/promptUtils.js";
 import { reportMakeConcurrencyRefresh, reportMakeRetry } from "../utils/makeOutcomeMetrics.js";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../../../shared/make-request-id.js";
 import { classifyMakeError } from "../../../shared/make-message-model.js";
-import { classifyUsageError, normalizeEntitlement } from "../policies/usage-entitlement.mjs";
 
 export function useMessageRetry({
   activeThreadId, authSession, isLoggedIn, isLoading, messages, onAuthExpired,
@@ -18,20 +17,10 @@ export function useMessageRetry({
   setActiveThreadId, setAuthMode, setLocalRecentThreads, setMessages, setRagStatus,
   setSessionUuid, showNotice, recordConcurrency, resetConcurrency,
   isLifecycleActive = () => true,
-  onEntitlement,
 }) {
   const [editingMessageId, setEditingMessageId] = useState("");
   const [editingDraft, setEditingDraft] = useState("");
   const serverEditRequests = useRef(new Map());
-
-  function syncUsageError(error) {
-    onEntitlement?.(error?.payload);
-    const usageError = classifyUsageError(error, normalizeEntitlement(error?.payload, { fallbackPlan: isLoggedIn ? "FREE" : "GUEST" }));
-    if (!usageError) return false;
-    if (usageError.requiresLogin) setAuthMode("login");
-    else showNotice(usageError.message);
-    return true;
-  }
 
   function startEditMessage(message) {
     if (!message || message.role !== "user" || isLoading) return;
@@ -75,8 +64,7 @@ export function useMessageRetry({
         prompt,
         restoreComposer: true,
         payload: { accessToken: authSession.accessToken, threadId, messageId, requestId, prompt, category: "prompt_techniques" },
-        onSuccess: async (data) => {
-          onEntitlement?.(data);
+        onSuccess: async () => {
           serverEditRequests.current.delete(String(messageId));
           resetConcurrency?.(threadId);
           setRagStatus("connected");
@@ -89,7 +77,6 @@ export function useMessageRetry({
             await onAuthExpired?.();
             return;
           }
-          if (syncUsageError(error)) return;
           if (isRequestIdReusedError(error)) {
             serverEditRequests.current.delete(String(messageId));
             await refreshActiveServerThread(String(threadId)).catch(() => false);
@@ -143,7 +130,6 @@ export function useMessageRetry({
       restoreComposer: true,
       payload: { prompt, category: "prompt_techniques", sessionUuid: guestSessionUuid, history },
       onSuccess: async (data) => {
-        onEntitlement?.(data);
         setRagStatus("connected");
         const assistantMessage = createAssistantMessage(prompt, data);
         const nextMessages = [...baseMessages, editedUserMessage, assistantMessage];
@@ -158,7 +144,7 @@ export function useMessageRetry({
       },
       onError: async (error) => {
         setRagStatus("error");
-        syncUsageError(error);
+        if (error?.code === "FREE_TRIAL_LIMIT_EXCEEDED") setAuthMode("login");
         setMessages((items) => [...items, createImproveErrorMessage(prompt, error)]);
       },
     });

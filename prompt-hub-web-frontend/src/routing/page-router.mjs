@@ -6,7 +6,6 @@
     saved: "#/mypage",
     share: "#/share",
     admin: "#/admin",
-    pricing: "#/pricing",
   };
 
   function getRouteHash(route) {
@@ -15,7 +14,7 @@
 
   function resolveRouteHash(hash) {
     const normalized = String(hash || "").replace(/^#\/?/, "");
-    return { make: "make", mypage: "saved", share: "share", admin: "admin", pricing: "pricing" }[normalized] || "home";
+    return { make: "make", mypage: "saved", share: "share", admin: "admin" }[normalized] || "home";
   }
 
   function createRouteLocation({ window, state, isAdminAccount }) {
@@ -44,7 +43,6 @@
         if (route !== state.route) navigate(route);
       };
       window.addEventListener("popstate", handleLocationNavigation);
-      window.addEventListener("hashchange", handleLocationNavigation);
     }
     return { apply, bind, sync };
   }
@@ -58,7 +56,6 @@
       MakePage,
       SavedPage,
       SharePage,
-      PricingPage,
     } = ctx;
 
     if (state.adminMode) return AdminPage();
@@ -78,7 +75,6 @@
       return HomePage();
     }
     if (state.route === "share") return SharePage();
-    if (state.route === "pricing") return PricingPage();
     if (state.route === "admin") return AdminPage();
     return HomePage();
   }

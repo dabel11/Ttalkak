@@ -64,8 +64,6 @@ docs/*
 .gitignore
 
 extension/.env.production.local
-extension/*.zip
-prompt-hub-web-frontend/*-preview.png
 
 # Local preview server logs
 prompt-hub-web-frontend/preview-server.*.log
