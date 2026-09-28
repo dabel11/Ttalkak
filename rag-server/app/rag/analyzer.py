@@ -272,11 +272,16 @@ def _exempt_template_source(query: str, fields: list[dict]) -> list[dict]:
     return fields
 
 
-def analyze(query: str, history: list[dict] | None = None) -> dict | None:
+def analyze(query: str, history: list[dict] | None = None,
+            usage_sink: list[dict] | None = None) -> dict | None:
     """요청 → {"taskType", "fields":[{name, role, status, value}], "techniqueAxes":[…]}.
 
     None 은 **분석 실패**만 뜻한다(키 없음·호출 실패·JSON 파싱 실패·산출물 전무).
-    필드가 비었지만 축이 있으면 dict 를 돌려준다 — 축은 축 라우팅의 입력이다."""
+    필드가 비었지만 축이 있으면 dict 를 돌려준다 — 축은 축 라우팅의 입력이다.
+
+    usage_sink 가 주어지면 성공한 LLM 호출의 토큰 usage 를 거기에 append 한다
+    (과금/한도 집계용). 실패·키 없음이면 아무것도 넣지 않는다 → 청구 안 되는 호출을
+    세지 않는다. 기본 None 이라 eval·기존 호출부는 무회귀."""
     client = _get_client()
     if client is None:
         return None
@@ -303,6 +308,11 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
     except Exception as e:
         print(f"[Analyzer] 분석 실패 → 분석 없이 진행: {e}")
         return None
+
+    # 성공한 호출만 usage 에 반영한다(위 except 는 append 전에 빠져나간다).
+    if usage_sink is not None:
+        from app.core.usage import groq_usage
+        usage_sink.append(groq_usage(resp, "analyze", _MODEL))
 
     fields = _sanitize(data.get("fields") or [])
     # 판별은 **이번 입력**만 본다 — 멀티턴 후속 입력("격식체로")에는 관형절이 없어 적용되지

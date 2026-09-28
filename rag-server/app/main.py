@@ -12,6 +12,7 @@ from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
 from app.rag import query_transform, analyzer
+from app.core.usage import summarize
 # 파싱·복원 순수 함수 (eval 스크립트 하위호환 위해 동일 이름 재노출)
 from app.rag.postprocess import (
     parse_generation, build_answer, assemble_fields,
@@ -122,10 +123,17 @@ class QueryResponse(BaseModel):
     questions:           list[dict] = []
     # 1단계 분석기가 도출한 필드 상태(검증·디버깅용). 분석 실패 시 [].
     fields:              list[dict] = []
+    # 이 요청이 실제로 소비한 토큰 usage — 내부 LLM 호출(분석기 + 생성기,
+    # 옵션으로 쿼리변환/HyDE, Groq 실패 시 Gemini 폴백)을 **합산**한 값과 호출별 breakdown.
+    # {input_tokens, output_tokens, total_tokens, calls:[{stage, model, input/output/total}]}.
+    # Spring 은 이 값을 자신이 이미 들고 있는 requestId(멱등키)에 묶어 회원 사용량으로 기록한다.
+    # LLM 호출이 없거나(캐시 replay 등) usage 를 못 읽으면 0 합계 + 빈 calls.
+    usage:               dict = {}
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
-                   history: list[dict], use_analyzer: bool = True) -> dict:
+                   history: list[dict], use_analyzer: bool = True,
+                   usage_sink: list[dict] | None = None) -> dict:
     """검색 결과 → (1단계 분석) → 생성 → 구조화 필드 조립 (/query·eval 공유).
 
     규약 v3: 1단계 분석기(temp 0.2)가 요청에 필요한 필드를 동적으로 도출하고,
@@ -141,10 +149,12 @@ def run_generation(query: str, contexts: list[dict], model: str,
     # 429 → Gemini 폴백 → Gemini RPD 20 소진 → 두 백엔드 동시 차단. 줄을 세우는 편이
     # 폴백 쿼터까지 태우는 것보다 낫다. 검색·리랭크는 게이트 밖(병렬 유지).
     with generation_gate.enter():
-        analysis = analyzer.analyze(query, history) if use_analyzer else None
+        analysis = (analyzer.analyze(query, history, usage_sink=usage_sink)
+                    if use_analyzer else None)
 
         raw = generator.generate(query=query, contexts=contexts, model=model,
-                                 history=history, analysis=analysis)
+                                 history=history, analysis=analysis,
+                                 usage_sink=usage_sink)
     if not (raw and raw.strip()):
         raise RuntimeError("생성 결과가 비어 있습니다.")
 
@@ -177,7 +187,8 @@ def index_chunks(req: IndexRequest,
 
 
 def retrieve_contexts(req: "QueryRequest",
-                      history: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
+                      history: list[dict] | None = None,
+                      usage_sink: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
     """검색 단계 전체 — (기법 청크, 예시 청크) 를 돌려준다. /query 와 평가가 **공유**한다.
 
     왜 함수로 뺐나 (2026-09-16): gen_eval 이 이 로직을 **따로 복제**해 들고 있었고,
@@ -190,10 +201,11 @@ def retrieve_contexts(req: "QueryRequest",
     history = history or []
 
     # 검색에는 '기법 검색용 쿼리'를 쓰고, 생성에는 원본 프롬프트를 그대로 쓴다.
+    # hyde/transform 도 LLM 호출이므로 usage_sink 에 함께 집계된다(기본 경로는 둘 다 off).
     if req.use_hyde:
-        search_query = query_transform.hyde(req.query, history)
+        search_query = query_transform.hyde(req.query, history, usage_sink=usage_sink)
     elif req.use_query_transform:
-        search_query = query_transform.transform(req.query, history)
+        search_query = query_transform.transform(req.query, history, usage_sink=usage_sink)
     else:
         search_query = req.query
 
@@ -231,7 +243,9 @@ def retrieve_contexts(req: "QueryRequest",
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
     history = req.history or []
-    retrieved, examples = retrieve_contexts(req, history)
+    # 이 요청의 모든 내부 LLM 호출이 usage 를 여기에 append 한다(변환/HyDE·분석기·생성기·폴백).
+    usage_calls: list[dict] = []
+    retrieved, examples = retrieve_contexts(req, history, usage_sink=usage_calls)
 
     # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
     # use_hyde=True 기본에서는 쿼리가 카드 장르로 재작성돼 거의 항상 min_score를 통과하므로
@@ -246,7 +260,8 @@ def query(req: QueryRequest):
 
     try:
         # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)
-        gen = run_generation(req.query, retrieved + examples, req.model, history)
+        gen = run_generation(req.query, retrieved + examples, req.model, history,
+                             usage_sink=usage_calls)
     except (GateBusy, GateTimeout) as e:
         # 동시 요청 제한 — 서버가 망가진 게 아니라 '지금은 순서가 아니다'.
         # 503 은 기존 에러 계약(ADR-0008)과 같지만 Retry-After 로 재시도 시점을 준다.
@@ -271,6 +286,7 @@ def query(req: QueryRequest):
         summary=gen["summary"],
         questions=gen["questions"],
         fields=gen.get("fields", []),
+        usage=summarize(usage_calls),
     )
 
 

@@ -407,7 +407,8 @@ class GroqGenerator:
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
-                 analysis: dict | None = None) -> str:
+                 analysis: dict | None = None,
+                 usage_sink: list[dict] | None = None) -> str:
         groq_model = self.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -441,6 +442,9 @@ class GroqGenerator:
                     response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
                     **({"reasoning_effort": effort} if effort else {}),
                 )
+                if usage_sink is not None:
+                    from app.core.usage import groq_usage
+                    usage_sink.append(groq_usage(response, "generate", groq_model))
                 return _strip_cjk_noise(response.choices[0].message.content)
             except RateLimitError as e:
                 wait = _retry_after_seconds(e)
@@ -519,7 +523,8 @@ class GeminiGenerator:
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
-                 analysis: dict | None = None) -> str:
+                 analysis: dict | None = None,
+                 usage_sink: list[dict] | None = None) -> str:
         model = _resolve_gemini_model(model)   # 무료 불가 모델(gemini-2.0-flash 등) → 실제 되는 모델
         # 대화 기록을 contents 배열의 정식 턴으로 전달 (Groq messages 와 구조 동일).
         # 과거엔 system+대화를 한 문자열로 평탄화 → 멀티턴에서 role 경계가 사라져
@@ -556,6 +561,9 @@ class GeminiGenerator:
                         response_mime_type="application/json",  # 구조화 출력 강제
                     ),
                 )
+                if usage_sink is not None:
+                    from app.core.usage import gemini_usage
+                    usage_sink.append(gemini_usage(response, "generate", model))
                 return _strip_cjk_noise(response.text)
             except ClientError as e:
                 last_err = e
@@ -626,7 +634,8 @@ class Generator:
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
-                 analysis: dict | None = None) -> str:
+                 analysis: dict | None = None,
+                 usage_sink: list[dict] | None = None) -> str:
         backend = self._groq or self._gemini
 
         if self._groq and self._gemini:
@@ -640,15 +649,19 @@ class Generator:
                 query=query, contexts=contexts,
                 model=model, max_tokens=max_tokens,
                 history=history, analysis=analysis,
+                usage_sink=usage_sink,
             )
         except RuntimeError as e:
             if backend is self._groq and self._gemini:
                 # 원인을 반드시 남긴다 — 종전엔 사유 없이 "Groq 실패"만 찍혀서, 폴백 쪽(Gemini)
                 # 에러만 보이고 진짜 원인(대개 Groq 429)은 가려졌다(2026-09-16).
                 print(f"[Generator] Groq 실패 → Gemini 폴백 — 원인: {str(e)[:160]}")
+                # 폴백도 같은 sink 에 append 된다 → 요청 usage 는 '실제로 청구된' 호출을
+                # 모두 합산한다(Groq 실패분은 append 전에 예외로 빠졌으므로 안 세어진다).
                 return self._gemini.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,
                     history=history, analysis=analysis,
+                    usage_sink=usage_sink,
                 )
             raise

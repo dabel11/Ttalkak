@@ -89,8 +89,12 @@ def _get_client():
         return None
 
 
-def transform(query: str, history: list[dict] | None = None) -> str:
-    """개선 대상 프롬프트 → 기법 검색용 쿼리. 실패 시 원본 반환."""
+def transform(query: str, history: list[dict] | None = None,
+              usage_sink: list[dict] | None = None) -> str:
+    """개선 대상 프롬프트 → 기법 검색용 쿼리. 실패 시 원본 반환.
+
+    usage_sink 가 주어지면 성공한 호출의 토큰 usage 를 append(과금 집계용).
+    기본 None 이라 무회귀."""
     client = _get_client()
     if client is None:
         return query
@@ -113,6 +117,9 @@ def transform(query: str, history: list[dict] | None = None) -> str:
             reasoning_effort=_REASONING_EFFORT,
             temperature=0.3,
         )
+        if usage_sink is not None:
+            from app.core.usage import groq_usage
+            usage_sink.append(groq_usage(resp, "transform", _TRANSFORM_MODEL))
         out = (resp.choices[0].message.content or "").strip()
         return out if out else query
     except Exception as e:
@@ -120,9 +127,12 @@ def transform(query: str, history: list[dict] | None = None) -> str:
         return query
 
 
-def hyde(query: str, history: list[dict] | None = None) -> str:
+def hyde(query: str, history: list[dict] | None = None,
+         usage_sink: list[dict] | None = None) -> str:
     """HyDE: 기법 카드형 가상 문서를 생성해 '원본 + 가상문서'를 검색 쿼리로 반환.
-    가상문서가 코퍼스(기법 청크)와 모양이 닮아 매칭이 살아난다. 실패 시 원본."""
+    가상문서가 코퍼스(기법 청크)와 모양이 닮아 매칭이 살아난다. 실패 시 원본.
+
+    usage_sink 가 주어지면 성공한 호출의 토큰 usage 를 append(과금 집계용)."""
     client = _get_client()
     if client is None:
         return query
@@ -144,6 +154,9 @@ def hyde(query: str, history: list[dict] | None = None) -> str:
             reasoning_effort=_REASONING_EFFORT,
             temperature=0.3,
         )
+        if usage_sink is not None:
+            from app.core.usage import groq_usage
+            usage_sink.append(groq_usage(resp, "hyde", _HYDE_MODEL))
         doc = (resp.choices[0].message.content or "").strip()
         # 원본 쿼리 신호를 유지하면서 가상문서로 보강(견고한 HyDE 변형)
         return f"{query}\n{doc}" if doc else query
