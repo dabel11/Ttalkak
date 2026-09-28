@@ -50,7 +50,10 @@ export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normaliz
       },
       /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
       improvePrompt(payload, token, { signal } = {}) {
-        const headers = token ? {} : { "X-Session-UUID": getOrCreateGuestSessionUuid() };
+        // Keep the device UUID on member requests as well. If a stored bearer token
+        // expires between rendering and dispatch, the backend intentionally falls
+        // back to the Guest policy and still needs this header to identify the device.
+        const headers = { "X-Session-UUID": getOrCreateGuestSessionUuid() };
         return request(MAKE_API_PATHS.improve, { method: "POST", token, headers, useStoredToken: Boolean(token), signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
           normalizeImproveResult(result, payload?.prompt || ""),
         );

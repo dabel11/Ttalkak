@@ -77,7 +77,7 @@ test("keeps one in-memory Guest UUID when browser storage is unavailable", () =>
   assert.equal(isValidGuestSessionUuid(first), true);
 });
 
-test("sends the same Guest UUID on every anonymous improve request and omits it for members", async () => {
+test("sends the same device UUID on anonymous and member improve requests", async () => {
   const previousStorage = globalThis.localStorage;
   const storage = createMemoryStorage();
   globalThis.localStorage = storage;
@@ -87,11 +87,11 @@ test("sends the same Guest UUID on every anonymous improve request and omits it 
     for (let index = 0; index < 4; index += 1) await api.improvePrompt({ prompt: `guest-${index}` }, "");
     await api.improvePrompt({ prompt: "member" }, "member-token");
 
-    const guestIds = requests.slice(0, 4).map(({ options }) => options.headers["X-Session-UUID"]);
-    assert.equal(new Set(guestIds).size, 1);
-    assert.equal(isValidGuestSessionUuid(guestIds[0]), true);
+    const sessionIds = requests.map(({ options }) => options.headers["X-Session-UUID"]);
+    assert.equal(new Set(sessionIds).size, 1);
+    assert.equal(isValidGuestSessionUuid(sessionIds[0]), true);
     assert.ok(requests.slice(0, 4).every(({ options }) => options.useStoredToken === false));
-    assert.deepEqual(requests[4].options.headers, {});
+    assert.equal(requests[4].options.headers["X-Session-UUID"], sessionIds[0]);
     assert.equal(requests[4].options.useStoredToken, true);
   } finally {
     if (previousStorage === undefined) delete globalThis.localStorage;
