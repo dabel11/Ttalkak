@@ -47,13 +47,16 @@ class _FakeClient:
 
 
 def _analyze_with(payload: dict, query: str = "블로그 글 써줘") -> dict | None:
-    """가짜 응답을 물린 채 analyze() 를 돌린다."""
+    """가짜 응답을 물린 채 analyze() 를 돌린다. (Groq 경로 JSON 처리 검증 — 백엔드 고정)"""
     original = analyzer._get_client
+    orig_backend = analyzer._BACKEND
     analyzer._get_client = lambda: _FakeClient(payload)
+    analyzer._BACKEND = "groq"   # .env 의 ANALYZER_BACKEND 가 무엇이든 이 테스트는 groq 목 경로
     try:
         return analyzer.analyze(query)
     finally:
         analyzer._get_client = original
+        analyzer._BACKEND = orig_backend
 
 
 # ── A. None 의 의미 ─────────────────────────────────────────
@@ -99,11 +102,14 @@ def test_fields_only_still_works() -> None:
 def test_analysis_failure_still_returns_none() -> None:
     """클라이언트가 없으면(키 미설정) 종전대로 None."""
     original = analyzer._get_client
+    orig_backend = analyzer._BACKEND
     analyzer._get_client = lambda: None
+    analyzer._BACKEND = "groq"
     try:
         assert analyzer.analyze("블로그 글 써줘") is None
     finally:
         analyzer._get_client = original
+        analyzer._BACKEND = orig_backend
 
 
 def test_empty_fields_render_same_as_no_analysis() -> None:

@@ -52,6 +52,25 @@ _TEMPERATURE = 0.2                 # 결정성 우선 — 같은 입력 → 같�
 _REASONING_EFFORT = "low"   # 형식 판단에 긴 추론이 필요 없다
 _MAX_TOKENS = 1000          # low 기준 실사용 198~447 → 2배 이상 여유
 
+# 백엔드 선택 (2026-09-27) — Groq 무료 한도(20b, TPD 200k → 하루 ~90건)를 넘으면 분석기가
+# 조용히 None 으로 퇴화한다. 사용량이 늘면 생성기와 같은 제미나이로 통일할 수 있게 열어 둔다.
+#   ANALYZER_BACKEND=gemini + (선택)ANALYZER_MODEL=gemini-3.5-flash-lite 로 전환.
+# 기본값은 groq(gpt-oss-20b) — 미설정 시 종전과 동일 동작(무회귀).
+# ⚠️ gemini-2.5-flash-lite 는 신규 계정에 종료(404) → 3.5-flash-lite 가 후속(실측 2026-09-27).
+_BACKEND = os.environ.get("ANALYZER_BACKEND", "groq").strip().lower()
+_GEMINI_MODEL = os.environ.get("ANALYZER_MODEL", "gemini-3.5-flash-lite").strip()
+# 형식 판단이라 사고는 최소로. 단 3.5-flash-lite 는 thinking_budget=0 을 거부(400)하고 512+ 만
+# 받는다 → 기본 512, 거부되면 thinking 설정 없이 1회 재시도(모델별 허용 범위 차이 흡수).
+try:
+    _GEMINI_THINKING = int(os.environ.get("ANALYZER_THINKING_BUDGET", "512"))
+except ValueError:
+    _GEMINI_THINKING = 512
+
+
+def _active_model() -> str:
+    """현재 백엔드가 실제로 호출하는 모델명(로그·집계용). _MODEL 하드코딩 표시 버그 방지."""
+    return _GEMINI_MODEL if _BACKEND == "gemini" else _MODEL
+
 # 주의: 구체적인 예시 하나를 길게 쓰면 8b가 그 예시를 무관한 요청에도 복사한다
 # (실측: "환불 거절 이메일" 예시가 "글 써줘"의 taskType으로 새어나옴).
 # → 작업유형별 required 를 '짧은 목록'으로만 주고, 특정 시나리오를 서술하지 않는다.
@@ -115,6 +134,8 @@ _SYSTEM = _SYSTEM.replace("{axis_catalog}", build_axis_catalog("request"))
 
 _client = None
 _init_failed = False
+_gemini_client = None
+_gemini_init_failed = False
 
 
 def _get_client():
@@ -137,6 +158,81 @@ def _get_client():
         print(f"[Analyzer] 초기화 실패 → 분석 생략: {e}")
         _init_failed = True
         return None
+
+
+def _get_gemini_client():
+    """Gemini 클라이언트 1회 초기화(google-genai). 키 없거나 실패하면 None.
+    generator.GeminiGenerator 와 같은 SDK — 같은 인증·타임아웃 규약을 쓴다."""
+    global _gemini_client, _gemini_init_failed
+    if _gemini_client is not None:
+        return _gemini_client
+    if _gemini_init_failed:
+        return None
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        _gemini_init_failed = True
+        return None
+    try:
+        from google import genai
+        from google.genai import types
+        from app.core.timeouts import FAST_MILLIS
+        _gemini_client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=FAST_MILLIS),
+        )
+        return _gemini_client
+    except Exception as e:
+        print(f"[Analyzer] Gemini 초기화 실패 → 분석 생략: {e}")
+        _gemini_init_failed = True
+        return None
+
+
+def _call_analyzer_llm(user_msg: str) -> str:
+    """분석기 LLM 1회 호출 → 원시 JSON 문자열. 백엔드는 ANALYZER_BACKEND 로 선택.
+
+    - groq(기본): gpt-oss-20b, reasoning_effort=low (추론 토큰이 예산 먹는 것 방지)
+    - gemini: flash-lite, thinking_budget=0 (형식 판단이라 사고 불필요 — 출력·지연 최소화)
+    둘 다 JSON 출력을 강제하고 system/user 를 정식 채널로 분리해 전달한다."""
+    if _BACKEND == "gemini":
+        client = _get_gemini_client()
+        if client is None:
+            raise RuntimeError("Gemini 클라이언트 없음(GEMINI_API_KEY 미설정 등)")
+        from google.genai import types
+        contents = [types.Content(role="user", parts=[types.Part.from_text(text=user_msg)])]
+
+        def _call(thinking: int | None):
+            cfg = dict(system_instruction=_SYSTEM, temperature=_TEMPERATURE,
+                       max_output_tokens=_MAX_TOKENS, response_mime_type="application/json")
+            if thinking is not None:
+                cfg["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking)
+            return client.models.generate_content(
+                model=_GEMINI_MODEL, contents=contents,
+                config=types.GenerateContentConfig(**cfg),
+            )
+
+        try:
+            resp = _call(_GEMINI_THINKING)
+        except Exception as e:   # 모델이 이 thinking 예산을 안 받으면(400) 설정 없이 1회 재시도
+            if _GEMINI_THINKING is not None and ("INVALID_ARGUMENT" in str(e) or "400" in str(e)):
+                print(f"[Analyzer] thinking_budget={_GEMINI_THINKING} 거부 → thinking 설정 없이 재시도")
+                resp = _call(None)
+            else:
+                raise
+        return resp.text or "{}"
+
+    client = _get_client()
+    if client is None:
+        raise RuntimeError("Groq 클라이언트 없음(GROQ_API_KEY 미설정 등)")
+    resp = client.chat.completions.create(
+        model=_MODEL,
+        temperature=_TEMPERATURE,
+        max_tokens=_MAX_TOKENS,
+        reasoning_effort=_REASONING_EFFORT,
+        response_format={"type": "json_object"},
+        messages=[{"role": "system", "content": _SYSTEM},
+                  {"role": "user", "content": user_msg}],
+    )
+    return resp.choices[0].message.content or "{}"
 
 
 # 규약의 '하드 제약'은 프롬프트가 아니라 코드로 강제한다.
@@ -170,7 +266,7 @@ _SANITIZE_DROPS: dict[str, int] = {}
 def _record_drop(rule: str, name: str) -> None:
     """방어 규칙이 모델 출력을 고쳤다는 사실을 남긴다(조용히 버리지 않는다)."""
     _SANITIZE_DROPS[rule] = _SANITIZE_DROPS.get(rule, 0) + 1
-    print(f"[Analyzer] _sanitize 교정 {rule}: {name!r} ({_MODEL})")
+    print(f"[Analyzer] _sanitize 교정 {rule}: {name!r} ({_active_model()})")
 
 
 def sanitize_stats() -> dict[str, int]:
@@ -355,10 +451,6 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
 
     None 은 **분석 실패**만 뜻한다(키 없음·호출 실패·JSON 파싱 실패·산출물 전무).
     필드가 비었지만 축이 있으면 dict 를 돌려준다 — 축은 축 라우팅의 입력이다."""
-    client = _get_client()
-    if client is None:
-        return None
-
     user_msg = query
     if history:
         recent = [f"{h.get('role','')}: {h.get('content','')}" for h in history[-4:]
@@ -368,16 +460,7 @@ def analyze(query: str, history: list[dict] | None = None) -> dict | None:
             user_msg = "이전 대화:\n" + "\n".join(recent) + "\n\n이번 입력: " + query
 
     try:
-        resp = client.chat.completions.create(
-            model=_MODEL,
-            temperature=_TEMPERATURE,
-            max_tokens=_MAX_TOKENS,
-            reasoning_effort=_REASONING_EFFORT,
-            response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": _SYSTEM},
-                      {"role": "user", "content": user_msg}],
-        )
-        data = json.loads(resp.choices[0].message.content or "{}")
+        data = json.loads(_call_analyzer_llm(user_msg))
     except Exception as e:
         print(f"[Analyzer] 분석 실패 → 분석 없이 진행: {e}")
         return None

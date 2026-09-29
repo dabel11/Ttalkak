@@ -128,4 +128,30 @@ check("content None 관용", fit(M70, [{"role": "user", "content": None}], 4096)
 check("est_input 우선", fit("openai/gpt-oss-120b", msgs("x"), 4096, est_input=5500) == 8000 - 5500 - 200)
 
 
+# ── GROQ_TPM_LIMIT (유료 티어 예산) ─────────────────────────────
+# 무료 표가 상수로 고정돼 결제해도 출력 예산이 안 늘던 것(2026-09-20) — 환경변수로 푼다.
+import os  # noqa: E402
+
+from app.rag.generator import _needs_long_context  # noqa: E402
+
+OSS = "openai/gpt-oss-120b"
+_saved = os.environ.pop("GROQ_TPM_LIMIT", None)
+try:
+    # 운영 규모 입력(SYSTEM + 기법 5 + 예시 2 ≈ 실측 5.5k) — 무료 8k 에선 예산이 4096 에 못 미친다
+    m = msgs("임영웅 콘서트 인스타 카드뉴스 문구 만들어줘. " + "참고 기법 설명 " * 300)
+    free = fit(OSS, m, 4096)
+    check("미설정이면 무료 표(8k) 그대로", free < 4096 and est_msgs(m) + free + 200 <= 8000, f"got {free}")
+
+    os.environ["GROQ_TPM_LIMIT"] = "250000"
+    check("설정하면 같은 입력도 4096 유지", fit(OSS, m, 4096) == 4096)
+    check("장문 판정도 설정값을 따름", not _needs_long_context("가" * 3000, [], [], OSS))
+
+    for bad in ("", "abc", "0", "-5"):
+        os.environ["GROQ_TPM_LIMIT"] = bad
+        check(f"잘못된 값({bad!r})은 무시", fit(OSS, m, 4096) == free)
+finally:
+    os.environ.pop("GROQ_TPM_LIMIT", None)
+    if _saved is not None:
+        os.environ["GROQ_TPM_LIMIT"] = _saved
+
 print(f"\n전부 통과 ({_passed}개)")

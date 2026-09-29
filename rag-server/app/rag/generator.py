@@ -4,7 +4,7 @@ import time
 
 from google import genai
 from google.genai import types
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 
 from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
 from app.rag.analyzer import is_source_field
@@ -415,6 +415,21 @@ def _build_context_blocks(contexts: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _compose_user_message(query: str, contexts: list[dict] | None,
+                          analysis: dict | None, has_history: bool) -> str:
+    """이번 턴의 user 메시지 — Groq·Gemini 가 **같은 본문**을 받게 하는 단일 출처.
+
+    두 백엔드가 이 조립을 각자 복제해 들고 있었다. 한쪽만 고치면 폴백·장문 라우팅으로
+    Gemini 를 탄 요청만 다른 입력을 받는다(`_build_context_blocks` 가 분리된 뒤에도 남은 중복)."""
+    blocks = [b for b in (build_analysis_block(analysis),
+                          _build_context_blocks(contexts) if contexts else "") if b]
+    if not blocks:
+        # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
+        return query
+    label = "이번 요청" if has_history else "원본 프롬프트"
+    return "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
+
+
 class _BudgetShort(Exception):
     """출력 예산 부족 — 400(JSON 시작 전 소진) 또는 finish_reason='length'(중간 잘림)."""
 
@@ -438,6 +453,19 @@ class GroqGenerator:
     }
 
     @classmethod
+    def _tpm(cls, groq_model: str) -> int:
+        """이 모델의 TPM 예산. GROQ_TPM_LIMIT 가 있으면 그 값(유료 티어용), 없으면 무료 표.
+
+        ⚠️ 2026-09-20: 상수가 무료 8,000 에 고정돼 있어 **결제만 해서는 출력 예산이 안 늘었다.**
+        실측(120b 8건): 자연 출력 980~2,200+(추론 594~1,719)인데 이 예산이 준 max_tokens 는
+        782~1,510 → 5/8 가 추론에 예산을 다 쓰고 400 json_validate_failed 로 떨어질 크기.
+        Developer 티어(gpt-oss TPM 250K)로 올리면 .env 에 GROQ_TPM_LIMIT=250000."""
+        raw = os.environ.get("GROQ_TPM_LIMIT", "").strip()
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        return cls.TPM_LIMIT.get(groq_model, 12000)
+
+    @classmethod
     def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int,
                         est_input: int | None = None) -> int:
         """입력 길이를 추정해 TPM 예산 안에 들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을
@@ -448,7 +476,7 @@ class GroqGenerator:
         없으면 messages 전체를 사용자 입력으로 보고 보수 추정한다(출처를 모를 때의 안전한 기본)."""
         if est_input is None:
             est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
-        tpm = cls.TPM_LIMIT.get(groq_model, 12000)
+        tpm = cls._tpm(groq_model)
         return max(512, min(want, tpm - est_input - 200))
 
     def __init__(self):
@@ -489,16 +517,8 @@ class GroqGenerator:
         """Groq 에 보내는 messages 조립. 예산 보정 측정(eval)도 이 함수를 써서 운영과 같은 입력을 잰다."""
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(_sanitize_history(history))
-
-        blocks = [b for b in (build_analysis_block(analysis),
-                              _build_context_blocks(contexts) if contexts else "") if b]
-        if blocks:
-            label = "원본 프롬프트" if not messages[1:] else "이번 요청"
-            user_msg = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
-        else:
-            # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
-            user_msg = query
-        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "user", "content": _compose_user_message(
+            query, contexts, analysis, has_history=bool(messages[1:]))})
         return messages
 
     def generate(self, query: str, contexts: list[dict],
@@ -657,14 +677,7 @@ class GeminiGenerator:
                 role=role, parts=[types.Part.from_text(text=h["content"])],
             ))
 
-        blocks = [b for b in (build_analysis_block(analysis),
-                              _build_context_blocks(contexts) if contexts else "") if b]
-        if blocks:
-            label = "원본 프롬프트" if not contents else "이번 요청"
-            current = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
-        else:
-            # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달 (Groq 경로와 동일)
-            current = query
+        current = _compose_user_message(query, contexts, analysis, has_history=bool(contents))
         contents.append(types.Content(
             role="user", parts=[types.Part.from_text(text=current)],
         ))
@@ -709,8 +722,17 @@ class GeminiGenerator:
                     pass
                 print(f"[Generator] Gemini 429 — {retry_delay}초 대기 ({attempt+1}/3)...")
                 time.sleep(retry_delay)
+            except ServerError as e:
+                # 503 UNAVAILABLE·500 등 일시적 과부하 — 짧게 백오프 후 재시도.
+                # 실측(2026-09-29): gemini-3.6-flash 가 피크에 503 을 자주 낸다. 종전엔 이 예외가
+                # 그대로 올라가 Generator 의 `except RuntimeError` 를 못 타서 **폴백도 안 됐다**.
+                last_err = e
+                delay = 4 * (attempt + 1)   # 4, 8, 12초
+                print(f"[Generator] Gemini {getattr(e,'code','5xx')} 과부하 — {delay}초 대기 ({attempt+1}/3)...")
+                time.sleep(delay)
 
-        raise RuntimeError("⛔ Gemini API 재시도 3회 초과") from last_err
+        # 재시도 소진 → RuntimeError 로 변환해야 Generator 가 Groq 로 폴백한다.
+        raise RuntimeError(f"⛔ Gemini API 재시도 3회 초과: {str(last_err)[:120]}") from last_err
 
 
 # ── 장문 라우팅 판정 ─────────────────────────────────────────
@@ -720,10 +742,15 @@ def _needs_long_context(query: str, contexts: list[dict] | None,
     개선 프롬프트는 사용자가 준 원문을 그대로 재인용해야 하므로, 필요 출력은
     최소한 원문 길이만큼이다 — 예산이 그에 못 미치면 잘림이 '보장'되는 구조.
     이 경우 컨텍스트가 큰 Gemini 로 보내는 것이 분할/요약 선처리보다 싸고 확실하다."""
-    est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100   # _fit_max_tokens 와 동일 추정기
+    # ⚠️ 전부 보수 추정기(`_est_tokens`, 한글 1.0)로 잰다. `_fit_max_tokens` 는 2026-09-20 재보정부터
+    #    출처별 `estimate_input`(고정 입력 0.75) 을 쓰므로 **둘은 더 이상 같은 추정기가 아니다** —
+    #    같은 입력을 이 판정이 ~20% 크게 본다(카드 5장·무료 8k: 5,645 vs 4,611 tok →
+    #    Gemini 라우팅 경계 800자 vs 1,300자). 맞출지는 Gemini 쿼터(무료 RPD 20)와 Groq 잘림
+    #    위험을 맞바꾸는 결정이라 코드는 그대로 둔다(WORKLOG 2026-09-20 전수조사).
+    est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100
     est_in += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
     est_in += sum(_est_tokens(c.get("text") or "") + 60 for c in (contexts or []))
-    avail_out  = GroqGenerator.TPM_LIMIT.get(groq_model, 12000) - est_in - 200
+    avail_out  = GroqGenerator._tpm(groq_model) - est_in - 200
     needed_out = _est_tokens(query) + 600               # 원문 재인용 + 지시문·JSON 오버헤드
     return avail_out < needed_out
 
@@ -732,10 +759,14 @@ def _needs_long_context(query: str, contexts: list[dict] | None,
 class Generator:
     """
     백엔드 자동 선택 + 요청 단위 라우팅.
-    - 기본: GROQ_API_KEY 있으면 Groq(빠름), 없으면 Gemini
-    - 장문 라우팅: Groq TPM 예산으로 verbatim 출력이 불가능한 긴 원문은 Gemini 로
-      (GEMINI_API_KEY 가 함께 설정된 경우에만 작동)
-    - 폴백: Groq 실패(429 재시도 포함) 시 Gemini 가용하면 1회 폴백
+    - 메인 백엔드: GEN_PRIMARY 환경변수("groq"|"gemini", 기본 groq)로 선택. 지정 백엔드의
+      키가 없으면 가용한 쪽으로 폴백(무회귀 — 미설정+GROQ_API_KEY 면 종전과 동일).
+    - 장문 라우팅: 메인이 Groq(TPM 제한)일 때만. verbatim 출력이 불가능한 긴 원문은
+      컨텍스트가 큰 Gemini 로(양쪽 키가 다 있을 때).
+    - 폴백: 메인 실패(429 재시도 포함) 시 반대편 백엔드가 가용하면 1회 폴백.
+
+    ⚠️ 제미나이를 메인으로 쓰려면(GEN_PRIMARY=gemini) 결제 등급(Tier 1)이 필요하고,
+       모델은 GEMINI_MODEL 로 고정한다(예: gemini-3.6-flash). 무료 티어는 RPD 20 이라 폴백용.
     """
 
     def __init__(self):
@@ -745,21 +776,32 @@ class Generator:
             raise EnvironmentError(
                 "GROQ_API_KEY 또는 GEMINI_API_KEY 중 하나를 .env에 설정해주세요."
             )
-        self._using = "groq" if self._groq else "gemini"
-        extra = " (+gemini 장문 라우팅·폴백)" if (self._groq and self._gemini) else ""
+        pref = os.environ.get("GEN_PRIMARY", "groq").strip().lower()
+        if pref == "gemini" and self._gemini:
+            self._primary, self._using = self._gemini, "gemini"
+        elif self._groq:
+            self._primary, self._using = self._groq, "groq"
+        else:                                   # groq 키 없음 → 제미나이 단독
+            self._primary, self._using = self._gemini, "gemini"
+        other = " (+반대편 백엔드 폴백"
+        other += "·gemini 장문 라우팅)" if self._primary is self._groq and self._gemini else ")"
+        extra = other if (self._groq and self._gemini) else ""
         print(f"[Generator] 백엔드: {self._using}{extra}")
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
                  analysis: dict | None = None) -> str:
-        backend = self._groq or self._gemini
+        backend = self._primary
 
-        if self._groq and self._gemini:
+        # 장문 라우팅은 메인이 Groq 일 때만 의미가 있다(Gemini 는 컨텍스트가 커서 잘림 걱정 없음).
+        if backend is self._groq and self._gemini:
             groq_model = GroqGenerator.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
             if _needs_long_context(query, contexts, history, groq_model):
                 print("[Generator] 장문 입력 → Gemini 라우팅 (Groq TPM 예산 부족)")
                 backend = self._gemini
+
+        fallback = self._gemini if backend is self._groq else self._groq
 
         try:
             return backend.generate(
@@ -768,11 +810,12 @@ class Generator:
                 history=history, analysis=analysis,
             )
         except RuntimeError as e:
-            if backend is self._groq and self._gemini:
-                # 원인을 반드시 남긴다 — 종전엔 사유 없이 "Groq 실패"만 찍혀서, 폴백 쪽(Gemini)
-                # 에러만 보이고 진짜 원인(대개 Groq 429)은 가려졌다(2026-09-16).
-                print(f"[Generator] Groq 실패 → Gemini 폴백 — 원인: {str(e)[:160]}")
-                return self._gemini.generate(
+            if fallback is not None:
+                # 원인을 반드시 남긴다 — 종전엔 사유 없이 "실패"만 찍혀서 폴백 쪽 에러만 보이고
+                # 진짜 원인(대개 메인 429)이 가려졌다(2026-09-16).
+                who = "Groq" if backend is self._groq else "Gemini"
+                print(f"[Generator] {who} 실패 → 폴백 — 원인: {str(e)[:160]}")
+                return fallback.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,
                     history=history, analysis=analysis,

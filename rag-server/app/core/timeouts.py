@@ -44,3 +44,4 @@ GEN_SECONDS = _seconds("RAG_LLM_TIMEOUT_GEN", 45.0)
 
 # google-genai 는 밀리초를 받는다(groq/httpx 는 초).
 GEN_MILLIS = int(GEN_SECONDS * 1000)
+FAST_MILLIS = int(FAST_SECONDS * 1000)   # 분석기가 Gemini(google-genai) 백엔드일 때
