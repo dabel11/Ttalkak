@@ -3873,3 +3873,27 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: `pytest tests -q` **254 passed**. 호스트 통합(제미나이 백엔드): analyze+generate 2건 기록, summary billed_output 사고 합산 확인.
 **미완(백엔드 작업)**: Spring 이 `usage` 를 받아 요청 단위로 DB 적재 → 월 사용량·비용 역산. (rag 쪽 창구는 완료)
 **변경 파일**: 신규 `app/core/usage.py`·`tests/test_usage.py` / 수정 `app/rag/generator.py`·`app/rag/analyzer.py`·`app/main.py`·`CONTRACT_BACKEND.md`·`WORKLOG.md`
+
+---
+
+## [2026-09-29] 품질 A/B (정식) — 제미나이 3.6 Flash, gen_set 18 전량 · 폴백 0
+
+**조건**: GEN_PRIMARY=gemini(3.6-flash) + 분석 3.5-flash-lite, judge=gpt-oss-120b(중립, temp0), 새 캐시(오염 제거), 결제 활성 상태라 **18건 전량 제미나이 생성**(503·폴백 0, cache 0/18).
+
+| 지표 | 제미나이 3.6 (n=18) | gpt-oss 베이스라인(WORKLOG 09-19, self-judge) |
+|---|---|---|
+| mode_accuracy | **0.94 (17/18)** | 0.85~0.92 |
+| mode_fit | 4.78 | 5.00 / 4.54 |
+| technique_grounding(improve) | 5.00 (n=12) | 5.00 |
+| technique_grounding(ask) | 3.83 (n=6) | 3.56~3.67 |
+| instruction_form | 5.00 | 5.00 |
+| intent_preservation | 5.00 | — |
+| faithfulness / 환각 | 5.00 / **0.00** | 5.00 |
+| structured(JSON) | **18/18** | — |
+| 반영불가 기법 적용률 | 0.00 (0/41) | 0.00 |
+
+**판정: 제미나이 3.6 ≥ gpt-oss (동급, mode_accuracy 는 우위).** judge 가 제미나이엔 중립·베이스라인엔 self-bias(점수 부풀림)라 비교는 **제미나이에 보수적**인데도 동급 이상 → 신뢰할 신호. 환각 0·JSON 100%·반영불가 0%로 안전성도 유지.
+- 유일한 mode 오판: #18 "제품 홍보 이메일 써줘" improve(기대 ask) — 경계 사례(베이스라인도 유사 오판 존재). fit 평균을 끌어내린 주원인.
+- ask 의 technique_grounding 3.83 은 gpt-oss 시절과 같은 수준(질문이 기법 관점에서 약한 문항: "이거 개선해줘" tech2, "발표 대본" tech2) — 모델 문제가 아니라 ask 채점 특성.
+
+**결론**: 3.6 Flash 유지 권장. 데이터: `eval/.gen_cache_gemini36_clean.json`.
