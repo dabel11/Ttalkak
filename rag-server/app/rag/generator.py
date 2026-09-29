@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ClientError, ServerError
 
+from app.core import usage
 from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
 from app.rag.analyzer import is_source_field
 
@@ -593,6 +594,10 @@ class GroqGenerator:
         u = getattr(response, "usage", None)
         finish = response.choices[0].finish_reason
         if u is not None:
+            det = getattr(u, "prompt_tokens_details", None)
+            usage.record("generate", "groq", groq_model,
+                         prompt=u.prompt_tokens, completion=u.completion_tokens,
+                         cached=getattr(det, "cached_tokens", None) if det else None)
             print(f"[Generator] 예산 max_tokens={max_tokens} · 입력 추정 {est_input}/실제 "
                   f"{u.prompt_tokens} · 완료 {u.completion_tokens} ({finish}"
                   f"{', effort=' + effort if effort else ''})")
@@ -695,6 +700,13 @@ class GeminiGenerator:
                         response_mime_type="application/json",  # 구조화 출력 강제
                     ),
                 )
+                um = getattr(response, "usage_metadata", None)
+                if um is not None:
+                    usage.record("generate", "gemini", model,
+                                 prompt=getattr(um, "prompt_token_count", None),
+                                 completion=getattr(um, "candidates_token_count", None),
+                                 thoughts=getattr(um, "thoughts_token_count", None),
+                                 cached=getattr(um, "cached_content_token_count", None))
                 return _strip_cjk_noise(response.text)
             except ClientError as e:
                 last_err = e

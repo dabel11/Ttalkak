@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # .env 는 app/__init__.py 에서 로드됨
+from app.core import usage
 from app.core.concurrency import GateBusy, GateTimeout, generation_gate
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
@@ -102,6 +103,9 @@ class QueryRequest(BaseModel):
     example_collection:  str  = "prompt_examples"
     n_examples:          int  = 2       # 주입할 예시 수(상한 — min_score 컷으로 줄 수 있음)
     example_min_score:   float = 0.40   # 예시 유효 유사도 컷(dense 코사인)
+    # 사용량 로깅용 요청 식별자(선택). 다중턴을 한 대화로 묶으려면 클라이언트가 같은 값을 넘긴다.
+    # 미지정 시 서버가 발급. 응답 usage.request_id 로 되돌려준다.
+    request_id:          Optional[str] = None
 
 class QueryResponse(BaseModel):
     mode:                str            # "improve" | "ask" — 프론트 분기의 단일 기준(추측 금지)
@@ -118,6 +122,9 @@ class QueryResponse(BaseModel):
     questions:           list[dict] = []
     # 1단계 분석기가 도출한 필드 상태(검증·디버깅용). 분석 실패 시 [].
     fields:              list[dict] = []
+    # 이번 요청의 LLM 토큰 사용량(선택 — 없으면 None). {summary:{...}, records:[{stage,backend,model,
+    # prompt_tokens,completion_tokens,thoughts_tokens,cached_tokens,...}]}. 백엔드가 무시해도 무방.
+    usage:               Optional[dict] = None
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
@@ -232,6 +239,9 @@ def retrieve_contexts(req: "QueryRequest",
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
     history = req.history or []
+    # 사용량 창구 열기 — 이 요청의 모든 LLM 호출(분석기·생성기)이 여기로 기록된다.
+    # turn_index = 이전 대화 턴 수(user+assistant), 다중턴을 request_id 로 묶어 집계.
+    usage.start(request_id=req.request_id, turn_index=len(history))
     retrieved, examples = retrieve_contexts(req, history)
 
     # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
@@ -261,6 +271,12 @@ def query(req: QueryRequest):
         {"text": r["text"][:300], "metadata": r["metadata"], "score": r["score"]}
         for r in retrieved
     ]
+    records = usage.drain()
+    usage_payload = {"summary": usage.summarize(records), "records": records} if records else None
+    if usage_payload:
+        s = usage_payload["summary"]
+        print(f"[Usage] req={s['request_id'][:8]} turn={s['turn_index']} calls={s['calls']} "
+              f"in={s['input_tokens']} out={s['billed_output_tokens']} cached={s['cached_tokens']}")
     return QueryResponse(
         mode=gen["mode"],
         answer=gen["answer"],
@@ -272,6 +288,7 @@ def query(req: QueryRequest):
         summary=gen["summary"],
         questions=gen["questions"],
         fields=gen.get("fields", []),
+        usage=usage_payload,
     )
 
 

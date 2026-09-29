@@ -3853,3 +3853,23 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 **갱신**: 팀 문서(토큰 사용량·월 구독 역연산 아티팩트)를 실측값으로 교체.
 **주의**: 무료 티어에서 이 측정을 돌렸으면 RPD 20 에 막혔을 것 — 결제 상태에서만 전량 측정 가능했다.
+
+---
+
+## [2026-09-29] 토큰 사용량 창구 — 요청 단위 usage 를 /query 응답으로 (월 구독 역산용)
+
+**배경**: 월 구독 규모를 역산하려면 실사용량을 요청 식별자와 함께 남겨야 하는데, 종전엔 생성기(Groq)만 print 로 흘렸고 제미나이·분석기는 기록조차 없었다. rag-server 쪽 '창구'를 만든다(백엔드 적재는 별도 작업).
+
+**Before**: `/query` 응답에 사용량 없음. 사용량은 생성기 Groq 경로 print 뿐(비구조·비식별·미반환).
+
+**After**
+- 신규 `app/core/usage.py` — `contextvars` 기반 **요청별 수집기**. `start()`/`record()`/`drain()`/`summarize()`. 수집기 미개시(eval·직접호출·단위테스트)면 `record()` 무동작 → **무회귀**.
+- 계측: `GroqGenerator._complete`·`GeminiGenerator.generate`·`analyzer._call_analyzer_llm`(gemini/groq 양쪽) 이 호출마다 `usage.record(stage, backend, model, prompt/completion/thoughts/cached)`.
+- `/query`: 핸들러가 `usage.start(request_id=req.request_id, turn_index=len(history))` 로 열고, 응답에 `usage={summary, records}` 로 담는다. `QueryRequest.request_id`(선택)·`QueryResponse.usage`(선택) 추가.
+- `summarize`: **billed_output = output + thoughts**(제미나이 사고 과금 반영).
+- 계약: `CONTRACT_BACKEND.md` 에 `usage` 스키마·`request_id` 왕복 명시(백엔드 DB 적재용, 프론트 전달 불필요).
+- 테스트: `tests/test_usage.py` +6.
+
+**검증**: `pytest tests -q` **254 passed**. 호스트 통합(제미나이 백엔드): analyze+generate 2건 기록, summary billed_output 사고 합산 확인.
+**미완(백엔드 작업)**: Spring 이 `usage` 를 받아 요청 단위로 DB 적재 → 월 사용량·비용 역산. (rag 쪽 창구는 완료)
+**변경 파일**: 신규 `app/core/usage.py`·`tests/test_usage.py` / 수정 `app/rag/generator.py`·`app/rag/analyzer.py`·`app/main.py`·`CONTRACT_BACKEND.md`·`WORKLOG.md`

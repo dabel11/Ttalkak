@@ -28,6 +28,7 @@ import json
 import re
 import os
 
+from app.core import usage
 from app.core.timeouts import FAST_SECONDS
 from app.rag.axes import (
     MAX_AXES_PER_REQUEST, build_axis_catalog, normalize_axes,
@@ -218,6 +219,13 @@ def _call_analyzer_llm(user_msg: str) -> str:
                 resp = _call(None)
             else:
                 raise
+        um = getattr(resp, "usage_metadata", None)
+        if um is not None:
+            usage.record("analyze", "gemini", _GEMINI_MODEL,
+                         prompt=getattr(um, "prompt_token_count", None),
+                         completion=getattr(um, "candidates_token_count", None),
+                         thoughts=getattr(um, "thoughts_token_count", None),
+                         cached=getattr(um, "cached_content_token_count", None))
         return resp.text or "{}"
 
     client = _get_client()
@@ -232,6 +240,12 @@ def _call_analyzer_llm(user_msg: str) -> str:
         messages=[{"role": "system", "content": _SYSTEM},
                   {"role": "user", "content": user_msg}],
     )
+    u = getattr(resp, "usage", None)
+    if u is not None:
+        det = getattr(u, "prompt_tokens_details", None)
+        usage.record("analyze", "groq", _MODEL,
+                     prompt=u.prompt_tokens, completion=u.completion_tokens,
+                     cached=getattr(det, "cached_tokens", None) if det else None)
     return resp.choices[0].message.content or "{}"
 
 
