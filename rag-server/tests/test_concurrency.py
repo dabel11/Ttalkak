@@ -203,3 +203,15 @@ def run_tests() -> None:
 
 if __name__ == "__main__":
     run_tests()
+
+
+# ── 백엔드 인지 기본 동시성 (2026-10-01) ──────────────────────
+def test_default_concurrency_by_backend(monkeypatch) -> None:
+    """미설정 기본값이 메인 백엔드를 따른다 — Groq/미설정 1(직렬), 제미나이 6."""
+    import app.core.concurrency as conc
+    monkeypatch.setenv("GEN_PRIMARY", "groq")
+    assert conc._default_concurrency() == 1
+    monkeypatch.setenv("GEN_PRIMARY", "gemini")
+    assert conc._default_concurrency() == 6
+    monkeypatch.delenv("GEN_PRIMARY", raising=False)
+    assert conc._default_concurrency() == 1   # 미설정 = 안전한 직렬

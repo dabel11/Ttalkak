@@ -5,6 +5,7 @@ bge-m3 임베딩 모델을 프로세스당 1회만 로드해 Indexer/Retriever�
 (기존엔 Indexer·Retriever가 각각 로드해 메모리를 2배로 썼다.)
 """
 
+import os
 import sys
 
 import torch
@@ -14,6 +15,30 @@ _DEFAULT_MODEL    = "BAAI/bge-m3"
 _DEFAULT_RERANKER = "BAAI/bge-reranker-v2-m3"
 _model_cache:    dict[str, SentenceTransformer] = {}
 _reranker_cache: dict[str, CrossEncoder] = {}
+
+
+def _tune_cpu_threads() -> None:
+    """CPU 추론에서 torch 가 전체 코어를 쓰도록 스레드 수를 맞춘다.
+
+    왜: torch 기본 intra-op 스레드가 코어 수보다 작게 잡히는 경우가 있다(실측 2026-10-01:
+    10코어 머신에서 4스레드). CPU 바운드인 bge-reranker(가장 큰 지연원)·bge-m3 임베딩이
+    코어를 다 못 써 느렸다 — 스레드를 코어 수로 올리면 리랭크 50쌍 4.1s→2.6s(-38%), 품질 불변.
+    RAG_TORCH_THREADS 로 상한 지정 가능(0/미설정이면 os.cpu_count()). GPU 에선 무의미하나 무해."""
+    try:
+        want = int(os.environ.get("RAG_TORCH_THREADS", "") or 0)
+    except ValueError:
+        want = 0
+    if want <= 0:
+        want = os.cpu_count() or 1
+    try:
+        if want != torch.get_num_threads():
+            torch.set_num_threads(want)
+            print(f"[Embeddings] torch CPU 스레드: {torch.get_num_threads()} (코어 {os.cpu_count()})")
+    except Exception as e:
+        print(f"[Embeddings] torch 스레드 설정 실패(무시): {e}")
+
+
+_tune_cpu_threads()
 
 
 def _select_device() -> str:

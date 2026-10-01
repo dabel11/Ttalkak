@@ -3897,3 +3897,21 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 - ask 의 technique_grounding 3.83 은 gpt-oss 시절과 같은 수준(질문이 기법 관점에서 약한 문항: "이거 개선해줘" tech2, "발표 대본" tech2) — 모델 문제가 아니라 ask 채점 특성.
 
 **결론**: 3.6 Flash 유지 권장. 데이터: `eval/.gen_cache_gemini36_clean.json`.
+
+---
+
+## [2026-10-01] 데모 성능 P0 — 동시성 게이트 백엔드 인지화 + CPU 스레드 튜닝
+
+**P0-1 동시성 게이트(생성 직렬화) 완화**
+- Before: `MAX_CONCURRENT=_int_env(..., 1)` — 메인이 제미나이(유료)여도 생성을 1건씩 직렬화. 근거는 "Groq 무료 1건=TPM 7,800"인데 제미나이엔 무효 → 데모 동시 접속 시 3번째부터 503.
+- After: `_default_concurrency()` — `GEN_PRIMARY=gemini` 면 기본 6, Groq/미설정이면 1. `RAG_MAX_CONCURRENT_GEN` 명시 시 그 값 우선. (`app/core/concurrency.py`)
+- 테스트 +1 (`test_concurrency.py`).
+
+**P0-2 리랭커 지연 완화 (안전·품질 불변)**
+- 실측: 10코어 머신에서 `torch.get_num_threads()=4` — bge-reranker(가장 큰 지연원)·bge-m3 가 코어를 다 못 씀. 리랭크 50쌍 4.13s.
+- `embeddings._tune_cpu_threads()` — import 시 torch 스레드를 `os.cpu_count()` 로(또는 `RAG_TORCH_THREADS` 상한). **리랭크 50쌍 4.13s→2.56s (-38%), 품질 불변.**
+- 테스트 +3 (`test_cpu_threads.py`).
+- ⏳ 더 큰 리랭커 개선(ONNX/양자화, 후보 수 축소, 조건부/제거)은 **eval·의존성 결정 필요** — 별도 과제로 남김(RAG_PIPELINE §4).
+
+**검증**: `pytest tests -q` **255 passed** + 신규 4.
+**변경 파일**: `app/core/concurrency.py` · `app/core/embeddings.py` · `tests/test_concurrency.py` · 신규 `tests/test_cpu_threads.py` · `.env.example` · `WORKLOG.md`

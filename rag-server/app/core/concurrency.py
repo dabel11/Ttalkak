@@ -14,6 +14,11 @@ LLM 생성 구간 동시 실행 게이트.
   쿼터를 늘릴 수 없다면 **줄을 세우는 것**이 맞다. 429 로 실패해 폴백 쿼터까지
   태우는 것보다, 기다렸다가 성공하는 편이 사용자에게도 낫다.
 
+  ⚠️ 2026-10-01: 위 근거는 **Groq 무료 티어** 전제다. 메인이 제미나이(유료)면 TPM 여유가
+  커서 직렬화(1)는 불필요한 병목이 된다 — 데모에서 동시 접속 시 3번째부터 503. 그래서
+  기본 동시성을 **메인 백엔드(GEN_PRIMARY)에 맞춰** 가른다(제미나이 6 / Groq 1).
+  `RAG_MAX_CONCURRENT_GEN` 을 명시하면 그 값이 항상 우선이다.
+
 설계
   · 게이트는 **LLM 구간만** 감싼다(`run_generation`). 검색·리랭크는 CPU/DB 작업이라
     병렬로 둔다 — 게이트 안에 넣으면 5초짜리 검색이 줄을 막아 처리량이 반으로 준다.
@@ -52,8 +57,15 @@ def _float_env(name: str, default: float, minimum: float = 0.0) -> float:
     return value if value > minimum else default
 
 
-# 동시에 LLM 을 부를 수 있는 요청 수. 1 = 완전 직렬(현 쿼터의 현실).
-MAX_CONCURRENT = _int_env("RAG_MAX_CONCURRENT_GEN", 1, minimum=1)
+def _default_concurrency() -> int:
+    """미설정 시 메인 생성 백엔드에 맞춘 기본 동시성.
+    Groq 무료는 1건이 TPM 거의 전부를 먹어 직렬(1)이 맞지만, 제미나이 유료는 TPM 여유가
+    커서 직렬화가 불필요한 병목이다. `GEN_PRIMARY` 로 가른다(명시 env 가 있으면 그게 우선)."""
+    return 6 if os.environ.get("GEN_PRIMARY", "groq").strip().lower() == "gemini" else 1
+
+
+# 동시에 LLM 을 부를 수 있는 요청 수. 미설정이면 메인 백엔드 기준(제미나이 6 / Groq 1).
+MAX_CONCURRENT = _int_env("RAG_MAX_CONCURRENT_GEN", _default_concurrency(), minimum=1)
 # 슬롯을 기다릴 수 있는 최대 시간(초).
 QUEUE_WAIT_SECONDS = _float_env("RAG_GEN_QUEUE_WAIT", 40.0)
 # 동시에 '대기'할 수 있는 요청 수. 초과하면 기다리지 않고 즉시 거절.
