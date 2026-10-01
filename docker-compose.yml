@@ -7,8 +7,9 @@
 #   docker compose down                 # 중지 (데이터는 볼륨에 보존)
 #   docker compose down -v              # 데이터까지 삭제
 #
-# 사전 준비: backend/.env 와 rag-server/.env 를 각 .env.example 기준으로 만든다.
-#   backend/.env 에는 최소 JWT_SECRET_BASE64(32바이트 Base64) 가 필요하다.
+# 사전 준비:
+#   rag-server/.env  ← rag-server/.env.example 을 복사해 LLM 키(GROQ_API_KEY 등)를 채운다.
+#   backend/.env     ← .env.example 이 없다. 최소 JWT_SECRET_BASE64(32바이트 Base64) 가 필요하다.
 
 services:
   mysql:

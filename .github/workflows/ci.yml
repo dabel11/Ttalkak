@@ -311,10 +311,11 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
 
-      # 정의 안 된 이름·문법 오류만 본다. Gemini 경로에서만 실행되는 줄의 NameError 가
+      # 정의 안 된 이름·문법 오류(F821,E9) — Gemini 경로에서만 실행되는 줄의 NameError 가
       # 테스트를 통과한 채 들어온 적이 있다(c91201b, 3곳).
-      - name: Check undefined names
-        run: ruff check --select F821,E9 app eval ingestion tests
+      # + 안 쓰는 import·재정의(F401,F811) — 리팩토링 뒤 죽은 참조가 조용히 쌓이는 것을 막는다.
+      - name: Check undefined names and dead imports
+        run: ruff check --select F821,F401,F811,E9 app eval ingestion tests
 
       - name: Run unit tests
         run: python -m pytest tests -q
