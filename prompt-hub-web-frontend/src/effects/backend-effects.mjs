@@ -325,80 +325,98 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     state.myBackendStatus = "checking";
     const token = getAuthToken() || undefined;
     const hydrationController = new AbortController();
-    const settledRequests = Promise.allSettled([
-      api.getMyLibrary({ filter: "all", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
-      api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
-      api.getMyPrompts?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
-      api.getMyComments?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
-      api.getMyReports?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
-    ]);
     let hydrationTimeoutId;
-    const hydrationTimeout = new Promise((resolve) => {
-      hydrationTimeoutId = globalThis.setTimeout(() => {
-        hydrationController.abort();
-        resolve(null);
-      }, MY_PAGE_HYDRATION_TIMEOUT_MS);
-    });
-    const settledResults = await Promise.race([settledRequests, hydrationTimeout]);
-    globalThis.clearTimeout(hydrationTimeoutId);
-    if (!settledResults) {
-      const timeoutError = Object.assign(new Error("My page data hydration timed out."), {
-        code: "MY_PAGE_HYDRATION_TIMEOUT",
-        status: 0,
+    try {
+      if (state.route === "saved") render?.();
+      const settledRequests = Promise.allSettled([
+        api.getMyLibrary({ filter: "all", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+        api.getMyLibrary({ filter: "liked", page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+        api.getMyPrompts?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+        api.getMyComments?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+        api.getMyReports?.({ page: 1, pageSize: 64, signal: hydrationController.signal }, token),
+      ]);
+      const hydrationTimeout = new Promise((resolve) => {
+        hydrationTimeoutId = globalThis.setTimeout(() => {
+          hydrationController.abort();
+          resolve(null);
+        }, MY_PAGE_HYDRATION_TIMEOUT_MS);
       });
-      ctx.reportWarning?.("backend-hydration", "my-page-timeout", timeoutError);
+      const settledResults = await Promise.race([settledRequests, hydrationTimeout]);
+      if (!settledResults) {
+        const timeoutError = Object.assign(new Error("My page data hydration timed out."), {
+          code: "MY_PAGE_HYDRATION_TIMEOUT",
+          status: 0,
+        });
+        state.myBackendStatus = "fallback";
+        ctx.reportWarning?.("backend-hydration", "my-page-timeout", timeoutError);
+        if (state.route === "saved") render?.();
+        return;
+      }
+
+      const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = settledResults;
+      const allRequestsFailed = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult].every(
+        (result) => result.status === "rejected" || result.value === undefined,
+      );
+      const rejectedReasons = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult]
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason);
+      const unauthorizedReason = rejectedReasons.find((reason) => {
+        const status = Number(reason?.status || reason?.payload?.status || 0);
+        const code = String(reason?.payload?.code || reason?.code || "");
+        return status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED";
+      });
+
+      if (allRequestsFailed && unauthorizedReason && typeof ctx.handleBackendAccessError === "function") {
+        ctx.handleBackendAccessError(unauthorizedReason, "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+        return;
+      }
+
+      let shouldRender = false;
+      const backendDataContext = applyContext();
+
+      if (libraryResult.status === "fulfilled") {
+        shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
+      } else {
+        ctx.reportWarning?.("backend-hydration", "my-library", libraryResult.reason);
+      }
+
+      if (likedLibraryResult.status === "fulfilled") {
+        shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
+      } else {
+        ctx.reportWarning?.("backend-hydration", "my-liked-library", likedLibraryResult.reason);
+      }
+
+      if (promptsResult.status === "fulfilled") {
+        shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
+      } else {
+        ctx.reportWarning?.("backend-hydration", "my-prompts", promptsResult.reason);
+      }
+
+      if (commentsResult.status === "fulfilled") {
+        shouldRender = applyMyCommentsResult(backendDataContext, commentsResult.value) || shouldRender;
+      }
+      if (reportsResult.status === "fulfilled") {
+        shouldRender = applyMyReportsResult(backendDataContext, reportsResult.value) || shouldRender;
+      }
+
+      state.myBackendStatus = allRequestsFailed || !shouldRender ? "fallback" : "connected";
+      if (state.route === "saved") render?.();
+    } catch (error) {
+      hydrationController.abort();
       state.myBackendStatus = "fallback";
-      if (state.route === "saved") render();
-      return;
+      try {
+        ctx.reportWarning?.("backend-hydration", "my-page-unexpected", error);
+      } catch (_reportingError) {
+        // Observability must never keep the visible recovery state alive.
+      }
+      if (state.route === "saved") render?.();
+    } finally {
+      if (hydrationTimeoutId !== undefined) globalThis.clearTimeout(hydrationTimeoutId);
+      if (state.myBackendStatus === "checking") {
+        state.myBackendStatus = "fallback";
+        if (state.route === "saved") render?.();
+      }
     }
-    const [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult] = settledResults;
-    const allRequestsFailed = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult].every(
-      (result) => result.status === "rejected" || result.value === undefined,
-    );
-    const rejectedReasons = [libraryResult, likedLibraryResult, promptsResult, commentsResult, reportsResult]
-      .filter((result) => result.status === "rejected")
-      .map((result) => result.reason);
-    const unauthorizedReason = rejectedReasons.find((reason) => {
-      const status = Number(reason?.status || reason?.payload?.status || 0);
-      const code = String(reason?.payload?.code || reason?.code || "");
-      return status === 401 || code === "AUTHENTICATION_REQUIRED" || code === "LOGIN_REQUIRED";
-    });
-
-    if (allRequestsFailed && unauthorizedReason && typeof ctx.handleBackendAccessError === "function") {
-      ctx.handleBackendAccessError(unauthorizedReason, "로그인이 만료되었습니다. 다시 로그인해 주세요.");
-      return;
-    }
-
-    let shouldRender = false;
-    const backendDataContext = applyContext();
-
-    if (libraryResult.status === "fulfilled") {
-      shouldRender = applyMyLibraryResult(backendDataContext, libraryResult.value) || shouldRender;
-    } else {
-      ctx.reportWarning("backend-hydration", "my-library", libraryResult.reason);
-    }
-
-    if (likedLibraryResult.status === "fulfilled") {
-      shouldRender = applyLikedLibraryResult(backendDataContext, likedLibraryResult.value) || shouldRender;
-    } else {
-      ctx.reportWarning("backend-hydration", "my-liked-library", likedLibraryResult.reason);
-    }
-
-    if (promptsResult.status === "fulfilled") {
-      shouldRender = applyMyPromptsResult(backendDataContext, promptsResult.value) || shouldRender;
-    } else {
-      ctx.reportWarning("backend-hydration", "my-prompts", promptsResult.reason);
-    }
-
-    if (commentsResult.status === "fulfilled") {
-      shouldRender = applyMyCommentsResult(backendDataContext, commentsResult.value) || shouldRender;
-    }
-    if (reportsResult.status === "fulfilled") {
-      shouldRender = applyMyReportsResult(backendDataContext, reportsResult.value) || shouldRender;
-    }
-
-    state.myBackendStatus = allRequestsFailed || !shouldRender ? "fallback" : "connected";
-    if (state.route === "saved") render();
   }
 
   async function hydrateBackendHomeDataEffect(ctx) {

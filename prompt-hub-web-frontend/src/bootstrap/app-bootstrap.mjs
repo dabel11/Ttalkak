@@ -33,7 +33,7 @@
         handleBackendAccessError: ctx.handleBackendAccessError,
         makeState: ctx.makeState,
         homePageSize: ctx.homePageSize,
-        render: ctx.render,
+        render: ctx.renderAfterBackendUpdate || ctx.render,
         reportWarning: ctx.reportWarning,
         state: ctx.state,
       };
