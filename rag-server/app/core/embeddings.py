@@ -9,6 +9,8 @@ import os
 import sys
 
 import torch
+
+from app.core.cpu import desired_threads
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 _DEFAULT_MODEL    = "BAAI/bge-m3"
@@ -24,12 +26,7 @@ def _tune_cpu_threads() -> None:
     10코어 머신에서 4스레드). CPU 바운드인 bge-reranker(가장 큰 지연원)·bge-m3 임베딩이
     코어를 다 못 써 느렸다 — 스레드를 코어 수로 올리면 리랭크 50쌍 4.1s→2.6s(-38%), 품질 불변.
     RAG_TORCH_THREADS 로 상한 지정 가능(0/미설정이면 os.cpu_count()). GPU 에선 무의미하나 무해."""
-    try:
-        want = int(os.environ.get("RAG_TORCH_THREADS", "") or 0)
-    except ValueError:
-        want = 0
-    if want <= 0:
-        want = os.cpu_count() or 1
+    want = desired_threads()
     try:
         if want != torch.get_num_threads():
             torch.set_num_threads(want)

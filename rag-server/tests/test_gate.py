@@ -7,7 +7,7 @@ tests/test_gate.py
 근거 측정은 eval/gate_set.json + 아래 AUC. 임계치 기본 0.53(RAG_GATE_MIN_SCORE).
 """
 
-from app.main import no_evidence_gate as gate
+from app.core.gate import no_evidence_gate as gate
 
 EX = lambda s: [{"score": s}]          # noqa: E731
 

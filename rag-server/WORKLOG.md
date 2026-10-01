@@ -3938,3 +3938,14 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 **검증**: `pytest tests -q` **265 passed**.
 **변경 파일**: `app/main.py` · 신규 `eval/gate_set.json`·`eval/gate_eval.py`·`tests/test_gate.py` · `RAG_PIPELINE.md` · `WORKLOG.md`
+
+## [2026-10-01] P0 테스트 CI 호환 — 순수 로직 분리(gate/cpu)
+**목적**: P0 때 추가한 test_gate.py·test_cpu_threads.py 가 app.main(uvicorn)·torch 를 import 해 CI(requirements-test.txt, 경량) collection 단계에서 전체 중단시킴(run 36835829745). requirements-test.txt 명문 규칙("테스트는 app.main·torch import 금지") 위반.
+**Before**: test_gate → `from app.main import no_evidence_gate`(→uvicorn), test_cpu_threads → `import torch` + `app.core.embeddings`(→sentence-transformers, bge-m3 다운로드). CI: `ModuleNotFoundError: No module named 'uvicorn'/'torch'` → 2 errors during collection, 전체 테스트 미실행.
+**After**: 판정·결정 순수 로직을 경량 모듈로 분리.
+- `app/core/gate.py`(신규): `no_evidence_gate` 이전(로직 동일). main.py 는 여기서 import.
+- `app/core/cpu.py`(신규): `desired_threads()` — 스레드 수 '결정'만(torch 무관). embeddings._tune_cpu_threads 가 이 값으로 torch.set_num_threads 호출.
+- 두 테스트는 경량 모듈만 import → torch/uvicorn 불필요.
+**변경 파일**: app/core/gate.py(신규), app/core/cpu.py(신규), app/main.py(수정-import로 대체), app/core/embeddings.py(수정-desired_threads 사용), tests/test_gate.py(수정-import 경로), tests/test_cpu_threads.py(수정-torch 제거, desired_threads 검증 + 0/음수 폴백 케이스 추가)
+**검증**: requirements-test.txt 만 설치한 깨끗한 venv(CI 동일)에서 `ruff check --select F821,F401,F811,E9` 통과 + `pytest` **266 passed**(이전 265 + 폴백 케이스 1). 설치 목록에 torch/uvicorn/fastapi 없음 확인. 동작 로직 불변(게이트 판정·스레드 결정 값 동일).
+**결정·근거**: 동작 변경 없는 순수 리팩토링(테스트 가능성만 확보). 로직을 테스트용으로 복제하지 않고 실코드가 같은 함수를 쓰게 해 중복 서술 회피. requirements-test 에 torch 추가(수 GB)는 CI 비용·시간 과다로 기각.
