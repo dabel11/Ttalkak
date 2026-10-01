@@ -203,7 +203,8 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 | 항목 | 기본값 | 위치 | 비고 |
 |---|---|---|---|
 | `top_k` | 5 | `main.py` QueryRequest | 최종 반환 청크 수(상한 — min_score 컷으로 줄 수 있음) |
-| `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷. 🔴 **운영 분포에서 무효** — 실사용 404 6%·무관입력 5/8 통과. 재교정 필요(§1-[B4]) |
+| `min_score` | 0.40 | `main.py` QueryRequest | dense 코사인 유효 컷(기법 검색용). 무관입력 분리엔 무효(AUC 0.694) → 404 판정은 아래 `gate_min_score` 로 이관(2026-10-01) |
+| `gate_min_score` | 0.53 (`RAG_GATE_MIN_SCORE`) | `main.py` `no_evidence_gate` | **무의미 입력 404 게이트 — 예시 코퍼스 dense 기준**(AUC 1.000, eval/gate_eval.py). 0 이면 종전 '기법 0건' 규칙. 임계치는 소표본(24건) 기준 — 확장 재교정 권장 |
 | `fetch_k` | **50** | `main.py` Retriever | 2026-09-13 재측정. 어려운 구간 +5.3pp·쉬운 구간 손실 0. 종전 20 은 108~134청크 시절 근거 |
 | `use_reranker` | True | `main.py` `Retriever(...)` | 측정상 단독이 최고 |
 | `use_hybrid` | False | `main.py` `Retriever(...)` | 한국어 코퍼스에서 악화 → off |

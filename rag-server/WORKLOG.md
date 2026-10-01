@@ -3915,3 +3915,26 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 **검증**: `pytest tests -q` **255 passed** + 신규 4.
 **변경 파일**: `app/core/concurrency.py` · `app/core/embeddings.py` · `tests/test_concurrency.py` · 신규 `tests/test_cpu_threads.py` · `.env.example` · `WORKLOG.md`
+
+---
+
+## [2026-10-01] 데모 품질 P0-3 — 무의미 입력 404 게이트를 예시 코퍼스 기준으로 이관
+
+**문제 (RAG_PIPELINE §4, CORPUS_STRATEGY)**: 404 판정이 기법 코퍼스 dense 였는데, 기법 카드는 영문 정의체라 한국어 쿼리의 관련/무관을 못 가른다. 무관 입력이 통과(`https://example.com` 등)하고 정상 요청이 404 나는 두 오류가 동시에.
+
+**측정 (신규 `eval/gate_set.json` 양성 12 + 음성 12, `eval/gate_eval.py`, 임베딩만 — API 0)**
+| 게이트 신호 | AUC |
+|---|---|
+| 기법 코퍼스 dense | **0.694** (≒무작위) |
+| 예시 코퍼스 dense | **1.000** (완전분리) |
+- 양성 예시점수 최저 0.545 > 음성 최고 0.541. 예시 코퍼스가 쿼리와 같은 한국어 말투라 분리된다.
+
+**변경**
+- `main.no_evidence_gate(retrieved, examples, history, gate_min_score, examples_enabled)` — 순수 함수. gate_min_score>0 & 예시 활성이면 **예시 최고점 < 임계치**로 404 판정(예시 비면 무근거). 0 이거나 예시 비활성이면 종전 '기법 0건' 폴백. 후속 턴은 판정 안 함.
+- `QueryRequest.gate_min_score` 기본 `RAG_GATE_MIN_SCORE`(0.53). `/query` 가 종전 `if not retrieved and not history` 를 이 게이트로 교체.
+- 기본 0.53: 양성 12건 전부 통과(최저 0.545)·음성 대부분 차단. gen_set 양성은 전부 0.545↑라 gen_eval 무영향(게이트는 `/query` 에만, retrieve_contexts/run_generation 직접 호출은 안 거침).
+- 테스트 `tests/test_gate.py` +7.
+- ⚠️ 임계치는 24건 소표본 — 더 큰 양성/음성셋으로 FPR 목표 재교정 권장(gate_eval.py 가 FPR≤5% 임계치 역산).
+
+**검증**: `pytest tests -q` **265 passed**.
+**변경 파일**: `app/main.py` · 신규 `eval/gate_set.json`·`eval/gate_eval.py`·`tests/test_gate.py` · `RAG_PIPELINE.md` · `WORKLOG.md`

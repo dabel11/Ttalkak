@@ -3,7 +3,7 @@ import os
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 # .env 는 app/__init__.py 에서 로드됨
@@ -16,6 +16,34 @@ from app.rag import query_transform, analyzer
 from app.rag.postprocess import assemble_fields
 
 app = FastAPI(title="RAG Server", description="bge-m3 + MySQL + reranker + LLM")
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, ""))
+    except (TypeError, ValueError):
+        return default
+
+
+def no_evidence_gate(retrieved: list[dict], examples: list[dict],
+                     history: list, gate_min_score: float,
+                     examples_enabled: bool = True) -> bool:
+    """첫 턴 '무근거(무의미 입력)' 판정 — 생성 전에 404 로 돌릴지.
+
+    예시 코퍼스(prompt_examples)는 쿼리와 같은 한국어 말투라 관련/무관을 깨끗이 분리한다
+    (실측 AUC 1.000). 기법 코퍼스는 영문 정의체라 분리 불가(AUC 0.694) — 종전엔 그걸로 판정해
+    무의미 입력이 통과(https://example.com)하고 정상 요청이 404 나는 두 오류가 같이 났다.
+
+    - gate_min_score>0 & 예시 활성: 예시 최고점 < 임계치면 무근거(예시 비면 최고점 0 → 무근거).
+      예시 cut(example_min_score)이 임계치보다 낮아야 경계 구간을 본다(기본 0.40 < 0.53).
+    - 그 외(게이트 off 또는 예시 비활성): 종전 '기법 0건' 규칙으로 폴백.
+    후속 턴(history 있음)은 대화 맥락으로 잇는다 — 판정하지 않는다."""
+    if history:
+        return False
+    if gate_min_score > 0 and examples_enabled:
+        best = max((e.get("score", 0.0) for e in examples), default=0.0)
+        return best < gate_min_score
+    return not retrieved
 
 
 # ── /index 보호 ──────────────────────────────────────────────
@@ -103,6 +131,10 @@ class QueryRequest(BaseModel):
     example_collection:  str  = "prompt_examples"
     n_examples:          int  = 2       # 주입할 예시 수(상한 — min_score 컷으로 줄 수 있음)
     example_min_score:   float = 0.40   # 예시 유효 유사도 컷(dense 코사인)
+    # 무의미 입력 게이트 임계치(예시 코퍼스 dense). 0 이면 비활성(종전 '기법 0건' 404).
+    # 예시 코퍼스는 쿼리와 같은 한국어 말투라 관련/무관을 깨끗이 분리한다(실측 AUC 1.000 vs
+    # 기법 0.694, 2026-10-01 eval/gate_set.json). 미설정 시 RAG_GATE_MIN_SCORE(기본 0.53).
+    gate_min_score:      float = Field(default_factory=lambda: _env_float("RAG_GATE_MIN_SCORE", 0.53))
     # 사용량 로깅용 요청 식별자(선택). 다중턴을 한 대화로 묶으려면 클라이언트가 같은 값을 넘긴다.
     # 미지정 시 서버가 발급. 응답 usage.request_id 로 되돌려준다.
     request_id:          Optional[str] = None
@@ -247,9 +279,11 @@ def query(req: QueryRequest):
     # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
     # 기본은 원본 쿼리 그대로 검색(use_hyde=False)이라 dense 점수가 좁은 띠에 눌려, 정상 요청도
     # min_score(0.40) 아래로 떨어지면 여기서 막힌다(실사용 약 6% — RAG_PIPELINE.md §4).
-    # 후속 피드백 턴은 기법 검색이 약해도 대화 맥락으로 이어서 개선한다.
-    # (404 판정은 '기법' 기준 — 예시는 보조 재료라 무관 입력을 구제하지 않는다.)
-    if not retrieved and not history:
+    # 무의미 입력 게이트 — 예시 코퍼스 기준(AUC 1.000). 종전 '기법 0건'(AUC 0.694)은
+    # 무관 입력을 통과시키고 정상 요청을 404 내던 것(RAG_PIPELINE §4·eval/gate_set.json).
+    # 후속 피드백 턴은 대화 맥락으로 이어가므로 게이트하지 않는다.
+    if no_evidence_gate(retrieved, examples, history, req.gate_min_score,
+                        examples_enabled=req.use_examples and req.n_examples > 0):
         raise HTTPException(
             status_code=404,
             detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
