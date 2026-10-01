@@ -23,7 +23,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.rag.layers import LAYER_NAMES, SEARCHABLE_LAYERS, get_card_layer  # noqa: E402
+from app.rag.layers import SEARCHABLE_LAYERS, get_card_layer  # noqa: E402
 
 _SET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "layer_set.json")
 
