@@ -94,11 +94,17 @@ def _complete(backend: str, model: str, system: str, user: str,
     """시스템프롬프트 없는(또는 중립) 순수 LLM 1회 호출."""
     client = _get_client(backend)
     if backend == "groq":
+        # gpt-oss 는 추론 모델이라 추론 토큰이 max_tokens 를 먼저 먹는다 — judge 예산 300 이면
+        # 본문이 비어 _judge_pair 가 조용히 무승부를 낸다(2026-09-13 gen_eval 과 같은 버그, 2026-09-20 발견).
+        extra = {}
+        if model.startswith("openai/gpt-oss"):
+            extra = {"reasoning_effort": "low"}
+            max_tokens = max(max_tokens, 1200)
         resp = client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": system},
                       {"role": "user",   "content": user}],
-            max_tokens=max_tokens, temperature=temperature,
+            max_tokens=max_tokens, temperature=temperature, **extra,
         )
         return (resp.choices[0].message.content or "").strip()
     else:

@@ -31,6 +31,7 @@ multi_turn_eval.py 는 운영 코드를 import 하지 않는 순수 평가 로�
 """
 
 import argparse
+import inspect
 import json
 import time
 from pathlib import Path
@@ -38,13 +39,15 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.core.db import get_engine
-from app.main import retriever, run_generation, extract_improved_prompt
+from app.main import retriever, run_generation
+from app.rag.postprocess import extract_improved_prompt
 from app.rag.generator import SYSTEM_PROMPT
-from app.rag import query_transform
+from app.rag import analyzer, query_transform
 # 운영 LLM 클라이언트는 uplift_eval 의 것을 재사용한다(백엔드 선택·키 처리 동일).
 from eval.uplift_eval import _pick_backend, _complete
 
 from eval.multi_turn_eval import (
+    analyzer_fingerprint,
     load_dataset,
     load_cache,
     run_evaluation_item,
@@ -237,6 +240,9 @@ def main() -> None:
                     # 운영 SYSTEM_PROMPT 를 캐시 키에 반영해야 프롬프트를 바꾼 뒤
                     # 예전 생성 결과가 조용히 재사용되지 않는다.
                     system_prompt=SYSTEM_PROMPT,
+                    # 분석기도 같은 이유로 키에 넣는다 — 모델·프롬프트·교정 규칙이 바뀌면 재생성.
+                    analyzer_model=analyzer_fingerprint(analyzer._MODEL, inspect.getsource(analyzer)),
+                    analyzer_temperature=str(analyzer._TEMPERATURE),
                     judge_call=judge_call,
                     judge_cache=run_judge_cache,
                     judge_cache_path=judge_cache_path if run_index == 0 else None,
