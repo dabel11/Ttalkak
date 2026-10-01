@@ -1,0 +1,82 @@
+문항 31 × 조건 2 × 반복 1
+  호출 수: generate 31, execute 62, req_judge 62, defect_judge 62, pair_judge 0
+  토큰 추정: 약 756,400 (무료 하루 한도 200,000 기준 약 3.8일 — 생성·판정이 같은 모델이면)
+[  1/62] up_01 raw      #0  요구 1.0 · 결함 지어내기=False 거부=False
+[Main] /index 비활성 (RAG_INDEX_API_KEY 미설정). 쓰려면 .env 에 키를 설정하세요.
+[Embeddings] 임베딩 모델 로드 중: BAAI/bge-m3 (device=cpu)
+[Embeddings] 임베딩 준비 완료
+[Indexer] 준비 완료 (MySQL)
+[Retriever] 준비 완료 (MySQL, rerank=True, hybrid=False)
+[Generator] Groq 백엔드 초기화 완료
+[Generator] Gemini 백엔드 초기화 완료
+[Generator] 백엔드: groq (+gemini 장문 라우팅·폴백)
+[Embeddings] 리랭커 로드 중: BAAI/bge-reranker-v2-m3 (device=cpu)
+[Embeddings] 리랭커 준비 완료
+[Generator] 예산 max_tokens=2549 · 입력 추정 5251/실제 5120 · 완료 1086 (stop)
+[  2/62] up_01 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+[  3/62] up_02 raw      #0  요구 1.0 · 결함 지어내기=True 거부=False
+[Generator] 예산 max_tokens=1855 · 입력 추정 5945/실제 5697 · 완료 1709 (stop)
+[  4/62] up_02 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+[  5/62] up_04 raw      #0  요구 1.0 · 결함 지어내기=False 거부=False
+[Generator] 예산 max_tokens=1968 · 입력 추정 5832/실제 5629 · 완료 1045 (stop)
+[  6/62] up_04 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+[  7/62] up_05 raw      #0  요구 1.0 · 결함 지어내기=None 거부=False
+[Generator] 예산 max_tokens=2149 · 입력 추정 5651/실제 5441 · 완료 1051 (stop)
+[  8/62] up_05 ttalkak  #0  요구 1.0 · 결함 지어내기=None 거부=False
+[  9/62] up_06 raw      #0  요구 1.0 · 결함 지어내기=True 거부=False
+[Generator] 예산 max_tokens=1827 · 입력 추정 5973/실제 5749 · 완료 1350 (stop)
+[ 10/62] up_06 ttalkak  #0  요구 1.0 · 결함 지어내기=True 거부=False
+[ 11/62] up_07 raw      #0  요구 1.0 · 결함 지어내기=None 거부=False
+[Generator] Groq 429 — 3.0초 대기 후 재시도 (1/1)
+[Generator] 예산 max_tokens=2402 · 입력 추정 5398/실제 5221 · 완료 2225 (stop)
+[ 12/62] up_07 ttalkak  #0  요구 1.0 · 결함 지어내기=None 거부=False
+[ 13/62] up_08 raw      #0  요구 1.0 · 결함 지어내기=False 거부=False
+[Generator] 예산 max_tokens=2111 · 입력 추정 5689/실제 5471 · 완료 1160 (stop)
+[ 14/62] up_08 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+[ 15/62] up_09 raw      #0  요구 1.0 · 결함 지어내기=True 거부=False
+[Generator] 예산 max_tokens=2955 · 입력 추정 4845/실제 4749 · 완료 1707 (stop)
+[ 16/62] up_09 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+[ 17/62] up_11 raw      #0  요구 1.0 · 결함 지어내기=True 거부=False
+[Generator] 예산 max_tokens=2476 · 입력 추정 5324/실제 5156 · 완료 1478 (stop)
+[ 18/62] up_11 ttalkak  #0  요구 1.0 · 결함 지어내기=False 거부=False
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/uplift_score.py", line 356, in <module>
+    main()
+    ~~~~^^
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/uplift_score.py", line 350, in main
+    run(args, items, data, out)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/uplift_score.py", line 207, in run
+    req = patient(lambda: judge_requirements(client, args.judge_model, it, ex["text"]))
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/uplift_score.py", line 188, in <lambda>
+    patient = lambda fn: call_patiently(fn, args.max_wait)
+                         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/defect_canary.py", line 84, in call_patiently
+    return fn()
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/uplift_score.py", line 207, in <lambda>
+    req = patient(lambda: judge_requirements(client, args.judge_model, it, ex["text"]))
+                          ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jidaehyun/과제/Ttalkak/rag-server/eval/requirement_judge.py", line 87, in judge_requirements
+    resp = client.chat.completions.create(
+        model=model,
+    ...<5 lines>...
+        temperature=0.0,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/groq/resources/chat/completions.py", line 461, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/openai/v1/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<45 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/groq/_base_client.py", line 1284, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/groq/_base_client.py", line 1071, in request
+    raise self._make_status_error_from_response(err.response) from None
+groq.BadRequestError: Error code: 400 - {'error': {'message': "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'json_validate_failed', 'failed_generation': '{"answers":[{"id":"r1","verdict":"yes","evidence":"def dedupe_preserve_order(items: List[T]) -> List[T]:"},{"id":"r2","verdict":"yes","evidence":"중복된 원소를 제거하고"},{"id":"r3","verdict":"yes","evidence":"result.append(item)"},"evidence":"if item not in seen:"},{"id":"r4","verdict":"yes","evidence":"def dedupe_preserve_order(items: List[T]) -> List[T]:"},{"id":"r5","verdict":"yes","evidence":"if __name__ == \\"__main__\\":"},{"id":"g1","verdict":"yes","evidence":"if item not in seen: seen.add(item); result.append(item)"},"evidence":"result.append(item)"},"id":"g2","verdict":"yes","evidence":"# 중복 제거 후: [3, 1, 4, 5, 9, 2, 6]"}]}'}}
