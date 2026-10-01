@@ -41,11 +41,14 @@ import os
 # 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
 # 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
 from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
+# 기본 모델은 generator.default_model() 이 단일 출처다 — 여기 하드코딩했던 llama-3.3-70b 는
+# 2026-08-21 Groq 폐기로 404 를 냈고, gemini-2.0-flash 는 이 계정 무료 티어에서 limit 0 이다.
+from app.rag.generator import default_model
 import pathlib
 import re
 import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 
 import pypdf
 
@@ -342,14 +345,14 @@ class LLMJudge:
             from groq import Groq
             self.backend = "groq"
             self.client = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
-            self.model = model or "llama-3.3-70b-versatile"
+            self.model = model or default_model("groq")
         elif os.environ.get("GEMINI_API_KEY"):
             from google import genai
             from google.genai import types
             self.backend = "gemini"
             self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                                        http_options=types.HttpOptions(timeout=GEN_MILLIS))
-            self.model = model or "gemini-2.0-flash"
+            self.model = model or default_model("gemini")
         else:
             raise EnvironmentError(
                 "GROQ_API_KEY 또는 GEMINI_API_KEY 를 .env에 설정해주세요."
