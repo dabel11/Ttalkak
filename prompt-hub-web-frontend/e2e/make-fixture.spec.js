@@ -1263,6 +1263,47 @@ test("an authenticated 401 preserves only the failed prompt as a reload-safe log
   await expect(page.locator(".recent-thread")).toHaveCount(1);
 });
 
+test("an expired token on a first request triggers login instead of consuming a Guest use", async ({ page }) => {
+  let guestUses = 0;
+  let authorization = "";
+  await openMake(page, [], {
+    isLoggedIn: true,
+    authToken: "expired-token",
+    token: "expired-token",
+    currentUser: "Expired Member",
+    currentUserId: "7",
+    backendThreads: [],
+  }, async (route) => {
+    authorization = route.request().headers().authorization || "";
+    const sessionUuid = route.request().headers()["x-session-uuid"];
+    // Match #25: an invalid bearer resolves to Guest; a UUID would allow an
+    // unsaved success, while no UUID returns SESSION_UUID_REQUIRED.
+    if (sessionUuid) guestUses += 1;
+    await route.fulfill({
+      status: sessionUuid ? 200 : 400,
+      headers: CORS_HEADERS,
+      body: JSON.stringify(sessionUuid
+        ? { mode: "improve", improvedPrompt: "Unsaved Guest result" }
+        : { code: "SESSION_UUID_REQUIRED", message: "Session UUID is required" }),
+    });
+  });
+
+  const prompt = "Preserve this first member request";
+  await page.locator('[data-composer] textarea[name="prompt"]').fill(prompt);
+  await page.locator('[data-composer] button[type="submit"]').click();
+  await expect(page.locator("[data-auth-form]")).toBeVisible();
+  expect(authorization).toBe("Bearer expired-token");
+  expect(guestUses).toBe(0);
+  await expect(page.getByText("Unsaved Guest result", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate((key) => localStorage.getItem(key), TOKEN_KEY)).toBeNull();
+
+  await page.reload();
+  await waitForAppHydration(page);
+  await page.locator('.sidebar [data-route="make"]').click();
+  await expect(page.locator(".message.user").getByText(prompt, { exact: true })).toBeVisible();
+  await expect(page.locator("[data-make-login]")).toHaveText("로그인");
+});
+
 test("Google demo login still sends Make improvement as a Guest request", async ({ page }) => {
   let authorization = "missing";
   let guestSessionUuid = "";
