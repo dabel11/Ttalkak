@@ -208,7 +208,10 @@ public class SecurityConfig {
         ));
 
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Authorization"));
+        // Retry-After 를 노출하지 않으면 브라우저 JS 가 값을 읽지 못한다
+        // (CORS 는 기본적으로 소수의 안전 목록 헤더만 스크립트에 보여준다).
+        // rag-server 동시 실행 게이트의 재시도 안내가 프론트까지 닿으려면 필요하다.
+        config.setExposedHeaders(List.of("Authorization", "Retry-After"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source =
