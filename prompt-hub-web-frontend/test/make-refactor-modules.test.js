@@ -125,6 +125,224 @@ test("edited-message retry orchestration lives in the Make controller", async ()
   assert.deepEqual(calls.slice(6), ["after", "sync"]);
 });
 
+test("an authenticated composer success clears a pending Guest transfer before refresh", async () => {
+  const OriginalFormData = global.FormData;
+  const calls = [];
+  let backendThreadId = "";
+  const state = {
+    activeThreadId: "guest-thread",
+    messages: [{ id: "guest-failed", role: "user", content: "Guest limit prompt" }],
+  };
+  global.FormData = class { get() { return "Continue after login"; } };
+  try {
+    await makeController.submitPrompt({
+      state,
+      guard: () => false,
+      isBusy: () => false,
+      notice: () => {},
+      bumpInteraction: () => {},
+      buildHistory: () => [{ role: "user", content: "Guest limit prompt" }],
+      shouldSync: () => true,
+      startRequest: () => new AbortController().signal,
+      setDraft: () => {},
+      appendUser: (_threadId, message) => state.messages.push(message),
+      setThinking: () => {},
+      updateThread: () => {},
+      render: () => calls.push("render"),
+      scrollLatest: () => {},
+      waitForPaint: async () => {},
+      improve: async () => ({ mode: "improve", improvedPrompt: "Member result", threadId: 42 }),
+      completeRequest: () => {},
+      appendAssistant: (message) => state.messages.push(message),
+      applyPendingThread: () => { backendThreadId = "42"; },
+      getBackendThreadId: () => backendThreadId,
+      clearPendingGuestThreadTransfer: (threadId) => calls.push(["clear-transfer", threadId]),
+      refreshThread: async () => null,
+      focusAsk: () => {},
+      syncThread: () => calls.push("unexpected-sync"),
+    }, {});
+  } finally {
+    global.FormData = OriginalFormData;
+  }
+
+  assert.deepEqual(calls.find((entry) => Array.isArray(entry) && entry[0] === "clear-transfer"), ["clear-transfer", "guest-thread"]);
+  assert.equal(calls.includes("render"), true);
+  assert.equal(calls.includes("unexpected-sync"), false);
+});
+
+test("a Guest failure preserves prior history when it is resent after login", async () => {
+  const calls = [];
+  let backendThreadId = "";
+  const messages = [
+    { id: "guest-user-before", role: "user", content: "earlier guest prompt" },
+    { id: "guest-assistant-before", role: "assistant", content: "earlier result", improvedPrompt: "earlier result" },
+    { id: "user-1", role: "user", content: "guest prompt" },
+  ];
+  const ctx = {
+    messages: { busy: "busy", missingThread: "missing", edited: "edited", editFailed: "edit failed", improveFailed: "improve failed" },
+    findEditableMessage: () => 2, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "local-thread", getMessages: () => messages,
+    buildHistory: (items) => items.map(({ role, content }) => ({ role, content })), startRequest: () => new AbortController().signal, shouldSync: () => true,
+    getBackendThreadId: () => backendThreadId,
+    clearPendingGuestThreadTransfer: (threadId) => calls.push(["clear-transfer", threadId]),
+    applyEdit: (index, value) => { messages.splice(index + 1); messages[index] = { ...messages[index], content: value }; calls.push("apply"); },
+    setThinking: (value) => calls.push(`thinking:${value}`), queueScroll: () => {}, render: () => calls.push("render"),
+    waitForPaint: async () => {}, improve: async (_prompt, options) => { calls.push(["improve", options]); return { mode: "improve", improvedPrompt: "member result" }; },
+    completeRequest: () => calls.push("complete"), reportOutcome: () => {},
+    finishEdit: (message) => { messages.push(message); calls.push("finish"); }, updateThread: () => calls.push("update"),
+    applyPendingThread: () => { backendThreadId = "42"; calls.push("apply-pending"); }, refreshThread: async () => { calls.push("refresh"); return { id: "42" }; },
+    syncThread: () => calls.push("unexpected-sync"), notice: (message) => calls.push(message),
+    focusAsk: () => {}, stopInFlight: () => {}, failRequest: () => {}, classifyError: (error) => error,
+    setBackendFailure: () => {}, handleError: () => {},
+  };
+
+  await makeController.resendEdited(ctx, "user-1", "guest prompt");
+
+  const request = calls.find((entry) => Array.isArray(entry) && entry[0] === "improve");
+  assert.equal(request[1].threadId, "local-thread");
+  assert.equal(request[1].messageId, undefined);
+  assert.ok(request[1].requestId);
+  assert.deepEqual(request[1].history, [
+    { role: "user", content: "earlier guest prompt" },
+    { role: "assistant", content: "earlier result" },
+  ]);
+  assert.equal(calls.some((entry) => Array.isArray(entry) && entry[0] === "clear-transfer"), true);
+  assert.equal(calls.includes("refresh"), true);
+  assert.equal(calls.includes("unexpected-sync"), false);
+  assert.equal(calls.includes("missing"), false);
+});
+
+test("a failed post-login Guest retry keeps its request id for an idempotent replay", async () => {
+  const calls = [];
+  const requestIds = [];
+  const messages = [
+    { id: "guest-user-before", role: "user", content: "earlier guest prompt" },
+    { id: "guest-assistant-before", role: "assistant", content: "earlier result" },
+    { id: "guest-user-failed", role: "user", content: "retry me" },
+  ];
+  let attempt = 0;
+  let backendThreadId = "";
+  const ctx = {
+    messages: { busy: "busy", missingThread: "missing", edited: "edited", editFailed: "edit failed", improveFailed: "improve failed" },
+    findEditableMessage: () => 2, guard: () => false, isBusy: () => false,
+    getActiveThreadId: () => "guest-thread", getMessages: () => messages,
+    buildHistory: (items) => items.map(({ role, content }) => ({ role, content })),
+    startRequest: () => new AbortController().signal, shouldSync: () => true, getBackendThreadId: () => backendThreadId,
+    applyEdit: (index, value) => { messages.splice(index + 1); messages[index] = { ...messages[index], content: value }; },
+    setThinking: () => {}, queueScroll: () => {}, render: () => {}, waitForPaint: async () => {},
+    improve: async (_prompt, options) => {
+      requestIds.push(options.requestId);
+      attempt += 1;
+      if (attempt === 1) throw Object.assign(new Error("network"), { code: "NETWORK_ERROR" });
+      return { mode: "improve", improvedPrompt: "replayed member result", requestId: options.requestId };
+    },
+    completeRequest: () => {}, stopInFlight: () => {}, reportOutcome: () => {}, reportFailure: () => {},
+    finishEdit: (message) => messages.push(message), updateThread: () => {}, applyPendingThread: () => { backendThreadId = "42"; },
+    clearPendingGuestThreadTransfer: () => calls.push("clear-transfer"),
+    refreshThread: async () => ({ id: "42" }), syncThread: () => {}, notice: () => {}, focusAsk: () => {},
+    failRequest: () => {}, classifyError: () => ({ kind: "network", retryable: true }),
+    setBackendFailure: () => {}, handleError: () => {},
+  };
+
+  await makeController.resendEdited(ctx, "guest-user-failed", "retry me");
+  assert.equal(calls.includes("clear-transfer"), false);
+  assert.ok(messages[2].requestId);
+
+  await makeController.resendEdited(ctx, "guest-user-failed", "retry me");
+  assert.equal(requestIds.length, 2);
+  assert.equal(requestIds[0], requestIds[1]);
+  assert.deepEqual(calls, ["clear-transfer"]);
+});
+
+test("a failed backend follow-up retries without sending its local message id as an edit", async () => {
+  const calls = [];
+  const messages = [
+    { id: "server-user", role: "user", content: "Earlier prompt" },
+    { id: "server-assistant", role: "assistant", content: "Earlier result" },
+    { id: "user-local", role: "user", content: "Retry this follow-up", requestId: "request-follow-up", retryMode: "follow-up" },
+  ];
+  const ctx = {
+    messages: { busy: "busy", missingThread: "missing", edited: "edited", editFailed: "edit failed", improveFailed: "improve failed" },
+    findEditableMessage: () => 2,
+    guard: () => false,
+    isBusy: () => false,
+    getActiveThreadId: () => "42",
+    getMessages: () => messages,
+    buildHistory: (items) => items.map(({ role, content }) => ({ role, content })),
+    startRequest: () => new AbortController().signal,
+    shouldSync: () => true,
+    getBackendThreadId: () => "42",
+    applyEdit: (index, value) => {
+      messages.splice(index + 1);
+      messages[index] = { ...messages[index], content: value };
+    },
+    setThinking: () => {},
+    queueScroll: () => {},
+    render: () => {},
+    waitForPaint: async () => {},
+    improve: async (_prompt, options) => {
+      calls.push(["improve", options]);
+      return { mode: "improve", improvedPrompt: "Retried result", requestId: options.requestId };
+    },
+    completeRequest: () => {},
+    reportOutcome: () => {},
+    finishEdit: (message) => messages.push(message),
+    updateThread: () => {},
+    applyPendingThread: () => {},
+    clearPendingGuestThreadTransfer: () => {},
+    refreshThread: async () => ({ id: "42" }),
+    syncThread: () => {},
+    notice: (message) => calls.push(["notice", message]),
+    focusAsk: () => {},
+    stopInFlight: () => {},
+    failRequest: () => {},
+    classifyError: (error) => error,
+    setBackendFailure: () => {},
+    handleError: () => {},
+  };
+
+  await makeController.resendEdited(ctx, "user-local", "Retry this follow-up");
+
+  const request = calls.find((entry) => entry[0] === "improve")[1];
+  assert.equal(request.threadId, "42");
+  assert.equal(request.messageId, undefined);
+  assert.equal(request.requestId, "request-follow-up");
+  assert.deepEqual(request.history, [
+    { role: "user", content: "Earlier prompt" },
+    { role: "assistant", content: "Earlier result" },
+  ]);
+  assert.equal(messages[2].retryMode, undefined);
+  assert.deepEqual(calls.at(-1), ["notice", "edited"]);
+});
+
+test("a Guest-limit action becomes resend after login", () => {
+  const html = makePageRenderers.UserMessageView(
+    { icons: { edit: "edit" }, escapeAttr: String, escapeHtml: String },
+    {
+      canSplit: false, content: "preserved prompt", failureAction: { id: "login", label: "로그인" },
+      failureKind: "guest_limit", failureMessage: "무료 체험 3회를 모두 사용했습니다.", failureRepeated: false,
+      failureRetryable: false, failureTitle: "", failureTone: "", hasBackendAuth: true, isEditing: false,
+      recoveryAction: "", retryMode: "", retryTargetContent: "", role: "user", safeContent: "preserved prompt", safeMessageId: "guest-1",
+    },
+  );
+  assert.match(html, /data-retry-message="guest-1"[^>]*>다시 전송/);
+  assert.doesNotMatch(html, /data-make-login/);
+});
+
+test("a demo login keeps the Guest-limit action on real login", () => {
+  const html = makePageRenderers.UserMessageView(
+    { icons: { edit: "edit" }, escapeAttr: String, escapeHtml: String },
+    {
+      canSplit: false, content: "preserved prompt", failureAction: { id: "login", label: "로그인" },
+      failureKind: "guest_limit", failureMessage: "무료 체험 3회를 모두 사용했습니다.", failureRepeated: false,
+      failureRetryable: false, failureTitle: "", failureTone: "", hasBackendAuth: false, isEditing: false,
+      recoveryAction: "", retryMode: "", retryTargetContent: "", role: "user", safeContent: "preserved prompt", safeMessageId: "guest-demo",
+    },
+  );
+  assert.match(html, /data-make-login/);
+  assert.doesNotMatch(html, /data-retry-message/);
+});
+
 test("route cancellation leaves a classified non-retryable Make message state", async () => {
   const OriginalFormData = global.FormData;
   global.FormData = class { get() { return "cancel this request"; } };
@@ -249,7 +467,7 @@ test("web API boundary forwards request ids only with a canonical server thread"
   assert.equal(result.replayed, false);
 });
 
-test("web API boundary forwards a request id for an authenticated first turn", async () => {
+test("web API boundary forwards history and a request id for an authenticated first turn", async () => {
   const payloads = [];
   const state = { isLoggedIn: true, activeThreadId: "local-1", recentThreads: [{ id: "local-1" }] };
   const effects = makeServerSyncEffects.createMakeServerSyncEffects({
@@ -260,8 +478,9 @@ test("web API boundary forwards a request id for an authenticated first turn", a
     makeState: { setMakeBackendState() {} }, polishPrompt: (value) => value,
     buildMakeImproveHistory: () => [], canUseDemoFallback: () => false,
   });
-  await effects.improvePromptWithBackend("first prompt", { threadId: "local-1", requestId: "request-first" });
-  assert.deepEqual(payloads[0], { prompt: "first prompt", category: "prompt_techniques", requestId: "request-first" });
+  const history = [{ role: "user", content: "earlier Guest prompt" }];
+  await effects.improvePromptWithBackend("first prompt", { threadId: "local-1", history, requestId: "request-first" });
+  assert.deepEqual(payloads[0], { prompt: "first prompt", category: "prompt_techniques", history, requestId: "request-first" });
 });
 
 test("logged-in first turns create a bounded request id before a server thread exists", async () => {

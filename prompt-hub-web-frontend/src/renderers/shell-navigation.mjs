@@ -48,7 +48,6 @@
       adminAccessButton,
       authButton,
       hasReportedPrompts,
-      remaining,
       showPromptTools,
     } = data;
     const settingsMenu = `<details class="topbar-settings">
@@ -73,7 +72,7 @@
       ? `<div class="account-actions">${adminAccessButton}${accountMenu}</div>`
       : authButton;
     const makeAuthHint = state.route === "make" && !state.isLoggedIn
-      ? `비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.`
+      ? "비로그인 무료 체험은 총 3회 제공됩니다.<br />로그인하면 저장하고 이어서 사용할 수 있습니다."
       : "";
 
     return `

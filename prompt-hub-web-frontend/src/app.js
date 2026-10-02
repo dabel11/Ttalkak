@@ -444,7 +444,7 @@ const { resolvePageView } = modules.routing;
 if (typeof resolvePageView !== "function") {
   throw moduleLoadError("라우팅 헬퍼");
 }
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 let pendingMessageScrollId = null;
@@ -722,6 +722,7 @@ async function ensureMakeRuntime() {
       MakeFolderButtonView, MessageBubbleView, findMakeThread, canSplitMakeThread, isBackendNumericId,
       countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
       makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
+      hasBackendAuthToken,
     });
     document.documentElement.dataset.routeRuntime = "make:ready";
     return true;
@@ -986,7 +987,6 @@ function Sidebar() {
   );
 }
 function Header() {
-  const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
   const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
@@ -998,9 +998,7 @@ function Header() {
     {
       adminAccessButton,
       authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
-      freeMakeLimit: FREE_MAKE_LIMIT,
       hasReportedPrompts,
-      remaining,
       showPromptTools,
     },
   );
@@ -1901,7 +1899,6 @@ function cancelActiveMakeRequest() {
 function getMakeControllerContext() {
   return {
     state,
-    freeLimit: FREE_MAKE_LIMIT,
     guard: guardAdminUserAction,
     isBusy: () => isMakeThinking || makeRequestState.inFlight,
     notice: showNotice,
@@ -1992,10 +1989,17 @@ function getMakeControllerContext() {
     getMessages: () => state.messages,
     getActiveThreadId: () => state.activeThreadId,
     getBackendThreadId: getMakeBackendThreadId,
+    clearPendingGuestThreadTransfer: (threadId) => {
+      if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
+        state.pendingGuestThreadTransferId = null;
+        state.pendingGuestThreadTransferErrorCode = "";
+        persistState();
+      }
+    },
     clearEditing: () => makeStateModule.setMakeEditingMessage(state),
     refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
     applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
-    finishEdit: finishEditedMakeMessageState,
+    finishEdit: (message) => finishEditedMakeMessageState(state, message),
     queueScroll: (messageId) => queueLatestMakeScroll(messageId, { mode: "immediate" }),
     messages: {
       busy: "이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.",
@@ -2247,7 +2251,7 @@ function getMakeApi() {
   return apiClient || {};
 }
 function getMakeApiToken() {
-  return getAuthToken() || undefined;
+  return state.isLoggedIn && hasBackendAuthToken() ? getAuthToken() : undefined;
 }
 function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
   handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
