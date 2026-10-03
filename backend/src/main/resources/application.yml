@@ -34,3 +34,9 @@ ttalkak:
     secret-base64: "${JWT_SECRET_BASE64:}"
     expiration-minutes: "${JWT_EXPIRATION_MINUTES:120}"
     issuer: "${JWT_ISSUER:ttalkak}"
+
+  billing:
+    toss-client-key: "${TOSS_TEST_CLIENT_KEY:}"
+    toss-secret-key: "${TOSS_TEST_SECRET_KEY:}"
+    monthly-price-krw: "${PRO_MONTHLY_PRICE_KRW:5000}"
+    poll-ms: "${BILLING_POLL_MS:60000}"
