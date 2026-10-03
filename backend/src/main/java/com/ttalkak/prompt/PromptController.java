@@ -30,6 +30,7 @@ public class PromptController {
     private final PromptLikeRepository likeRepository;
     private final TagRepository tagRepository;
     private final AuthService authService;
+    private final GuestUsageService guestUsageService;
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
@@ -50,12 +51,14 @@ public class PromptController {
                             // @Value 가 없으면 Spring 이 Duration 타입 빈을 찾다 실패해 기동이 막힌다
                             // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
                             @Value("${rag.response-timeout:75s}")
-                            Duration ragResponseTimeout) {
+                            Duration ragResponseTimeout,
+                            GuestUsageService guestUsageService) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
+        this.guestUsageService = guestUsageService;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
@@ -701,7 +704,9 @@ public class PromptController {
     public Map<String, Object> improve(
             @RequestBody ImproveRequest request,
             @RequestHeader(value = "Authorization", required = false)
-            String authorization
+            String authorization,
+            @RequestHeader(value = "X-Session-UUID", required = false)
+            String sessionUuid
     ) {
         String prompt = request.prompt() == null
                 ? ""
@@ -841,6 +846,10 @@ public class PromptController {
 	}
 
         Map<String, Object> body;
+        GuestUsageService.Permit guestPermit = memberId == null
+                ? guestUsageService.reserve(sessionUuid)
+                : null;
+        boolean aiSucceeded = false;
 
         try {
             Map<String, Object> ragRequest =
@@ -870,8 +879,10 @@ public class PromptController {
             }
 
             body = buildImproveResponse(response);
+            aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
             body = buildNoEvidenceResponse(prompt);
+            aiSucceeded = true;
         } catch (WebClientResponseException e) {
             if (e.getStatusCode().value() == 429
                     || isRateLimitError(e)) {
@@ -895,6 +906,11 @@ public class PromptController {
                     "AI_SERVICE_UNAVAILABLE",
                     "AI 서비스를 일시적으로 사용할 수 없습니다."
             );
+        } finally {
+            if (guestPermit != null) {
+                if (aiSucceeded) guestUsageService.complete(guestPermit);
+                else guestUsageService.release(guestPermit);
+            }
         }
 
         Long savedThreadId = null;

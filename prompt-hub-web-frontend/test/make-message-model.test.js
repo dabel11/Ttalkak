@@ -90,6 +90,14 @@ test("errors are separated into actionable states", () => {
   assert.equal(model.classifyMakeError({}).kind, "network");
 });
 
+test("Guest trial exhaustion asks for login instead of offering a retry", () => {
+  const failure = model.classifyMakeError({ status: 429, payload: { code: "FREE_TRIAL_LIMIT_EXCEEDED" } });
+  assert.equal(failure.kind, "guest_limit");
+  assert.equal(failure.requiresLogin, true);
+  assert.equal(failure.retryable, false);
+  assert.deepEqual(model.getMakeFailureAction(failure), { id: "login", label: "로그인" });
+});
+
 test("user cancellation is not reported as a retryable timeout", () => {
   const failure = model.classifyMakeError({ code: "REQUEST_ABORTED" });
   assert.equal(failure.kind, "cancelled");

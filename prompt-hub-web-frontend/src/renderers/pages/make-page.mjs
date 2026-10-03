@@ -368,7 +368,7 @@ import { parts } from "./make-message-parts.mjs";
 
   function MessageBubbleView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, fields, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, recoveryAction, retryMode, retryTargetContent, role, summary, techniques } = data;
+    const { answer, canSplit, changes, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, fields, hasBackendAuth, hasExecutablePrompt, id, improvedPrompt, isCopied, isEditing, isSaved, isThinking, isUnchanged, mode, questions, ragStatus, recoveryAction, retryMode, retryTargetContent, role, summary, techniques } = data;
     const isAssistant = role === "assistant";
     const isAsk = mode === "ask";
     const normalizedChanges = normalizeMessageChanges(changes);
@@ -423,7 +423,7 @@ import { parts } from "./make-message-parts.mjs";
 
     return `
       <div class="message-group user-group make-message-enter" data-message-id="${safeMessageId}">
-        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId })}
+        ${UserMessageView(ctx, { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, hasBackendAuth, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId })}
       </div>
     `;
   }
@@ -441,13 +441,15 @@ import { parts } from "./make-message-parts.mjs";
 
   function UserMessageView(ctx, data) {
     const { icons, escapeAttr, escapeHtml } = ctx;
-    const { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId } = data;
+    const { canSplit, content, failureAction, failureKind, failureMessage, failureRepeated, failureRetryable, failureTitle, failureTone, hasBackendAuth, isEditing, recoveryAction, retryMode, retryTargetContent, role, safeContent, safeMessageId } = data;
     if (isEditing) return `<form class="message-edit-form" data-edit-message-form="${safeMessageId}"><textarea name="message" rows="3">${safeContent}</textarea><div class="message-edit-actions"><button type="button" data-cancel-message-edit>취소</button><button type="submit">다시 전송</button></div></form>`;
     const failureRole = failureKind === "cancelled" ? "status" : "alert";
     const recoveryPending = Boolean(recoveryAction);
     const recoveryLabel = recoveryAction === "refresh" ? "불러오는 중…" : recoveryAction === "retry" ? "보내는 중…" : "";
     const failureButton = failureAction?.id === "login"
-      ? `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
+      ? hasBackendAuth
+        ? `<button type="button" data-retry-message="${safeMessageId}">다시 전송</button>`
+        : `<button type="button" data-make-login>${escapeHtml(failureAction.label)}</button>`
       : failureAction?.id === "reload-thread"
         ? `<button type="button" data-refresh-concurrent="${safeMessageId}" ${recoveryPending ? "disabled aria-busy=\"true\"" : ""}>${escapeHtml(recoveryLabel || failureAction.label)}</button>`
       : failureAction?.id === "retry-after-refresh"

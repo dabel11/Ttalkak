@@ -94,11 +94,12 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
       searchScope: state.searchScope,
       popularSort: state.popularSort,
       savedSort: state.savedSort,
-      guestImproveCount: state.guestImproveCount,
       recentThreads: state.recentThreads,
       makeFolders: state.makeFolders,
       activeFolderId: state.activeFolderId,
       activeThreadId: state.activeThreadId,
+      pendingGuestThreadTransferId: state.pendingGuestThreadTransferId,
+      pendingGuestThreadTransferErrorCode: state.pendingGuestThreadTransferErrorCode,
       messages: state.messages,
       composerDraft: state.composerDraft,
       templateCollapsed: state.templateCollapsed,
@@ -187,7 +188,6 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
   state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(savedState.savedSort)
     ? savedState.savedSort
     : "recent";
-  state.guestImproveCount = Number(savedState.guestImproveCount || 0);
   state.recentThreads = Array.isArray(savedState.recentThreads) ? savedState.recentThreads : [];
   state.makeFolders = normalizeMakeFolders(savedState.makeFolders);
   state.activeFolderId =
@@ -195,6 +195,15 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
       ? savedState.activeFolderId
       : "all";
   state.activeThreadId = savedState.activeThreadId || null;
+  state.pendingGuestThreadTransferId = savedState.pendingGuestThreadTransferId != null
+    && state.recentThreads.some((thread) => String(thread?.id || "") === String(savedState.pendingGuestThreadTransferId))
+    ? savedState.pendingGuestThreadTransferId
+    : null;
+  state.pendingGuestThreadTransferErrorCode = state.pendingGuestThreadTransferId
+    ? ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "SESSION_UUID_REQUIRED", "AUTHENTICATION_REQUIRED"].includes(String(savedState.pendingGuestThreadTransferErrorCode || "").toUpperCase())
+      ? String(savedState.pendingGuestThreadTransferErrorCode).toUpperCase()
+      : "FREE_TRIAL_LIMIT_EXCEEDED"
+    : "";
   state.messages = Array.isArray(savedState.messages) ? savedState.messages : [];
   state.composerDraft = savedState.composerDraft || "";
   state.templateCollapsed = Boolean(savedState.templateCollapsed);
