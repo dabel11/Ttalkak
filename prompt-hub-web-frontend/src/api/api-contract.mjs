@@ -7,6 +7,7 @@
       "getAdminUserActivity", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
       "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
       "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
+      "getBillingStatus", "getUsageStatus", "setupBilling", "completeBilling", "cancelBilling", "retryBilling",
     ],
     collection: [
       "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",

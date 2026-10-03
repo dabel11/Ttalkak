@@ -63,6 +63,7 @@
           <summary aria-label="계정 메뉴">${escapeHtml(state.currentUser || "사용자")}님</summary>
           <div class="topbar-account-menu">
             <span class="topbar-settings-label">계정</span>
+            <button class="topbar-menu-action" type="button" data-open-billing>요금제·결제</button>
             <button class="topbar-menu-action" type="button" data-logout>로그아웃</button>
             <button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>
           </div>
