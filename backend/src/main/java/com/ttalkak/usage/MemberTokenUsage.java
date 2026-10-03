@@ -40,9 +40,17 @@ public class MemberTokenUsage {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    @Column(name = "usage_details_json", columnDefinition = "TEXT")
+    private String usageDetailsJson;
+
     protected MemberTokenUsage() {}
 
     MemberTokenUsage(Long memberId, String requestKey, TokenCounts counts, Instant occurredAt) {
+        this(memberId, requestKey, counts, occurredAt, null);
+    }
+
+    MemberTokenUsage(Long memberId, String requestKey, TokenCounts counts, Instant occurredAt, String details) {
+        this.usageDetailsJson = details;
         this.memberId = memberId;
         this.requestKey = requestKey;
         this.inputTokens = counts.inputTokens();
@@ -51,6 +59,7 @@ public class MemberTokenUsage {
         this.occurredAt = occurredAt;
     }
 
+    public String getUsageDetailsJson() { return usageDetailsJson; }
     public Long getMemberId() { return memberId; }
     public String getRequestKey() { return requestKey; }
     public long getInputTokens() { return inputTokens; }

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
+import com.ttalkak.usage.RagUsageRecorder;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,7 @@ public class PromptController {
     private final TagRepository tagRepository;
     private final AuthService authService;
     private final GuestUsageService guestUsageService;
+    private final RagUsageRecorder ragUsageRecorder;
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
@@ -52,13 +54,15 @@ public class PromptController {
                             // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
                             @Value("${rag.response-timeout:75s}")
                             Duration ragResponseTimeout,
-                            GuestUsageService guestUsageService) {
+                            GuestUsageService guestUsageService,
+                            RagUsageRecorder ragUsageRecorder) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
         this.guestUsageService = guestUsageService;
+        this.ragUsageRecorder = ragUsageRecorder;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
@@ -879,6 +883,7 @@ public class PromptController {
             }
 
             body = buildImproveResponse(response);
+            if (memberId != null) ragUsageRecorder.record(memberId, requestId, response);
             aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
             body = buildNoEvidenceResponse(prompt);

@@ -28,6 +28,10 @@ public class MemberTokenUsageService {
 
     /** One requestKey is recorded at most once per member, including concurrent retries. */
     public void record(Long memberId, String requestKey, TokenCounts counts, Instant occurredAt) {
+        record(memberId, requestKey, counts, occurredAt, null);
+    }
+
+    public void record(Long memberId, String requestKey, TokenCounts counts, Instant occurredAt, String details) {
         requireMember(memberId);
         if (requestKey == null || requestKey.isBlank() || requestKey.trim().length() > 128) {
             throw new IllegalArgumentException("requestKey must contain 1-128 characters");
@@ -43,7 +47,7 @@ public class MemberTokenUsageService {
                     verifySameCounts(previous, counts);
                     return;
                 }
-                repository.saveAndFlush(new MemberTokenUsage(memberId, key, counts, occurredAt));
+                repository.saveAndFlush(new MemberTokenUsage(memberId, key, counts, occurredAt, details));
             });
         } catch (DataIntegrityViolationException conflict) {
             // A concurrent request may have committed the same key first. Read after rollback.
