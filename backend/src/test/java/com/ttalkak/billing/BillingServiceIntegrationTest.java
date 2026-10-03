@@ -33,6 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BillingServiceIntegrationTest {
     @Autowired BillingService billing;
     @Autowired BillingChargeRepository charges;
+    @Autowired BillingSubscriptionRepository subscriptions;
+    @Autowired org.springframework.transaction.support.TransactionTemplate transactions;
     @Autowired UsagePeriodService periods;
     @Autowired MemberRepository members;
     @Autowired AuthService auth;
@@ -52,6 +54,7 @@ class BillingServiceIntegrationTest {
         when(clock.instant()).thenAnswer(invocation -> now.get());
         Member member = newMember();
         Long memberId = member.getId();
+        assertEquals("NOT_REGISTERED", billing.status(memberId).paymentStatus());
         var setup = billing.setup(memberId);
         when(gateway.issueBillingKey("auth-once", setup.customerKey())).thenReturn("billing-key");
         when(gateway.charge(eq("billing-key"), eq(setup.customerKey()), anyString(), eq(5000)))
@@ -73,10 +76,12 @@ class BillingServiceIntegrationTest {
         assertTrue(billing.status(memberId).nextChargeAt().isAfter(due));
 
         billing.cancelRenewal(memberId);
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
         now.set(billing.status(memberId).nextChargeAt().plusSeconds(1));
         billing.chargeDue();
         assertEquals(2, charges.countByMemberId(memberId));
         assertEquals("FREE", periods.at(memberId, now.get()).plan());
+        assertEquals("EXPIRED", billing.status(memberId).paymentStatus());
     }
 
     @Test
@@ -96,8 +101,15 @@ class BillingServiceIntegrationTest {
         assertEquals("BILLING_PAYMENT_FAILED", failed.getCode());
         assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
         assertFalse(billing.status(memberId).autoRenew());
+        assertEquals("FAILED", billing.status(memberId).paymentStatus());
+        billing.chargeDue();
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
         billing.retry(memberId);
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
+        billing.cancelRenewal(memberId);
+        Instant expiredAt = billing.status(memberId).nextChargeAt().plusSeconds(1);
+        when(clock.instant()).thenReturn(expiredAt);
+        assertEquals("EXPIRED", billing.status(memberId).paymentStatus());
     }
 
     @Test
@@ -119,9 +131,32 @@ class BillingServiceIntegrationTest {
         when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
                 "payment-confirmed-later", orderId, "DONE", "BILLING", 5000));
 
-        billing.retry(memberId);
+        assertEquals("PENDING", billing.status(memberId).paymentStatus());
+        assertNull(billing.status(memberId).nextChargeAt());
+        billing.chargeDue();
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(1, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    void registeredCardWithoutFirstChargeIsRecoveredByPoll() {
+        Instant now = Instant.parse("2026-09-27T07:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId);
+        transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
+                .orElseThrow().register("billing-before-crash"));
+        when(gateway.charge(eq("billing-before-crash"), eq(setup.customerKey()), anyString(), eq(5000)))
+                .thenAnswer(invocation -> new BillingGateway.Payment("recovered-first-payment",
+                        invocation.getArgument(2), "DONE", "BILLING", 5000));
+        assertEquals("PENDING", billing.status(memberId).paymentStatus());
+        billing.chargeDue();
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
+        assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(1, charges.countByMemberId(memberId));
+        billing.chargeDue();
         verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
     }
 

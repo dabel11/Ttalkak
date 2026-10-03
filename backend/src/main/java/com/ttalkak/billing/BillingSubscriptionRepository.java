@@ -14,6 +14,6 @@ public interface BillingSubscriptionRepository extends JpaRepository<BillingSubs
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from BillingSubscription b where b.memberId = :memberId")
     Optional<BillingSubscription> lockByMemberId(@Param("memberId") Long memberId);
-    @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.nextChargeAt <= :now")
+    @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
     List<Long> dueMemberIds(@Param("now") Instant now);
 }

@@ -61,8 +61,22 @@ public class BillingService {
 
     public Status status(Long memberId) {
         return subscriptions.findByMemberId(memberId)
-                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt()))
-                .orElseGet(() -> new Status(false, false, null));
+                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(), paymentStatus(s)))
+                .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED"));
+    }
+
+    private String paymentStatus(BillingSubscription subscription) {
+        Long memberId = subscription.getMemberId();
+        if (charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isPresent()) {
+            return "PENDING";
+        }
+        if (subscription.getNextChargeAt() != null && subscription.getNextChargeAt().isAfter(clock.instant())) {
+            return "ACTIVE";
+        }
+        if (subscription.getBillingKey() == null) return "NOT_REGISTERED";
+        if (charges.findFirstByMemberIdOrderByIdDesc(memberId)
+                .map(charge -> "FAILED".equals(charge.getStatus())).orElse(false)) return "FAILED";
+        return subscription.getNextChargeAt() == null ? "PENDING" : "EXPIRED";
     }
 
     public Status completeRegistration(Long memberId, String customerKey, String authKey) {
@@ -167,5 +181,5 @@ public class BillingService {
 
     private record Prepared(String billingKey, String customerKey, String orderId, boolean retry) {}
     public record Setup(String clientKey, String customerKey, int amount, boolean cardRegistered) {}
-    public record Status(boolean cardRegistered, boolean autoRenew, Instant nextChargeAt) {}
+    public record Status(boolean cardRegistered, boolean autoRenew, Instant nextChargeAt, String paymentStatus) {}
 }
