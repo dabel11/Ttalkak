@@ -56,6 +56,7 @@ services:
       DB_USERNAME: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       RAG_SERVER_URL: http://rag-server:8000
+      FORWARD_HEADERS_STRATEGY: framework
     ports:
       - "8080:8080"
 
