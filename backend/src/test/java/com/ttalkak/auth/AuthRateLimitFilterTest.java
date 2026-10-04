@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuthRateLimitFilterTest {
     @Test void limitsRequestsSeparatelyAndAllowsNextWindow() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper()));
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         for (int i=0; i<10; i++) assertTrue(filter.allow("ip", "/api/auth/password-reset/request", 1000));
         assertFalse(filter.allow("ip", "/api/auth/password-reset/request", 1000));
         assertTrue(filter.allow("other", "/api/auth/password-reset/request", 1000));
@@ -17,7 +17,7 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("ip", "/api/auth/password-reset/request", 61000));
     }
     @Test void rejectedRequestReturnsStructured429AndDoesNotReachController() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper()));
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         for (int i=0; i<10; i++) filter.allow("127.0.0.1", "/api/auth/password-reset/request", System.currentTimeMillis());
         var request = new MockHttpServletRequest("POST", "/api/auth/password-reset/request");
         request.setRemoteAddr("127.0.0.1");
