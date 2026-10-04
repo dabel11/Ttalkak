@@ -31,14 +31,23 @@ the payment lifecycle, not a replacement for that field.
 
 - Frontend: show PENDING and re-fetch billing plus usage after an uncertain
   result. Do not interpret card registration or autoRenew as successful payment.
-- Timeout: each provider call currently permits 70 seconds; `/complete` can
-  perform card issuance + charge, or lookup + charge, sequentially (up to
-  140 seconds in the normal flow). The web
-  timeout is 90 seconds and the staging nginx default is also 90 seconds.
-  Agree on a bounded server budget or asynchronous completion, then align
-  browser and proxy timeouts. Increasing only the browser timeout is insufficient.
+- Timeout: provider calls default to 20 seconds each and share a 60-second
+  monotonic deadline across card issuance, lookup, and charge within one
+  `/complete` or retry request. Polling starts a fresh budget for each member.
+  Database time before subsequent provider calls consumes the same budget;
+  database operations themselves are not forcibly cancelled by this deadline.
+  `BILLING_PROVIDER_TIMEOUT` and `BILLING_REQUEST_BUDGET` configure these values.
+  The request budget must be positive and at most 75 seconds, leaving room
+  beneath the current 90-second browser/nginx timeout. Do not claim this is a
+  hard end-to-end deadline for stalled database operations.
+- Provider timeout, network failure, HTTP 408/429, or 5xx during payment keeps
+  the order PENDING and returns BILLING_UNCERTAIN; it does not mark the card as
+  declined or create a replacement order. Card issuance timeout/network failure
+  returns BILLING_CARD_REGISTRATION_UNCERTAIN. A missing billing key cannot be
+  recovered by the existing payment-order poll: check status and resolve the
+  card registration before retrying.
 - AI: return actual token counts and agree on a stable per-request identifier.
-  MemberTokenUsageService currently has no call site in the improve flow.
+  PR #32 records valid usage from successful member improve requests.
 - Policy: FREE/PRO token limits and over-limit behavior are not defined in #27.
   Do not expose fabricated remaining tokens or claim limits are enforced.
 - Deployment: merge the guest policy and server configuration with billing

@@ -80,6 +80,10 @@ public class BillingService {
     }
 
     public Status completeRegistration(Long memberId, String customerKey, String authKey) {
+        return gateway.withinRequestBudget(() -> completeRegistrationWithinBudget(memberId, customerKey, authKey));
+    }
+
+    private Status completeRegistrationWithinBudget(Long memberId, String customerKey, String authKey) {
         configured();
         BillingSubscription subscription = subscriptions.findByMemberId(memberId)
                 .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "먼저 결제 등록을 시작해 주세요."));
@@ -99,6 +103,10 @@ public class BillingService {
     }
 
     public Status retry(Long memberId) {
+        return gateway.withinRequestBudget(() -> retryWithinBudget(memberId));
+    }
+
+    private Status retryWithinBudget(Long memberId) {
         configured();
         transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
                 .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다."))
@@ -120,7 +128,7 @@ public class BillingService {
         if (!clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_")) return;
         for (Long memberId : subscriptions.dueMemberIds(clock.instant())) {
             try {
-                charge(memberId);
+                gateway.withinRequestBudget(() -> { charge(memberId); return null; });
             } catch (RuntimeException e) {
                 // Do not log provider responses, billing keys, or card data.
                 log.warn("Billing poll failed for member {}: {}", memberId, e.getClass().getSimpleName());

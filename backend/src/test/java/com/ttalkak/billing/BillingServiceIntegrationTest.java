@@ -42,6 +42,11 @@ class BillingServiceIntegrationTest {
     @MockitoBean BillingGateway gateway;
     @MockitoBean Clock clock;
 
+    @org.junit.jupiter.api.BeforeEach
+    void executeRequestBudgets() {
+        doCallRealMethod().when(gateway).withinRequestBudget(any());
+    }
+
     private Member newMember() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         return members.save(new Member("bill_" + suffix, "password", "bill_" + suffix,
@@ -170,6 +175,8 @@ class BillingServiceIntegrationTest {
                 .andExpect(jsonPath("$.clientKey").value("test_ck_example"));
         assertThrows(ApiException.class,
                 () -> billing.completeRegistration(member.getId(), "different-user", "auth-key"));
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).issueBillingKey(anyString(), anyString());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+        verify(gateway, never()).lookup(anyString());
     }
 }
