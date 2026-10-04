@@ -3,6 +3,7 @@ import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
 import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
+import { consumeBillingRedirect, createBillingController } from "./billing/billing-controller.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -616,6 +617,7 @@ const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const billingController = createBillingController({ state, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, render, escapeHtml });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
 const { AuthModal } = authView;
 const adminRuntime = createLazyRuntimeFacade({
@@ -842,6 +844,7 @@ function render() {
     PromptEditModal,
     AdminRevisionRequestModal,
     AuthModal,
+    BillingModal: billingController.view,
     ReportModal,
     ExecuteModal,
     ConfirmModal,
@@ -1356,6 +1359,7 @@ function bindCoreEvents() {
   bindGlobalNavigationEvents();
   bindDiscoveryEvents();
   bindAuthControls(document, authController);
+  billingController.bind(document);
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();
@@ -2463,7 +2467,9 @@ appBootstrap = createAppBootstrap({
   hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, prepareDemoData,
   normalizeAssistantPromptOutputs,
 });
+const billingReturn = consumeBillingRedirect(window.location, window.history);
 const bootstrapResult = appBootstrap.bootstrap();
+if (billingReturn) void billingController.handleRedirect(billingReturn);
 const needsAdminRuntime = state.adminMode || state.route === "admin";
 const needsShareRuntime = state.route === "share";
 const needsMakeRuntime = state.route === "make";
