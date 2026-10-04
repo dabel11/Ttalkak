@@ -3,6 +3,7 @@ package com.ttalkak.prompt;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.usage.RagUsageRecorder;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PromptImproveConversationTest {
@@ -45,6 +47,7 @@ class PromptImproveConversationTest {
 	private TagRepository tagRepository;
 	private AuthService authService;
 	private GuestUsageService guestUsageService;
+	private RagUsageRecorder ragUsageRecorder;
 	private MakeThreadRepository makeThreadRepository;
 
 	private ObjectMapper objectMapper;
@@ -58,6 +61,7 @@ class PromptImproveConversationTest {
 		tagRepository = mock(TagRepository.class);
 		authService = mock(AuthService.class);
 		guestUsageService = mock(GuestUsageService.class);
+		ragUsageRecorder = mock(RagUsageRecorder.class);
 		makeThreadRepository = mock(MakeThreadRepository.class);
 
 		objectMapper = new ObjectMapper();
@@ -72,7 +76,8 @@ class PromptImproveConversationTest {
 				objectMapper,
 				successfulRagWebClientBuilder(),
 				Duration.ofSeconds(75),
-				guestUsageService
+				guestUsageService,
+                ragUsageRecorder
 		);
 
 		ReflectionTestUtils.setField(
@@ -109,6 +114,7 @@ class PromptImproveConversationTest {
 						null),
 				null);
 
+		verifyNoInteractions(ragUsageRecorder);
 		assertNull(response.get("conversationId"));
 		assertNull(response.get("threadId"));
 		assertEquals(
@@ -320,6 +326,7 @@ class PromptImproveConversationTest {
 				AUTHORIZATION
 		);
 
+		verifyNoInteractions(ragUsageRecorder);
 		assertEquals(true, response.get("replayed"));
 		assertEquals(
 				"저장된 개선 프롬프트",
@@ -368,6 +375,8 @@ class PromptImproveConversationTest {
 				"request-new-123",
 				response.get("requestId")
 		);
+		verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("request-new-123"), any(Map.class));
 		assertEquals(false, response.get("replayed"));
 		assertEquals(
 				"request-new-123",
@@ -633,7 +642,8 @@ class PromptImproveConversationTest {
 				objectMapper,
 				webClientBuilder,
 				Duration.ofSeconds(75),
-				guestUsageService
+				guestUsageService,
+                ragUsageRecorder
 		);
 
 		ReflectionTestUtils.setField(
@@ -656,7 +666,8 @@ class PromptImproveConversationTest {
 					objectMapper,
 					webClientBuilder,
 					timeout,
-					guestUsageService
+					guestUsageService,
+                ragUsageRecorder
 			);
 
 			ReflectionTestUtils.setField(
