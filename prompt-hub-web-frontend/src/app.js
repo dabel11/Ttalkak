@@ -3,6 +3,7 @@ import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
 import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
+import { consumeBillingRedirect, createBillingController } from "./billing/billing-controller.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -442,7 +443,7 @@ if ([AdminAuditPanelView, AdminPromptsPanelView, AdminRevisionRequestModalView, 
 }
 const { createRouteLocation, resolvePageView } = modules.routing;
 if ([createRouteLocation, resolvePageView].some((fn) => typeof fn !== "function")) throw moduleLoadError("라우팅 헬퍼");
-const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, FREE_MAKE_LIMIT, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
+const { DEMO_FALLBACK_ENABLED: configuredDemoFallbackEnabled, popularPrompts, savedPrompts, DEMO_LIBRARY_PROMPT_IDS, fallbackPopularTags, promptTemplates, WITHDRAWN_AUTHOR_LABEL, SAVED_PAGE_SIZE, HOME_PAGE_SIZE, SEARCH_DEBOUNCE_MS, MAX_CUSTOM_MAKE_FOLDERS, DEMO_EXISTING_NICKNAMES, DEMO_EXISTING_USER_IDS, commentsByPrompt, demoCommentBackfill } = createAppStaticData({ demo: modules.demo, demoFallbackEnabled: runtimeConfig.demoFallbackEnabled });
 const DEMO_FALLBACK_ENABLED = globalThis.TTALKAK_PRODUCTION_BUILD !== true && configuredDemoFallbackEnabled;
 const state = createInitialState({ homePageSize: HOME_PAGE_SIZE });
 const routeLocation = createRouteLocation({ window, state, isAdminAccount });
@@ -615,6 +616,7 @@ const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
+const billingController = createBillingController({ state, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, render, escapeHtml });
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
 const { AuthModal } = authView;
 const adminRuntime = createLazyRuntimeFacade({
@@ -721,6 +723,7 @@ async function ensureMakeRuntime() {
       MakeFolderButtonView, MessageBubbleView, findMakeThread, canSplitMakeThread, isBackendNumericId,
       countThreadsInFolder, getCustomMakeFolderCount, getActiveFolderName, getThreadFolderId,
       makePreview, sanitizeMakeBackendMessage, maxCustomFolders: MAX_CUSTOM_MAKE_FOLDERS, isPromptSaved,
+      hasBackendAuthToken,
     });
     document.documentElement.dataset.routeRuntime = "make:ready";
     return true;
@@ -842,6 +845,7 @@ function render() {
     PromptEditModal,
     AdminRevisionRequestModal,
     AuthModal,
+    BillingModal: billingController.view,
     ReportModal,
     ExecuteModal,
     ConfirmModal,
@@ -989,7 +993,6 @@ function Sidebar() {
   );
 }
 function Header() {
-  const remaining = Math.max(0, FREE_MAKE_LIMIT - state.guestImproveCount);
   const canUseReportTools = (state.isLoggedIn && !isAdminAccount()) || state.adminMode;
   const hasReportedPrompts = canUseReportTools && state.reportedPromptIds.size > 0;
   const showPromptTools = canUseReportTools && (state.route === "home" || state.route === "saved");
@@ -1001,9 +1004,7 @@ function Header() {
     {
       adminAccessButton,
       authButton: `<button class="login-button" type="button" data-open-auth="login">로그인</button>`,
-      freeMakeLimit: FREE_MAKE_LIMIT,
       hasReportedPrompts,
-      remaining,
       showPromptTools,
     },
   );
@@ -1164,76 +1165,19 @@ function SavedPage() {
     { id: "reports", label: "신고 내역", count: getMyReports().length },
   ];
   return SavedPageView(
-    { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel },
+    { icons, state, formatNumber, MyPagePanel },
     {
       tabs,
       hideMyPagePanel: !canUseDemoFallback() && state.myBackendStatus === "fallback",
+      libraryStatus: {
+        backendStatus: state.myBackendStatus,
+        canUseDemoFallback: canUseDemoFallback(),
+        hasCachedContent: tabs.some((tab) => tab.count > 0),
+        isDemoAccount: isDemoAuthToken(),
+        isSeeded: state.libraryDemoSeeded,
+      },
     },
   );
-}
-function DemoLibraryPrompt() {
-  if (state.myBackendStatus === "checking") {
-    const hasCachedContent = getSavedPagePrompts().length > 0
-      || getMyPrompts().length > 0
-      || getMyComments().length > 0
-      || getMyReports().length > 0;
-    if (hasCachedContent) {
-      return `
-        <div class="demo-library-prompt is-recovering is-compact" role="status" aria-live="polite">
-          <span class="demo-library-status-dot" aria-hidden="true"></span>
-          <span>최신 정보 확인 중…</span>
-        </div>
-      `;
-    }
-    return `
-      <div class="demo-library-prompt is-recovering" role="status" aria-live="polite">
-        <div>
-          <strong>서버에 다시 연결하는 중입니다</strong>
-          <p>저장한 프롬프트와 최근 활동을 새로 불러오고 있습니다.</p>
-        </div>
-        <button class="secondary-button" type="button" disabled>연결 중…</button>
-      </div>
-    `;
-  }
-  if (isDemoAuthToken()) {
-    return `
-      <div class="demo-library-prompt">
-        <div><strong>데모 계정 · 이 기기에 저장됨</strong>
-          <p>저장과 좋아요 활동은 서버로 보내지 않고 현재 브라우저에만 보관합니다.</p></div>
-      </div>
-    `;
-  }
-  if (state.myBackendStatus === "connected") {
-    return `
-      <div class="demo-library-prompt">
-        <div>
-          <strong>현재: 서버 응답 우선 + 최근 활동 즉시 반영</strong>
-          <p>백엔드 API 응답을 우선 반영하고, 방금 저장·댓글·신고한 활동은 즉시 함께 표시합니다.</p>
-        </div>
-      </div>
-    `;
-  }
-  if (state.myBackendStatus === "fallback" && !canUseDemoFallback()) {
-    return `
-      <div class="demo-library-prompt is-error" role="alert">
-        <div>
-          <strong>마이페이지 데이터를 불러오지 못했습니다</strong>
-          <p>네트워크 상태를 확인한 뒤 잠시 후 다시 시도해 주세요.</p>
-        </div>
-        <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
-      </div>
-    `;
-  }
-  const isSeeded = state.libraryDemoSeeded;
-  return `
-    <div class="demo-library-prompt">
-      <div>
-        <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
-        <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
-      </div>
-      ${canUseDemoFallback() ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
-    </div>
-  `;
 }
 async function retryMyPageBackendConnection() {
   if (myPageRecoveryPromise) return myPageRecoveryPromise;
@@ -1369,6 +1313,7 @@ function bindCoreEvents() {
   bindGlobalNavigationEvents();
   bindDiscoveryEvents();
   bindAuthControls(document, authController);
+  billingController.bind(document);
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();
@@ -1913,7 +1858,6 @@ function cancelActiveMakeRequest() {
 function getMakeControllerContext() {
   return {
     state,
-    freeLimit: FREE_MAKE_LIMIT,
     guard: guardAdminUserAction,
     isBusy: () => isMakeThinking || makeRequestState.inFlight,
     notice: showNotice,
@@ -2004,10 +1948,17 @@ function getMakeControllerContext() {
     getMessages: () => state.messages,
     getActiveThreadId: () => state.activeThreadId,
     getBackendThreadId: getMakeBackendThreadId,
+    clearPendingGuestThreadTransfer: (threadId) => {
+      if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
+        state.pendingGuestThreadTransferId = null;
+        state.pendingGuestThreadTransferErrorCode = "";
+        persistState();
+      }
+    },
     clearEditing: () => makeStateModule.setMakeEditingMessage(state),
     refreshThreads: () => refreshMakeThreadsFromBackend({ shouldRender: false }).catch(() => {}),
     applyEdit: (index, value, now) => applyEditedMakeMessageState(state, index, value, now),
-    finishEdit: finishEditedMakeMessageState,
+    finishEdit: (message) => finishEditedMakeMessageState(state, message),
     queueScroll: (messageId) => queueLatestMakeScroll(messageId, { mode: "immediate" }),
     messages: {
       busy: "이미 프롬프트를 개선하고 있습니다. 잠시만 기다려주세요.",
@@ -2256,7 +2207,7 @@ function getMakeApi() {
   return apiClient || {};
 }
 function getMakeApiToken() {
-  return getAuthToken() || undefined;
+  return state.isLoggedIn && hasBackendAuthToken() ? getAuthToken() : undefined;
 }
 function handleMakeBackendSyncError(error, demoMessage, strictMessage, logMessage, options) {
   handleBackendAccessError(error, canUseDemoFallback() ? demoMessage : strictMessage, options);
@@ -2469,7 +2420,9 @@ appBootstrap = createAppBootstrap({
   hydrateBackendHomeDataEffect, refreshBackendHomePromptsEffect, loadPersistedState, prepareDemoData,
   normalizeAssistantPromptOutputs,
 });
+const billingReturn = consumeBillingRedirect(window.location, window.history);
 const bootstrapResult = appBootstrap.bootstrap();
+if (billingReturn) void billingController.handleRedirect(billingReturn);
 const needsAdminRuntime = state.adminMode || state.route === "admin";
 const needsShareRuntime = state.route === "share";
 const needsMakeRuntime = state.route === "make";

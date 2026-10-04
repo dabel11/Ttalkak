@@ -66,12 +66,14 @@ interface TtalkakApplicationState {
   [key: string]: unknown;
   route: string; searchQuery: string; searchScope: string; popularSort: string; popularPage: number; savedSort: string; savedPage: number;
   isLoggedIn: boolean; currentUser: string | null; currentUserId: TtalkakId | null; currentUserRole: string; authToken: string; token: string;
-  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; guestImproveCount: number; templateCollapsed: boolean;
+  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; templateCollapsed: boolean;
   detailPromptId: TtalkakId | null; detailHighlightCommentId: TtalkakId | null; editingPromptId: TtalkakId | null; editingCommentId: TtalkakId | null;
   replyingCommentId: TtalkakId | null; reportPromptId: TtalkakId | null; reportCommentId: TtalkakId | null; executePromptId: TtalkakId | null;
   executeMessageId: TtalkakId | null; editingMessageId: TtalkakId | null; copiedMessageId: TtalkakId | null; confirmAction: TtalkakStateEntity | null;
   creatingFolder: boolean; creatingThreadFolderId: TtalkakId | null; editingFolderId: TtalkakId | null; openFolderMenuId: TtalkakId | null;
   openPromptCardMenuId: TtalkakId | null; openThreadMenuId: TtalkakId | null; activeFolderId: TtalkakId; activeThreadId: TtalkakId | null;
+  pendingGuestThreadTransferId: TtalkakId | null;
+  pendingGuestThreadTransferErrorCode: string;
   composerDraft: string; makeBackendStatus: string; myBackendStatus: string; adminBackendStatus: string; myPageTab: string;
   shareError: string; shareDraft: TtalkakStateEntity | null; libraryDemoSeeded: boolean;
   messages: TtalkakStateEntity[]; recentThreads: TtalkakStateEntity[]; makeFolders: TtalkakStateEntity[];
@@ -288,6 +290,12 @@ interface TtalkakApi {
   getMyReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getMyRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getBillingStatus(token: TtalkakToken): Promise<unknown>;
+  getUsageStatus(token: TtalkakToken): Promise<unknown>;
+  setupBilling(token: TtalkakToken): Promise<unknown>;
+  completeBilling(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  cancelBilling(token: TtalkakToken): Promise<unknown>;
+  retryBilling(token: TtalkakToken): Promise<unknown>;
   getAdminReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   updateAdminReportStatus(reportId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
   getAdminPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;

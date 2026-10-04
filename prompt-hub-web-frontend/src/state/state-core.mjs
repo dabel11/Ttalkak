@@ -8,6 +8,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
   return {
     route: "home",
     authView: null,
+    billingOpen: false,
     detailPromptId: null,
     detailHighlightCommentId: null,
     reportPromptId: null,
@@ -110,7 +111,6 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     templateCollapsed: false,
     mobileTemplateExpanded: false,
     makeDrawerOpen: false,
-    guestImproveCount: 0,
     shareDraft: null,
     savedFilter: { community: true, mine: true, liked: false },
     messages: [],
@@ -120,6 +120,8 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     creatingFolder: false,
     editingFolderId: null,
     activeThreadId: null,
+    pendingGuestThreadTransferId: null,
+    pendingGuestThreadTransferErrorCode: "",
     copiedMessageId: "",
   };
 }
@@ -189,6 +191,8 @@ function toggleReportedVisibilityState(/** @type {TtalkakApplicationState} */ st
 function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
   if (state.confirmAction) {
     state.confirmAction = null;
+  } else if (state.billingOpen) {
+    state.billingOpen = false;
   } else if (state.adminBlockTarget) {
     state.adminBlockTarget = null;
   } else if (state.executeMessageId) {
@@ -265,6 +269,25 @@ function clearSessionBackendDataState(/** @type {TtalkakApplicationState} */ sta
 }
 
 
+function clearMakeSessionDataState(/** @type {TtalkakApplicationState} */ state) {
+  /** @param {unknown} id */
+  const isLocalId = (id) => Boolean(id) && !/^\d+$/.test(String(id));
+  const localThreads = state.recentThreads.filter((thread) => !thread.serverId && isLocalId(thread.id));
+  const activeThread = localThreads.find((thread) => String(thread.id) === String(state.activeThreadId || ""));
+  state.recentThreads = localThreads;
+  state.messages = activeThread?.messages?.map((message) => ({ ...message })) || [];
+  state.activeThreadId = activeThread?.id || null;
+  state.makeFolders = [
+    { id: "uncategorized", name: "\uBBF8\uBD84\uB958" },
+    ...state.makeFolders.filter((folder) => folder.id !== "uncategorized" && isLocalId(folder.id)),
+  ];
+  if (!state.makeFolders.some((folder) => String(folder.id) === String(state.activeFolderId || ""))) state.activeFolderId = "all";
+  state.composerDraft = "";
+  state.pendingMakeImproveThread = null;
+  state.makeBackendMessage = "";
+}
+
+
 function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ state) {
   state.creatingFolder = false;
   state.editingFolderId = null;
@@ -281,6 +304,8 @@ function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ sta
   state.editingMessageId = null;
   state.executeMessageId = null;
   state.executePromptId = null;
+  state.pendingGuestThreadTransferId = null;
+  state.pendingGuestThreadTransferErrorCode = "";
 }
 
 
@@ -288,9 +313,11 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   clearAuthenticatedIdentityState(state);
   state.adminMode = false;
   state.authView = null;
+  state.billingOpen = false;
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);
+  clearMakeSessionDataState(state);
   clearTransientSessionUiState(state);
   if (!options.keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
 }

@@ -48,7 +48,6 @@
       adminAccessButton,
       authButton,
       hasReportedPrompts,
-      remaining,
       showPromptTools,
     } = data;
     const settingsMenu = `<details class="topbar-settings">
@@ -64,6 +63,7 @@
           <summary aria-label="계정 메뉴">${escapeHtml(state.currentUser || "사용자")}님</summary>
           <div class="topbar-account-menu">
             <span class="topbar-settings-label">계정</span>
+            <button class="topbar-menu-action" type="button" data-open-billing>요금제·결제</button>
             <button class="topbar-menu-action" type="button" data-logout>로그아웃</button>
             <button class="topbar-menu-action danger" type="button" data-open-auth="withdraw">회원탈퇴</button>
           </div>
@@ -73,7 +73,7 @@
       ? `<div class="account-actions">${adminAccessButton}${accountMenu}</div>`
       : authButton;
     const makeAuthHint = state.route === "make" && !state.isLoggedIn
-      ? `비로그인 체험 ${remaining}/${data.freeMakeLimit}회 남음<br />로그인하면 제한 없이 저장하고 이어서 사용할 수 있습니다.`
+      ? "비로그인 무료 체험은 총 3회 제공됩니다.<br />로그인하면 저장하고 이어서 사용할 수 있습니다."
       : "";
 
     return `

@@ -121,13 +121,29 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const { isBackendNumericId, makePreview, makeState, normalizeRecentThreads, state } = ctx;
     if (!Array.isArray(threads)) return false;
 
+    const activeThreadId = String(state.activeThreadId || "");
+    const activeThread = activeThreadId
+      ? state.recentThreads.find((thread) => {
+        return String(thread?.id || "") === activeThreadId || String(thread?.serverId || "") === activeThreadId;
+      })
+      : null;
+    const activeLookupId = String(activeThread?.serverId || activeThreadId);
+    const pendingThreadId = String(state.pendingGuestThreadTransferId || "");
+    const pendingThread = pendingThreadId
+      ? state.recentThreads.find((thread) => {
+        const backendId = thread?.serverId || thread?.id;
+        return String(thread?.id || "") === pendingThreadId && !isBackendNumericId(backendId);
+      })
+      : null;
+    const preservedThreads = pendingThread ? [pendingThread] : [];
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
-      makeState.setMakeRecentThreads(state, []);
+      makeState.setMakeRecentThreads(state, preservedThreads);
+      reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
       return true;
     }
 
-    makeState.setMakeRecentThreads(state, validThreads.map((thread) => ({
+    const backendThreads = validThreads.map((thread) => ({
       id: thread.id,
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
@@ -136,9 +152,26 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
-    })));
+    }));
+    const nextThreads = [...preservedThreads, ...backendThreads];
+    makeState.setMakeRecentThreads(state, nextThreads);
+    reconcileActiveMakeThread(state, nextThreads, pendingThread, activeLookupId);
     normalizeRecentThreads();
     return true;
+  }
+
+  function reconcileActiveMakeThread(state, threads, pendingThread, activeLookupId) {
+    if (!activeLookupId) return;
+    const nextActiveThread = threads.find((thread) => {
+      const id = String(thread?.id || "");
+      const serverId = String(thread?.serverId || "");
+      return id === activeLookupId || serverId === activeLookupId;
+    }) || pendingThread || null;
+
+    state.activeThreadId = nextActiveThread?.id || null;
+    state.messages = Array.isArray(nextActiveThread?.messages)
+      ? nextActiveThread.messages.map((message) => ({ ...message }))
+      : [];
   }
 
   function applyMyLibraryResult(ctx, result) {
@@ -242,7 +275,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       const wasLoggedIn = Boolean(state.isLoggedIn);
       const hasAnyToken = Boolean(String(typeof getAuthToken === "function" ? getAuthToken() || "" : "").trim());
       if (wasLoggedIn && !hasAnyToken && typeof clearAuthenticatedSession === "function") {
+        const pendingGuestThreadTransferId = state.pendingGuestThreadTransferId || null;
+        const pendingGuestThreadTransferErrorCode = String(state.pendingGuestThreadTransferErrorCode || "");
         clearAuthenticatedSession({ keepRoute: true });
+        state.pendingGuestThreadTransferId = pendingGuestThreadTransferId;
+        state.pendingGuestThreadTransferErrorCode = pendingGuestThreadTransferId
+          ? pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED"
+          : "";
         state.authView = "login";
       }
       makeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
@@ -298,12 +337,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     });
 
     if (!anyConnected && unauthorizedReason && typeof handleBackendAccessError === "function") {
-      if (state.isLoggedIn && typeof clearAuthenticatedSession === "function") {
-        clearAuthenticatedSession({ keepRoute: true });
-        state.authView = "login";
-      }
-      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       render();
       return;
     }
