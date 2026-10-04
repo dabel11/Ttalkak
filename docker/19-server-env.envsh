@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Official nginx sources executable *.envsh files before substituting templates.
+case "$PORT" in ''|*[!0-9]*) echo 'PORT must be numeric' >&2; exit 1;; esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+    echo 'PORT must be between 1 and 65535' >&2; exit 1
+fi
+case "$BACKEND_UPSTREAM" in ''|*[!a-zA-Z0-9.:-]*) echo 'BACKEND_UPSTREAM must be host:port' >&2; exit 1;; esac
+case "$PROXY_READ_TIMEOUT" in ''|*[!0-9smh]) echo 'Invalid PROXY_READ_TIMEOUT' >&2; exit 1;; esac
+resolver="${DNS_RESOLVER:-$(awk '/^nameserver / {print $2; exit}' /etc/resolv.conf)}"
+case "$resolver" in ''|*[!a-zA-Z0-9.:%\[\]-]*) echo 'Invalid DNS resolver' >&2; exit 1;; esac
+case "$resolver" in *:*) case "$resolver" in \[*\]) ;; *) resolver="[$resolver]";; esac;; esac
+export DNS_RESOLVER="$resolver"
