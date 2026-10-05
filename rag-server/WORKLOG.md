@@ -3971,6 +3971,21 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 
 ---
 
+## [2026-10-05] 배포 이미지 추가 축소 — 중복 safetensors 제거 (Railway 빌드 반복 실패 대응)
+**목적**: Railway 빌드가 "Dockerfile 단계·이미지 export 는 끝났는데 build 가 에러 메시지 없이 실패"(Infrastructure Error)로 **3~4회 반복 실패**. 13.2GB 이미지 과대가 export/push 를 불안정하게 만든다고 보고 번들 이미지를 줄였다.
+
+**Before**: bge-m3 캐시에 `pytorch_model.bin`(2.2G, 저장소 원본)과 transformers 가 로드 시 **자동 변환**한 `model.safetensors`(2.2G)가 **둘 다** 포함 → 모델 레이어 6.86GB, 이미지 **13.2GB**. (추가로 HF xet 청크 캐시도 중복 저장)
+
+**After**: 빌드 단계에서 **자동 변환 safetensors 제거(원본 `.bin` 유지)** + `HF_HUB_DISABLE_XET=1` + xet 캐시 삭제. 모델 캐시 6.4→**4.3GB**, 이미지 **13.2→9.54GB**.
+
+**변경 파일**: `rag-server/Dockerfile`(수정)
+
+**검증**: `docker build` 후 `docker run --network none` 로 bge-m3 임베딩(dim 1024)·bge-reranker 로드 정상(`OFFLINE LOAD OK`). HF 저장소 확인(`list_repo_files`): **bge-m3 는 `.bin` 만 제공**(safetensors 없음) → 처음에 `.bin` 을 지웠더니 오프라인 로드가 깨졌고(없는 safetensors 를 찾음), **원본 `.bin` 을 남기고 변환본 safetensors 를 제거**하는 쪽으로 정정.
+
+**결정·근거**: 번들 유지(모델 실측 4.3GB 가 최소치). `.bin` 이 저장소 원본이라 반드시 남겨야 함. 런타임 safetensors 재변환은 ephemeral 디스크에만 쓰여 이미지 크기 무영향. 9.54GB 로도 Railway export 가 또 실패하면 다음 수는 **이미지에서 모델 제외 + 5GB 볼륨 런타임 다운로드**(단, 변환본 중복을 막아야 4.3GB<5GB 성립).
+
+---
+
 ## [2026-10-05] Railway 배포 후속 — CPU torch 최적화 + 코퍼스 마이그레이션 도구
 **목적**: (1) 번들링 이미지가 20.9GB로 과대 — CPU 배포에 불필요한 CUDA 라이브러리 제거. (2) 새 스테이징 MySQL 로 `rag_chunk` 코퍼스를 재임베딩 없이 옮길 도구 마련.
 
