@@ -36,6 +36,9 @@ ttalkak:
   auth:
     password-reset-enabled: ${PASSWORD_RESET_ENABLED:false}
     mail-from: ${AUTH_MAIL_FROM:}
+    mail-transport: ${AUTH_MAIL_TRANSPORT:smtp}
+    mail-test-recipient: ${AUTH_MAIL_TEST_RECIPIENT:}
+    resend-api-key: ${RESEND_API_KEY:}
   cors:
     allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,chrome-extension://djbhhlahjhaeccghbnajnhmbcdilccmn}"
 

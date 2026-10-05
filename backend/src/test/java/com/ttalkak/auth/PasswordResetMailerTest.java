@@ -37,4 +37,39 @@ class PasswordResetMailerTest {
         assertFalse(error.getReason().contains("private"));
         assertNull(error.getCause());
     }
+
+    @SuppressWarnings("unchecked")
+    @Test void resendNeedsKeyAndSharedDomainNeedsRestrictedRecipient() {
+        ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+        var gateway = mock(ResendMailGateway.class);
+        when(gateway.isConfigured()).thenReturn(true);
+        assertFalse(new PasswordResetMailer(provider, true, "onboarding@resend.dev", "", gateway,
+                "resend", "").isEnabled());
+        assertTrue(new PasswordResetMailer(provider, true, "onboarding@resend.dev", "", gateway,
+                "resend", "owner@example.com").isEnabled());
+        assertTrue(new PasswordResetMailer(provider, true, "noreply@example.com", "", gateway,
+                "resend", "").isEnabled());
+        when(gateway.isConfigured()).thenReturn(false);
+        assertFalse(new PasswordResetMailer(provider, true, "noreply@example.com", "", gateway,
+                "resend", "").isEnabled());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test void testModeNeverRedirectsAnotherMembersResetOrId() {
+        ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+        var gateway = mock(ResendMailGateway.class);
+        when(gateway.isConfigured()).thenReturn(true);
+        var mailer = new PasswordResetMailer(provider, true, "onboarding@resend.dev", "", gateway,
+                "resend", "owner@example.com");
+        assertThrows(ApiException.class, () -> mailer.send("other@example.com", "private-code"));
+        assertThrows(ApiException.class, () -> mailer.sendUserId("other@example.com", "private-id"));
+        verify(gateway, never()).send(anyString(), anyString(), anyString(), anyString());
+        mailer.send("owner@example.com", "fixture-code");
+        verify(gateway).send(eq("onboarding@resend.dev"), eq("owner@example.com"), anyString(),
+                contains("fixture-code"));
+        mailer.sendUserId("owner@example.com", "fixture-user");
+        verify(gateway).send(eq("onboarding@resend.dev"), eq("owner@example.com"), anyString(),
+                contains("fixture-user"));
+        verifyNoInteractions(provider);
+    }
 }

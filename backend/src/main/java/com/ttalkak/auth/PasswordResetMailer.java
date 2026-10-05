@@ -1,6 +1,8 @@
 package com.ttalkak.auth;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -14,17 +16,38 @@ public class PasswordResetMailer {
     private final boolean enabled;
     private final String from;
     private final String host;
+    private final ResendMailGateway resend;
+    private final String transport;
+    private final String testRecipient;
+    @Autowired
     public PasswordResetMailer(ObjectProvider<JavaMailSender> sender,
             @Value("${ttalkak.auth.password-reset-enabled:false}") boolean enabled,
             @Value("${ttalkak.auth.mail-from:}") String from,
-            @Value("${spring.mail.host:}") String host) {
+            @Value("${spring.mail.host:}") String host,
+            ResendMailGateway resend,
+            @Value("${ttalkak.auth.mail-transport:smtp}") String transport,
+            @Value("${ttalkak.auth.mail-test-recipient:}") String testRecipient) {
         this.sender = sender;
         this.enabled = enabled;
-        this.from = from;
+        this.from = from == null ? "" : from.trim();
         this.host = host;
+        this.resend = resend;
+        this.transport = transport == null ? "" : transport.trim().toLowerCase(Locale.ROOT);
+        this.testRecipient = testRecipient == null ? "" : testRecipient.trim();
+    }
+
+    // Keep the existing SMTP-only unit test setup and configuration compatible.
+    PasswordResetMailer(ObjectProvider<JavaMailSender> sender, boolean enabled, String from, String host) {
+        this(sender, enabled, from, host, null, "smtp", "");
     }
     public boolean isEnabled() {
-        return enabled && host != null && !host.isBlank() && from != null && !from.isBlank()
+        if (!enabled || from.isBlank()) return false;
+        if ("resend".equals(transport)) {
+            // Resend's shared domain can only deliver to the account owner's email.
+            boolean sharedDomain = from.toLowerCase(Locale.ROOT).contains("@resend.dev");
+            return resend != null && resend.isConfigured() && (!sharedDomain || !testRecipient.isBlank());
+        }
+        return "smtp".equals(transport) && host != null && !host.isBlank()
                 && sender.getIfAvailable() != null;
     }
     public void requireEnabled() {
@@ -42,6 +65,15 @@ public class PasswordResetMailer {
     }
     private void deliver(String email, String subject, String text) {
         requireEnabled();
+        if (!testRecipient.isBlank() && !testRecipient.equalsIgnoreCase(email)) {
+            // Never redirect recovery credentials to the tester or another address.
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "PASSWORD_RESET_DELIVERY_FAILED", "메일 발송에 실패했습니다. 잠시 후 다시 요청해주세요.");
+        }
+        if ("resend".equals(transport)) {
+            resend.send(from, email, subject, text);
+            return;
+        }
         SimpleMailMessage mail = new SimpleMailMessage();
         mail.setFrom(from);
         mail.setTo(email);
