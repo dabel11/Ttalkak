@@ -26,6 +26,17 @@ test("Playwright isolates local fixture and production servers", () => {
   assert.match(productionConfig, /reuseExistingServer:\s*false/);
 });
 
+test("web container copies every local asset referenced by index.html before building", () => {
+  const indexHtml = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
+  const dockerfile = fs.readFileSync(path.resolve(__dirname, "../../docker/web.Dockerfile"), "utf8");
+  assert.match(indexHtml, /\.\/assets\/fonts\/pretendard-dynamic-subset\.css/);
+  assert.match(dockerfile, /COPY prompt-hub-web-frontend\/assets \.\/prompt-hub-web-frontend\/assets/);
+  assert.ok(
+    dockerfile.indexOf("COPY prompt-hub-web-frontend/assets") < dockerfile.indexOf("RUN cd prompt-hub-web-frontend && npm run build:prod"),
+    "web assets must be copied before the production build validates index.html",
+  );
+});
+
 test("production build excludes optional demo data while development keeps lazy loading", () => {
   const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
