@@ -183,6 +183,24 @@ class GoogleIdTokenVerifierTest {
         );
     }
 
+    @org.junit.jupiter.api.Test
+    void rejectsMissingOrExpiredTokenLifetime() {
+        Jwt valid = googleJwt(Map.of());
+        for (Instant expiration : java.util.Arrays.asList(null, Instant.now().minusSeconds(10))) {
+            Jwt invalid = new Jwt("value", Instant.now().minusSeconds(20), expiration,
+                    Map.of("alg", "RS256"), valid.getClaims());
+            var verifier = new GoogleIdTokenVerifier(CLIENT_ID, token -> invalid);
+            var error = assertThrows(ResponseStatusException.class, () -> verifier.verify("credential"));
+            assertEquals(HttpStatus.UNAUTHORIZED, error.getStatusCode());
+        }
+    }
+    @org.junit.jupiter.api.Test
+    void acceptsGoogleIssuerWithoutScheme() {
+        var verifier = new GoogleIdTokenVerifier(CLIENT_ID,
+                token -> googleJwt(Map.of("iss", "accounts.google.com")));
+        assertEquals("google-subject-1", verifier.verify("credential").subject());
+    }
+
     private Jwt googleJwt(Map<String, Object> overrides) {
         Map<String, Object> claims = new LinkedHashMap<>();
 

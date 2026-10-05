@@ -44,6 +44,16 @@ class GoogleAuthServiceTest {
     }
 
     @Test
+    void newGoogleMemberRequiresExplicitConsent() {
+        when(verifier.verify("credential")).thenReturn(identity());
+        when(memberRepository.findByAuthProviderAndProviderSubject(
+                Member.PROVIDER_GOOGLE, identity().subject())).thenReturn(Optional.empty());
+        var error = assertThrows(ApiException.class, () -> googleAuthService.login("credential"));
+        assertEquals("AUTH_TERMS_REQUIRED", error.getCode());
+        org.mockito.Mockito.verify(memberRepository, org.mockito.Mockito.never()).save(any(Member.class));
+    }
+
+    @Test
     void createsNewGoogleMember() {
         GoogleIdentity identity = identity();
 
@@ -63,7 +73,7 @@ class GoogleAuthServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         GoogleAuthService.GoogleLoginResult result =
-                googleAuthService.login("credential");
+                googleAuthService.login("credential", true, true);
 
         assertTrue(result.newMember());
         assertTrue(result.member().isGoogleAccount());
@@ -107,7 +117,7 @@ class GoogleAuthServiceTest {
                 .thenReturn(existing);
 
         GoogleAuthService.GoogleLoginResult result =
-                googleAuthService.login("credential");
+                googleAuthService.login("credential", true, true);
 
         assertFalse(result.newMember());
         assertSame(existing, result.member());
@@ -144,7 +154,7 @@ class GoogleAuthServiceTest {
 
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> googleAuthService.login("credential")
+                () -> googleAuthService.login("credential", true, true)
         );
 
         assertEquals(
@@ -180,7 +190,7 @@ class GoogleAuthServiceTest {
 
     ApiException exception = assertThrows(
             ApiException.class,
-            () -> googleAuthService.login("credential")
+            () -> googleAuthService.login("credential", true, true)
     );
 
     assertEquals(

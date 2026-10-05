@@ -31,9 +31,9 @@ public class GoogleAuthController {
             @RequestBody GoogleLoginRequest request
     ) {
         GoogleLoginResult result = googleAuthService.login(
-                request == null
-                        ? null
-                        : request.credential()
+                request == null ? null : request.credential(),
+                request != null && Boolean.TRUE.equals(request.agreeTerms()),
+                request != null && Boolean.TRUE.equals(request.agreePrivacy())
         );
 
         Member member = result.member();
@@ -63,6 +63,6 @@ public class GoogleAuthController {
         return ResponseEntity.ok(body);
     }
 
-    public record GoogleLoginRequest(String credential) {
+    public record GoogleLoginRequest(String credential, Boolean agreeTerms, Boolean agreePrivacy) {
     }
 }
