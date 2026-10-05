@@ -9,6 +9,7 @@ import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
 import com.ttalkak.usage.RagUsageRecorder;
+import com.ttalkak.usage.MemberRequestGuard;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,7 @@ public class PromptController {
     private final AuthService authService;
     private final GuestUsageService guestUsageService;
     private final RagUsageRecorder ragUsageRecorder;
+    private final MemberRequestGuard memberRequestGuard;
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
@@ -55,7 +57,8 @@ public class PromptController {
                             @Value("${rag.response-timeout:75s}")
                             Duration ragResponseTimeout,
                             GuestUsageService guestUsageService,
-                            RagUsageRecorder ragUsageRecorder) {
+                            RagUsageRecorder ragUsageRecorder,
+                            MemberRequestGuard memberRequestGuard) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
@@ -63,6 +66,7 @@ public class PromptController {
         this.authService = authService;
         this.guestUsageService = guestUsageService;
         this.ragUsageRecorder = ragUsageRecorder;
+        this.memberRequestGuard = memberRequestGuard;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
@@ -765,6 +769,8 @@ public class PromptController {
 	int editedMessageIndex = -1;
     String requestId =
         normalizeRequestId(request.requestId());
+    MemberRequestGuard.Permit memberPermit = memberRequestGuard.acquire(memberId);
+    try {
 
     if (requestedThreadId == null
             && memberId != null
@@ -849,6 +855,7 @@ public class PromptController {
 		ragHistory = toRagHistory(messages);
 	}
 
+        memberRequestGuard.checkQuota(memberPermit);
         Map<String, Object> body;
         GuestUsageService.Permit guestPermit = memberId == null
                 ? guestUsageService.reserve(sessionUuid)
@@ -883,7 +890,16 @@ public class PromptController {
             }
 
             body = buildImproveResponse(response);
-            if (memberId != null) ragUsageRecorder.record(memberId, requestId, response);
+            if (memberId != null) {
+                boolean recorded;
+                try {
+                    recorded = ragUsageRecorder.record(memberId, requestId, response);
+                } catch (RuntimeException accountingFailure) {
+                    memberRequestGuard.usageMissing(memberPermit);
+                    throw accountingFailure;
+                }
+                if (!recorded) memberRequestGuard.usageMissing(memberPermit);
+            }
             aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
             body = buildNoEvidenceResponse(prompt);
@@ -996,6 +1012,9 @@ public class PromptController {
 		}
 
         return body;
+    } finally {
+        memberRequestGuard.release(memberPermit);
+    }
     }
 
     private Map<String, Object> replayResponse(

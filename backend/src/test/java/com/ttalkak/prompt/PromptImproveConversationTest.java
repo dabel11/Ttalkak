@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.usage.RagUsageRecorder;
+import com.ttalkak.usage.MemberRequestGuard;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
@@ -48,6 +49,7 @@ class PromptImproveConversationTest {
 	private AuthService authService;
 	private GuestUsageService guestUsageService;
 	private RagUsageRecorder ragUsageRecorder;
+    private MemberRequestGuard memberRequestGuard;
 	private MakeThreadRepository makeThreadRepository;
 
 	private ObjectMapper objectMapper;
@@ -62,6 +64,7 @@ class PromptImproveConversationTest {
 		authService = mock(AuthService.class);
 		guestUsageService = mock(GuestUsageService.class);
 		ragUsageRecorder = mock(RagUsageRecorder.class);
+        memberRequestGuard = mock(MemberRequestGuard.class);
 		makeThreadRepository = mock(MakeThreadRepository.class);
 
 		objectMapper = new ObjectMapper();
@@ -77,7 +80,8 @@ class PromptImproveConversationTest {
 				successfulRagWebClientBuilder(),
 				Duration.ofSeconds(75),
 				guestUsageService,
-                ragUsageRecorder
+                ragUsageRecorder,
+                memberRequestGuard
 		);
 
 		ReflectionTestUtils.setField(
@@ -101,6 +105,32 @@ class PromptImproveConversationTest {
 					return thread;
 				});
 	}
+
+    @Test
+    void memberQuotaRejectionDoesNotInvokeOrRecordAiAndReleasesPermit() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "quota-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        org.mockito.Mockito.doThrow(new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                "MEMBER_TOKEN_LIMIT_EXCEEDED", "quota")).when(memberRequestGuard).checkQuota(permit);
+        assertEquals("MEMBER_TOKEN_LIMIT_EXCEEDED", assertThrows(ApiException.class,
+                () -> improve(request("quota request", null, null), AUTHORIZATION)).getCode());
+        verifyNoInteractions(ragUsageRecorder);
+        verify(makeThreadRepository, never()).save(any(MakeThread.class));
+        verify(memberRequestGuard).release(permit);
+    }
+
+    @Test
+    void missingUsageKeepsSuccessfulAnswerButFlagsAccountingForNextRequest() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "missing-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        Map<String, Object> response = improve(request("usage missing", null, null), AUTHORIZATION);
+        assertEquals(false, response.get("replayed"));
+        verify(memberRequestGuard).usageMissing(permit);
+        verify(memberRequestGuard).release(permit);
+        verify(makeThreadRepository).save(any(MakeThread.class));
+    }
 
 	@Test
 	void anonymousImproveDoesNotSaveThread() {
@@ -643,7 +673,8 @@ class PromptImproveConversationTest {
 				webClientBuilder,
 				Duration.ofSeconds(75),
 				guestUsageService,
-                ragUsageRecorder
+                ragUsageRecorder,
+                memberRequestGuard
 		);
 
 		ReflectionTestUtils.setField(
@@ -667,7 +698,8 @@ class PromptImproveConversationTest {
 					webClientBuilder,
 					timeout,
 					guestUsageService,
-                ragUsageRecorder
+                ragUsageRecorder,
+                memberRequestGuard
 			);
 
 			ReflectionTestUtils.setField(

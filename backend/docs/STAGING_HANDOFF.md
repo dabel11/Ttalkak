@@ -1,6 +1,14 @@
 # Staging handoff — 2026-10-04
 
-## Verified now
+## Source integration update — 2026-10-06
+
+Server #29, billing/usage #32/#33, auth #35 and Resend #37 are merged into develop.
+The checked develop commit is `5e71ff7a7d804f9e8f0e05fa28b7fa5a23adf422` and its CI succeeded.
+This does not establish what commit is currently deployed in Railway.
+The current develop RAG response still lacks usage. See MEMBER_QUOTA.md and
+OPERATIONS_READINESS.md for the proposed follow-up and acceptance criteria.
+
+## Historical deployment observations — 2026-10-04
 
 - Web: https://web-production-a82d94.up.railway.app/
 - Backend: https://backend-production-35b61.up.railway.app/
@@ -41,16 +49,10 @@ Use a distinct requestId for each new turn; reuse it only for the same request.
 
 ## Integration and review
 
-- #29 supplies server configuration; #32 supplies billing and member usage.
-- A follow-up based on #32 adds bounded billing provider waits and transient
-  payment error recovery. If merged before #32, it includes #32's changes.
-- Integrate both server and latest billing changes before changing Railway web
-  and backend source branches to develop. A billing-only branch does not yet
-  include the Railway server configuration.
-- #25's guest backend requires #26's frontend in the same deployment or earlier.
-  Both are already included in the current server branch.
-- Close superseded #27/#30/#31/#32 only after the replacement is merged and
-  their changes are present. Do not delete an unmerged working branch.
+- Source changes are merged; verify deployed web/backend commits rather than reopening superseded PRs.
+- Guest frontend and backend must remain deployed together.
+- Keep the DB volume and stable JWT secret.
+- The observations above are a dated snapshot; recheck actual RAG availability and indexing.
 
 ## Frontend owner
 
@@ -65,8 +67,8 @@ Use a distinct requestId for each new turn; reuse it only for the same request.
 ## Team decisions still needed
 
 - Actual PRO price and FREE/PRO allowance, reset periods and over-limit policy.
-- `/api/me/usage` limit/remaining/limitReached and quota enforcement depend on
-  these decisions. Actual token logging alone does not enforce a quota.
+- Configurable `/api/me/usage` quota fields and enforcement are proposed in MEMBER_QUOTA.md.
+  Enforcement defaults off until these decisions and actual usage readiness are confirmed.
 - Toss integration remains test-only. Confirm readiness before real payments.
 - RAG readiness and payment/usage frontend integration are separate completion
   criteria; successful web deployment is not full release acceptance.
