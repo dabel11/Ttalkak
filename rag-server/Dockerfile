@@ -9,7 +9,13 @@ WORKDIR /code
 ENV HF_HOME=/opt/hf-cache \
     HF_HUB_DISABLE_TELEMETRY=1
 
-# 의존성 먼저 설치 (레이어 캐시)
+# CPU 전용 torch 먼저 설치. 기본 torch 는 Linux 에서 CUDA 라이브러리(cudnn·cublas 등 ~3GB+)를
+# 끌어오지만 Railway 는 CPU 전용이라 전부 사장(실측: 이미지 20.9GB). CPU 휠로 고정하면
+# sentence-transformers 의 torch>=2.2 를 이게 먼저 만족시켜, 이후 requirements 설치가 CUDA
+# torch 를 다시 당기지 않는다 → 이미지·빌드시간 대폭 감소, 추론 동작은 CPU 라 동일.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# 나머지 의존성 설치 (레이어 캐시)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -3968,3 +3968,24 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: 로컬 모델 RSS 실측(운영과 동일 `device=cpu` 경로, psutil 단계별) — bge-m3+리랭커 상주 ≈ **2.6GB**(Railway Hobby 8GB 상한 내. 무료/트라이얼 RAM 0.5~1GB라 불가). `railway.json`은 Railway 스키마 형식 준수. ⏳ `docker build` 전체 검증은 미실행(이미지 ~10GB·빌드 중 6.4GB 다운로드) — **배포 전 1회 빌드 권장**.
 
 **결정·근거**: 볼륨 대신 **이미지 번들링** 선택 — Hobby 볼륨 상한 5GB < 캐시 6.4GB라 볼륨 불가, 빌드 이미지 상한은 100GB로 여유. 비용(실단가 2026-10-05): 메모리 $0.00000386/GB·s = $10.14/GB·월 → 2.6GB 24/7 ≈ $26/월, Hobby 크레딧 $5 차감 시 실부담 ~$21~30/월. Dockerfile 모델 다운로드는 heredoc 대신 `python -c` 단일행으로 빌더 호환성 확보.
+
+---
+
+## [2026-10-05] Railway 배포 후속 — CPU torch 최적화 + 코퍼스 마이그레이션 도구
+**목적**: (1) 번들링 이미지가 20.9GB로 과대 — CPU 배포에 불필요한 CUDA 라이브러리 제거. (2) 새 스테이징 MySQL 로 `rag_chunk` 코퍼스를 재임베딩 없이 옮길 도구 마련.
+
+**Before**
+- Dockerfile: `pip install -r requirements.txt` 만 → sentence-transformers 의존 torch 가 Linux 기본 휠(`2.14.1+cu130`)로 설치돼 cudnn·cublas 등 CUDA 라이브러리(~3GB+)를 끌어옴. 이미지 **20.9GB**(실측 `docker build`). Railway 는 CPU 전용이라 전부 사장.
+- 코퍼스 이전 도구 없음 — 새 MySQL 의 `rag_chunk` 가 비어 적재 수단 필요(기존은 전부 `ingestion/*` 가 `data/`·API 키로 오프라인 적재 — 배포 이미지엔 .dockerignore 로 제외).
+
+**After**
+- Dockerfile: requirements 설치 **전에** `pip install torch --index-url https://download.pytorch.org/whl/cpu` 로 **CPU 전용 torch(`2.14.1+cpu`) 선설치** → 이후 requirements 가 `torch>=2.2` 를 이미 만족으로 보고 CUDA 를 다시 안 당김. 이미지 **13.2GB**(−7.7GB, −37%). 추론이 CPU 라 동작 불변.
+- `ingestion/migrate_rag_chunk.py`(신규): `rag_chunk` 덤프/복원/직접복사 도구. 임베딩(JSON)을 그대로 옮겨 **재임베딩·LLM API 0·결정적**. `(collection_name, chunk_id)` 멱등 upsert, `--dry-run` 미리보기. 소스=app 연결(.env), 타깃=`--target` DSN 로 분리(섞임 방지).
+
+**변경 파일**: `rag-server/Dockerfile`(수정) · 신규 `rag-server/ingestion/migrate_rag_chunk.py` · `rag-server/WORKLOG.md`
+
+**검증**
+- `docker build` 2회 비교 — `cu130` **20.9GB** vs `cpu` **13.2GB**. CPU 빌드 로그: `torch 2.14.1+cpu`, requirements 단계 `torch>=2.2 already satisfied (2.14.1+cpu)`, `[build] model cache warmed`, 컨테이너 `import torch` 정상.
+- migrate 스크립트: 로컬 `dump` 301행(prompt_techniques 170 + prompt_examples 131, 임베딩 1024차원), 임시 컬렉션 `_migrate_selftest` 에 실제 `load` **2회 멱등**(중복 0)·document 왕복 정상·실데이터(170/131) 무결, `--dry-run` 연결·스키마·파싱 OK.
+
+**결정·근거**: CPU 휠 선설치가 가장 간단·견고(torch 버전 핀 불필요 — sentence-transformers 가 이미 만족분을 재설치 안 함). 모델 캐시 6.4GB 추가 정리(중복 포맷 제거)는 HF 캐시 symlink/blob 구조상 fragile 해 보류. 마이그레이션은 `ingestion/*` 재실행(API·`data/` 자산 필요) 대신 덤프/복원(무비용·결정적) 채택.
