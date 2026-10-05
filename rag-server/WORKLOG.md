@@ -3949,3 +3949,22 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **변경 파일**: app/core/gate.py(신규), app/core/cpu.py(신규), app/main.py(수정-import로 대체), app/core/embeddings.py(수정-desired_threads 사용), tests/test_gate.py(수정-import 경로), tests/test_cpu_threads.py(수정-torch 제거, desired_threads 검증 + 0/음수 폴백 케이스 추가)
 **검증**: requirements-test.txt 만 설치한 깨끗한 venv(CI 동일)에서 `ruff check --select F821,F401,F811,E9` 통과 + `pytest` **266 passed**(이전 265 + 폴백 케이스 1). 설치 목록에 torch/uvicorn/fastapi 없음 확인. 동작 로직 불변(게이트 판정·스레드 결정 값 동일).
 **결정·근거**: 동작 변경 없는 순수 리팩토링(테스트 가능성만 확보). 로직을 테스트용으로 복제하지 않고 실코드가 같은 함수를 쓰게 해 중복 서술 회피. requirements-test 에 torch 추가(수 GB)는 CI 비용·시간 과다로 기각.
+
+---
+
+## [2026-10-05] Railway 배포 설정 — railway.json 추가 + 모델 이미지 번들링
+**목적**: 스테이징(`ttalkak-staging`) Railway 배포 준비. 팀 배포 계획이 지정한 Config File(`railway.json`) 부재 해소 + 콜드스타트에서 모델 ~6.4GB 재다운로드 제거.
+
+**Before**
+- `rag-server/railway.json` 없음 — 지정된 Config File 부재(연결 시 못 찾음).
+- Dockerfile: 모델을 **첫 기동 시 런타임 다운로드**(`/root/.cache/huggingface`). Railway FS는 재배포마다 초기화되고 Hobby 볼륨 상한(5GB) < 캐시(~6.4GB)라, 배포/재시작마다 6.4GB 재다운로드 → 콜드스타트 수 분·헬스체크 타임아웃 위험.
+
+**After**
+- `railway.json`(신규): `DOCKERFILE` 빌더 + `/health` 헬스체크(타임아웃 300s) + 재시작 정책(`ON_FAILURE`, 10회). Root Directory `/rag-server` 기준이라 `dockerfilePath=Dockerfile`, 포트 8000.
+- Dockerfile(수정): `ENV HF_HOME=/opt/hf-cache` 고정 + 빌드 단계에서 `bge-m3`·`bge-reranker-v2-m3`를 **사전 다운로드해 이미지에 번들**. 런타임은 네트워크 없이 캐시에서 로드.
+
+**변경 파일**: `rag-server/railway.json`(신규) · `rag-server/Dockerfile`(수정) · `rag-server/WORKLOG.md`
+
+**검증**: 로컬 모델 RSS 실측(운영과 동일 `device=cpu` 경로, psutil 단계별) — bge-m3+리랭커 상주 ≈ **2.6GB**(Railway Hobby 8GB 상한 내. 무료/트라이얼 RAM 0.5~1GB라 불가). `railway.json`은 Railway 스키마 형식 준수. ⏳ `docker build` 전체 검증은 미실행(이미지 ~10GB·빌드 중 6.4GB 다운로드) — **배포 전 1회 빌드 권장**.
+
+**결정·근거**: 볼륨 대신 **이미지 번들링** 선택 — Hobby 볼륨 상한 5GB < 캐시 6.4GB라 볼륨 불가, 빌드 이미지 상한은 100GB로 여유. 비용(실단가 2026-10-05): 메모리 $0.00000386/GB·s = $10.14/GB·월 → 2.6GB 24/7 ≈ $26/월, Hobby 크레딧 $5 차감 시 실부담 ~$21~30/월. Dockerfile 모델 다운로드는 heredoc 대신 `python -c` 단일행으로 빌더 호환성 확보.
