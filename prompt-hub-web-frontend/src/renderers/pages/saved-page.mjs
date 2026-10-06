@@ -1,18 +1,72 @@
   "use strict";
 
+  function LibraryStatusPromptView(data = {}) {
+    const { backendStatus, canUseDemoFallback, hasCachedContent, isDemoAccount, isSeeded } = data;
+    if (backendStatus === "checking") {
+      if (hasCachedContent) {
+        return `
+          <div class="demo-library-prompt is-recovering is-compact" role="status" aria-live="polite">
+            <span class="demo-library-status-dot" aria-hidden="true"></span>
+            <span>최신 정보 확인 중…</span>
+          </div>
+        `;
+      }
+      return `
+        <div class="demo-library-prompt is-recovering" role="status" aria-live="polite">
+          <div>
+            <strong>연결 중</strong>
+            <p>활동을 불러오고 있습니다.</p>
+          </div>
+          <button class="secondary-button" type="button" disabled>연결 중…</button>
+        </div>
+      `;
+    }
+    if (isDemoAccount) {
+      return `
+        <div class="demo-library-prompt">
+          <div><strong>데모 계정 · 이 기기에 저장됨</strong>
+            <p>이 브라우저에만 저장됩니다.</p></div>
+        </div>
+      `;
+    }
+    if (backendStatus === "connected") return "";
+    if (backendStatus === "fallback" && !canUseDemoFallback) {
+      return `
+        <div class="demo-library-prompt is-error" role="alert">
+          <div>
+            <strong>마이페이지 데이터를 불러오지 못했습니다</strong>
+            <p>다시 시도해 주세요.</p>
+          </div>
+          <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
+        </div>
+      `;
+    }
+    if (globalThis.TTALKAK_PRODUCTION_BUILD === true || !canUseDemoFallback) return "";
+    return `
+      <div class="demo-library-prompt">
+        <div>
+          <strong>${isSeeded ? "데모 보관함" : "빈 보관함"}</strong>
+          <p>${isSeeded ? "예시를 숨기면 새 계정 상태를 확인할 수 있습니다." : "필요하면 검수용 예시를 채워볼 수 있습니다."}</p>
+        </div>
+        ${canUseDemoFallback ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
+      </div>
+    `;
+  }
+
   function SavedPageView(ctx, data) {
     const { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel } = ctx;
-    const { hideMyPagePanel, tabs } = data;
+    const { hideMyPagePanel, libraryStatus, tabs } = data;
+    const statusPrompt = typeof DemoLibraryPrompt === "function" ? DemoLibraryPrompt() : LibraryStatusPromptView(libraryStatus);
 
     return `
       <section class="saved-page my-page" aria-labelledby="my-page-heading">
         <div class="page-head my-page-head">
           <div class="page-title">
             <span>${icons.user}</span>
-            <h1 id="my-page-heading">My page</h1>
+            <h1 id="my-page-heading">마이페이지</h1>
           </div>
         </div>
-        <nav class="my-page-tabs" aria-label="My page 메뉴">
+        <nav class="my-page-tabs" aria-label="마이페이지 메뉴">
           ${tabs
             .map(
               (tab) => `
@@ -23,7 +77,7 @@
             )
             .join("")}
         </nav>
-        ${DemoLibraryPrompt()}
+        ${statusPrompt}
         ${hideMyPagePanel ? "" : MyPagePanel()}
       </section>
     `;
@@ -65,7 +119,7 @@
         </div>
         ${
           pendingUnsaveCount
-            ? `<p class="saved-pending-hint">저장 취소 예정 ${pendingUnsaveCount}개가 있습니다. 같은 저장 아이콘을 다시 누르면 되돌릴 수 있고, Home, Make, Share로 이동하면 목록에서 제거됩니다.</p>`
+            ? `<p class="saved-pending-hint">저장 취소 ${pendingUnsaveCount}개 · 다시 누르면 복원됩니다. 화면을 이동하면 목록에서 제거됩니다.</p>`
             : ""
         }
         ${

@@ -31,6 +31,7 @@ vi.mock("../src/storage/extensionStorage", () => ({
 }));
 
 import { AuthModal } from "../src/components/AuthModal";
+import { ConfirmModal } from "../src/components/ConfirmModal";
 import { useAuth } from "../src/hooks/useAuth";
 import { STORAGE } from "../src/constants";
 
@@ -56,6 +57,40 @@ function renderSignup(overrides = {}) {
   render(createElement(AuthModal, props));
   return props;
 }
+
+test("extension dialogs trap keyboard focus, close with Escape, and restore the opener", async () => {
+  const opener = globalThis.document.createElement("button");
+  opener.textContent = "로그인 열기";
+  globalThis.document.body.append(opener);
+  opener.focus();
+  const onCancel = vi.fn();
+  const view = render(createElement(ConfirmModal, {
+    title: "확인",
+    message: "계속할까요?",
+    confirmLabel: "계속",
+    danger: false,
+    onCancel,
+    onConfirm: vi.fn(),
+  }));
+
+  const dialog = screen.getByRole("dialog", { name: "확인" });
+  const cancel = screen.getByRole("button", { name: "취소" });
+  const confirm = screen.getByRole("button", { name: "계속" });
+  await waitFor(() => expect(cancel).toBe(globalThis.document.activeElement));
+  confirm.focus();
+  fireEvent.keyDown(globalThis.document, { key: "Tab" });
+  expect(cancel).toBe(globalThis.document.activeElement);
+  cancel.focus();
+  fireEvent.keyDown(globalThis.document, { key: "Tab", shiftKey: true });
+  expect(confirm).toBe(globalThis.document.activeElement);
+  expect(dialog.contains(globalThis.document.activeElement)).toBe(true);
+
+  fireEvent.keyDown(globalThis.document, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledOnce();
+  view.unmount();
+  await waitFor(() => expect(opener).toBe(globalThis.document.activeElement));
+  opener.remove();
+});
 
 async function completeSignupForm() {
   fireEvent.change(screen.getByLabelText("닉네임"), { target: { value: "nickname" } });

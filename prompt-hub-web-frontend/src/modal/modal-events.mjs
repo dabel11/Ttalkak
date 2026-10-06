@@ -1,3 +1,5 @@
+const modalFocusTrapCleanups = new WeakMap();
+
 function bindModalEvents(root, actions, state) {
   const bind = (selector, handler) => root.querySelectorAll(selector).forEach((node) => node.addEventListener("click", handler));
   bind("[data-close-auth]", () => { state.authView = null; state.authError = ""; actions.render(); actions.restoreAuthFocus?.(); });
@@ -11,5 +13,26 @@ function bindModalEvents(root, actions, state) {
   bind("[data-cancel-confirm]", () => actions.closeTop());
   bind("[data-confirm-alternative]", async () => actions.runConfirmedAction(true));
   bind("[data-confirm-action]", async () => actions.runConfirmedAction(false));
+
+  modalFocusTrapCleanups.get(root)?.();
+  const modals = [...root.querySelectorAll(".modal")];
+  const activeModal = modals.at(-1);
+  if (!activeModal) {
+    modalFocusTrapCleanups.delete(root);
+    return;
+  }
+  const focusableSelector = ":is(button,input,textarea,select):not(:disabled),a[href],[tabindex]:not([tabindex='-1'])";
+  const trapFocus = (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [...activeModal.querySelectorAll(focusableSelector)];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if ((event.shiftKey ? root.activeElement === first : root.activeElement === last) || !activeModal.contains(root.activeElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
+  };
+  root.addEventListener("keydown", trapFocus, true);
+  modalFocusTrapCleanups.set(root, () => root.removeEventListener("keydown", trapFocus, true));
 }
 export { bindModalEvents };

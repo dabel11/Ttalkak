@@ -20,8 +20,10 @@ const additionalInternalContextPropertyPattern = /^(?:findPrompt|findComment|fin
 // API response fields, persisted record keys, or dynamically named renderers.
 // Reviewed internal callbacks and configuration only: no API payload or persisted storage keys.
 const internalStatePropertyPattern = /^(?:applyScope|isHiddenDemoPrompt|renderAfterBackendUpdate|loadPersistedState|homePageSize|billingOpen|isDemoToken|handleRedirect|pendingGuestThreadTransferId|pendingGuestThreadTransferErrorCode|addCommentReplyState|addPromptCommentState|appendMakeAssistantMessageState|appendMakeUserMessageState|applyAdminPromptHiddenState|applyAdminReportStatusState|applyAdminRevisionRequestState|applyAdminTagDecisionState|applyAdminUserActivityRefreshState|applyAdminUserBlockActivityState|applyAuthenticatedIdentityState|applyBackendPromptUnsavedState|applyCommentReportedState|applyDeletedPromptState|applyEditedMakeMessageState|applyEditedPromptState|applyExistingPromptSavedState|applyHomeAuthorSearchState|applyHomePageState|applyHomeSearchQueryState|applyHomeSearchScopeState|applyHomeSortState|applyHomeTagSearchState|applyNewPromptSavedState|applyPendingUnsavesState|applyPromptLikedState|applyPromptReportedState|applyPromptUnlikedState|applyPromptUnsavedState|applyPublishedSavedPromptState|applySharedPromptState|applyUnsharedPromptState|clearAuthenticatedIdentityState|clearAuthenticatedSessionState|clearPersistedPayload|clearSessionBackendDataState|clearTransientSessionUiState|closeTopModalState|createInitialState|createLocalMakeFolderState|deleteCommentState|deleteMakeFolderState|deleteMakeThreadState|finishAdminRevisionRequestState|finishEditedMakeMessageState|loadPersistedAppState|normalizeSavedPageState|openRecentMakeThreadState|openSavedMakePromptState|persistAppState|readPersistedPayload|readStorageItem|removeCommentFromListState|removeLocalMakeFolderState|removePromptByIdState|removeStorageItem|resetHomeViewState|resetSessionBackendState|restoreMakeThreadFolderState|startNewMakeChatState|toggleCommentLikedState|toggleEditCommentState|togglePendingUnsaveState|toggleReplyCommentState|toggleReportedVisibilityState|toggleSavedMakeMessageState|updateOwnCommentState|updatePromptCommentCountState|updateRecentMakeThreadState|writePersistedPayload|writeStorageItem)$/;
+const persistedRuntimeStatePropertyPattern = /^(?:isLoggedIn|currentUser|currentUserId|currentUserRole|accountScopes|libraryDemoSeeded|userLibraryPromptIds|likedPromptIds|likedCommentIds|reportedPromptIds|reportedCommentIds|hideReportedPrompts|adminMode|adminHiddenPromptIds|adminTagDecisions|adminTab|adminPromptQuery|adminPromptFilter|adminTagQuery|adminTagFilter|adminTagSort|adminTagPromptKey|adminUserQuery|adminUserActivityNickname|adminPromptRevisionRequests|adminReportFilter|reportRecords|searchScope|popularSort|savedSort|recentThreads|makeFolders|activeFolderId|activeThreadId|composerDraft|templateCollapsed)$/;
+const transientRuntimePropertyPattern = /^(?:mobileTemplateExpanded|makeDrawerOpen|compactHeaderOpen|backendRecoveryNotice|createMakeRequestCorrelation|targetPreview|controller|events|reporter|inFlight|cancelSearchCommit|scheduleSearchCommit|updateCapsLock|createMakePageAdapter|setMakeEditingMessage|ensureBackendMakeThreadId|hydratePromptComments|keywordTokens|authorTokens|tagTokens|allTokens)$/;
 const productionManglePropertyPattern = new RegExp(
-  `^(?!${dynamicRendererPropertyPattern.source.slice(1, -1)}$)(?:(?:${internalContextPropertyPattern.source.slice(1, -1)})|(?:${additionalInternalContextPropertyPattern.source.slice(1, -1)})|(?:${internalStatePropertyPattern.source.slice(1, -1)})|(?:state|api|root|refresh|promptTemplates|debounceMs|demoPromptIds|observability|report|recent|sink|limit|allowedRecordFields|aggregateEventFields|prohibitedContent|externalCollectionEnabled|renderers|routing|bootstrap|components|discovery|session|validation|home|auth|admin|modal|saved|utils|effects|interactions|persistence|share|make|selectors|backend|backendStatus|model|navigation|reportCommentForms|makeScroll|app|demo|toBackendStatus|promptOverrides|commentOverrides|messageModel|requestId|threadPolicy|loadRuntime|makeFailureRecovery|makeServerSync|engagement|commentModel|commentView|previewUtils|focusUtils|errorBoundary|savedPrompts|popularPrompts|commentsByPrompt))$`,
+  `^(?!${dynamicRendererPropertyPattern.source.slice(1, -1)}$)(?:(?:${internalContextPropertyPattern.source.slice(1, -1)})|(?:${additionalInternalContextPropertyPattern.source.slice(1, -1)})|(?:${internalStatePropertyPattern.source.slice(1, -1)})|(?:${persistedRuntimeStatePropertyPattern.source.slice(1, -1)})|(?:${transientRuntimePropertyPattern.source.slice(1, -1)})|(?:state|api|root|refresh|promptTemplates|debounceMs|demoPromptIds|observability|report|recent|sink|limit|allowedRecordFields|aggregateEventFields|prohibitedContent|externalCollectionEnabled|renderers|routing|bootstrap|components|discovery|session|validation|home|auth|admin|modal|saved|utils|effects|interactions|persistence|share|make|selectors|backend|backendStatus|model|navigation|reportCommentForms|makeScroll|app|demo|toBackendStatus|promptOverrides|commentOverrides|messageModel|requestId|threadPolicy|loadRuntime|makeFailureRecovery|makeServerSync|engagement|commentModel|commentView|previewUtils|focusUtils|errorBoundary|savedPrompts|popularPrompts|commentsByPrompt))$`,
 );
 
 async function compressProductionJavaScript(metafile) {
@@ -53,9 +55,19 @@ async function compressProductionJavaScript(metafile) {
     // Terser preserves indentation inside HTML template literals. Production
     // renderers do not rely on that formatting, so collapse inter-tag lines to
     // one browser-equivalent space without changing text-node separation.
-    const compressed = result.code
+    const normalized = result.code
+      .replace(/>\\n\s+(?=<)/g, ">")
       .replace(/>\\n\s+/g, "> ")
       .replace(/\\n\s+(?=[<$])/g, " ");
+    const cleanup = await terser.minify(normalized, {
+      module: true,
+      ecma: 2023,
+      compress: { passes: 2, unsafe: true },
+      mangle: true,
+      format: { comments: false, ecma: 2023, semicolons: true },
+    });
+    if (!cleanup.code) throw new Error(`Terser cleanup produced no output for ${output}`);
+    const compressed = cleanup.code;
     fs.writeFileSync(path.resolve(output), compressed, "utf8");
     metafile.outputs[output].bytes = Buffer.byteLength(compressed);
   }
@@ -69,6 +81,16 @@ async function writeProductionStyles(source, destination, before = [], after = [
     target: ["chrome110", "firefox110"],
   });
   fs.writeFileSync(destination, result.code, "utf8");
+}
+
+function copyDirectory(source, destination) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    if (entry.isDirectory()) copyDirectory(sourcePath, destinationPath);
+    else if (entry.isFile()) fs.copyFileSync(sourcePath, destinationPath);
+  }
 }
 
 function assertSafeOutputPath() {
@@ -136,6 +158,12 @@ async function build() {
     if (productionJavaScript.includes("딸깍 확장 프로그램 소개문")) {
       throw new Error("Production bundle must not contain development-only demo seed records.");
     }
+    if (productionJavaScript.includes("데모 보관함")) {
+      throw new Error("Production bundle must not contain development-only library controls.");
+    }
+    if (productionJavaScript.includes("로컬 데모 데이터 초기화")) {
+      throw new Error("Production bundle must not contain development-only reset controls.");
+    }
     const output = Object.entries(result.metafile.outputs).find(([, metadata]) => metadata.entryPoint?.endsWith("src/app-entry.js"))?.[0];
     if (!output) throw new Error("Production bundle output was not created.");
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
@@ -147,7 +175,10 @@ async function build() {
     // Keep the source cascade order in one emitted stylesheet; src is not deployed.
     html = html.replace(/<link\b[^>]*href="\.\/src\/styles\/(?:tokens|notion)\.css[^"\n]*"[^>]*>\s*/g, "");
     await writeProductionStyles(path.join(webRoot, "src", "styles", "make.css"), path.join(outputRoot, "assets", "styles", "make.css"));
-    html = html.replaceAll("./src/styles.css", "./assets/styles.css").replaceAll("./src/styles/make.css", "./assets/styles/make.css");
+    copyDirectory(path.join(webRoot, "assets", "fonts"), path.join(outputRoot, "assets", "fonts"));
+    html = html
+      .replaceAll("./src/styles.css", "./assets/styles.css")
+      .replaceAll("./src/styles/make.css", "./assets/styles/make.css");
   } else {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });
   }

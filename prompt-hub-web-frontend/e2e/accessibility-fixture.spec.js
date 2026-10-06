@@ -120,6 +120,12 @@ test("confirmation modal opens through a real folder workflow and restores focus
   await expect(page.locator(".confirm-modal")).toBeVisible();
   await expect(page.locator(".confirm-modal [data-confirm-action]")).toBeFocused();
   await expectAccessible(page, "Confirmation modal");
+  const cancel = page.locator(".confirm-modal [data-cancel-confirm]");
+  await cancel.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(".confirm-modal [data-confirm-action]")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.locator(".confirm-modal")).toHaveCount(0);
   await expect(folder.locator("[data-folder-menu]")).toBeFocused();

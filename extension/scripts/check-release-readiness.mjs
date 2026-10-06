@@ -43,7 +43,7 @@ export async function verifyCors(config, fetchImpl = globalThis.fetch) {
     headers: {
       Origin: config.origin,
       "Access-Control-Request-Method": "POST",
-      "Access-Control-Request-Headers": "authorization,content-type",
+      "Access-Control-Request-Headers": "authorization,content-type,x-session-uuid",
     },
   });
   const allowOrigin = response.headers.get("access-control-allow-origin");
@@ -51,7 +51,7 @@ export async function verifyCors(config, fetchImpl = globalThis.fetch) {
   const allowHeaders = response.headers.get("access-control-allow-headers") || "";
   const allowCredentials = response.headers.get("access-control-allow-credentials");
   if (!response.ok || allowOrigin !== config.origin) throw new Error(`CORS preflight rejected ${config.origin}.`);
-  if (!/\bPOST\b/i.test(allowMethods) || !/authorization/i.test(allowHeaders) || !/content-type/i.test(allowHeaders)) throw new Error("CORS preflight does not allow the required method and headers.");
+  if (!/\bPOST\b/i.test(allowMethods) || !/authorization/i.test(allowHeaders) || !/content-type/i.test(allowHeaders) || !/x-session-uuid/i.test(allowHeaders)) throw new Error("CORS preflight does not allow the required method and headers.");
   if (String(allowCredentials).toLowerCase() !== "true") throw new Error("CORS preflight must allow credentials.");
 }
 

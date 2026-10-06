@@ -32,10 +32,13 @@ test("release CORS gate requires the exact origin, POST, headers, and credential
   const headers = new Headers({
     "access-control-allow-origin": config.origin,
     "access-control-allow-methods": "POST, OPTIONS",
-    "access-control-allow-headers": "content-type, authorization",
+    "access-control-allow-headers": "content-type, authorization, x-session-uuid",
     "access-control-allow-credentials": "true",
   });
   await assert.doesNotReject(() => verifyCors(config, async () => new Response(null, { status: 200, headers })));
+  const missingGuestHeader = new Headers(headers);
+  missingGuestHeader.set("access-control-allow-headers", "content-type, authorization");
+  await assert.rejects(() => verifyCors(config, async () => new Response(null, { status: 200, headers: missingGuestHeader })), /required method and headers/);
   await assert.rejects(() => verifyCors(config, async () => new Response(null, { status: 200, headers: new Headers() })), /CORS preflight/);
 });
 
