@@ -166,6 +166,30 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void lateDeclineCannotDisableRenewalForAnAlreadyConfirmedOrder() {
+        Instant now = Instant.parse("2026-09-27T07:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId);
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("race-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt())).thenAnswer(invocation -> {
+            String orderId = invocation.getArgument(2);
+            // Simulate a competing worker committing approval before this response arrives.
+            transactions.executeWithoutResult(tx -> {
+                BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+                BillingCharge attempt = charges.findByOrderId(orderId).orElseThrow();
+                attempt.complete("confirmed-by-other-worker");
+                subscription.paidUntil(now.plusSeconds(3600));
+            });
+            throw new BillingDeclinedException();
+        });
+        assertDoesNotThrow(() -> billing.completeRegistration(memberId, setup.customerKey(), "race-auth"));
+        assertTrue(billing.status(memberId).autoRenew());
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
+        assertEquals("DONE", charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow().getStatus());
+    }
+
+    @Test
     void onlySignedInMemberCanRegisterAndForeignCustomerKeyIsRejected() throws Exception {
         mvc.perform(post("/api/me/billing/setup")).andExpect(status().isUnauthorized());
         Member member = newMember();

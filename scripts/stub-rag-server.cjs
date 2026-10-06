@@ -29,6 +29,7 @@ const server = http.createServer((request, response) => {
     }
     response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
     response.end(JSON.stringify({
+      ...(query === "__CI_USAGE_MISSING__" ? {} : {usage: {input_tokens: 10, output_tokens: 5, total_tokens: 15}}),
       mode: "improve",
       answer: `개선된 ${query}`,
       improvedPrompt: `개선된 ${query}`,

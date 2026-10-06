@@ -161,11 +161,16 @@ public class BillingService {
                 payment = gateway.charge(prepared.billingKey(), prepared.customerKey(), prepared.orderId(), amount);
             }
         } catch (BillingDeclinedException e) {
-            transactions.executeWithoutResult(tx -> {
+            boolean declined = Boolean.TRUE.equals(transactions.execute(tx -> {
+                BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
                 BillingCharge attempt = charges.findByOrderId(prepared.orderId()).orElseThrow();
-                if (attempt.getStatus().equals("PENDING")) attempt.fail();
-                subscriptions.lockByMemberId(memberId).orElseThrow().cancelRenewal();
-            });
+                // A parallel worker may already have confirmed this order.
+                if (!attempt.getStatus().equals("PENDING")) return false;
+                attempt.fail();
+                subscription.cancelRenewal();
+                return true;
+            }));
+            if (!declined) return;
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_PAYMENT_FAILED", "결제 승인에 실패했습니다.");
         }
         if (payment == null || !"DONE".equals(payment.status()) || !"BILLING".equals(payment.type())
