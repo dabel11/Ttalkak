@@ -234,7 +234,7 @@
         else if (has("executeMessage")) actions.execute(data.executeMessage);
         else if (has("newChat")) actions.newChat();
         else if (has("threadMenu")) { event.preventDefault(); event.stopPropagation(); const id = data.threadMenu; state.openThreadMenuId = state.openThreadMenuId === id ? null : id; if (state.openThreadMenuId !== id) state.creatingThreadFolderId = null; actions.render(); }
-        else if (has("openThread")) { state.openThreadMenuId = null; actions.openThread(data.openThread); }
+        else if (has("openThread")) { state.openThreadMenuId = null; actions.openThread(data["openThread"]); }
         else if (has("deleteThread")) { event.preventDefault(); event.stopPropagation(); state.openThreadMenuId = null; actions.confirm({ type: "delete-thread", targetId: data.deleteThread, title: "대화 삭제", message: "이 대화를 최근 대화 목록에서 삭제할까요?", confirmLabel: "삭제", danger: true }); }
         else if (has("showFolderForm")) { if (!requireFolderAccess()) return; state.creatingFolder = true; actions.render(); actions.focusLater("[data-folder-create-form] input"); }
         else if (has("cancelFolderCreate")) { state.creatingFolder = false; actions.render(); }
