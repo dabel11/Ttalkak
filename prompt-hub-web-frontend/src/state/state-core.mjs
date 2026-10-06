@@ -42,6 +42,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     currentUser: null,
     currentUserId: null,
     currentUserRole: "user",
+    currentUserProvider: "",
     authToken: "",
     token: "",
     accountScopes: {},
@@ -220,11 +221,12 @@ function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
 }
 
 
-function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string}, token: string}} */ authResult) {
+function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string, provider?: string}, token: string}} */ authResult) {
   state.isLoggedIn = true;
   state.currentUser = authResult.user.nickname;
   state.currentUserId = authResult.user.id;
   state.currentUserRole = authResult.user.role || "user";
+  state.currentUserProvider = authResult.user.provider || "";
   state.authToken = authResult.token;
   state.token = authResult.token;
   state.adminMode = state.currentUserRole === "admin";
@@ -237,6 +239,7 @@ function clearAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ 
   state.currentUser = null;
   state.currentUserId = null;
   state.currentUserRole = "user";
+  state.currentUserProvider = "";
   state.authToken = "";
   state.token = "";
 }

@@ -28,11 +28,11 @@ public class RagUsageRecorder {
         this.clock = clock;
     }
 
-    public void record(Long memberId, String requestId, Map<?, ?> response) {
-        if (memberId == null) return;
+    public boolean record(Long memberId, String requestId, Map<?, ?> response) {
+        if (memberId == null) return false;
         if (!(response.get("usage") instanceof Map<?, ?> reported) || reported.isEmpty()) {
             log.warn("RAG usage missing; member token usage was not recorded");
-            return;
+            return false;
         }
         TokenCounts counts;
         String details;
@@ -40,16 +40,17 @@ public class RagUsageRecorder {
             counts = new TokenCounts(tokens(reported.get("input_tokens")),
                     tokens(reported.get("output_tokens")), tokens(reported.get("total_tokens")));
             // A provider may not supply usage. Zero does not mean a metered request.
-            if (counts.totalTokens() == 0) return;
+            if (counts.totalTokens() == 0) return false;
             details = mapper.writeValueAsString(Map.of("calls", safeCalls(reported.get("calls"))));
         } catch (IllegalArgumentException | JsonProcessingException e) {
             // Preserve compatibility with older RAG deployments; never fabricate billing data.
             log.warn("RAG usage invalid; member token usage was not recorded");
-            return;
+            return false;
         }
         // A missing client key is a new actual invocation, not a replayable request.
         String key = requestId == null ? UUID.randomUUID().toString() : requestId;
         usage.record(memberId, key, counts, clock.instant(), details);
+        return true;
     }
 
     private static long tokens(Object value) {

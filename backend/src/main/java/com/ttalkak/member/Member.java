@@ -37,6 +37,22 @@ public class Member {
     @Column(nullable = false)
     private String password;
 
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int authVersion;
+
+    @jakarta.persistence.Version
+    @Column(nullable = false, columnDefinition = "bigint not null default 0")
+    private long entityVersion;
+
+    public int getAuthVersion() { return authVersion; }
+
+    public void invalidateSessions() { authVersion++; }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+        invalidateSessions();
+    }
+
     @Column(nullable = false, unique = true, length = 50)
     private String nickname;
 

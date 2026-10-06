@@ -1,7 +1,7 @@
-# Billing readiness follow-up to PR #27
+# Billing readiness
 
-This change is based on `817308a` (`trytur/member-token-usage`). It does not
-deploy or merge PR #27. Review it with that PR before integrating into develop.
+Billing and timeout changes are integrated in develop through the merged billing PRs.
+Actual provider approval and deployment configuration must still be verified.
 
 ## First-payment recovery
 
@@ -48,10 +48,9 @@ the payment lifecycle, not a replacement for that field.
   card registration before retrying.
 - AI: return actual token counts and agree on a stable per-request identifier.
   PR #32 records valid usage from successful member improve requests.
-- Policy: FREE/PRO token limits and over-limit behavior are not defined in #27.
-  Do not expose fabricated remaining tokens or claim limits are enforced.
-- Deployment: merge the guest policy and server configuration with billing
-  before switching Railway to the integrated develop branch. Configure only
+- Policy: configurable member quotas are prepared in MEMBER_QUOTA.md, disabled
+  by default. Set team-approved FREE/PRO limits only after real usage verification.
+- Deployment: confirm Railway actually runs the integrated develop commit. Configure only
   Toss test keys for this demonstration and verify the web redirect origin.
 
 Tests cover uncertain first-payment lookup, recovery before any order exists,

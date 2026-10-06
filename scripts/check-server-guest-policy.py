@@ -66,7 +66,75 @@ def main():
     subprocess.run(["docker", "compose", "-p", "ttalkak-ci", "-f", "docker/compose.ci.yml", "restart", "backend"], check=True)
     wait_ready()
     assert improve(session)[0] == 429, "Restart must preserve guest usage in MySQL"
+    check_member_policy()
     print("PASS: nondefault ports, HTTP/HTTPS origin, nginx, missing UUID, 3/4 limit, failure refund, restart persistence")
+
+
+def check_member_policy():
+    suffix = uuid.uuid4().hex[:12]
+    user = "ci_" + suffix
+    password, changed = "CI-fixture-123!", "CI-changed-456!"
+    status, body = request("/api/auth/signup", {
+        "userId": user, "nickname": user, "name": "CI fixture",
+        "email": user + "@example.test", "password": password,
+        "passwordConfirm": password, "agreeTerms": True, "agreePrivacy": True,
+    })
+    assert status == 200, ("signup", status)
+    first = body["accessToken"]
+    def headers(token):
+        return {"Authorization": "Bearer " + token}
+    def login(pwd):
+        return request("/api/auth/login", {"userId": user, "password": pwd})
+    second = login(password)[1]["accessToken"]
+    assert request("/api/auth/logout", {}, extra_headers=headers(first))[0] == 200
+    assert request("/api/auth/me", extra_headers=headers(first))[0] == 401
+    assert request("/api/auth/me", extra_headers=headers(second))[0] == 200
+    assert request("/api/auth/password/change", {
+        "currentPassword": password, "newPassword": changed, "passwordConfirm": changed,
+    }, extra_headers=headers(second))[0] == 200
+    assert request("/api/auth/me", extra_headers=headers(second))[0] == 401
+    assert login(password)[0] == 401
+    token = login(changed)[1]["accessToken"]
+    initial = {"prompt": "CI member request", "requestId": str(uuid.uuid4())}
+    status, result = request("/api/prompts/improve", initial, extra_headers=headers(token))
+    assert status == 200 and result["replayed"] is False, ("member improve", status)
+    assert request("/api/prompts/improve", initial, extra_headers=headers(token))[1]["replayed"] is True
+    usage = request("/api/me/usage", extra_headers=headers(token))[1]
+    assert usage["used"] == 15 and usage["remaining"] == 15 and usage["quotaEnforced"] is True
+    followup = {"prompt": "CI followup", "threadId": result["threadId"], "requestId": str(uuid.uuid4())}
+    assert request("/api/prompts/improve", followup, extra_headers=headers(token))[0] == 200
+    status, failure = request("/api/prompts/improve", {
+        "prompt": "CI blocked", "requestId": str(uuid.uuid4()),
+    }, extra_headers=headers(token))
+    assert status == 429 and failure["code"] == "MEMBER_TOKEN_LIMIT_EXCEEDED", (status, failure)
+    # A stored replay is still available even after quota exhaustion.
+    assert request("/api/prompts/improve", initial, extra_headers=headers(token))[1]["replayed"] is True
+    subprocess.run(["docker", "compose", "-p", "ttalkak-ci", "-f", "docker/compose.ci.yml", "restart", "backend"], check=True)
+    wait_ready()
+    usage = request("/api/me/usage", extra_headers=headers(token))[1]
+    assert usage["used"] == 30 and usage["limitReached"] is True
+    other = login(changed)[1]["accessToken"]
+    assert request("/api/auth/logout-all", {}, extra_headers=headers(other))[0] == 200
+    assert request("/api/auth/me", extra_headers=headers(token))[0] == 401
+    assert request("/api/auth/me", extra_headers=headers(other))[0] == 401
+    unknown_user = "unknown_" + uuid.uuid4().hex[:12]
+    status, account = request("/api/auth/signup", {
+        "userId": unknown_user, "nickname": unknown_user, "name": "Unknown usage fixture",
+        "email": unknown_user + "@example.test", "password": password,
+        "passwordConfirm": password, "agreeTerms": True, "agreePrivacy": True,
+    })
+    assert status == 200, ("unknown signup", status)
+    unknown_token = account["accessToken"]
+    missing = {"prompt": "__CI_USAGE_MISSING__", "requestId": str(uuid.uuid4())}
+    assert request("/api/prompts/improve", missing, extra_headers=headers(unknown_token))[0] == 200
+    unknown_usage = request("/api/me/usage", extra_headers=headers(unknown_token))[1]
+    assert unknown_usage["usageAvailable"] is False and unknown_usage["usageBlocked"] is True
+    status, error = request("/api/prompts/improve", {
+        "prompt": "CI should block missing accounting", "requestId": str(uuid.uuid4()),
+    }, extra_headers=headers(unknown_token))
+    assert status == 503 and error["code"] == "MEMBER_USAGE_UNAVAILABLE", (status, error)
+    assert request("/api/prompts/improve", missing, extra_headers=headers(unknown_token))[1]["replayed"] is True
+    print("PASS: member metering, replay, quota, restart persistence, missing accounting, individual/all logout, password change")
 
 
 if __name__ == "__main__":

@@ -14,8 +14,8 @@
       return `
         <div class="demo-library-prompt is-recovering" role="status" aria-live="polite">
           <div>
-            <strong>서버에 다시 연결하는 중입니다</strong>
-            <p>저장한 프롬프트와 최근 활동을 새로 불러오고 있습니다.</p>
+            <strong>연결 중</strong>
+            <p>활동을 불러오고 있습니다.</p>
           </div>
           <button class="secondary-button" type="button" disabled>연결 중…</button>
         </div>
@@ -25,36 +25,28 @@
       return `
         <div class="demo-library-prompt">
           <div><strong>데모 계정 · 이 기기에 저장됨</strong>
-            <p>저장과 좋아요 활동은 서버로 보내지 않고 현재 브라우저에만 보관합니다.</p></div>
+            <p>이 브라우저에만 저장됩니다.</p></div>
         </div>
       `;
     }
-    if (backendStatus === "connected") {
-      return `
-        <div class="demo-library-prompt">
-          <div>
-            <strong>현재: 서버 응답 우선 + 최근 활동 즉시 반영</strong>
-            <p>백엔드 API 응답을 우선 반영하고, 방금 저장·댓글·신고한 활동은 즉시 함께 표시합니다.</p>
-          </div>
-        </div>
-      `;
-    }
+    if (backendStatus === "connected") return "";
     if (backendStatus === "fallback" && !canUseDemoFallback) {
       return `
         <div class="demo-library-prompt is-error" role="alert">
           <div>
             <strong>마이페이지 데이터를 불러오지 못했습니다</strong>
-            <p>네트워크 상태를 확인한 뒤 잠시 후 다시 시도해 주세요.</p>
+            <p>다시 시도해 주세요.</p>
           </div>
           <button class="secondary-button" type="button" data-retry-my-page-load>다시 연결</button>
         </div>
       `;
     }
+    if (globalThis.TTALKAK_PRODUCTION_BUILD === true || !canUseDemoFallback) return "";
     return `
       <div class="demo-library-prompt">
         <div>
-          <strong>현재: ${isSeeded ? "데모 데이터 표시 중" : "실서비스 초기 상태"}</strong>
-          <p>${isSeeded ? "기능 검수용 예시 보관함을 표시하고 있습니다. 실제 신규 계정 상태를 확인하려면 데모 데이터를 숨겨주세요." : "실서비스 기준으로 새 계정의 보관함은 비어 있습니다. 기능 검수용 예시가 필요하면 데모 데이터를 채워 확인할 수 있습니다."}</p>
+          <strong>${isSeeded ? "데모 보관함" : "빈 보관함"}</strong>
+          <p>${isSeeded ? "예시를 숨기면 새 계정 상태를 확인할 수 있습니다." : "필요하면 검수용 예시를 채워볼 수 있습니다."}</p>
         </div>
         ${canUseDemoFallback ? `<button class="secondary-button" type="button" data-toggle-library-demo>${isSeeded ? "데모 데이터 숨기기" : "데모 데이터 채우기"}</button>` : ""}
       </div>
@@ -127,7 +119,7 @@
         </div>
         ${
           pendingUnsaveCount
-            ? `<p class="saved-pending-hint">저장 취소 예정 ${pendingUnsaveCount}개가 있습니다. 같은 저장 아이콘을 다시 누르면 되돌릴 수 있고, 홈, 첨삭, 공유로 이동하면 목록에서 제거됩니다.</p>`
+            ? `<p class="saved-pending-hint">저장 취소 ${pendingUnsaveCount}개 · 다시 누르면 복원됩니다. 화면을 이동하면 목록에서 제거됩니다.</p>`
             : ""
         }
         ${

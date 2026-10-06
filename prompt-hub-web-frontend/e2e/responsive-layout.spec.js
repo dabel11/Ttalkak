@@ -461,7 +461,8 @@ test("mobile My page offers an inline retry and refreshes after the backend reco
   await expect(page.locator('[data-open-prompt="cached-prompt"]')).toBeVisible();
   holdRecovery = false;
   releaseRecovery();
-  await expect(page.locator(".demo-library-prompt")).toContainText("서버 응답 우선");
+  await expect(page.locator(".demo-library-prompt.is-error")).toHaveCount(0);
+  await expect(page.locator(".my-page-panel")).toBeVisible();
   await expectNoDocumentOverflow(page);
 });
 

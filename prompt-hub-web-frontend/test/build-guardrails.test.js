@@ -60,6 +60,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /format:\s*\{\s*comments:\s*false/);
   assert.match(build, /compressionPolicy: production \? productionCompressionPolicy : null/);
   assert.match(build, /replace\(\/>\\\\n\\s\+\/g/);
+  assert.match(build, /Terser cleanup produced no output/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
   assert.match(build, /async function writeProductionStyles/);
   assert.match(build, /loader:\s*["']css["']/);
@@ -69,6 +70,8 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
   assert.match(build, /Production bundle must not contain the development-only demo data chunk/);
   assert.match(build, /Production bundle must not contain development-only demo seed records/);
+  assert.match(build, /Production bundle must not contain development-only library controls/);
+  assert.match(build, /Production bundle must not contain development-only reset controls/);
   assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);
@@ -87,6 +90,11 @@ test("persisted state envelope stays stable while internal state properties are 
   assert.match(persistence, /parsed\[["']popularPrompts["']\]/);
   assert.match(persistence, /["']commentsByPrompt["']\s*:/);
   assert.match(persistence, /parsed\[["']commentsByPrompt["']\]/);
+  ["isLoggedIn", "currentUser", "recentThreads", "activeThreadId", "composerDraft"].forEach((key) => {
+    assert.match(persistence, new RegExp(`["']${key}["']\\s*:`));
+    assert.match(persistence, new RegExp(`stored\\(["']${key}["']\\)`));
+    assert.doesNotMatch(persistence, new RegExp(`savedState\\.${key}\\b`));
+  });
 });
 
 test("production renderers share the Admin, Make, and Share runtime chunks", () => {
@@ -157,15 +165,15 @@ test("Make styles are declared but not loaded before the Make route", () => {
   assert.doesNotMatch(html, /<link[^>]+href=["'][^"']*make\.css/);
 });
 
-test("production build publishes every design stylesheet and local font asset", () => {
+test("production build combines design styles in source order and publishes local font assets", () => {
   const html = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
-  ["tokens.css", "notion.css"].forEach((file) => {
-    const escaped = file.replace(".", "\\.");
-    assert.match(html, new RegExp(`src/styles/${escaped}`));
-    assert.match(build, new RegExp(`writeProductionStyles\\([^\\n]+${escaped}`));
-    assert.match(build, new RegExp(`replaceAll\\(\\"\\./src/styles/${escaped}\\"`));
-  });
+  assert.match(html, /src\/styles\/tokens\.css/);
+  assert.match(html, /src\/styles\/notion\.css/);
+  assert.match(build, /writeProductionStyles\([^\n]+styles\.css[^\n]*\n\s*\[path\.join\(webRoot, "src", "styles", "tokens\.css"\)\],\n\s*\[path\.join\(webRoot, "src", "styles", "notion\.css"\)\]\)/);
+  assert.ok(build.includes("html = html.replace(/<link\\b"));
+  assert.ok(build.includes("(?:tokens|notion)\\.css"));
+  assert.doesNotMatch(build, /writeProductionStyles\(path\.join\(webRoot, "src", "styles", "(?:tokens|notion)\.css"\),/);
   assert.match(html, /assets\/fonts\/pretendard-dynamic-subset\.css/);
   assert.match(build, /copyDirectory\(path\.join\(webRoot, "assets", "fonts"\)/);
 });

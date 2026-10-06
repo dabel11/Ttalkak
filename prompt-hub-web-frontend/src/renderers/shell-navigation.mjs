@@ -50,12 +50,15 @@
       hasReportedPrompts,
       showPromptTools,
     } = data;
+    const demoResetButton = globalThis.TTALKAK_PRODUCTION_BUILD === true
+      ? ""
+      : '<button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>';
     const settingsMenu = `<details class="topbar-settings">
           <summary aria-label="화면 설정">설정</summary>
           <div class="topbar-settings-menu">
             <span class="topbar-settings-label">화면 및 데이터</span>
             ${showPromptTools ? `<button class="topbar-menu-action ${state.hideReportedPrompts ? "active" : ""}" type="button" data-toggle-reported ${hasReportedPrompts ? "" : "disabled"}>${state.hideReportedPrompts ? "신고한 게시물 표시" : "신고한 게시물 숨기기"}</button>` : ""}
-            <button class="topbar-menu-action" type="button" data-reset-demo>로컬 데모 데이터 초기화</button>
+            ${demoResetButton}
           </div>
         </details>`;
     const accountMenu = state.isLoggedIn

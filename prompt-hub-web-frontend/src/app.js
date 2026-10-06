@@ -805,7 +805,7 @@ const confirmActionHandlers = {
     showNotice(wasAdminMode ? "로그아웃하여 관리자 화면을 종료했습니다." : "로그아웃했습니다.");
   },
   withdraw: authController.withdraw,
-  "reset-demo": () => { resetDemoState(); return false; },
+  ...(globalThis.TTALKAK_PRODUCTION_BUILD === true ? {} : { "reset-demo": () => { resetDemoState(); return false; } }),
 };
 const icons = {
   home: `<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
@@ -1344,22 +1344,24 @@ function bindGlobalActionEvents() {
       render();
     });
   });
-  document.querySelectorAll("[data-reset-demo]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openConfirmAction({
-        type: "reset-demo",
-        title: "데모 초기화",
-        message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 화면 상태를 모두 초기화할까요? 서버 DB 데이터는 삭제하지 않습니다.",
-        confirmLabel: "초기화",
-        danger: true,
+  if (globalThis.TTALKAK_PRODUCTION_BUILD !== true) {
+    document.querySelectorAll("[data-reset-demo]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openConfirmAction({
+          type: "reset-demo",
+          title: "데모 초기화",
+          message: "저장, 신고, 댓글, 로그인, 최근 대화 등 현재 브라우저에 쌓인 화면 상태를 모두 초기화할까요? 서버 DB 데이터는 삭제하지 않습니다.",
+          confirmLabel: "초기화",
+          danger: true,
+        });
       });
     });
-  });
-  document.querySelectorAll("[data-toggle-library-demo]").forEach((button) => {
-    button.addEventListener("click", () => {
-      toggleLibraryDemoData();
+    document.querySelectorAll("[data-toggle-library-demo]").forEach((button) => {
+      button.addEventListener("click", () => {
+        toggleLibraryDemoData();
+      });
     });
-  });
+  }
   document.querySelectorAll("[data-open-auth]").forEach((button) => {
     button.addEventListener("click", () => {
       authFocusReturnView = button.dataset.openAuth || "login";
