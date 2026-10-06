@@ -11,7 +11,7 @@ const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 const terser = require(path.join(webRoot, "node_modules", "terser"));
 const terserVersion = require(path.join(webRoot, "node_modules", "terser", "package.json")).version;
-const productionCompressionPolicy = `${terserVersion}/11`;
+const productionCompressionPolicy = `${terserVersion}/12`;
 const internalContextPropertyPattern = /^(?:reportWarning|isCurrentRequest|canUseDemoFallback|normalizeTag|updateThread|setThinking|canDeleteComment|getCommentMutationContext|classifyError|runMutation|failRequest|requestState|refreshMyPage|refreshThread|queueScroll|hasBackendToken|completeRequest|isBackendNumericId|getBackendThreadId|renderCancellation|setBackendFailure|getPromptMutationContext|normalizeRecentThreads|getReportRecord|mapBackendReportStatus|hydrateComments|renderPreservingScroll|isBackendId|findPromptIdByComment|getStatusLabel|countThreadsInFolder|normalizeText|hasBackendAuthToken|togglePendingUnsave|shouldSync|reportFailure|reportOutcome|applyPendingThread|clearPendingGuestThreadTransfer|canSplitMakeThread|scrollLatest|stopInFlight|refreshBackendHomePromptsEffect|normalizeAssistantPromptOutputs|cancelHomeSearch|restoreHomeFocus|hydrateBackendMyPageDataEffect|normalizeResult|formatShortDate|getCommentCount|normalizePersistedLikeCounts|hydrateBackendMakeDataEffect|hydrateBackendHomeDataEffect|findMakeThread|sanitizeMakeBackendMessage|updateBackendHomePageMeta|clearAuthenticatedSession|getMakeInteractionVersion|handleBackendAccessError|reportConcurrencyRefresh|getCustomMakeFolderCount|hydrateBackendAdminData|buildHistory|startRequest|waitForPaint|findEditableMessage|normalizeMakeFolders|discardCurrentScope|getValidSearchScope|applyBackendUnsaved|isOwnedRevisionTarget|syncCommentCount|prepareDemoData|incrementViews|escapeHtml|escapeAttr|showNotice|clearEditing|messageModel|getMessages|parseTags|getIcons|getToken|setDraft|emailValid|phoneValid|appendUser|applyUser|uniquePrompts|getAuthToken|removePrompt|focusAsk|makePreview|addPromptCommentState|getApiFailureMessage|logMessage|applyState|syncThread|getActiveFolderName|getThreadFolderId|searchDebounceMs|applySearchQuery|applyPromptLiked|toggleReplyState|getMakeApiToken|getCommentLikes|toggleEditState|bumpInteraction|appendAssistant|getLikes|normalizeLikes|isMakeThinking|refreshThreads|canTransition|applyIdentity|applyNewSaved|addReplyState|focusRestored|isPromptSaved|clearSession|resetBackend|upsertPrompt|getCreatedAt|applyUnsaved|refreshAdmin|formatNumber|isHiddenDemo|getKnownTags|hydrateMake|removeToken|applyAuthor|keepSession|recoveryPrompt|revisionKey|applySort|applyPage|getAuthor|applyEdit|applyTag|hasToken|isFinal|setMakeComposerDraft|setMakeBackendState|setMakeRecentThreads|setActiveThreadId|render|notice|guard|icons|interactions|effects|runtimeConfig|maxCustomFolders|freeLimit|existingNicknames|existingUserIds|MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView|applyExistingSaved|applyPromptUnliked|toggleCommentLiked|updateCommentState|deleteCommentState|getMutationContext|getRecord|canUseApi|fromBackendStatus|keepQuery|findCommentInList|getActiveThreadId|getRevisionTarget|refreshOnFailure|applyShared|finishEdit|closeState|showStatus|writeToken|clearState|getMakeApi|validScope|isApproved|myBackendStatus|adminBackendStatus|backendStatusMessage|backendStatus|adminUserSearchResults|backendAdminUserActivities|detailHighlightCommentId|detailPromptId|pendingUnsaveIds|openPromptCardMenuId|creatingThreadFolderId|openThreadMenuId|backendLikedPrompts|executeMessageId|executePromptId|editingCommentId|openFolderMenuId|adminUserSearchMessage|adminRequestTargetKey|adminAuditSyncMessage|backendLibraryPrompts|backendLibraryPromptIds|backendAdminPrompts|popularPage|reportCommentId|reportPromptId|backendMyPrompts|backendAdminTags|backendAdminAuditLogs|backendAdminReports|backendAdminReportsLoaded|backendHomePage|backendMyComments|backendMyReports|backendAdminRevisionRequests|backendPopularTags|authView|authDuplicateChecks|editingPromptId|replyingCommentId|savedFilter|shareDraft|adminBlockTarget|expandedComments|savedPage|confirmAction|creatingFolder|isComposingShareTag|shareTagQuery|editingFolderId|isComposingAdminPromptSearch|authUserIdWarning|editingMessageId|isComposingAdminTagSearch|authError|copiedMessageId|pendingMakeImproveThread|pendingGuestThreadTransferId|pendingGuestThreadTransferErrorCode|isComposingSearch|myPageTab|makeBackendStatus|shareError|searchTipVisible|authDraft|makeBackendMessage|searchTipShown)$/;
 
 const dynamicRendererPropertyPattern = /^(?:MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView)$/;
@@ -61,8 +61,9 @@ async function compressProductionJavaScript(metafile) {
   }
 }
 
-async function writeProductionStyles(source, destination) {
-  const result = await esbuild.transform(fs.readFileSync(source, "utf8"), {
+async function writeProductionStyles(source, destination, before = [], after = []) {
+  const css = [...before, source, ...after].map((file) => fs.readFileSync(file, "utf8")).join("\n");
+  const result = await esbuild.transform(css, {
     loader: "css",
     minify: true,
     target: ["chrome110", "firefox110"],
@@ -140,11 +141,20 @@ async function build() {
     bundle = path.relative(outputRoot, path.resolve(output)).replaceAll("\\", "/");
     html = html.replace('./src/app-entry.js', `./${bundle}`);
     fs.mkdirSync(path.join(outputRoot, "assets", "styles"), { recursive: true });
-    await writeProductionStyles(path.join(webRoot, "src", "styles.css"), path.join(outputRoot, "assets", "styles.css"));
+    await writeProductionStyles(path.join(webRoot, "src", "styles.css"), path.join(outputRoot, "assets", "styles.css"),
+      [path.join(webRoot, "src", "styles", "tokens.css")],
+      [path.join(webRoot, "src", "styles", "notion.css")]);
+    // Keep the source cascade order in one emitted stylesheet; src is not deployed.
+    html = html.replace(/<link\b[^>]*href="\.\/src\/styles\/(?:tokens|notion)\.css[^"\n]*"[^>]*>\s*/g, "");
     await writeProductionStyles(path.join(webRoot, "src", "styles", "make.css"), path.join(outputRoot, "assets", "styles", "make.css"));
     html = html.replaceAll("./src/styles.css", "./assets/styles.css").replaceAll("./src/styles/make.css", "./assets/styles/make.css");
   } else {
     fs.cpSync(path.join(webRoot, "src"), path.join(outputRoot, "src"), { recursive: true });
+  }
+  for (const [, reference] of html.matchAll(/(?:src|href)="\.\/([^"?#]+)/g)) {
+    if (!fs.existsSync(path.join(outputRoot, reference))) {
+      throw new Error(`Built index.html references a missing file: ${reference}`);
+    }
   }
   fs.writeFileSync(path.join(outputRoot, "index.html"), html, "utf8");
   if (bundleMetafile) fs.writeFileSync(path.join(outputRoot, "bundle-metafile.json"), `${JSON.stringify(bundleMetafile, null, 2)}\n`, "utf8");
