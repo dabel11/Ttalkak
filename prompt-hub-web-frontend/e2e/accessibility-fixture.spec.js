@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 const AxeBuilder = require("@axe-core/playwright").default;
 
 async function expectAccessible(page, label) {
@@ -24,6 +24,7 @@ async function reachByTab(page, locator, { direction = "forward", maxTabs = 40 }
 test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA automated rules", async ({ page }) => {
   test.setTimeout(60_000);
   await gotoApp(page);
+  await waitForAppHydration(page);
   await expectAccessible(page, "Home");
 
   await page.locator('[data-open-auth="login"]').click();
@@ -50,6 +51,7 @@ test("Home, authentication, Share, Make and modal components satisfy WCAG A/AA a
 
 test("keyboard operation opens and closes authentication and enters Make with focus preserved", async ({ page }) => {
   await gotoApp(page);
+  await waitForAppHydration(page);
   const login = page.locator('[data-open-auth="login"]').first();
   await reachByTab(page, login);
   await page.keyboard.press("Enter");
@@ -70,6 +72,7 @@ test("keyboard operation opens and closes authentication and enters Make with fo
 
 test("Make field choices expose a single-select radio group and support arrow keys", async ({ page }) => {
   await gotoApp(page);
+  await waitForAppHydration(page);
   await page.locator('[data-route="make"]').first().click();
 
   const group = page.getByRole("radiogroup", { name: "프롬프트 분야" });
