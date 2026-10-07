@@ -21,7 +21,7 @@ import numpy as np
 from sqlalchemy import select
 
 from app.core.db import SessionLocal, RagChunk, init_db
-from app.core.embeddings import get_model, get_reranker
+from app.core.embeddings import embed_query, get_model, get_reranker, rerank_enabled
 from app.rag.layers import is_searchable
 
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
@@ -74,7 +74,9 @@ class Retriever:
         **_ignore,
     ):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)
-        self.model        = get_model(model_name)
+        # ⚠️ 임베딩 모델을 여기서 미리 로드하지 않는다(기동 OOM 방지). 쿼리 임베딩은
+        #    embed_query() 가 백엔드별로 처리(gemini=API, local=지연 로드).
+        self._model_name  = model_name
         self.use_reranker = use_reranker
         self.use_hybrid   = use_hybrid
         self.fetch_k      = fetch_k
@@ -84,7 +86,13 @@ class Retriever:
         self._reranker    = None  # 지연 로드
         self._bm25_cache  = {}    # {collection: (BM25Okapi, row_count)} — 토큰화 재사용
         init_db()
-        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid})")
+        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker and rerank_enabled()}, "
+              f"hybrid={use_hybrid})")
+
+    @property
+    def model(self):
+        """레거시 호환(eval 이 retriever.model.encode 를 직접 참조) — local 모델 지연 로드."""
+        return get_model(self._model_name)
 
     def search(
         self,
@@ -99,7 +107,9 @@ class Retriever:
         """min_score: dense 코사인 임계치. 이 값 미만은 top_k에서 제외(무관 꼬리 컷).
         측정(eval/score_analysis) 근거: 리랭커 확률은 정답/오답 분리가 안 되고(0.50 평탄),
         dense 는 분리됨 → 필터는 dense 기준. τ=0.40이면 recall 무손실·빈결과 0%."""
-        do_rerank = self.use_reranker if use_reranker is None else use_reranker
+        # 리랭커는 rerank_enabled() 로 한 번 더 게이트한다. 기본 백엔드(gemini)에선 OFF —
+        # bge-reranker 는 torch·~1.1GB 라 free RAM 에 못 올린다(RAG_RERANK=local 로만 켜짐).
+        do_rerank = (self.use_reranker if use_reranker is None else use_reranker) and rerank_enabled()
         do_hybrid = self.use_hybrid   if use_hybrid   is None else use_hybrid
         n_fetch   = fetch_k if fetch_k is not None else self.fetch_k
 
@@ -154,7 +164,7 @@ class Retriever:
         """행별 dense 코사인. 행이 검색뷰 벡터(`embedding_views`)를 갖고 있으면
         본문 벡터와 뷰 벡터 중 **최고 점수**를 그 행의 점수로 쓴다(멀티표현 max 풀링).
         뷰가 없는 행은 종전과 완전히 동일하다 — 본문 벡터 하나뿐이므로 max 가 곧 그 값."""
-        query_vec = np.asarray(self.model.encode([query])[0], dtype=np.float32)
+        query_vec = np.asarray(embed_query(query), dtype=np.float32)
 
         # 모든 벡터를 한 행렬로 펼치고, 각 벡터가 어느 행 소속인지 기록
         vectors: list = []

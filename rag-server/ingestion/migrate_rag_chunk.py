@@ -42,7 +42,6 @@ mysqldump 대안 (mysql 클라이언트가 있고 버전 호환이 맞을 때, �
 
 import argparse
 import json
-import sys
 from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, func, select

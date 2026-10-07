@@ -1,0 +1,9 @@
+# ── local 임베딩 백엔드 (EMBEDDING_BACKEND=local) — 개발/eval 전용 ──
+# 사용: pip install -r requirements-local.txt
+#   (CPU 전용 torch 를 쓰려면 먼저:
+#      pip install torch --index-url https://download.pytorch.org/whl/cpu )
+#
+# 배포 이미지(requirements.txt)에는 들어가지 않는다. bge-m3 + bge-reranker-v2-m3 를
+# 로컬에서 직접 돌려 Gemini 백엔드와 품질을 대조하거나 eval 을 재현할 때만 필요하다.
+-r requirements.txt
+sentence-transformers>=3.0.0   # torch(수 GB)를 끌어온다 — free RAM 에는 올릴 수 없음

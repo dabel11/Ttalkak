@@ -4004,3 +4004,33 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 - migrate 스크립트: 로컬 `dump` 301행(prompt_techniques 170 + prompt_examples 131, 임베딩 1024차원), 임시 컬렉션 `_migrate_selftest` 에 실제 `load` **2회 멱등**(중복 0)·document 왕복 정상·실데이터(170/131) 무결, `--dry-run` 연결·스키마·파싱 OK.
 
 **결정·근거**: CPU 휠 선설치가 가장 간단·견고(torch 버전 핀 불필요 — sentence-transformers 가 이미 만족분을 재설치 안 함). 모델 캐시 6.4GB 추가 정리(중복 포맷 제거)는 HF 캐시 symlink/blob 구조상 fragile 해 보류. 마이그레이션은 `ingestion/*` 재실행(API·`data/` 자산 필요) 대신 덤프/복원(무비용·결정적) 채택.
+
+---
+
+## [2026-10-07] 임베딩 백엔드 전환 — 로컬 bge-m3 → Gemini API (Railway free 기동 OOM 해결)
+**목적**: Railway free/trial(RAM 0.5~1GB) 배포가 **요청 시 연결 자체가 끊김**. 원인은 `app/main.py` 모듈 로드 시 `indexer = Indexer()`·`retriever = Retriever()` 가 기동 중 bge-m3(~1.5~2GB)+torch 를 동기 로드 → free RAM 초과로 **기동 OOM(프로세스 즉사, HTTP 시그널 없이 연결 끊김)**. `/health` 는 모델을 안 건드려 "배포 성공"처럼 보였다. free 기준 부합이 요구사항이라 로컬 모델을 런타임에서 제거해야 함.
+
+**Before**
+- `app/core/embeddings.py`: 최상단 `import torch` + `from sentence_transformers import ...` → **gemini 로 떠도** 모듈 import 만으로 torch(~수백 MB) 상주.
+- `Indexer.__init__`·`Retriever.__init__`: `get_model()` 로 bge-m3 **즉시 로드**(기동 중 ~1.5~2GB). 리랭커는 첫 `/query` 에 추가 로드(합 ~2.6GB).
+- 상주 RAM ~2.6GB·이미지 9.54GB → free(0.5~1GB) 불가, Hobby(8GB·유료) 전용.
+
+**After**
+- `embeddings.py`: `EMBEDDING_BACKEND`(gemini 기본|local) 분기. **gemini**=`client.models.embed_content`(google-genai, 기존 `GEMINI_API_KEY` 재사용, 문서=RETRIEVAL_DOCUMENT / 쿼리=RETRIEVAL_QUERY 비대칭, `EMBEDDING_DIM` 기본 768). torch·sentence-transformers 는 **local 경로에서만 지연 import** → gemini 로 뜨면 torch 미로드. 공개 API `embed_documents()`·`embed_query()`·`rerank_enabled()` 신설.
+- `indexer.py`·`retriever.py`: 기동 중 모델 선로드 제거(쿼리=`embed_query`, 적재=`embed_documents`). eval/ingestion 레거시 호환용 `model` 지연 property 유지.
+- 리랭커: 기본 **OFF**(bge-reranker ~1.1GB+torch → free RAM 불가). `RAG_RERANK=local` 로만 복구(향후 외부 rerank API 지점).
+- `requirements.txt`: sentence-transformers 제거 → 이미지 ~1GB 미만. 신규 `requirements-local.txt`(local 백엔드·eval 용).
+- `Dockerfile`: torch 설치·모델 번들링·HF 캐시 전부 제거. `CMD` 를 `$PORT` 바인딩으로(Railway 라우팅 — 미사용 시 연결 끊김의 2차 원인). `railway.json` startCommand 동일.
+- 신규 `ingestion/reembed.py`: 백엔드 전환 시 `rag_chunk`(본문+검색뷰)를 현재 백엔드로 **재임베딩**(멱등·배치). bge-m3(1024d)↔Gemini(768d) 벡터 공간 불일치 해소.
+- `ingestion/migrate_rag_chunk.py`: 미사용 `import sys` 제거(기존 CI F401 그린 유지).
+
+**변경 파일**: `app/core/embeddings.py`·`app/rag/indexer.py`·`app/rag/retriever.py`·`requirements.txt`·`Dockerfile`·`railway.json`·`.env.example`(수정) · 신규 `requirements-local.txt`·`ingestion/reembed.py` · `ingestion/migrate_rag_chunk.py`(정리) · `WORKLOG.md`
+
+**검증**
+- 단위(스텁 SDK): `import app.core.embeddings` 후 `torch`·`sentence_transformers` **미로드** 확인(기동 OOM 원인 제거). gemini 분기 — 쿼리/문서 task_type 정확, 개수·순서 보존, 100 초과 배치 분할, 빈 입력 처리.
+- CI 게이트 `ruff --select F821,F401,F811,E9 app eval ingestion tests` 그린 · `pytest` **266 passed**.
+- ⏳ **미실행(사용자 환경 필요)**: 실 Gemini 키로 `/query` 왕복, `docker build` 실측 이미지 크기, 실 DB `reembed.py` 재임베딩.
+
+**배포 체크리스트(사용자)**: ① Railway env `EMBEDDING_BACKEND=gemini`·`GEMINI_API_KEY` 설정 → ② 재배포(이미지 ~1GB, 기동 시 모델 로드 없음) → ③ `python -m ingestion.reembed` 로 코퍼스 재임베딩(기존 bge-m3 벡터 무효화 해소) → ④ `min_score`/`RAG_GATE_MIN_SCORE` 를 eval 로 재보정(Gemini 코사인 분포가 bge-m3 와 다름 — 미보정 시 정상 쿼리가 404 나거나 무관 통과 가능).
+
+**결정·근거**: free 기준(RAM 0.5~1GB·볼륨 0.5GB)에서 bge-m3(~1.5GB)+리랭커(~1.1GB)는 물리적으로 불가 → "free + 현 품질" 양립 불가. 로컬 모델 제거가 전제. BM25 전용(품질 하락 큼)·외부 임베딩 API(품질 유지, 소액 비용) 중 **후자 채택**(사용자 선택). `google-genai` 가 이미 생성기 의존성이라 신규 SDK·키 불필요. 리랭커는 free RAM 에 못 올려 기본 OFF.

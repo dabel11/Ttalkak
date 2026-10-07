@@ -1,9 +1,13 @@
 # ── 서버 런타임 (app/) — Docker 이미지에 설치되는 것 ──
 # 오프라인 적재/크롤링 의존성은 requirements-ingestion.txt 로 분리
+#
+# ⚠️ sentence-transformers·torch 는 여기서 뺐다(2026-10-07). 기본 임베딩 백엔드가 Gemini
+#    API(google-genai)로 바뀌어 런타임에 로컬 모델이 불필요하다. torch(~수백 MB)+bge-m3
+#    (~2GB)를 기동 중 올리던 것이 Railway free/trial(RAM 0.5~1GB) 기동 OOM 의 원인이었다.
+#    local 백엔드(EMBEDDING_BACKEND=local)로 bge-m3 를 쓰려면 requirements-local.txt 를 설치.
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
-sentence-transformers>=3.0.0
-google-genai>=1.0.0
+google-genai>=1.0.0   # 생성(Gemini)·임베딩(gemini-embedding-001) 공용
 groq>=0.11.0
 pydantic>=2.0.0
 python-dotenv>=1.0.0

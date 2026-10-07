@@ -13,16 +13,24 @@ upsert(있으면 갱신, 없으면 삽입)하고, chunk_id가 없으면 매번 �
 from sqlalchemy import delete, select
 
 from app.core.db import SessionLocal, RagChunk, init_db
-from app.core.embeddings import get_model
+from app.core.embeddings import embed_documents, get_model
 from app.rag.views import build_search_views
 
 
 class Indexer:
     def __init__(self, model_name: str = "BAAI/bge-m3", **_ignore):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)
-        self.model = get_model(model_name)
+        # ⚠️ 임베딩 모델을 여기서 미리 로드하지 않는다 — gemini 백엔드는 로컬 모델이 없고,
+        #    local 백엔드라도 기동 중 수 GB 로드로 free RAM OOM 을 유발한다. 실제 임베딩은
+        #    index() 에서 embed_documents() 가 백엔드별로 처리한다(gemini=API, local=지연 로드).
+        self._model_name = model_name
         init_db()  # rag_chunk 테이블 보장
         print("[Indexer] 준비 완료 (MySQL)")
+
+    @property
+    def model(self):
+        """레거시 호환(ingestion/eval 이 indexer.model 을 직접 참조) — local 모델 지연 로드."""
+        return get_model(self._model_name)
 
     def index(
         self,
@@ -45,9 +53,8 @@ class Indexer:
 
         print(f"[Indexer] {len(chunks)}개 청크 임베딩 중"
               f"{f' (+검색뷰 {len(flat_views)}개)' if flat_views else ''}...")
-        vectors = self.model.encode(chunks, batch_size=32, show_progress_bar=True)
-        view_vectors = (self.model.encode(flat_views, batch_size=32).tolist()
-                        if flat_views else [])
+        vectors = embed_documents(chunks)
+        view_vectors = embed_documents(flat_views) if flat_views else []
 
         # 평탄화한 뷰 벡터를 청크별로 되돌린다
         grouped_views, cursor = [], 0
@@ -57,7 +64,7 @@ class Indexer:
 
         count = 0
         with SessionLocal() as session:
-            for doc, meta, vec, views in zip(chunks, metas, vectors.tolist(), grouped_views):
+            for doc, meta, vec, views in zip(chunks, metas, vectors, grouped_views):
                 cid = meta.get("chunk_id")
                 row = None
                 if cid:
