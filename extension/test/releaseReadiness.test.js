@@ -8,6 +8,7 @@ import { validateProductionArtifact, validateReleaseConfiguration, verifyCors, v
 const valid = {
   TTALKAK_PRODUCTION_EXTENSION_ID: "abcdefghijklmnopabcdefghijklmnop",
   VITE_BACKEND_API_URL: "https://api.ttalkak.example.kr",
+  VITE_WEB_APP_URL: "https://web.ttalkak.example.kr",
   TTALKAK_SUPPORT_URL: "https://support.ttalkak.example.kr",
   TTALKAK_PRIVACY_POLICY_URL: "https://www.ttalkak.example.kr/privacy",
   TTALKAK_RELEASE_OWNER: "frontend-team",
@@ -17,6 +18,7 @@ test("release configuration rejects missing placeholders and accepts explicit pr
   assert.throws(() => validateReleaseConfiguration({}), /PRODUCTION_EXTENSION_ID/);
   assert.throws(() => validateReleaseConfiguration({ ...valid, VITE_BACKEND_API_URL: "http://localhost:8080" }));
   assert.equal(validateReleaseConfiguration(valid).origin, "chrome-extension://abcdefghijklmnopabcdefghijklmnop");
+  assert.equal(validateReleaseConfiguration(valid).webAppUrl, valid.VITE_WEB_APP_URL);
 });
 
 test("release public-page gate requires reachable privacy and support pages", async () => {

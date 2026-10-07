@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { assertProductionBackendApiUrl } from "./build-policy.mjs";
+import { assertProductionBackendApiUrl, assertProductionWebAppUrl } from "./build-policy.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXTENSION_ID_PATTERN = /^[a-p]{32}$/;
@@ -9,11 +9,13 @@ const EXTENSION_ID_PATTERN = /^[a-p]{32}$/;
 export function validateReleaseConfiguration(env = process.env) {
   const extensionId = String(env.TTALKAK_PRODUCTION_EXTENSION_ID || "").trim();
   const backendApiUrl = String(env.VITE_BACKEND_API_URL || "").trim();
+  const webAppUrl = String(env.VITE_WEB_APP_URL || "").trim();
   const supportUrl = String(env.TTALKAK_SUPPORT_URL || "").trim();
   const privacyPolicyUrl = String(env.TTALKAK_PRIVACY_POLICY_URL || "").trim();
   const releaseOwner = String(env.TTALKAK_RELEASE_OWNER || "").trim();
   if (!EXTENSION_ID_PATTERN.test(extensionId)) throw new Error("TTALKAK_PRODUCTION_EXTENSION_ID must be the 32-character Chrome Web Store ID.");
   assertProductionBackendApiUrl("production", backendApiUrl, false);
+  assertProductionWebAppUrl("production", webAppUrl, false);
   for (const [name, value] of [["TTALKAK_PRIVACY_POLICY_URL", privacyPolicyUrl], ["TTALKAK_SUPPORT_URL", supportUrl]]) {
     let hostname = "";
     try { hostname = new URL(value).hostname.replace(/\.$/, "").toLowerCase(); } catch { /* handled below */ }
@@ -22,7 +24,7 @@ export function validateReleaseConfiguration(env = process.env) {
     }
   }
   if (!releaseOwner) throw new Error("TTALKAK_RELEASE_OWNER is required.");
-  return { backendApiUrl, extensionId, origin: `chrome-extension://${extensionId}`, privacyPolicyUrl, releaseOwner, supportUrl };
+  return { backendApiUrl, extensionId, origin: `chrome-extension://${extensionId}`, privacyPolicyUrl, releaseOwner, supportUrl, webAppUrl };
 }
 
 export function validateProductionArtifact(config, distDir = path.join(root, "dist-prod")) {

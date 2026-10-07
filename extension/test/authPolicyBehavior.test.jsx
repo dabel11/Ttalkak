@@ -32,6 +32,7 @@ vi.mock("../src/storage/extensionStorage", () => ({
 
 import { AuthModal } from "../src/components/AuthModal";
 import { ConfirmModal } from "../src/components/ConfirmModal";
+import { Header } from "../src/components/Header";
 import { useAuth } from "../src/hooks/useAuth";
 import { STORAGE } from "../src/constants";
 
@@ -90,6 +91,54 @@ test("extension dialogs trap keyboard focus, close with Escape, and restore the 
   view.unmount();
   await waitFor(() => expect(opener).toBe(globalThis.document.activeElement));
   opener.remove();
+});
+
+describe("account menu accessibility and usage status", () => {
+  function renderHeader(overrides = {}) {
+    const props = {
+      currentUser: "member",
+      onLogin: vi.fn(),
+      onLogout: vi.fn(),
+      onOpenBilling: vi.fn(),
+      onRetryUsage: vi.fn(),
+      onWithdraw: vi.fn(),
+      ragStatus: "connected",
+      usage: { plan: "PRO", totalTokens: 1_234, limitTokens: 1_000_000 },
+      usageStatus: "ready",
+      ...overrides,
+    };
+    render(createElement(Header, props));
+    return props;
+  }
+
+  test("Escape closes the account menu and restores its trigger", async () => {
+    renderHeader();
+    const trigger = screen.getByRole("button", { name: "계정" });
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    screen.getByRole("menuitem", { name: "로그아웃" }).focus();
+    fireEvent.keyDown(globalThis.document, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(trigger));
+    expect(screen.getByRole("menu", { hidden: true }).getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("shows current token usage and opens web plan management", () => {
+    const props = renderHeader();
+    fireEvent.click(screen.getByRole("button", { name: "계정" }));
+    expect(screen.getByText("PRO")).toBeTruthy();
+    expect(screen.getByText("1,234 / 1,000,000 토큰")).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "요금제·사용량" }));
+    expect(props.onOpenBilling).toHaveBeenCalledOnce();
+  });
+
+  test("announces usage failures and offers a retry", () => {
+    const props = renderHeader({ usage: null, usageStatus: "error" });
+    fireEvent.click(screen.getByRole("button", { name: "계정" }));
+    expect(screen.getByRole("status").textContent).toContain("사용량을 불러오지 못했습니다.");
+    fireEvent.click(screen.getByRole("menuitem", { name: "사용량 다시 확인" }));
+    expect(props.onRetryUsage).toHaveBeenCalledOnce();
+  });
 });
 
 async function completeSignupForm() {

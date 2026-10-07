@@ -525,7 +525,7 @@ Because Chrome isolates extension storage by Extension ID, conversations and set
 
 #### Backend Setting
 
-Backend API URL is managed in one place through `VITE_BACKEND_API_URL`.
+Backend API and web account URLs are managed through `VITE_BACKEND_API_URL` and `VITE_WEB_APP_URL`.
 
 Development:
 
@@ -537,6 +537,7 @@ Production:
 
 ```text
 Set VITE_BACKEND_API_URL to the Spring Boot HTTPS production URL.
+Set VITE_WEB_APP_URL to the public TTALKAK web HTTPS URL.
 ```
 
 The extension calls:
@@ -556,14 +557,14 @@ Frontend-wide deployment configuration, API change, response fixture, user copy,
 
 For production packaging:
 
-1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL.
+1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL and `VITE_WEB_APP_URL` to the public TTALKAK web HTTPS URL.
 2. The build replaces `https://SPRING_BOOT_PRODUCTION_HOST/*` in the production manifest template with the same production host.
 3. Package the generated `extension/dist-prod` directory.
 4. Do not include `http://localhost:8080/*` or `http://127.0.0.1:8080/*` in the production manifest.
 5. Keep ChatGPT, Gemini, and Claude host permissions while Execute is supported.
-6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
+6. Build the production package with both URL variables set, then run `npm run build:prod`.
 
-Production builds fail fast when `VITE_BACKEND_API_URL` is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development always targets `http://localhost:8080` in `dist-dev` even if a production URL remains in the shell environment.
+Production builds fail fast when either URL is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development targets `http://localhost:8080` and `http://localhost:4200` in `dist-dev`.
 
 #### Production Extension ID
 

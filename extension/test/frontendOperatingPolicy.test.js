@@ -20,6 +20,7 @@ test("frontend operating policies retain every required decision area", () => {
   }
   assert.match(policies, /PowerShell:.*VITE_BACKEND_API_URL/);
   assert.match(policies, /POSIX:.*VITE_BACKEND_API_URL/);
+  assert.match(policies, /VITE_WEB_APP_URL/);
 });
 
 test("release documentation remains discoverable and cross-platform", () => {
@@ -29,11 +30,12 @@ test("release documentation remains discoverable and cross-platform", () => {
   assert.match(releaseChecklist, /^## Production smoke$/m);
   assert.match(releaseChecklist, /PowerShell:.*VITE_BACKEND_API_URL/);
   assert.match(releaseChecklist, /POSIX:.*VITE_BACKEND_API_URL/);
+  assert.match(releaseChecklist, /VITE_WEB_APP_URL/);
 });
 
 test("release checklist requires the live GitHub production smoke before publishing", () => {
   assert.match(releaseChecklist, /Extension production release smoke/);
-  for (const input of ["backend_api_url", "extension_id", "privacy_policy_url", "support_url", "release_owner"]) {
+  for (const input of ["backend_api_url", "web_app_url", "extension_id", "privacy_policy_url", "support_url", "release_owner"]) {
     assert.match(releaseWorkflow, new RegExp(`${input}:`));
   }
   assert.match(releaseWorkflow, /npm run release:prepare/);
