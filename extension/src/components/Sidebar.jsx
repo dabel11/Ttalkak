@@ -12,9 +12,12 @@ export function Sidebar({
   savedItems,
   recentItems,
   activeRecentId,
+  savedStatus,
   isSaved,
+  isSavePending,
   onOpenPrompt,
   onSavePrompt,
+  onRetrySaved,
   onOpenRecentThread,
   onDeleteSaved,
   onDeleteRecent,
@@ -44,7 +47,7 @@ export function Sidebar({
         <TabButton id="saved" activeTab={activeTab} onClick={selectTab} icon={<Save size={15} />} label="보관함" />
         <TabButton id="recents" activeTab={activeTab} onClick={selectTab} icon={<Clock3 size={15} />} label="최근" />
       </nav>
-      <div className="sidebar-content">
+      <div className="sidebar-content" inert={collapsed ? true : undefined} aria-hidden={collapsed ? "true" : undefined}>
         <label className="search-input">
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} aria-label={placeholder} />
         </label>
@@ -54,18 +57,30 @@ export function Sidebar({
             emptyText="검색할 수 있는 프롬프트가 없습니다."
             mode="search"
             isSaved={isSaved}
+            isSavePending={isSavePending}
             onOpenPrompt={onOpenPrompt}
             onSavePrompt={onSavePrompt}
           />
         )}
         {activeTab === "saved" && (
-          <PromptList
-            items={savedItems}
-            emptyText="저장한 프롬프트가 없습니다."
-            mode="saved"
-            onOpenPrompt={onOpenPrompt}
-            onDelete={onDeleteSaved}
-          />
+          <>
+            {savedStatus === "loading" && <div className="sidebar-state" role="status" aria-live="polite">보관함을 불러오는 중…</div>}
+            {savedStatus === "error" && (
+              <div className="sidebar-state error" role="alert">
+                <p>서버 보관함을 불러오지 못했습니다.</p>
+                <button type="button" onClick={onRetrySaved}>다시 시도</button>
+              </div>
+            )}
+            {(savedStatus !== "loading" || savedItems.length > 0) && (
+              <PromptList
+                items={savedItems}
+                emptyText="저장한 프롬프트가 없습니다."
+                mode="saved"
+                onOpenPrompt={onOpenPrompt}
+                onDelete={onDeleteSaved}
+              />
+            )}
+          </>
         )}
         {activeTab === "recents" && <RecentList items={recentItems} activeId={activeRecentId} onOpenThread={onOpenRecentThread} onDelete={onDeleteRecent} />}
       </div>

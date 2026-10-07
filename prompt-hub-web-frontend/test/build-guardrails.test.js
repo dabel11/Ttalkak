@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { assertBundleBudgets } = require("../../scripts/check-web-bundle-size.cjs");
+const { assertBundleBudgets, collectAssetSizes } = require("../../scripts/check-web-bundle-size.cjs");
 const { assertLegacyGlobalBaseline, auditLegacyGlobals } = require("../../scripts/check-web-legacy-globals.cjs");
 const { assertConsoleWarningBoundary } = require("../../scripts/check-web-observability.cjs");
 const { assertLocalReference, isBundleInput } = require("../../scripts/create-web-bundle-report.cjs");
@@ -24,6 +24,17 @@ test("Playwright isolates local fixture and production servers", () => {
   assert.match(productionConfig, /TTALKAK_E2E_PROD_PORT/);
   assert.match(productionConfig, /4175/);
   assert.match(productionConfig, /reuseExistingServer:\s*false/);
+});
+
+test("web container copies every local asset referenced by index.html before building", () => {
+  const indexHtml = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
+  const dockerfile = fs.readFileSync(path.resolve(__dirname, "../../docker/web.Dockerfile"), "utf8");
+  assert.match(indexHtml, /\.\/assets\/fonts\/pretendard-dynamic-subset\.css/);
+  assert.match(dockerfile, /COPY prompt-hub-web-frontend\/assets \.\/prompt-hub-web-frontend\/assets/);
+  assert.ok(
+    dockerfile.indexOf("COPY prompt-hub-web-frontend/assets") < dockerfile.indexOf("RUN cd prompt-hub-web-frontend && npm run build:prod"),
+    "web assets must be copied before the production build validates index.html",
+  );
 });
 
 test("production build excludes optional demo data while development keeps lazy loading", () => {
@@ -49,6 +60,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /format:\s*\{\s*comments:\s*false/);
   assert.match(build, /compressionPolicy: production \? productionCompressionPolicy : null/);
   assert.match(build, /replace\(\/>\\\\n\\s\+\/g/);
+  assert.match(build, /Terser cleanup produced no output/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
   assert.match(build, /async function writeProductionStyles/);
   assert.match(build, /loader:\s*["']css["']/);
@@ -58,6 +70,8 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /globalThis\.TTALKAK_PRODUCTION_BUILD["']?:\s*["']true["']/);
   assert.match(build, /Production bundle must not contain the development-only demo data chunk/);
   assert.match(build, /Production bundle must not contain development-only demo seed records/);
+  assert.match(build, /Production bundle must not contain development-only library controls/);
+  assert.match(build, /Production bundle must not contain development-only reset controls/);
   assert.match(build, /charset:\s*["']utf8["']/);
   assert.match(build, /chunkNames:\s*["']chunks\//);
   assert.match(build, /bundle-metafile\.json/);
@@ -76,9 +90,14 @@ test("persisted state envelope stays stable while internal state properties are 
   assert.match(persistence, /parsed\[["']popularPrompts["']\]/);
   assert.match(persistence, /["']commentsByPrompt["']\s*:/);
   assert.match(persistence, /parsed\[["']commentsByPrompt["']\]/);
+  ["isLoggedIn", "currentUser", "recentThreads", "activeThreadId", "composerDraft"].forEach((key) => {
+    assert.match(persistence, new RegExp(`["']${key}["']\\s*:`));
+    assert.match(persistence, new RegExp(`stored\\(["']${key}["']\\)`));
+    assert.doesNotMatch(persistence, new RegExp(`savedState\\.${key}\\b`));
+  });
 });
 
-test("production renderers share the Admin, Make, and Share runtime chunks", () => {
+test("production renderers keep primary and secondary runtime chunks outside the initial entry", () => {
   const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
   const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
   ["admin-panels.mjs", "pages/admin-page.mjs", "pages/make-message-parts.mjs", "pages/make-page.mjs", "pages/share-page.mjs"].forEach((file) => {
@@ -86,16 +105,20 @@ test("production renderers share the Admin, Make, and Share runtime chunks", () 
   });
   assert.match(loader, /admin: \(\) => import\(["']\.\.\/admin\/admin-runtime\.mjs["']\)/);
   assert.match(loader, /make: \(\) => import\(["']\.\.\/make\/make-runtime\.mjs["']\)/);
-  assert.match(loader, /share: \(\) => import\(["']\.\.\/share\/share-runtime\.mjs["']\)/);
+  ["overlays", "saved", "share"].forEach((route) => {
+    assert.match(loader, new RegExp(`${route}: \\(\\) => import\\(["']\\.\\/secondary-runtime\\.mjs["']\\)`));
+  });
   const runtimeSources = {
     admin: fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8"),
     make: fs.readFileSync(path.resolve(__dirname, "../src/make/make-runtime.mjs"), "utf8"),
-    share: fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8"),
+    secondary: fs.readFileSync(path.resolve(__dirname, "../src/renderers/secondary-runtime.mjs"), "utf8"),
   };
   assert.match(runtimeSources.admin, /renderers\/pages\/admin-page\.mjs/);
   assert.match(runtimeSources.admin, /renderers\/admin-panels\.mjs/);
   assert.match(runtimeSources.make, /renderers\/pages\/make-page\.mjs/);
-  assert.match(runtimeSources.share, /renderers\/pages\/share-page\.mjs/);
+  assert.match(runtimeSources.secondary, /pages\/share-page\.mjs/);
+  assert.match(runtimeSources.secondary, /pages\/saved-page\.mjs/);
+  assert.match(runtimeSources.secondary, /auth-modal\.mjs/);
 });
 
 test("auth, prompt overlays, and Saved renderers stay outside the initial renderer entry", () => {
@@ -104,8 +127,8 @@ test("auth, prompt overlays, and Saved renderers stay outside the initial render
   ["auth-modal.mjs", "modal-renderers.mjs", "prompt-modals.mjs", "pages/saved-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(file.replaceAll(".", "\\.")));
   });
-  assert.match(loader, /overlays: \(\) => import\(["']\.\/overlay-runtime\.mjs["']\)/);
-  assert.match(loader, /saved: \(\) => import\(["']\.\/saved-runtime\.mjs["']\)/);
+  assert.match(loader, /overlays: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
+  assert.match(loader, /saved: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
   assert.match(app, /event\.detail\?\.route === ["']overlays["']/);
 });
@@ -118,11 +141,11 @@ test("Admin controller view and events load only through the Admin runtime chunk
   assert.match(adminEntry, /loadAdminRuntime/);
 });
 
-test("Share controller and events load only through the Share runtime chunk", () => {
+test("Share controller and events load only through the secondary runtime chunk", () => {
   const shareEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/index.js"), "utf8");
-  assert.match(shareEntry, /import\(["']\.\/share-runtime\.mjs["']\)/);
-  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8");
-  ["share-controller.mjs", "share-events.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
+  assert.match(shareEntry, /import\(["']\.\.\/renderers\/secondary-runtime\.mjs["']\)/);
+  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/secondary-runtime.mjs"), "utf8");
+  ["share-controller.mjs", "share-events.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\.\\.\\/share\\/${file}["']`)));
   assert.match(shareEntry, /loadShareRuntime/);
 });
 
@@ -146,12 +169,39 @@ test("Make styles are declared but not loaded before the Make route", () => {
   assert.doesNotMatch(html, /<link[^>]+href=["'][^"']*make\.css/);
 });
 
+test("production build combines design styles in source order and publishes local font assets", () => {
+  const html = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
+  const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
+  assert.match(html, /src\/styles\/tokens\.css/);
+  assert.match(html, /src\/styles\/notion\.css/);
+  assert.match(build, /writeProductionStyles\([^\n]+styles\.css[^\n]*\r?\n\s*\[path\.join\(webRoot, "src", "styles", "tokens\.css"\)\],\r?\n\s*\[path\.join\(webRoot, "src", "styles", "notion\.css"\)\]\)/);
+  assert.ok(build.includes("html = html.replace(/<link\\b"));
+  assert.ok(build.includes("(?:tokens|notion)\\.css"));
+  assert.doesNotMatch(build, /writeProductionStyles\(path\.join\(webRoot, "src", "styles", "(?:tokens|notion)\.css"\),/);
+  assert.match(html, /assets\/fonts\/pretendard-dynamic-subset\.css/);
+  assert.match(build, /copyDirectory\(path\.join\(webRoot, "assets", "fonts"\)/);
+});
+
 test("bundle budgets accept values at the limit and reject regressions", () => {
   const budgets = { javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { rawBytes: 8, gzipBytes: 4 } };
   assert.doesNotThrow(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets));
   assert.throws(() => assertBundleBudgets({ javascript: { files: 2, rawBytes: 10, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 1, rawBytes: 11, gzipBytes: 5 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.rawBytes/);
   assert.throws(() => assertBundleBudgets({ javascript: { files: 0, rawBytes: 0, gzipBytes: 0 }, styles: { files: 1, rawBytes: 8, gzipBytes: 4 } }, budgets), /javascript\.files: required asset is missing/);
+});
+
+test("bundle budgets track font declarations separately from component styles", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ttalkak-bundle-assets-"));
+  try {
+    fs.mkdirSync(path.join(root, "fonts"));
+    fs.writeFileSync(path.join(root, "styles.css"), "body{color:#111}");
+    fs.writeFileSync(path.join(root, "fonts", "pretendard.css"), "@font-face{font-family:Pretendard}");
+    const totals = collectAssetSizes(root);
+    assert.equal(totals.styles.files, 1);
+    assert.equal(totals.fontStyles.files, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("bundle reference permits unrelated commits and rejects stale bundle inputs", () => {

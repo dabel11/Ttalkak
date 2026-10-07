@@ -14,14 +14,14 @@ test("Home defers Share and Make chunks until their routes are opened", async ({
   });
 
   await gotoApp(page);
-  expect(routeChunkRequested(scripts, "share")).toBe(false);
+  expect(routeChunkRequested(scripts, "secondary")).toBe(false);
   expect(routeChunkRequested(scripts, "make")).toBe(false);
   expect(routeChunkRequested(scripts, "admin")).toBe(false);
   expect(styles.some((url) => new URL(url).pathname.endsWith("/assets/styles/make.css"))).toBe(false);
 
   await page.locator('[data-route="share"]').first().click();
   await expect(page.locator(".share-page")).toBeVisible();
-  expect(routeChunkRequested(scripts, "share")).toBe(true);
+  expect(routeChunkRequested(scripts, "secondary")).toBe(true);
 
   await page.locator('[data-route="make"]').first().click();
   await expect(page.locator(".make-page")).toBeVisible();

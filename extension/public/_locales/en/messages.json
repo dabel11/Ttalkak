@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "TTALKAK",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "TTALKAK Chrome side panel for improving prompts and sending them to AI tools",
+    "description": "Description shown in the Chrome Web Store and extension manager"
+  }
+}

@@ -1,3 +1,5 @@
+import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
+
   "use strict";
   function createAuthView(ctx) {
     const { state, AuthModalView, escapeAttr, escapeHtml } = ctx;
@@ -19,7 +21,7 @@
       }
 
       return AuthModalView(
-        { icons, escapeAttr, escapeHtml },
+        { icons, escapeAttr, escapeHtml, accountWithdrawalNotice: ACCOUNT_WITHDRAWAL_NOTICE },
         {
           title,
           authError,

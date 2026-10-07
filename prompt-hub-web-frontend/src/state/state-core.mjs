@@ -9,6 +9,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     route: "home",
     authView: null,
     billingOpen: false,
+    pendingBillingOpen: false,
     detailPromptId: null,
     detailHighlightCommentId: null,
     reportPromptId: null,
@@ -42,6 +43,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     currentUser: null,
     currentUserId: null,
     currentUserRole: "user",
+    currentUserProvider: "",
     authToken: "",
     token: "",
     accountScopes: {},
@@ -110,6 +112,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     composerDraft: "",
     templateCollapsed: false,
     mobileTemplateExpanded: false,
+    makeDrawerOpen: false,
     shareDraft: null,
     savedFilter: { community: true, mine: true, liked: false },
     messages: [],
@@ -219,11 +222,12 @@ function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
 }
 
 
-function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string}, token: string}} */ authResult) {
+function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string, provider?: string}, token: string}} */ authResult) {
   state.isLoggedIn = true;
   state.currentUser = authResult.user.nickname;
   state.currentUserId = authResult.user.id;
   state.currentUserRole = authResult.user.role || "user";
+  state.currentUserProvider = authResult.user.provider || "";
   state.authToken = authResult.token;
   state.token = authResult.token;
   state.adminMode = state.currentUserRole === "admin";
@@ -236,6 +240,7 @@ function clearAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ 
   state.currentUser = null;
   state.currentUserId = null;
   state.currentUserRole = "user";
+  state.currentUserProvider = "";
   state.authToken = "";
   state.token = "";
 }
@@ -313,6 +318,7 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   state.adminMode = false;
   state.authView = null;
   state.billingOpen = false;
+  state.pendingBillingOpen = false;
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);

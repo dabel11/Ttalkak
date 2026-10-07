@@ -24,7 +24,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
-    show-sql: ${JPA_SHOW_SQL:true}
+    show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
@@ -33,9 +33,16 @@ rag:
   server-url: ${RAG_SERVER_URL:http://localhost:8000}
   response-timeout: ${RAG_RESPONSE_TIMEOUT:75s}
 ttalkak:
+  usage:
+    quota-enabled: ${MEMBER_QUOTA_ENABLED:false}
+    free-token-limit: ${FREE_TOKEN_LIMIT:0}
+    pro-token-limit: ${PRO_TOKEN_LIMIT:0}
   auth:
     password-reset-enabled: ${PASSWORD_RESET_ENABLED:false}
     mail-from: ${AUTH_MAIL_FROM:}
+    mail-transport: ${AUTH_MAIL_TRANSPORT:smtp}
+    mail-test-recipient: ${AUTH_MAIL_TEST_RECIPIENT:}
+    resend-api-key: ${RESEND_API_KEY:}
   cors:
     allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,chrome-extension://djbhhlahjhaeccghbnajnhmbcdilccmn}"
 
