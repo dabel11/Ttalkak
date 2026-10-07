@@ -487,3 +487,26 @@ test("billing renders the backend used limit remaining contract without treating
   assert.match(html, /참고 한도에 도달/);
   assert.doesNotMatch(html, /이번 이용 기간의 토큰을 모두 사용/);
 });
+
+test("billing explains when the displayed token usage is not fully aggregated", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const controller = createController({
+    state,
+    getToken: () => "member-token",
+    isDemoToken: () => false,
+    render() {},
+    escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+      getUsageStatus: async () => ({
+        plan: "FREE", used: 2400, limit: 100000, remaining: 97600, usageAvailable: false, usageBlocked: false,
+      }),
+    },
+  });
+
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /2,400개 \/ 100,000개 · 집계 중/);
+  assert.doesNotMatch(html, /사용량 확인 중에는 요청할 수 없습니다/);
+});

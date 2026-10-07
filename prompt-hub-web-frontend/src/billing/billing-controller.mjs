@@ -21,7 +21,7 @@ function BillingModalView(ctx, data) {
   const period = usage?.periodStart && usage?.periodEnd
     ? `${escapeHtml(formatShortDate(usage.periodStart))} ~ ${escapeHtml(formatShortDate(usage.periodEnd))}`
     : "확인 중";
-  const usageValue = `${formatTokenCount(usage?.totalTokens)}${usage?.limitTokens == null ? "" : ` / ${formatTokenCount(usage.limitTokens)}`}`;
+  const usageValue = `${formatTokenCount(usage?.totalTokens)}${usage?.limitTokens == null ? "" : ` / ${formatTokenCount(usage.limitTokens)}`}${usage && !usage.usageAvailable && !usage.usageBlocked ? " · 집계 중" : ""}`;
   return `<div class="modal-backdrop visible billing-backdrop" role="dialog" aria-modal="true" aria-labelledby="billing-title">
     <article class="modal billing-modal">
       <div class="modal-head"><h2 id="billing-title">요금제·결제</h2><button class="ghost-icon" type="button" data-close-billing aria-label="닫기">×</button></div>

@@ -40,4 +40,7 @@ test("release checklist requires the live GitHub production smoke before publish
   }
   assert.match(releaseWorkflow, /npm run release:prepare/);
   assert.match(releaseWorkflow, /extension\/dist-prod\//);
+  assert.match(releaseWorkflow, /default: https:\/\/web-production-a82d94\.up\.railway\.app/);
+  assert.match(releaseWorkflow, /default: https:\/\/github\.com\/dabel11\/Ttalkak\/issues/);
+  assert.match(releaseWorkflow, /default: https:\/\/docs\.google\.com\/document\/d\/e\//);
 });

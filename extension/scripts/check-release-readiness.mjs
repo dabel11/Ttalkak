@@ -40,21 +40,29 @@ export function validateProductionArtifact(config, distDir = path.join(root, "di
 }
 
 export async function verifyCors(config, fetchImpl = globalThis.fetch) {
-  const response = await fetchImpl(`${config.backendApiUrl.replace(/\/$/, "")}/api/prompts/improve`, {
-    method: "OPTIONS",
-    headers: {
-      Origin: config.origin,
-      "Access-Control-Request-Method": "POST",
-      "Access-Control-Request-Headers": "authorization,content-type,x-session-uuid",
-    },
-  });
-  const allowOrigin = response.headers.get("access-control-allow-origin");
-  const allowMethods = response.headers.get("access-control-allow-methods") || "";
-  const allowHeaders = response.headers.get("access-control-allow-headers") || "";
-  const allowCredentials = response.headers.get("access-control-allow-credentials");
-  if (!response.ok || allowOrigin !== config.origin) throw new Error(`CORS preflight rejected ${config.origin}.`);
-  if (!/\bPOST\b/i.test(allowMethods) || !/authorization/i.test(allowHeaders) || !/content-type/i.test(allowHeaders) || !/x-session-uuid/i.test(allowHeaders)) throw new Error("CORS preflight does not allow the required method and headers.");
-  if (String(allowCredentials).toLowerCase() !== "true") throw new Error("CORS preflight must allow credentials.");
+  const checks = [
+    { path: "/api/prompts/improve", method: "POST", headers: ["authorization", "content-type", "x-session-uuid"] },
+    { path: "/api/me/usage", method: "GET", headers: ["authorization"] },
+  ];
+  for (const check of checks) {
+    const response = await fetchImpl(`${config.backendApiUrl.replace(/\/$/, "")}${check.path}`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: config.origin,
+        "Access-Control-Request-Method": check.method,
+        "Access-Control-Request-Headers": check.headers.join(","),
+      },
+    });
+    const allowOrigin = response.headers.get("access-control-allow-origin");
+    const allowMethods = (response.headers.get("access-control-allow-methods") || "").split(",").map((value) => value.trim().toUpperCase());
+    const allowHeaders = (response.headers.get("access-control-allow-headers") || "").split(",").map((value) => value.trim().toLowerCase());
+    const allowCredentials = response.headers.get("access-control-allow-credentials");
+    if (!response.ok || allowOrigin !== config.origin) throw new Error(`${check.path} CORS preflight rejected ${config.origin}.`);
+    if (!allowMethods.includes(check.method) || !check.headers.every((header) => allowHeaders.includes(header))) {
+      throw new Error(`${check.path} CORS preflight does not allow the required method and headers.`);
+    }
+    if (String(allowCredentials).toLowerCase() !== "true") throw new Error(`${check.path} CORS preflight must allow credentials.`);
+  }
 }
 
 export async function verifyPublicPages(config, fetchImpl = globalThis.fetch) {
@@ -64,12 +72,24 @@ export async function verifyPublicPages(config, fetchImpl = globalThis.fetch) {
   }
 }
 
+export async function verifyWebApp(config, fetchImpl = globalThis.fetch) {
+  const destination = new URL(config.webAppUrl);
+  destination.searchParams.set("openBilling", "1");
+  destination.hash = "/home";
+  const response = await fetchImpl(destination, { method: "GET", redirect: "follow" });
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok || !/text\/html/i.test(contentType)) {
+    throw new Error(`Public web app billing destination returned HTTP ${response.status}.`);
+  }
+}
+
 async function main() {
   const config = validateReleaseConfiguration();
   validateProductionArtifact(config);
   await verifyCors(config);
   await verifyPublicPages(config);
-  console.log("Extension release gate passed: configuration, artifact, and CORS are ready.");
+  await verifyWebApp(config);
+  console.log("Extension release gate passed: configuration, artifact, CORS, and public destinations are ready.");
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {

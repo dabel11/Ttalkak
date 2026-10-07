@@ -536,8 +536,8 @@ http://localhost:8080
 Production:
 
 ```text
-Set VITE_BACKEND_API_URL to the Spring Boot HTTPS production URL.
-Set VITE_WEB_APP_URL to the public TTALKAK web HTTPS URL.
+VITE_BACKEND_API_URL=https://web-production-a82d94.up.railway.app
+VITE_WEB_APP_URL=https://web-production-a82d94.up.railway.app
 ```
 
 The extension calls:
