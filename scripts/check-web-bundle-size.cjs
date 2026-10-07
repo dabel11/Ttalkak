@@ -14,7 +14,9 @@ function collectAssetSizes(assetRoot) {
   };
   const visit = (directory) => fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
     const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) return visit(target);
+    // OneDrive can expose freshly generated directories as reparse points. In
+    // that case Dirent does not report a directory even though stat does.
+    if (entry.isDirectory() || (!entry.isFile() && fs.statSync(target).isDirectory())) return visit(target);
     const relative = path.relative(assetRoot, target).replaceAll("\\", "/");
     const category = entry.name.endsWith(".js")
       ? "javascript"

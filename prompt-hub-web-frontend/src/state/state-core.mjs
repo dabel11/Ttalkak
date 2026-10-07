@@ -9,6 +9,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     route: "home",
     authView: null,
     billingOpen: false,
+    pendingBillingOpen: false,
     detailPromptId: null,
     detailHighlightCommentId: null,
     reportPromptId: null,
@@ -317,6 +318,7 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   state.adminMode = false;
   state.authView = null;
   state.billingOpen = false;
+  state.pendingBillingOpen = false;
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);

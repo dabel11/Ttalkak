@@ -1,9 +1,9 @@
 const routeImports = Object.freeze({
   admin: () => import("../admin/admin-runtime.mjs"),
   make: () => import("../make/make-runtime.mjs"),
-  overlays: () => import("./overlay-runtime.mjs"),
-  saved: () => import("./saved-runtime.mjs"),
-  share: () => import("../share/share-runtime.mjs"),
+  overlays: () => import("./secondary-runtime.mjs"),
+  saved: () => import("./secondary-runtime.mjs"),
+  share: () => import("./secondary-runtime.mjs"),
 });
 
 const routeState = new Map();

@@ -1,7 +1,7 @@
 // @ts-check
 let runtimePromise;
 export function loadShareRuntime() {
-  runtimePromise ||= import("./share-runtime.mjs")
+  runtimePromise ||= import("../renderers/secondary-runtime.mjs")
     .then(({ controller, events }) => Object.freeze({ controller, events }));
   return runtimePromise;
 }

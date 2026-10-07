@@ -2427,6 +2427,9 @@ input[type="checkbox"] {
 .billing-summary > div + div { border-top: 1px solid var(--line); }
 .billing-summary dt { flex: none; color: var(--muted-dark); font-size: 13px; }
 .billing-summary dd { margin: 0; text-align: right; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.billing-summary dd small { display: block; margin-top: 2px; color: var(--muted-dark); font-weight: 500; }
+.billing-usage-meter { height: 7px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: var(--line-soft); }
+.billing-usage-meter span { display: block; height: 100%; border-radius: inherit; background: var(--brand-green); }
 .billing-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .billing-actions button { max-width: 100%; }
 .billing-modal button:disabled { opacity: .55; cursor: wait; }

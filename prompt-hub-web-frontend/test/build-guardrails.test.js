@@ -97,7 +97,7 @@ test("persisted state envelope stays stable while internal state properties are 
   });
 });
 
-test("production renderers share the Admin, Make, and Share runtime chunks", () => {
+test("production renderers keep primary and secondary runtime chunks outside the initial entry", () => {
   const rendererEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/index.js"), "utf8");
   const loader = fs.readFileSync(path.resolve(__dirname, "../src/renderers/lazy-route-renderers.js"), "utf8");
   ["admin-panels.mjs", "pages/admin-page.mjs", "pages/make-message-parts.mjs", "pages/make-page.mjs", "pages/share-page.mjs"].forEach((file) => {
@@ -105,16 +105,20 @@ test("production renderers share the Admin, Make, and Share runtime chunks", () 
   });
   assert.match(loader, /admin: \(\) => import\(["']\.\.\/admin\/admin-runtime\.mjs["']\)/);
   assert.match(loader, /make: \(\) => import\(["']\.\.\/make\/make-runtime\.mjs["']\)/);
-  assert.match(loader, /share: \(\) => import\(["']\.\.\/share\/share-runtime\.mjs["']\)/);
+  ["overlays", "saved", "share"].forEach((route) => {
+    assert.match(loader, new RegExp(`${route}: \\(\\) => import\\(["']\\.\\/secondary-runtime\\.mjs["']\\)`));
+  });
   const runtimeSources = {
     admin: fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8"),
     make: fs.readFileSync(path.resolve(__dirname, "../src/make/make-runtime.mjs"), "utf8"),
-    share: fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8"),
+    secondary: fs.readFileSync(path.resolve(__dirname, "../src/renderers/secondary-runtime.mjs"), "utf8"),
   };
   assert.match(runtimeSources.admin, /renderers\/pages\/admin-page\.mjs/);
   assert.match(runtimeSources.admin, /renderers\/admin-panels\.mjs/);
   assert.match(runtimeSources.make, /renderers\/pages\/make-page\.mjs/);
-  assert.match(runtimeSources.share, /renderers\/pages\/share-page\.mjs/);
+  assert.match(runtimeSources.secondary, /pages\/share-page\.mjs/);
+  assert.match(runtimeSources.secondary, /pages\/saved-page\.mjs/);
+  assert.match(runtimeSources.secondary, /auth-modal\.mjs/);
 });
 
 test("auth, prompt overlays, and Saved renderers stay outside the initial renderer entry", () => {
@@ -123,8 +127,8 @@ test("auth, prompt overlays, and Saved renderers stay outside the initial render
   ["auth-modal.mjs", "modal-renderers.mjs", "prompt-modals.mjs", "pages/saved-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(file.replaceAll(".", "\\.")));
   });
-  assert.match(loader, /overlays: \(\) => import\(["']\.\/overlay-runtime\.mjs["']\)/);
-  assert.match(loader, /saved: \(\) => import\(["']\.\/saved-runtime\.mjs["']\)/);
+  assert.match(loader, /overlays: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
+  assert.match(loader, /saved: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
   assert.match(app, /event\.detail\?\.route === ["']overlays["']/);
 });
@@ -137,11 +141,11 @@ test("Admin controller view and events load only through the Admin runtime chunk
   assert.match(adminEntry, /loadAdminRuntime/);
 });
 
-test("Share controller and events load only through the Share runtime chunk", () => {
+test("Share controller and events load only through the secondary runtime chunk", () => {
   const shareEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/index.js"), "utf8");
-  assert.match(shareEntry, /import\(["']\.\/share-runtime\.mjs["']\)/);
-  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/share/share-runtime.mjs"), "utf8");
-  ["share-controller.mjs", "share-events.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\./${file}["']`)));
+  assert.match(shareEntry, /import\(["']\.\.\/renderers\/secondary-runtime\.mjs["']\)/);
+  const runtimeEntry = fs.readFileSync(path.resolve(__dirname, "../src/renderers/secondary-runtime.mjs"), "utf8");
+  ["share-controller.mjs", "share-events.mjs"].forEach((file) => assert.match(runtimeEntry, new RegExp(`["']\\.\\.\\/share\\/${file}["']`)));
   assert.match(shareEntry, /loadShareRuntime/);
 });
 
@@ -170,7 +174,7 @@ test("production build combines design styles in source order and publishes loca
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
   assert.match(html, /src\/styles\/tokens\.css/);
   assert.match(html, /src\/styles\/notion\.css/);
-  assert.match(build, /writeProductionStyles\([^\n]+styles\.css[^\n]*\n\s*\[path\.join\(webRoot, "src", "styles", "tokens\.css"\)\],\n\s*\[path\.join\(webRoot, "src", "styles", "notion\.css"\)\]\)/);
+  assert.match(build, /writeProductionStyles\([^\n]+styles\.css[^\n]*\r?\n\s*\[path\.join\(webRoot, "src", "styles", "tokens\.css"\)\],\r?\n\s*\[path\.join\(webRoot, "src", "styles", "notion\.css"\)\]\)/);
   assert.ok(build.includes("html = html.replace(/<link\\b"));
   assert.ok(build.includes("(?:tokens|notion)\\.css"));
   assert.doesNotMatch(build, /writeProductionStyles\(path\.join\(webRoot, "src", "styles", "(?:tokens|notion)\.css"\),/);

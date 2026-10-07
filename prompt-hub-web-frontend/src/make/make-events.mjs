@@ -242,6 +242,7 @@
         else if (has("clearRecentThreadSearch")) clearRecentThreadSearch(target);
         else if (has("retryMessage")) { const message = state.messages.find((item) => item.id === data.retryMessage && item.role === "user"); if (message) { actions.reportRetry?.(message); actions.resend(message.id, message.content); } }
         else if (has("makeLogin")) actions.openLogin();
+        else if (has("openBillingFromMessage")) actions.openBilling?.();
         else if (has("copyMessage")) actions.copy(data.copyMessage);
         else if (has("editMessage")) { actions.setEditing(data.editMessage); actions.setPendingScroll(data.editMessage); actions.render(); }
         else if (has("splitThreadFrom")) actions.splitThread(data.splitThreadFrom);

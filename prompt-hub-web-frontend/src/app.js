@@ -3,7 +3,7 @@ import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
 import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
-import { consumeBillingRedirect, createBillingController } from "./billing/billing-controller.mjs";
+import { consumeBillingRedirect, consumeOpenBillingRequest, createBillingController } from "./billing/billing-controller.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -615,8 +615,18 @@ const saveCurrentAccountScope = authSession.saveScope;
 const restoreCurrentAccountScope = authSession.restoreScope;
 const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
-const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded });
-const billingController = createBillingController({ state, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, render, escapeHtml });
+const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded, onAuthenticated: resumePendingBillingOpen });
+const billingController = createBillingController({ state, root: document, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, handleBackendAccessError, render, escapeHtml, formatShortDate });
+function resumePendingBillingOpen() {
+  if (!state.pendingBillingOpen) return false;
+  state.pendingBillingOpen = false;
+  if (!getAuthToken() || isDemoAuthToken(getAuthToken())) {
+    showNotice("실제 계정으로 로그인한 뒤 요금제와 사용량을 확인해 주세요.");
+    return false;
+  }
+  billingController.openBilling();
+  return true;
+}
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
 const { AuthModal } = authView;
 const adminRuntime = createLazyRuntimeFacade({
@@ -685,7 +695,11 @@ const adminControllerFacade = createMethodFacade(adminRuntime, "controller", {
 }, { defer: true });
 const { searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs } = adminControllerFacade;
 const openAuth = authController.open;
-const closeTopModal = modalController.closeTop;
+const closeTopModal = () => {
+  if (state.billingOpen && !state.confirmAction) return billingController.closeBilling();
+  if (state.pendingBillingOpen && state.authView) state.pendingBillingOpen = false;
+  return modalController.closeTop();
+};
 const focusActiveModal = modalController.focusActive;
 const openConfirmAction = modalController.openConfirm;
 let makeWorkflows = null;
@@ -845,7 +859,7 @@ function render() {
     PromptEditModal,
     AdminRevisionRequestModal,
     AuthModal,
-    BillingModal: billingController.view,
+    BillingModal: billingController.renderBilling,
     ReportModal,
     ExecuteModal,
     ConfirmModal,
@@ -1313,7 +1327,7 @@ function bindCoreEvents() {
   bindGlobalNavigationEvents();
   bindDiscoveryEvents();
   bindAuthControls(document, authController);
-  billingController.bind(document);
+  billingController.bindBilling(document);
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();
@@ -1472,7 +1486,7 @@ function bindDiscoveryEvents() {
   });
 }
 function bindModalControlEvents() {
-  bindModalEvents(document, { ...modalController, render, restoreAuthFocus, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
+  bindModalEvents(document, { ...modalController, closeTop: closeTopModal, render, restoreAuthFocus, renderPreservingScroll: renderPreservingMakeScroll, runConfirmedAction: (useAlternative = false) => modalController.runConfirmed(confirmActionHandlers, useAlternative) }, state);
 }
 function bindPromptInteractionEvents() {
   document.querySelectorAll("[data-prompt-card-menu]").forEach((button) => {
@@ -1810,6 +1824,7 @@ function bindDelegatedMakeEvents() {
         requestCorrelation: makeRequestIdModule.createMakeRequestCorrelation(message?.requestId),
       }),
       openLogin: () => { state.authView = "login"; render(); },
+      openBilling: () => billingController.openBilling(),
       createFolder: createMakeFolder, createFolderAndMove: createMakeFolderAndMoveThread,
       renameFolder: renameMakeFolder, moveThread: moveThreadToFolder,
       applyTemplate,
@@ -2423,8 +2438,18 @@ appBootstrap = createAppBootstrap({
   normalizeAssistantPromptOutputs,
 });
 const billingReturn = consumeBillingRedirect(window.location, window.history);
+const billingLinkRequested = consumeOpenBillingRequest(window.location, window.history);
 const bootstrapResult = appBootstrap.bootstrap();
-if (billingReturn) void billingController.handleRedirect(billingReturn);
+if (billingReturn) void billingController.handleBillingRedirect(billingReturn);
+else if (billingLinkRequested) {
+  if (state.isLoggedIn) billingController.openBilling();
+  else {
+    state.pendingBillingOpen = true;
+    openAuth("login");
+    state.authError = "로그인한 뒤 요금제와 사용량을 확인할 수 있습니다.";
+    render();
+  }
+}
 const needsAdminRuntime = state.adminMode || state.route === "admin";
 const needsShareRuntime = state.route === "share";
 const needsMakeRuntime = state.route === "make";
