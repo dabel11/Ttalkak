@@ -1542,7 +1542,7 @@ button:disabled {
   top: calc(100% + 8px);
   right: 0;
   z-index: 15;
-  width: 150px;
+  width: min(224px, calc(100vw - 24px));
   display: grid;
   gap: 5px;
   padding: 8px;
@@ -1552,17 +1552,18 @@ button:disabled {
   box-shadow: 0 18px 42px rgba(5, 5, 16, 0.16);
   opacity: 0;
   pointer-events: none;
+  visibility: hidden;
   transform: translateY(-4px) scale(0.98);
   transform-origin: top right;
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
 }
 
-.account-menu:hover .account-menu-popover,
-.account-menu:focus-within .account-menu-popover,
 .account-menu.open .account-menu-popover {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
   transform: translateY(0) scale(1);
+  transition-delay: 0s;
 }
 
 .account-menu-popover p {
@@ -1573,6 +1574,35 @@ button:disabled {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.account-usage {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  margin: 0 0 4px;
+  padding: 8px 9px;
+  color: var(--muted);
+  background: var(--brand-green-soft);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.account-usage strong {
+  color: var(--brand-green);
+  font-size: 11px;
+}
+
+.account-usage span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.account-usage.needs-attention {
+  color: #8a3b12;
+  background: #fff7ed;
 }
 
 .account-menu-popover button {
@@ -1590,6 +1620,11 @@ button:disabled {
 
 .account-menu-popover button:hover {
   background: var(--brand-green-soft);
+}
+
+.account-menu-popover button:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
 }
 
 .account-menu-popover .danger-menu-item {

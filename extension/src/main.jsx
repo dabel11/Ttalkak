@@ -6,10 +6,12 @@ import { Composer } from "./components/Composer";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
+import { getDefaultWebAppUrl, openBillingPage } from "./config/webAppConfig";
 import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
 import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
+import { useUsageStatus } from "./hooks/useUsageStatus";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
 import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
@@ -26,6 +28,7 @@ function App() {
   const [executeTarget] = useState("auto");
   const [confirmAction, setConfirmAction] = useState(null);
   const [ragConfig] = useState(loadBackendConfig);
+  const [webAppUrl] = useState(getDefaultWebAppUrl);
   const composerRef = useRef(null);
   const noticeTimerRef = useRef(null);
   const [recoveryState, setRecoveryState] = useState({ messageId: "", action: "" });
@@ -61,6 +64,11 @@ function App() {
     setAuthMode,
     setSessionUuid,
   } = useAuth({ ragConfig, showNotice });
+  const { refreshUsage, usage, usageStatus } = useUsageStatus({
+    authSession,
+    ragConfig,
+    onAuthExpired: handleAuthExpired,
+  });
 
   const {
     filteredSavedItems,
@@ -185,6 +193,10 @@ function App() {
 
   async function handleResolveError(message) {
     if (recoveryCoordinator.isActive()) return;
+    if (["token_limit", "usage_unavailable"].includes(message?.failure?.kind)) {
+      await handleOpenBilling();
+      return;
+    }
     if (message?.failure?.requiresLogin) {
       setAuthMode("login");
       return;
@@ -200,6 +212,14 @@ function App() {
       await retryFailedMessage(message);
     } finally {
       recoveryCoordinator.finish(recovery);
+    }
+  }
+
+  async function handleOpenBilling() {
+    try {
+      await openBillingPage(webAppUrl);
+    } catch (error) {
+      showNotice(error?.message || "요금제 화면을 열지 못했습니다.");
     }
   }
 
@@ -254,8 +274,12 @@ function App() {
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
             onLogout={() => handleLogout()}
+            onOpenBilling={handleOpenBilling}
+            onRetryUsage={() => refreshUsage()}
             onWithdraw={() => setAuthMode("withdraw")}
             ragStatus={ragStatus}
+            usage={usage}
+            usageStatus={usageStatus}
           />
           <ChatFeed
             messages={messages}
