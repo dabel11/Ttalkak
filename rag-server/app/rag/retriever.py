@@ -22,6 +22,7 @@ from sqlalchemy import select
 
 from app.core.db import SessionLocal, RagChunk, init_db
 from app.core.embeddings import get_model, get_reranker
+from app.core import rerank as rerank_api
 from app.rag.layers import is_searchable
 
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
@@ -197,19 +198,36 @@ class Retriever:
         return np.argsort(-rrf)
 
     def _rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        # 호스티드 리랭크 API(RAG_RERANK_BACKEND) 우선 — torch cross-encoder 는
+        # ARM64 CPU 에서 50쌍 ~14초(실측 2026-10-02). API 실패 시 torch 로 폴백.
+        be = rerank_api.backend()
+        if be != "torch":
+            try:
+                ranked = rerank_api.remote_rerank(
+                    query, [c["text"] for c in candidates], top_k, be)
+                if ranked:
+                    return self._finalize_rerank(candidates, ranked)
+                print(f"[Retriever] 원격 리랭크({be}) 빈 결과 → torch 폴백")
+            except Exception as e:
+                print(f"[Retriever] 원격 리랭크({be}) 실패 → torch 폴백: {e}")
+
         if self._reranker is None:
             self._reranker = get_reranker()
         pairs  = [(query, c["text"]) for c in candidates]
         logits = self._reranker.predict(pairs)                 # cross-encoder 점수(로짓)
         probs  = 1.0 / (1.0 + np.exp(-np.asarray(logits)))     # sigmoid → 0~1
+        ranked = sorted(enumerate(probs.tolist()), key=lambda t: -t[1])[:top_k]
+        return self._finalize_rerank(candidates, ranked)
 
-        order = np.argsort(-probs)[:top_k]
+    def _finalize_rerank(self, candidates: list[dict],
+                         idx_scores: list[tuple[int, float]]) -> list[dict]:
+        """(원본 인덱스, 리랭크 점수) 목록으로 결과 dict 를 만든다(torch·원격 공용).
+        순위는 리랭커 기준, 표시 score 는 평탄한 리랭크 확률 대신 dense 코사인 유지 —
+        min_score 필터·무근거 게이트가 dense 기준이라 그대로 보존된다."""
         out = []
-        for i in order:
+        for i, s in idx_scores:
             c = dict(candidates[i])
-            # 순위는 reranker 기준 유지, 표시 점수는 평탄한 sigmoid 대신 dense 코사인 사용.
-            # rerank_score(sigmoid 0~1)는 임계치 필터·분석용으로 병기.
-            c["rerank_score"] = round(float(probs[i]), 4)
+            c["rerank_score"] = round(float(s), 4)
             c["score"] = c.pop("dense_score", c["score"])
             out.append(c)
         return out

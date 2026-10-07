@@ -29,7 +29,7 @@ POST /query
    ├ B1 컬렉션 전체 로드 (MySQL rag_chunk)        _load_collection()
    ├ B2 1단계 후보 50개  (bge-m3 dense 코사인 —    _candidates()
    │                     본문 벡터 ∪ 검색뷰 벡터의 max)
-   ├ B3 2단계 리랭크 → top 5 (cross-encoder)       _rerank()
+   ├ B3 2단계 리랭크 → top 5 (cross-encoder 또는 호스티드 API)  _rerank()
    └ B4 유효 유사도 컷   (dense < min_score 제외)   search()
   ▼
    검색결과 0 & history 없음 → 404                  main.py query()
@@ -54,7 +54,7 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 
 - **응답의 mode 가 프론트 분기의 단일 기준** — `"improve"`(개선안) / `"ask"`(추가 질문). 프론트는 `improved_prompt==""` 같은 추측 대신 `mode` 로 분기한다. **`questions[]` 는 두 모드 모두에서 렌더**한다 — `ask`면 핵심 질문, `improve`면 개선안과 함께 보여주는 **선택 질문**(하이브리드). 상세 계약은 별도 공유하는 백엔드/프론트 계약 문서(`CONTRACT_MAKE_PIPELINE.md`) 참조.
 
-- **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3) · 생성 LLM(Groq/Gemini)
+- **컴포넌트 3종**: 임베딩(bge-m3) · 리랭커(bge-reranker-v2-m3 torch, 또는 호스티드 API=Cohere/Jina/Voyage · `RAG_RERANK_BACKEND`) · 생성 LLM(Groq/Gemini)
 - **저장소**: MySQL `rag_chunk` (Spring 백엔드와 **동일 DB** `ttalkak` 공유)
 - **컬렉션 2종**: `prompt_techniques`(기법 정의 카드 **170**, 그중 검색 대상은 층 필터 통과분 `user_instruction` 123 · 제외 `system` 28·`degenerate` 10·`meta` 9 — 2026-09-20 실측) + `prompt_examples`(유사 요청 개선 사례 **131**, 타입별 주입 — 2026-07-23 A안 검증 후 도입). 둘을 **따로 검색**해 한 풀에서 경쟁시키지 않음(타입별 멀티 컬렉션).
 - **호출 경로**: Chrome 확장 → Spring(:8080) `/api/prompts/improve` → rag-server(:8000) `/query`

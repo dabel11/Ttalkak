@@ -4004,3 +4004,20 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 - migrate 스크립트: 로컬 `dump` 301행(prompt_techniques 170 + prompt_examples 131, 임베딩 1024차원), 임시 컬렉션 `_migrate_selftest` 에 실제 `load` **2회 멱등**(중복 0)·document 왕복 정상·실데이터(170/131) 무결, `--dry-run` 연결·스키마·파싱 OK.
 
 **결정·근거**: CPU 휠 선설치가 가장 간단·견고(torch 버전 핀 불필요 — sentence-transformers 가 이미 만족분을 재설치 안 함). 모델 캐시 6.4GB 추가 정리(중복 포맷 제거)는 HF 캐시 symlink/blob 구조상 fragile 해 보류. 마이그레이션은 `ingestion/*` 재실행(API·`data/` 자산 필요) 대신 덤프/복원(무비용·결정적) 채택.
+
+## [2026-10-02] 리랭크 호스티드 API 백엔드 — CPU 리랭커 병목 해소
+**목적**: /query 체감 지연 "너무 느림" 원인 실측 결과, LLM(Gemini)은 1.7초로 빠른데 **리랭크(bge-reranker-v2-m3, 568M cross-encoder)가 ARM64 CPU 에서 50쌍 ~14초**로 검색의 95%를 차지. "대형 LLM처럼 빠르게" = 생성을 Gemini로 옮긴 것과 같이 리랭크도 호스티드 API로 이관.
+**측정(리랭크 50쌍, ARM64/Apple Silicon, 워밍업 후)**:
+| 방식 | 속도 | 품질 |
+|---|---|---|
+| v2-m3 torch(현재) | 14.2s | 기준 |
+| ONNX fp32 | 12.0s(−14%) | 동일 |
+| ONNX INT8 | 빌드 불가(양자화 OOM) | — |
+| base(278M) | 3.3s | top-5 2/5만 겹침(품질↓) |
+| 호스티드 API | <1s(예상) | v2-m3 동급↑ |
+→ ONNX 는 ARM64 라 ROI 나빠 보류(INT8 의 2~4배 이득은 x86 avx512-vnni 전용). 호스티드 API 채택.
+**Before**: `retriever._rerank` 가 항상 torch CrossEncoder(get_reranker) 로 predict. fetch_k=50 → ~14초.
+**After**: `app/core/rerank.py`(신규, httpx 순수모듈)로 Cohere/Jina/Voyage REST 리랭크 지원. `_rerank` 가 `RAG_RERANK_BACKEND` 를 보고 원격 우선, **실패 시 torch 폴백**(검색 안 끊김). 출력 생성은 `_finalize_rerank` 공용 — 표시 score 는 dense 코사인 유지라 min_score 컷·무근거 게이트 동작 불변.
+**변경 파일**: app/core/rerank.py(신규), app/rag/retriever.py(_rerank 리팩토링+폴백, _finalize_rerank 분리), tests/test_rerank_api.py(신규 11케이스-httpx 모킹, torch/app.main 미사용), requirements-test.txt(httpx 명시), .env.example(RAG_RERANK_* 문서), RAG_PIPELINE.md(B3·컴포넌트)
+**검증**: requirements-test 만의 CI 동일 venv 에서 ruff(0.16.9) 통과 + pytest **277 passed**. 리랭크 테스트는 네트워크·토치 없이 응답 파싱·정렬·top_n/top_k·키누락·HTTP오류 폴백 검증.
+**결정·근거**: torch 무회귀 기본값(키 없으면 기존과 동일). 프로바이더는 env 로 교체 — 비용/키 보유에 따라 선택. 호스티드 API 는 50쌍 전부 리랭크해도 <1초라 **fetch_k 를 20으로 줄일 필요 없음**(fetch_k=20 은 측정상 techniques top-5 집합 3/12 일치로 recall 손실 — 적용 안 함). 라이브 검증은 키 설정 후 가능.
