@@ -22,6 +22,41 @@ test("auth normalization preserves the authoritative account provider", () => {
   assert.equal(normalizeAuthResult({ accessToken: "t", user: {} }).user.provider, "");
 });
 
+test("successful login resumes a deferred post-authentication action", async () => {
+  const PreviousFormData = global.FormData;
+  global.FormData = class {
+    get(name) { return name === "userId" ? "member" : name === "password" ? "password123" : ""; }
+  };
+  try {
+    let resumed = 0;
+    const state = { authView: "login", authDraft: {}, authDuplicateChecks: {}, authUserIdWarning: "", authError: "" };
+    const controller = createAuthController({
+      state,
+      root: { querySelector: () => null },
+      document: {},
+      render() {},
+      normalizeText: String,
+      existingNicknames: [],
+      existingUserIds: [],
+      userIdError: () => "",
+      emailValid: () => true,
+      phoneValid: () => true,
+      futureDate: () => false,
+      api: { login: async () => ({ accessToken: "token", member: { memberId: 1, nickname: "member" } }) },
+      normalizeResult: () => ({ token: "token", user: { id: 1, nickname: "member" } }),
+      applyUser() {},
+      notice() {},
+      hydrateMake: async () => {},
+      onAuthenticated() { resumed += 1; },
+    });
+
+    await controller.submit({});
+    assert.equal(resumed, 1);
+  } finally {
+    global.FormData = PreviousFormData;
+  }
+});
+
 test("identity state preserves provider and clears it on logout", async () => {
   const { api } = await import("../src/state/state-core.mjs");
   const state = {};

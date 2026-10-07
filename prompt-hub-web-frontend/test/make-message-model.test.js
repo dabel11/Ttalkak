@@ -98,6 +98,22 @@ test("Guest trial exhaustion asks for login instead of offering a retry", () => 
   assert.deepEqual(model.getMakeFailureAction(failure), { id: "login", label: "로그인" });
 });
 
+test("member quota failures expose only the explicit recovery allowed by the backend contract", () => {
+  const tokenLimit = model.classifyMakeError({ status: 429, payload: { code: "MEMBER_TOKEN_LIMIT_EXCEEDED" } });
+  const inProgress = model.classifyMakeError({ status: 409, payload: { code: "MEMBER_REQUEST_IN_PROGRESS" } });
+  const unavailable = model.classifyMakeError({ status: 503, payload: { code: "MEMBER_USAGE_UNAVAILABLE" } });
+
+  assert.equal(tokenLimit.kind, "token_limit");
+  assert.equal(inProgress.kind, "member_request_in_progress");
+  assert.equal(unavailable.kind, "usage_unavailable");
+  assert.equal(tokenLimit.requiresLogin, false);
+  assert.equal(inProgress.retryable, true);
+  assert.equal(unavailable.retryable, false);
+  assert.deepEqual(model.getMakeFailureAction(tokenLimit), { id: "open-billing", label: "요금제·사용량 확인" });
+  assert.deepEqual(model.getMakeFailureAction(unavailable), { id: "open-billing", label: "요금제·사용량 확인" });
+  assert.deepEqual(model.getMakeFailureAction(inProgress), { id: "retry-in-progress", label: "결과 다시 확인" });
+});
+
 test("user cancellation is not reported as a retryable timeout", () => {
   const failure = model.classifyMakeError({ code: "REQUEST_ABORTED" });
   assert.equal(failure.kind, "cancelled");

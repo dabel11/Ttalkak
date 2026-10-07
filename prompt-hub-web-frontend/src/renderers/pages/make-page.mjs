@@ -455,6 +455,8 @@ import { parts } from "./make-message-parts.mjs";
         ? `<button type="button" data-refresh-concurrent="${safeMessageId}" ${recoveryPending ? "disabled aria-busy=\"true\"" : ""}>${escapeHtml(recoveryLabel || failureAction.label)}</button>`
       : failureAction?.id === "retry-after-refresh"
         ? `<button type="button" data-retry-concurrent="${safeMessageId}" ${recoveryPending ? "disabled aria-busy=\"true\"" : ""}>${escapeHtml(recoveryLabel || failureAction.label)}</button>`
+      : failureAction?.id === "open-billing"
+        ? `<button type="button" data-open-billing-from-message>${escapeHtml(failureAction.label)}</button>`
       : failureRetryable ? `<button type="button" data-retry-message="${safeMessageId}">${escapeHtml(failureAction?.label || "다시 시도")}</button>` : "";
     const editDiffers = retryMode === "edit" && String(content || "").trim() !== String(retryTargetContent || "").trim();
     const editPreview = failureMessage && retryMode === "edit" ? `<div class="concurrency-compare" aria-label="충돌한 수정 내용 비교"><small><b>수정한 내용</b>${escapeHtml(String(content || "").slice(0, 120))}</small><small><b>서버 최신 내용</b>${escapeHtml(String(retryTargetContent || "내용을 찾지 못했습니다.").slice(0, 120))}</small>${editDiffers ? `<em>두 내용이 다릅니다. 확인한 뒤 다시 보내 주세요.</em>` : ""}</div>` : "";
