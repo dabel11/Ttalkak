@@ -16,18 +16,18 @@ Complete every `TBD` before a production release. Values containing credentials 
 
 | Item | Current value | Owner | Release evidence |
 | --- | --- | --- | --- |
-| Production web URL | TBD | Web/infra | URL and health check |
-| Production Spring Boot API URL | TBD | Backend/infra | HTTPS URL and frontend production build |
+| Production web URL | `https://web-production-a82d94.up.railway.app` | Web/infra | HTTP 200 and HTML response verified 2026-10-08 |
+| Production Extension API URL | `https://web-production-a82d94.up.railway.app` | Backend/infra | The public web proxy serves API responses; authenticated usage and billing endpoints return 401 without a token |
 | Chrome Web Store Extension ID | TBD until store registration | Extension/release | Store dashboard ID |
 | Production Extension CORS origin | `chrome-extension://{productionExtensionId}` | Backend | Successful preflight |
-| Privacy policy URL | Published Google Docs URL in `extension/src/constants.js` | Product/legal | Public read-only URL |
-| Extension support URL | TBD | Product | Public support page |
+| Privacy policy URL | `https://docs.google.com/document/d/e/2PACX-1vQtMHg_T33kpcCY1-5RApEsv3Wvg0KEnF_v5zfqBjnQMvwoLqBt2vRAhby39YGx2-2eIqlCrBhucIyK/pub` | Product/legal | HTTP 200 verified 2026-10-08 |
+| Extension support URL | `https://github.com/dabel11/Ttalkak/issues` | Product | Public repository with Issues enabled; monitoring owner remains required |
 | Incident/contact channel | TBD | Team lead | Named monitored channel |
 | Web production command | `npm run build:prod` | Web | `npm run verify` success |
 | Extension production command | PowerShell: set `VITE_BACKEND_API_URL` and `VITE_WEB_APP_URL`, then run `npm run build:prod`<br>POSIX: set `VITE_BACKEND_API_URL` and `VITE_WEB_APP_URL`, then run `npm run build:prod` | Extension | `dist-prod` policy check |
 | Post-release smoke | See `WEB_STORE_RELEASE_CHECKLIST.md` | Release owner | Signed checklist |
 
-Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API and web URLs, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks both public pages; and performs an exact-origin credentialed CORS preflight. Development IDs and placeholder hosts never count as release evidence.
+Production Extension readiness is enforced by `npm run release:prepare` from `extension`. It requires explicit production API and web URLs, Web Store ID, privacy-policy URL, support URL, and release owner values; validates the generated manifest; checks the privacy, support, and web billing destinations; and performs exact-origin credentialed CORS preflights for Guest improvement and member usage. Development IDs and placeholder hosts never count as release evidence.
 
 ## 2. API change procedure
 

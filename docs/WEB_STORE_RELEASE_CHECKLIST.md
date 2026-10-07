@@ -8,7 +8,7 @@ The same mandatory gate is available in GitHub Actions as **Extension production
 
 ## Configuration
 
-- [ ] Production HTTPS Spring Boot API URL is confirmed.
+- [ ] Public production API HTTPS URL is confirmed (direct Backend origin or reviewed web proxy).
 - [ ] Public TTALKAK web HTTPS URL is confirmed for 요금제·사용량 links.
 - [ ] Chrome Web Store Extension ID is recorded in `FRONTEND_OPERATING_POLICIES.md`.
 - [ ] Backend CORS allows the exact production `chrome-extension://...` origin.
@@ -52,6 +52,9 @@ Current permissions and their release rationale:
 - [ ] Side panel opens and reports backend connection correctly.
 - [ ] Guest improve and ask-follow-up flows work.
 - [ ] Login, session restore, logout, and authentication expiry work.
+- [ ] Logged-in FREE and PRO plans show the authoritative token usage and remaining allowance.
+- [ ] Usage-loading failure offers a working retry, and the token-limit state opens the web billing destination.
+- [ ] The 요금제·사용량 action opens the public web app with the billing panel requested.
 - [ ] Improve timeout is distinct from user cancellation.
 - [ ] Cancellation restores input and ignores late responses.
 - [ ] Edited resend works for guest and logged-in threads.
