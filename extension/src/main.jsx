@@ -6,10 +6,12 @@ import { Composer } from "./components/Composer";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
+import { getDefaultWebAppUrl, openBillingPage } from "./config/webAppConfig";
 import { useAuth } from "./hooks/useAuth";
 import { useConversation } from "./hooks/useConversation";
 import { useAskAnswers } from "./hooks/useAskAnswers";
 import { useSavedLibrary } from "./hooks/useSavedLibrary";
+import { useUsageStatus } from "./hooks/useUsageStatus";
 import { loadBackendConfig, promptMatches } from "./utils/promptUtils";
 import { showTransientNotice } from "./utils/transientNotice";
 import { createRecoveryActionCoordinator } from "./utils/recoveryActionState";
@@ -26,6 +28,7 @@ function App() {
   const [executeTarget] = useState("auto");
   const [confirmAction, setConfirmAction] = useState(null);
   const [ragConfig] = useState(loadBackendConfig);
+  const [webAppUrl] = useState(getDefaultWebAppUrl);
   const composerRef = useRef(null);
   const noticeTimerRef = useRef(null);
   const [recoveryState, setRecoveryState] = useState({ messageId: "", action: "" });
@@ -35,6 +38,15 @@ function App() {
     recoveryCoordinator.activate();
     return () => recoveryCoordinator.dispose();
   }, [recoveryCoordinator]);
+
+  useEffect(() => {
+    const compactViewport = window.matchMedia("(max-width: 760px)");
+    const collapseForCompactViewport = (event) => {
+      if (event.matches) setCollapsed(true);
+    };
+    compactViewport.addEventListener("change", collapseForCompactViewport);
+    return () => compactViewport.removeEventListener("change", collapseForCompactViewport);
+  }, []);
 
   const {
     authMode,
@@ -52,12 +64,20 @@ function App() {
     setAuthMode,
     setSessionUuid,
   } = useAuth({ ragConfig, showNotice });
+  const { refreshUsage, usage, usageStatus } = useUsageStatus({
+    authSession,
+    ragConfig,
+    onAuthExpired: handleAuthExpired,
+  });
 
   const {
     filteredSavedItems,
+    isSavePending,
     isSaved,
+    refreshSavedItems,
     requestDeleteSavedItem,
     saveLibraryPrompt,
+    savedStatus,
     searchItems,
     setSavedItems,
   } = useSavedLibrary({
@@ -173,6 +193,10 @@ function App() {
 
   async function handleResolveError(message) {
     if (recoveryCoordinator.isActive()) return;
+    if (["token_limit", "usage_unavailable"].includes(message?.failure?.kind)) {
+      await handleOpenBilling();
+      return;
+    }
     if (message?.failure?.requiresLogin) {
       setAuthMode("login");
       return;
@@ -191,6 +215,14 @@ function App() {
     }
   }
 
+  async function handleOpenBilling() {
+    try {
+      await openBillingPage(webAppUrl);
+    } catch (error) {
+      showNotice(error?.message || "요금제 화면을 열지 못했습니다.");
+    }
+  }
+
   function handleContinueConflictInNewChat(message) {
     const prompt = String(message?.sourcePrompt || "");
     startNewChat();
@@ -198,8 +230,23 @@ function App() {
     focusRestoredComposer(prompt);
   }
 
+  function returnToComposerOnCompactScreen() {
+    if (window.matchMedia("(max-width: 760px)").matches) setCollapsed(true);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  function handleOpenPrompt(item) {
+    openPrompt(item);
+    returnToComposerOnCompactScreen();
+  }
+
+  function handleOpenRecentThread(item) {
+    openRecentThread(item);
+    returnToComposerOnCompactScreen();
+  }
+
   return (
-    <main className="extension-frame" aria-label="TTALKAK Chrome extension">
+    <main className="extension-frame" aria-label="TTALKAK 크롬 확장 프로그램">
       <section className="extension-shell">
         <Sidebar
           activeTab={activeTab}
@@ -212,10 +259,13 @@ function App() {
           savedItems={filteredSavedItems}
           recentItems={filteredRecentThreads}
           activeRecentId={activeRecentId}
+          savedStatus={savedStatus}
           isSaved={isSaved}
-          onOpenPrompt={openPrompt}
+          isSavePending={isSavePending}
+          onOpenPrompt={handleOpenPrompt}
           onSavePrompt={saveLibraryPrompt}
-          onOpenRecentThread={openRecentThread}
+          onRetrySaved={refreshSavedItems}
+          onOpenRecentThread={handleOpenRecentThread}
           onDeleteSaved={requestDeleteSavedItem}
           onDeleteRecent={(id) => requestDeleteRecentThread(id, setConfirmAction)}
         />
@@ -224,8 +274,12 @@ function App() {
             currentUser={currentUser}
             onLogin={() => setAuthMode("login")}
             onLogout={() => handleLogout()}
+            onOpenBilling={handleOpenBilling}
+            onRetryUsage={() => refreshUsage()}
             onWithdraw={() => setAuthMode("withdraw")}
             ragStatus={ragStatus}
+            usage={usage}
+            usageStatus={usageStatus}
           />
           <ChatFeed
             messages={messages}
@@ -236,7 +290,7 @@ function App() {
             editingDraft={editingDraft}
             onCopy={copyMessage}
             onSave={toggleSave}
-            onExecute={executeMessage}
+            onExecute={(message) => executeMessage(message, setConfirmAction)}
             onStartEdit={startEditMessage}
             onChangeEditDraft={setEditingDraft}
             onCancelEdit={cancelEditMessage}
@@ -283,6 +337,7 @@ function App() {
           title={confirmAction.title}
           message={confirmAction.message}
           confirmLabel={confirmAction.confirmLabel}
+          danger={confirmAction.danger !== false}
           onCancel={() => setConfirmAction(null)}
           onConfirm={() => {
             confirmAction.onConfirm();

@@ -35,7 +35,7 @@ or `thoughts` and cached counts are retained when explicitly provided.
   Missing/invalid usage emits a content-free warning; old RAG deployments still
   function. This is compatibility behavior, not proof that requests are free.
 - Existing `/api/me/usage` FREE calendar / PRO paid-period sums include these rows.
-  Its response fields remain unchanged; no price or quota is invented.
+  Its original response fields remain compatible. Optional quota fields and enforcement are documented in MEMBER_QUOTA.md; enforcement is disabled by default.
 
 ## Deployment and follow-up
 
@@ -52,5 +52,5 @@ This records member consumption, not a complete provider cost ledger: anonymous
 traffic, partial provider work before a RAG error/timeout, and multiple actual
 provider invocations for concurrent retries need separate operational accounting.
 Client idempotency prevents double member usage; it does not refund duplicate
-provider calls. FREE/PRO token limits and over-limit handling remain a separate
-policy and enforcement task.
+provider calls. FREE/PRO allowance numbers remain a team policy decision. Configurable enforcement
+is prepared separately in MEMBER_QUOTA.md and requires real usage readiness.

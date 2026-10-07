@@ -31,6 +31,9 @@ services:
       JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       RAG_SERVER_URL: http://rag-stub:8000
       JPA_SHOW_SQL: 'false'
+      MEMBER_QUOTA_ENABLED: 'true'
+      FREE_TOKEN_LIMIT: '30'
+      PRO_TOKEN_LIMIT: '300'
   web:
     build:
       context: ..

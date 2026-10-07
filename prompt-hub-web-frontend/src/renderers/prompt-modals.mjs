@@ -82,7 +82,7 @@
                         ? `<p class="comment-empty">관리자 검토 모드에서는 댓글을 읽기 전용으로 확인합니다.</p>`
                         : isLoggedIn
                         ? `<form class="comment-form" data-comment-form="${safePromptId}">
-                            <input name="comment" type="text" placeholder="댓글을 입력하세요." autocomplete="off" />
+                            <input name="comment" type="text" placeholder="댓글을 입력하세요." aria-label="댓글을 입력하세요." autocomplete="off" />
                             <button class="primary-button" type="submit">등록</button>
                           </form>`
                         : `<div class="comment-login">

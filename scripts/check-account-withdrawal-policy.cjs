@@ -2,7 +2,9 @@ const fs = require("node:fs");
 const { outputPaths, sourcePath, transform } = require("./build-account-withdrawal-policy.cjs");
 
 const expected = transform(fs.readFileSync(sourcePath, "utf8"));
-const stale = outputPaths.filter((outputPath) => !fs.existsSync(outputPath) || fs.readFileSync(outputPath, "utf8") !== expected);
+const normalizeLines = (value) => value.replace(/\r\n/g, "\n");
+const stale = outputPaths.filter((outputPath) => !fs.existsSync(outputPath)
+  || normalizeLines(fs.readFileSync(outputPath, "utf8")) !== normalizeLines(expected));
 
 if (stale.length > 0) {
   console.error("Generated account withdrawal policy is out of date.");

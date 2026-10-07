@@ -172,6 +172,27 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   await page.locator('.sidebar [data-route="saved"]').click();
 
   let card = page.locator('[data-open-prompt="fixture-prompt"]');
+  const layout = await card.evaluate((element) => {
+    const cardBounds = element.getBoundingClientRect();
+    const titleBounds = element.querySelector(".card-head h2").getBoundingClientRect();
+    const likeBounds = element.querySelector("[data-like-prompt]").getBoundingClientRect();
+    const moreBounds = element.querySelector("[data-prompt-card-menu]").getBoundingClientRect();
+    return {
+      actionTitleDelta: Math.abs(likeBounds.left - titleBounds.left),
+      menuRightInset: cardBounds.right - moreBounds.right,
+    };
+  });
+  expect(layout.actionTitleDelta).toBeLessThanOrEqual(1);
+  expect(layout.menuRightInset).toBeLessThanOrEqual(20);
+
+  const savedSort = page.locator(".saved-sort-select");
+  expect(await savedSort.locator("select").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return style.appearance || style.webkitAppearance;
+  })).toBe("none");
+  expect(await savedSort.locator("select").evaluate((element) => getComputedStyle(element).borderRadius)).toBe("8px");
+  expect(await savedSort.evaluate((element) => getComputedStyle(element, "::after").right)).toBe("13px");
+
   await card.locator("[data-prompt-card-menu]").click();
   await card.locator("[data-edit-prompt]").click();
   await page.locator('[data-prompt-edit-form] input[name="title"]').fill("수정된 제목");

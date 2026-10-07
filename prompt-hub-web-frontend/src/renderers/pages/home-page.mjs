@@ -37,7 +37,7 @@
             </select>
           </span>
           <input type="search" data-tag-search value="${escapeAttr(state.searchQuery)}" placeholder="${escapeAttr(searchPlaceholder)}" aria-label="프롬프트 검색" />
-          <button class="search-help ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
+          <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
             <span>${icons.bulb}</span>
             <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
           </button>
@@ -50,7 +50,6 @@
             <h1 id="popular-heading">${isSearching ? "검색 결과" : "인기 프롬프트"}</h1>
           </div>
           <label class="sort-select">
-            <span aria-hidden="true">정렬</span>
             <select data-popular-sort aria-label="프롬프트 정렬 기준">
               ${SortOption("popular", "인기순")}
               ${SortOption("saves", "저장순")}
