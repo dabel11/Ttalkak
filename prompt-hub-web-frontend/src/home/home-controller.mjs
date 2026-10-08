@@ -1,5 +1,7 @@
   "use strict";
 
+  import { setTooltipExpanded } from "../interactions/tooltip-disclosure.mjs";
+
   function createHomeController(ctx) {
     let searchCommitTimer = null;
     let searchTipTimer = null;
@@ -37,16 +39,24 @@
       searchCommitTimer = globalThis.setTimeout(() => commitSearchQuery(value), ctx.debounceMs);
     }
 
+    function setSearchTipVisible(visible, { cancelAutoHide = false } = {}) {
+      if (cancelAutoHide) {
+        globalThis.clearTimeout(searchTipTimer);
+        searchTipTimer = null;
+      }
+      ctx.state.searchTipVisible = Boolean(visible);
+      setTooltipExpanded(ctx.root.querySelector("[data-search-help]"), visible);
+      return ctx.state.searchTipVisible;
+    }
+
     function showSearchTipOnce() {
       if (ctx.state.searchTipShown) return false;
       ctx.state.searchTipShown = true;
-      ctx.state.searchTipVisible = true;
       globalThis.clearTimeout(searchTipTimer);
-      ctx.render();
-      restoreSearchFocus();
+      setSearchTipVisible(true);
       searchTipTimer = globalThis.setTimeout(() => {
-        ctx.state.searchTipVisible = false;
-        ctx.root.querySelector("[data-search-help]")?.classList.remove("show-tip");
+        setSearchTipVisible(false);
+        searchTipTimer = null;
       }, 2000);
       return true;
     }
@@ -90,7 +100,7 @@
       return retryPromise;
     }
 
-    return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, retryHomeLoad, scheduleSearchCommit, showSearchTipOnce });
+    return Object.freeze({ cancelSearchCommit, changePage, changeScope, changeSort, commitSearchQuery, restoreSearchFocus, retryHomeLoad, scheduleSearchCommit, setSearchTipVisible, showSearchTipOnce });
   }
 
 export { createHomeController };

@@ -39,9 +39,9 @@
               <div class="share-label-with-help">
                 <label for="share-tag-search">해시태그</label>
                 <span class="share-field-help-wrap">
-                  <button class="search-help expand-right share-help share-field-help" type="button" aria-label="해시태그 도움말">
+                  <button class="search-help expand-right share-help share-field-help" type="button" data-share-help aria-label="해시태그 도움말" aria-describedby="share-tag-help-text" aria-expanded="false">
                     <span>${icons.bulb}</span>
-                    <span class="help-text">태그를 추가하면 검색에 더 잘 노출됩니다.</span>
+                    <span class="help-text" id="share-tag-help-text" role="tooltip">태그를 추가하면 검색에 더 잘 노출됩니다.</span>
                   </button>
                 </span>
               </div>

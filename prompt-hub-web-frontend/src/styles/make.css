@@ -2882,6 +2882,8 @@
   .composer { width: calc(100% - 24px); }
   .composer textarea { min-height: 44px; padding-block: 11px; }
   .composer .send-button { width: 44px; height: 44px; }
+  .make-template-bar .template-list button { height: 40px; }
+  .make-template-bar .template-custom-action { min-height: 38px; }
   .make-template-bar:not(.collapsed) .template-toggle { position: relative; display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; width: auto; min-width: 122px; padding: 0 12px 0 14px; font-size: 13px; }
   .make-template-bar:not(.collapsed) .template-toggle-mark { display: none; }
   .make-template-bar:not(.collapsed) .template-toggle-label { display: inline; }

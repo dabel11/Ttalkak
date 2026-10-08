@@ -1,9 +1,10 @@
 const { test, expect } = require("@playwright/test");
-const { gotoApp } = require("./support/app-ready.js");
+const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 test("narrow Home search help expands left without leaving the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await gotoApp(page);
+  await waitForAppHydration(page);
   const help = page.getByRole("button", { name: "검색 도움말" });
   await help.focus();
   await page.waitForTimeout(250);
@@ -39,8 +40,18 @@ test("narrow Home search help expands left without leaving the viewport", async 
   expect(positions.tooltipBottom).toBeLessThanOrEqual(positions.tagsTop);
   expect(positions.whiteSpace).toBe("normal");
   await expect(help).toHaveAttribute("aria-describedby", "home-search-help-text");
+  await expect(help).toHaveAttribute("aria-expanded", "true");
   await expect(help.locator(".help-text")).toHaveAttribute("role", "tooltip");
   await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
+
+  await help.press("Escape");
+  await expect(help).toBeFocused();
+  await expect(help).toHaveAttribute("aria-expanded", "false");
+  await expect.poll(() => help.locator(".help-text").evaluate((element) => getComputedStyle(element).opacity)).toBe("0");
+  await help.press("Enter");
+  await expect(help).toHaveAttribute("aria-expanded", "true");
+  await expect.poll(() => help.locator(".help-text").evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+  await help.press("Escape");
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await help.focus();

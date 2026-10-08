@@ -279,12 +279,25 @@ test("mobile Share and My Page keep the primary action and empty state nearby", 
   const shareHelp = page.getByRole("button", { name: "해시태그 도움말" });
   await shareHelp.focus();
   await page.waitForTimeout(220);
+  await expect(shareHelp).toHaveAttribute("aria-describedby", "share-tag-help-text");
+  await expect(shareHelp).toHaveAttribute("aria-expanded", "true");
+  await expect(shareHelp.locator(".help-text")).toHaveAttribute("role", "tooltip");
   const shareHelpBounds = await shareHelp.locator(".help-text").evaluate((tooltip) => {
     const bounds = tooltip.getBoundingClientRect();
-    return { left: bounds.left, right: bounds.right, viewportWidth: document.documentElement.clientWidth };
+    const trigger = tooltip.closest("button").getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right, triggerHeight: trigger.height, triggerWidth: trigger.width, viewportWidth: document.documentElement.clientWidth };
   });
   expect(shareHelpBounds.left).toBeGreaterThanOrEqual(0);
   expect(shareHelpBounds.right).toBeLessThanOrEqual(shareHelpBounds.viewportWidth);
+  expect(shareHelpBounds.triggerHeight).toBeGreaterThanOrEqual(34);
+  expect(shareHelpBounds.triggerWidth).toBeGreaterThanOrEqual(34);
+  await shareHelp.press("Escape");
+  await expect(shareHelp).toBeFocused();
+  await expect(shareHelp).toHaveAttribute("aria-expanded", "false");
+  await expect.poll(() => shareHelp.locator(".help-text").evaluate((element) => getComputedStyle(element).opacity)).toBe("0");
+  await shareHelp.press("Enter");
+  await expect(shareHelp).toHaveAttribute("aria-expanded", "true");
+  await expect.poll(() => shareHelp.locator(".help-text").evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
 
   await page.getByRole("button", { name: "메뉴" }).click();
   await page.locator('#topbar-action-menu [data-route="saved"]').click();

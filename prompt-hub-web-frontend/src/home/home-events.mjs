@@ -1,5 +1,7 @@
   "use strict";
 
+  import { bindTooltipDisclosure } from "../interactions/tooltip-disclosure.mjs";
+
   function bindHomeEvents(root, controller, state) {
     const searchInput = root.querySelector("[data-tag-search]");
     const scope = root.querySelector("[data-search-scope]");
@@ -15,7 +17,12 @@
         controller.commitSearchQuery(searchInput.value);
       });
     }
-    root.querySelector("[data-search-help]")?.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); searchInput?.focus(); });
+    bindTooltipDisclosure(root.querySelector("[data-search-help]"), {
+      onChange: (expanded) => {
+        if (controller.setSearchTipVisible) controller.setSearchTipVisible(expanded, { cancelAutoHide: true });
+        else state.searchTipVisible = expanded;
+      },
+    });
     const sort = root.querySelector("[data-popular-sort]");
     sort?.addEventListener("change", () => controller.changeSort(sort.value));
     root.querySelector("[data-retry-home-load]")?.addEventListener("click", () => controller.retryHomeLoad());

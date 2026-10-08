@@ -640,11 +640,14 @@ h1 {
   transition: transform 0.18s ease, opacity 0.16s ease;
 }
 
-.search-help:hover .help-text,
-.search-help:focus-visible .help-text,
 .search-help.show-tip .help-text {
   opacity: 1;
   transform: translateY(-50%) scaleX(1);
+}
+
+.search-help.tooltip-dismissed .help-text {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .search-help.expand-left .help-text {
@@ -1874,13 +1877,13 @@ h1 {
 }
 
 .share-field-help {
-  width: 22px;
-  height: 22px;
+  width: 34px;
+  height: 34px;
 }
 
 .share-field-help svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 .share-field-help:hover,
@@ -3980,16 +3983,21 @@ input[type="checkbox"] {
     transform-origin: right center;
   }
 
-  .search-help:hover .help-text,
-  .search-help:focus-visible .help-text,
   .search-help.show-tip .help-text {
     transform: translateY(0) scale(1);
   }
 
-  .home-page:has(.search-help:hover) .popular-tags,
-  .home-page:has(.search-help:focus-visible) .popular-tags,
   .home-page:has(.search-help.show-tip) .popular-tags {
     margin-top: 64px;
+  }
+
+  .home-page:has(.search-help.tooltip-dismissed) .popular-tags {
+    margin-top: 0;
+  }
+
+  .popular-tags button {
+    height: 38px;
+    padding-inline: 13px;
   }
 
   .search-help {

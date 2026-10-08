@@ -1,3 +1,5 @@
+import { bindTooltipDisclosure } from "../interactions/tooltip-disclosure.mjs";
+
 export function bindShareEvents(root, actions, state) {
   const form = root.querySelector(".share-form");
   if (form) {
@@ -25,4 +27,5 @@ export function bindShareEvents(root, actions, state) {
   }
   root.querySelectorAll("[data-remove-share-tag]").forEach((button) => button.addEventListener("click", () => actions.removeTag(button.dataset.removeShareTag)));
   root.querySelectorAll("[data-add-share-tag]").forEach((button) => button.addEventListener("click", () => actions.addTag(button.dataset.addShareTag)));
+  bindTooltipDisclosure(root.querySelector("[data-share-help]"));
 }
