@@ -1,5 +1,6 @@
 """Check the real MySQL/Spring/nginx stack using a deterministic AI fixture."""
 import json
+import re
 import subprocess
 import time
 import urllib.error
@@ -26,6 +27,14 @@ def request(path, payload=None, session=None, extra_headers=None):
         return response.code, json.loads(body) if body.startswith(("{", "[")) else body
 
 
+def request_headers(path, extra_headers=None):
+    headers = {"Origin": BASE}
+    headers.update(extra_headers or {})
+    response = HTTP.open(urllib.request.Request(BASE + path, headers=headers), timeout=10)
+    with response:
+        return response.code, {key.lower(): value for key, value in response.headers.items()}, response.read()
+
+
 def wait_ready():
     for _ in range(120):
         try:
@@ -44,7 +53,30 @@ def improve(session, prompt="CI guest request"):
 def main():
     wait_ready()
     assert request("/healthz") == (200, "ok\n")
-    assert "window.TTALKAK_API_BASE_URL = window.location.origin" in request("/")[1]
+    index_status, index_headers, index_body = request_headers("/")
+    index_html = index_body.decode()
+    assert index_status == 200
+    assert index_headers.get("cache-control") == "no-cache"
+    assert "window.TTALKAK_API_BASE_URL = window.location.origin" in index_html
+    app_match = re.search(r'src="\./(assets/app-[^"]+\.js)"', index_html)
+    assert app_match, "Production HTML must reference a hashed application bundle"
+    asset_status, asset_headers, _ = request_headers("/" + app_match.group(1), {"Accept-Encoding": "gzip"})
+    assert asset_status == 200
+    assert asset_headers.get("content-encoding") == "gzip"
+    assert asset_headers.get("cache-control") == "public, max-age=31536000, immutable"
+    css_status, css_headers, _ = request_headers("/assets/styles.css", {"Accept-Encoding": "gzip"})
+    assert css_status == 200
+    assert css_headers.get("content-encoding") == "gzip"
+    assert css_headers.get("cache-control") == "public, max-age=86400"
+    assert "immutable" not in css_headers.get("cache-control", "")
+    font_status, font_headers, _ = request_headers("/assets/fonts/pretendard/PretendardVariable.subset.2.woff2")
+    assert font_status == 200
+    assert font_headers.get("cache-control") == "public, max-age=86400"
+    assert "immutable" not in font_headers.get("cache-control", "")
+    assert "content-encoding" not in font_headers, "WOFF2 should not be compressed a second time"
+    api_status, api_headers, _ = request_headers("/api/tags/popular")
+    assert api_status == 200
+    assert "no-store" in api_headers.get("cache-control", "")
     status, body = request("/api/prompts/improve", {"prompt": "HTTPS proxy check", "history": []}, str(uuid.uuid4()), {
         "Host": "staging.example.test",
         "Origin": "https://staging.example.test",
