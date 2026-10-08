@@ -85,7 +85,9 @@ class Retriever:
         self._reranker    = None  # 지연 로드
         self._bm25_cache  = {}    # {collection: (BM25Okapi, row_count)} — 토큰화 재사용
         init_db()
-        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid})")
+        _rb = rerank_api.backend()
+        _rbdesc = f"{_rb}:{rerank_api.active_model(_rb)}" if _rb != "torch" else "torch:bge-reranker-v2-m3"
+        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid}, 리랭크백엔드={_rbdesc})")
 
     def search(
         self,

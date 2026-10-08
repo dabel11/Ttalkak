@@ -4056,3 +4056,13 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: CI 동일 venv ruff 통과 + pytest 278 passed. 신규 테스트: GEN_PRIMARY=gemini→gemini / groq→groq / 미설정→groq(무회귀).
 **효과(예상)**: prod 은 GEN_PRIMARY=gemini 가 이미 설정돼 있어 재배포만 하면 분석기가 자동으로 gemini-3.5-flash-lite(로컬 실측 ~1.7s)로 전환 → /query 404 ~2~4s, 정상 ~6~10s + 편차 제거. 별도 Railway env 불필요.
 **결정·근거**: GEN_PRIMARY 미설정(=groq 메인)인 환경은 종전과 동일(무회귀). gemini 메인을 쓰는 곳에서 분석기만 느린 Groq 로 남던 불일치를 구조적으로 제거.
+
+## [2026-10-08] 컨테이너 vCPU 인지 스레드 제한 + 리랭크 백엔드 로그
+**목적**: prod(/query 20~35s·모델로드 2분) 원인 추적. 로그에 `torch CPU 스레드: 48 (코어 48)` — Railway 는 호스트 48코어를 보고하지만 실제 할당 vCPU 는 소수. os.cpu_count()=48 로 스레드를 48개 띄워 **과다할당(oversubscription) → 컨텍스트 스위칭 폭주로 torch(임베딩·리랭크) 가 수배 느려짐**. P0-2 는 10코어 Mac(cpu_count=실제)에선 맞았지만 컨테이너에선 역효과.
+**Before**: `auto = os.cpu_count()` (Railway=48) → torch 48스레드 → 느림. 리랭크 백엔드가 로그에 안 찍혀 jina/torch 구분 불가.
+**After**:
+- `app/core/cpu.py`: `_cgroup_cpu_limit()`(cgroup v2 cpu.max / v1 cfs_quota 읽기) + `auto_threads()=min(cpu_count, cgroup limit)`. Mac/비컨테이너(cgroup 없음)는 종전대로 cpu_count(무회귀).
+- `retriever.__init__`: 준비 로그에 `리랭크백엔드={jina:model | torch:...}` 추가 → 로그만으로 활성 백엔드 확인.
+**변경 파일**: app/core/cpu.py(cgroup cap), app/rag/retriever.py(로그), tests/test_cpu_threads.py(재작성, cgroup cap 케이스)
+**검증**: CI 동일 venv ruff + pytest 280 passed. Mac 로컬: cgroup 없음 → auto=10(불변).
+**결정·근거**: 명시 RAG_TORCH_THREADS 는 여전히 최우선. 컨테이너에선 quota 이하로 자동 제한해 과다할당 제거. 다음 prod 배포에서 스레드 수·리랭크 백엔드를 로그로 재확인 → 지연 원인(과다할당 vs 리랭크) 확정.
