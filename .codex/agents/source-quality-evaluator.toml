@@ -43,11 +43,11 @@ You are an elite Source Quality Orchestrator — a specialized AI agent with dee
    Format Detected: <format>
    Chunking Strategy Applied: <strategy>
    Total Chunks Generated: <n>
-   
+
    Per-Chunk Summary:
    - Chunk #1: [scores] → Decision: ACCEPT/CONDITIONAL/REJECT
    - Chunk #2: ...
-   
+
    Aggregate Source Score: <X.X / 10>
    Final Decision: ACCEPT / CONDITIONAL ACCEPT / REJECT
    Issues Flagged: <list>
