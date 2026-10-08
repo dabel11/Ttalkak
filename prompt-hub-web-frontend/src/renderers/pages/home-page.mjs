@@ -37,9 +37,9 @@
             </select>
           </span>
           <input type="search" data-tag-search value="${escapeAttr(state.searchQuery)}" placeholder="${escapeAttr(searchPlaceholder)}" aria-label="프롬프트 검색" />
-          <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말">
+          <button class="search-help expand-left ${state.searchTipVisible ? "show-tip" : ""}" type="button" data-search-help aria-label="검색 도움말" aria-describedby="home-search-help-text">
             <span>${icons.bulb}</span>
-            <span class="help-text">쉼표로 여러 검색어를 함께 찾습니다.</span>
+            <span class="help-text" id="home-search-help-text" role="tooltip">쉼표로 여러 검색어를 함께 찾습니다.</span>
           </button>
         </label>
         <div class="popular-tags" role="group" aria-label="인기 태그">

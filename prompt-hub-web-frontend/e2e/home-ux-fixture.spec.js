@@ -11,14 +11,18 @@ test("narrow Home search help expands left without leaving the viewport", async 
     const trigger = button.getBoundingClientRect();
     const tooltipElement = button.querySelector(".help-text");
     const tooltip = tooltipElement.getBoundingClientRect();
-    const scope = button.closest(".search-field").querySelector("[data-search-scope]").getBoundingClientRect();
+    const field = button.closest(".search-field").getBoundingClientRect();
+    const tags = document.querySelector(".popular-tags").getBoundingClientRect();
     return {
       triggerLeft: trigger.left,
       triggerRight: trigger.right,
       triggerHeight: trigger.height,
-      scopeHeight: scope.height,
       tooltipLeft: tooltip.left,
       tooltipRight: tooltip.right,
+      tooltipTop: tooltip.top,
+      tooltipBottom: tooltip.bottom,
+      fieldBottom: field.bottom,
+      tagsTop: tags.top,
       clippedHorizontally: tooltipElement.scrollWidth > tooltipElement.clientWidth,
       clippedVertically: tooltipElement.scrollHeight > tooltipElement.clientHeight,
       height: tooltip.height,
@@ -30,9 +34,12 @@ test("narrow Home search help expands left without leaving the viewport", async 
   expect(positions.tooltipRight).toBeLessThanOrEqual(390);
   expect(positions.clippedHorizontally).toBe(false);
   expect(positions.clippedVertically).toBe(false);
-  expect(positions.height).toBeCloseTo(positions.triggerHeight, 0);
-  expect(positions.height).toBeCloseTo(positions.scopeHeight, 0);
-  expect(positions.whiteSpace).toBe("nowrap");
+  expect(positions.height).toBeGreaterThanOrEqual(positions.triggerHeight);
+  expect(positions.tooltipTop).toBeGreaterThanOrEqual(positions.fieldBottom + 6);
+  expect(positions.tooltipBottom).toBeLessThanOrEqual(positions.tagsTop);
+  expect(positions.whiteSpace).toBe("normal");
+  await expect(help).toHaveAttribute("aria-describedby", "home-search-help-text");
+  await expect(help.locator(".help-text")).toHaveAttribute("role", "tooltip");
   await expect(help.locator(".help-text")).toHaveText("쉼표로 여러 검색어를 함께 찾습니다.");
 
   await page.setViewportSize({ width: 1280, height: 800 });

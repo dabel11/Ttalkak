@@ -2433,6 +2433,21 @@ input[type="checkbox"] {
 .billing-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .billing-actions button { max-width: 100%; }
 .billing-modal button:disabled { opacity: .55; cursor: wait; }
+.billing-modal [data-close-billing] {
+  width: 44px;
+  height: 44px;
+  margin: -10px -10px -10px 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted-dark);
+  font-size: 20px;
+  line-height: 1;
+}
+.billing-modal [data-close-billing]:is(:hover, :focus-visible) {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--text);
+}
 
 .modal {
   width: 672px;
@@ -3947,18 +3962,34 @@ input[type="checkbox"] {
   }
 
   .search-help .help-text {
+    top: calc(100% + 26px);
     right: 0;
     left: auto;
     max-width: calc(100vw - 40px);
-    height: 34px;
+    width: max-content;
+    height: auto;
     min-height: 34px;
-    padding-block: 0;
-    border-radius: 999px;
-    line-height: 1.2;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: nowrap;
+    padding: 9px 12px;
+    border-radius: 10px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: initial;
+    white-space: normal;
+    transform: translateY(-4px) scale(0.96);
     transform-origin: right center;
+  }
+
+  .search-help:hover .help-text,
+  .search-help:focus-visible .help-text,
+  .search-help.show-tip .help-text {
+    transform: translateY(0) scale(1);
+  }
+
+  .home-page:has(.search-help:hover) .popular-tags,
+  .home-page:has(.search-help:focus-visible) .popular-tags,
+  .home-page:has(.search-help.show-tip) .popular-tags {
+    margin-top: 64px;
   }
 
   .search-help {

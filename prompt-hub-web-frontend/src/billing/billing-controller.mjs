@@ -79,13 +79,16 @@ export function createBillingController(ctx) {
   let activeToken = "";
   let sdkPromise = null;
   let focusReturnElement = null;
+  let focusReturnSelector = "";
 
   function restoreFocus() {
     globalThis.setTimeout(() => {
+      const selectorTarget = focusReturnSelector ? root?.querySelector?.(focusReturnSelector) : null;
+      focusReturnSelector = "";
       const button = focusReturnElement?.isConnected === false ? null : focusReturnElement;
       focusReturnElement = null;
       const fallback = root?.querySelector?.("[data-open-billing]");
-      const source = button || fallback;
+      const source = selectorTarget || button || fallback;
       const target = source?.closest?.("details")?.querySelector?.("summary") || source;
       target?.focus?.();
     }, 0);
@@ -159,6 +162,7 @@ export function createBillingController(ctx) {
   }
 
   function open() {
+    state.compactHeaderOpen = false;
     state.billingOpen = true;
     setup = billing = usage = null;
     void refresh();
@@ -306,7 +310,8 @@ export function createBillingController(ctx) {
   function bind(root) {
     const on = (selector, listener) => root.querySelector(selector)?.addEventListener("click", listener);
     root.querySelectorAll?.("[data-open-billing]").forEach((button) => button.addEventListener("click", () => {
-      focusReturnElement = button;
+      focusReturnSelector = state.compactHeaderOpen ? ".topbar-mobile-toggle" : "";
+      focusReturnElement = state.compactHeaderOpen ? null : button;
       open();
     }));
     on("[data-close-billing]", close);
