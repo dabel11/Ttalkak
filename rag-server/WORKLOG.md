@@ -4021,3 +4021,16 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **변경 파일**: app/core/rerank.py(신규), app/rag/retriever.py(_rerank 리팩토링+폴백, _finalize_rerank 분리), tests/test_rerank_api.py(신규 11케이스-httpx 모킹, torch/app.main 미사용), requirements-test.txt(httpx 명시), .env.example(RAG_RERANK_* 문서), RAG_PIPELINE.md(B3·컴포넌트)
 **검증**: requirements-test 만의 CI 동일 venv 에서 ruff(0.16.9) 통과 + pytest **277 passed**. 리랭크 테스트는 네트워크·토치 없이 응답 파싱·정렬·top_n/top_k·키누락·HTTP오류 폴백 검증.
 **결정·근거**: torch 무회귀 기본값(키 없으면 기존과 동일). 프로바이더는 env 로 교체 — 비용/키 보유에 따라 선택. 호스티드 API 는 50쌍 전부 리랭크해도 <1초라 **fetch_k 를 20으로 줄일 필요 없음**(fetch_k=20 은 측정상 techniques top-5 집합 3/12 일치로 recall 손실 — 적용 안 함). 라이브 검증은 키 설정 후 가능.
+
+## [2026-10-08] Jina 리랭크 실측 — 라이브 활성 + 벤치 결과
+**목적**: 호스티드 리랭크 API 를 실제 키로 우리 코퍼스에 돌려 속도·품질 확정(이전 2026-10-02 설계의 실측 보강).
+**환경**: RAG_RERANK_BACKEND=jina, 라이브 컨테이너(재빌드로 리랭크 코드 적재). 측정셋 eval/gate_set.json 양성 12쿼리, prompt_techniques fetch_k=50.
+**결과(리랭크 단계, 쿼리당)**:
+| 리랭커 | 지연 | torch 대비 top-5 겹침 |
+|---|---|---|
+| torch bge-reranker-v2-m3 | ~16,600–17,700ms | 기준 |
+| Jina v2-base-multilingual | 456ms (**~37배↑**) | 25/60 (42%) |
+| Jina v3.5 | 393ms (**~43배↑**) | 30/60 (50%) |
+- **끝단 /query**: ~31s → **~10.3s** (리랭크 17s→0.4s 제거, 남은 ~10s 는 Gemini 생성). 폴백 로그 없음(Jina 정상).
+**유의**: ① 품질은 torch 와 top-5 가 절반가량 갈림(다른 모델이라 당연 — 더 나쁘다는 뜻 아님, 정답 라벨 없어 우열 미확정). v3.5 가 torch 와 더 가깝다(50% vs 42%). ② 무료 티어 RPM 제한으로 **버스트 요청 시 429**(벤치가 몰아쳐 발생) — 분산된 실사용 쿼리에선 정상. 간격 2s 로 재측정해 v3.5 수치 확보.
+**결정·근거**: 속도는 압도적(~40배). 모델은 **v3.5 권장**(더 빠르고 torch 와 근접). 품질 우열 확정은 정답셋 A/B 필요(별도). torch 는 폴백으로 유지.
