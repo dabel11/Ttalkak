@@ -8,6 +8,8 @@ Copy this file to `docs/release-results/YYYY-MM-DD-extension-vX.Y.Z.md` for a re
 - GitHub Actions URL:
 - Successful jobs:
 - Production API origin:
+- Production web origin:
+- Extension version:
 - Chrome Web Store Extension ID:
 - Package SHA-256:
 - Rollback package/version:
@@ -23,6 +25,8 @@ Copy this file to `docs/release-results/YYYY-MM-DD-extension-vX.Y.Z.md` for a re
 - [ ] Side panel and backend connection
 - [ ] Guest improve and ask follow-up
 - [ ] Login, session restore, logout, authentication expiry
+- [ ] FREE/PRO plan, token usage, loading failure retry, and token-limit state
+- [ ] 요금제·사용량 link opens the public web billing destination
 - [ ] Cancellation, immediate resend, and timeout distinction
 - [ ] Edited resend for guest and signed-in threads
 - [ ] Copy, Save, Recents, and Execute visibility

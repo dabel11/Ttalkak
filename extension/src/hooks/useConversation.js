@@ -179,17 +179,11 @@ export function useConversation({
     }
   }
 
-  async function executeMessage(message) {
+  async function performExecuteMessage(message) {
     const prompt = message.executablePrompt || "";
     if (!prompt) {
       showNotice("실행 가능한 개선 프롬프트가 아직 없습니다.");
       return;
-    }
-    if (hasPromptPlaceholders(prompt)) {
-      const proceed = window.confirm(
-        "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다."
-      );
-      if (!proceed) return;
     }
     const targetLabel = executeTarget === "claude" ? "Claude" : executeTarget === "gemini" ? "Gemini" : "선택한 AI 사이트";
 
@@ -216,6 +210,19 @@ export function useConversation({
 
     await copyText(prompt);
     showNotice("미리보기 모드에서는 자동 입력을 사용할 수 없습니다. 복사한 프롬프트를 붙여넣어 주세요.");
+  }
+
+  function executeMessage(message, setConfirmAction) {
+    const prompt = message.executablePrompt || "";
+    if (!prompt || !hasPromptPlaceholders(prompt)) return performExecuteMessage(message);
+    setConfirmAction?.({
+      title: "입력할 정보가 남아 있습니다",
+      message: "채워지지 않은 정보가 있습니다. 그대로 실행하거나 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
+      confirmLabel: "그대로 실행",
+      danger: false,
+      onConfirm: () => performExecuteMessage(message),
+    });
+    return undefined;
   }
 
   async function submitPrompt(promptOverride = "") {

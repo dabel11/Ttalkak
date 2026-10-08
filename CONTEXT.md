@@ -28,12 +28,12 @@ Spring의 `CommunityPost` 엔티티에 해당한다.
 
 ### AnonymousSession (익명 세션)
 비로그인 사용자를 식별하는 UUID 기반 세션.
-확장이 최초 실행 시 생성해 localStorage에 저장한다.
-Spring은 이 UUID로 체험 횟수를 카운팅하며, 24시간마다 리셋된다.
+웹·확장이 익명 사용 시 생성해 localStorage에 저장하고 `X-Session-UUID`로 전달한다.
+Spring은 UUID의 해시를 기준으로 성공 횟수를 DB에 보관하며, 현재 구현에는 주기적 초기화가 없다.
 
 ### TrialCount (체험 횟수)
-AnonymousSession당 `/improve` 호출 가능 횟수. 한도는 3회/24시간.
-Turn 단위로 차감된다(피드백 1회 = 1회 차감).
+AnonymousSession당 `/improve` 성공 가능 횟수. 한도는 총 3회다.
+성공한 Turn 단위로 차감하며, AI 오류·시간 초과는 예약을 해제한다. 진행 중 예약도 한도 검사에 포함해 동시 요청의 초과 사용을 막는다.
 
 ### ImprovedPrompt (개선된 프롬프트)
 Turn에서 AI가 생성한 결과물 중 "다른 AI에게 시킬 지시문" 부분.

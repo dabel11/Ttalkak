@@ -1,0 +1,45 @@
+# Disposable GitHub Actions stack. All credentials below are test fixtures.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ci-only-password
+      MYSQL_DATABASE: ttalkak_ci
+    healthcheck:
+      test: [CMD-SHELL, 'mysqladmin ping -h 127.0.0.1 -pci-only-password --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  rag-stub:
+    image: node:24-alpine
+    environment:
+      TTALKAK_STUB_RAG_HOST: 0.0.0.0
+    volumes:
+      - ../scripts/stub-rag-server.cjs:/app/stub.cjs:ro
+    command: [node, /app/stub.cjs]
+  backend:
+    build: ../backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: '18080'
+      FORWARD_HEADERS_STRATEGY: framework
+      DB_URL: jdbc:mysql://mysql:3306/ttalkak_ci?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: ci-only-password
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      RAG_SERVER_URL: http://rag-stub:8000
+      JPA_SHOW_SQL: 'false'
+      MEMBER_QUOTA_ENABLED: 'true'
+      FREE_TOKEN_LIMIT: '30'
+      PRO_TOKEN_LIMIT: '300'
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+    environment:
+      PORT: '18081'
+      BACKEND_UPSTREAM: backend:18080
+    ports:
+      - '127.0.0.1:18173:18081'

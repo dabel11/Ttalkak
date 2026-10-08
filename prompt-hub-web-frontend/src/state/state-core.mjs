@@ -8,6 +8,8 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
   return {
     route: "home",
     authView: null,
+    billingOpen: false,
+    pendingBillingOpen: false,
     detailPromptId: null,
     detailHighlightCommentId: null,
     reportPromptId: null,
@@ -41,6 +43,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     currentUser: null,
     currentUserId: null,
     currentUserRole: "user",
+    currentUserProvider: "",
     authToken: "",
     token: "",
     accountScopes: {},
@@ -109,7 +112,7 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     composerDraft: "",
     templateCollapsed: false,
     mobileTemplateExpanded: false,
-    guestImproveCount: 0,
+    makeDrawerOpen: false,
     shareDraft: null,
     savedFilter: { community: true, mine: true, liked: false },
     messages: [],
@@ -119,6 +122,8 @@ function createInitialState(/** @type {{makeRequestState?: TtalkakStateEntity, h
     creatingFolder: false,
     editingFolderId: null,
     activeThreadId: null,
+    pendingGuestThreadTransferId: null,
+    pendingGuestThreadTransferErrorCode: "",
     copiedMessageId: "",
   };
 }
@@ -188,6 +193,8 @@ function toggleReportedVisibilityState(/** @type {TtalkakApplicationState} */ st
 function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
   if (state.confirmAction) {
     state.confirmAction = null;
+  } else if (state.billingOpen) {
+    state.billingOpen = false;
   } else if (state.adminBlockTarget) {
     state.adminBlockTarget = null;
   } else if (state.executeMessageId) {
@@ -215,11 +222,12 @@ function closeTopModalState(/** @type {TtalkakApplicationState} */ state) {
 }
 
 
-function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string}, token: string}} */ authResult) {
+function applyAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ state, /** @type {{user: {nickname: string, id: TtalkakId, role?: string, provider?: string}, token: string}} */ authResult) {
   state.isLoggedIn = true;
   state.currentUser = authResult.user.nickname;
   state.currentUserId = authResult.user.id;
   state.currentUserRole = authResult.user.role || "user";
+  state.currentUserProvider = authResult.user.provider || "";
   state.authToken = authResult.token;
   state.token = authResult.token;
   state.adminMode = state.currentUserRole === "admin";
@@ -232,6 +240,7 @@ function clearAuthenticatedIdentityState(/** @type {TtalkakApplicationState} */ 
   state.currentUser = null;
   state.currentUserId = null;
   state.currentUserRole = "user";
+  state.currentUserProvider = "";
   state.authToken = "";
   state.token = "";
 }
@@ -264,6 +273,25 @@ function clearSessionBackendDataState(/** @type {TtalkakApplicationState} */ sta
 }
 
 
+function clearMakeSessionDataState(/** @type {TtalkakApplicationState} */ state) {
+  /** @param {unknown} id */
+  const isLocalId = (id) => Boolean(id) && !/^\d+$/.test(String(id));
+  const localThreads = state.recentThreads.filter((thread) => !thread.serverId && isLocalId(thread.id));
+  const activeThread = localThreads.find((thread) => String(thread.id) === String(state.activeThreadId || ""));
+  state.recentThreads = localThreads;
+  state.messages = activeThread?.messages?.map((message) => ({ ...message })) || [];
+  state.activeThreadId = activeThread?.id || null;
+  state.makeFolders = [
+    { id: "uncategorized", name: "\uBBF8\uBD84\uB958" },
+    ...state.makeFolders.filter((folder) => folder.id !== "uncategorized" && isLocalId(folder.id)),
+  ];
+  if (!state.makeFolders.some((folder) => String(folder.id) === String(state.activeFolderId || ""))) state.activeFolderId = "all";
+  state.composerDraft = "";
+  state.pendingMakeImproveThread = null;
+  state.makeBackendMessage = "";
+}
+
+
 function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ state) {
   state.creatingFolder = false;
   state.editingFolderId = null;
@@ -280,6 +308,8 @@ function clearTransientSessionUiState(/** @type {TtalkakApplicationState} */ sta
   state.editingMessageId = null;
   state.executeMessageId = null;
   state.executePromptId = null;
+  state.pendingGuestThreadTransferId = null;
+  state.pendingGuestThreadTransferErrorCode = "";
 }
 
 
@@ -287,9 +317,12 @@ function clearAuthenticatedSessionState(/** @type {TtalkakApplicationState} */ s
   clearAuthenticatedIdentityState(state);
   state.adminMode = false;
   state.authView = null;
+  state.billingOpen = false;
+  state.pendingBillingOpen = false;
   state.authError = "";
   resetSessionBackendState(state);
   clearSessionBackendDataState(state);
+  clearMakeSessionDataState(state);
   clearTransientSessionUiState(state);
   if (!options.keepRoute || state.route === "admin" || state.route === "saved") state.route = "home";
 }

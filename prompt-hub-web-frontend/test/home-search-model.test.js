@@ -135,9 +135,7 @@ test("account and development actions use separate menus", () => {
   }, {
     adminAccessButton: "",
     authButton: "",
-    freeMakeLimit: 3,
     hasReportedPrompts: true,
-    remaining: 3,
     showPromptTools: true,
   });
 
@@ -164,7 +162,7 @@ test("screen settings remain available outside prompt-list routes", () => {
     state: { isLoggedIn: true, currentUser: "Fixture", route: "make", hideReportedPrompts: false },
     escapeHtml: (value) => String(value),
     BackendStatusBadge: () => '<span class="backend-status">연결됨</span>',
-  }, { adminAccessButton: "", authButton: "", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: false });
+  }, { adminAccessButton: "", authButton: "", hasReportedPrompts: false, showPromptTools: false });
   assert.match(html, /<details class="topbar-settings">/);
   assert.match(html, /data-reset-demo/);
   assert.doesNotMatch(html, /data-toggle-reported/);
@@ -176,7 +174,7 @@ test("compact header open state survives shell rendering", () => {
     state: { compactHeaderOpen: true, isLoggedIn: false, route: "home", hideReportedPrompts: false },
     escapeHtml: String,
     BackendStatusBadge: () => '<span class="backend-status">확인 중</span>',
-  }, { adminAccessButton: "", authButton: "로그인", freeMakeLimit: 3, hasReportedPrompts: false, remaining: 3, showPromptTools: true });
+  }, { adminAccessButton: "", authButton: "로그인", hasReportedPrompts: false, showPromptTools: true });
   assert.match(html, /class="topbar-primary-actions compact-open"/);
   assert.match(html, /class="topbar-mobile-toggle"[^>]*aria-expanded="true"/);
 });
@@ -193,7 +191,7 @@ test("Home retry exposes an actionable compact error state", async () => {
   const html = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "fallback", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });
   assert.match(html, /프롬프트를 불러오지 못했습니다/);
   assert.match(html, /data-retry-home-load/);
-  assert.match(html, />정렬</);
+  assert.doesNotMatch(html, />정렬</);
   assert.match(html, />저장순</);
 
   const checkingHtml = HomePageView({ icons: { search: "search", bulb: "bulb" }, state: { backendStatus: "checking", searchQuery: "", searchTipVisible: false }, escapeAttr: String, escapeHtml: String, normalizeTag: String, SearchScopeOption: option, SortOption: option, PromptCard: () => "", Pagination: () => "" }, { displayTags: [], searchCriteria: { tagTokens: [] }, totalPages: 1, currentPage: 1, pagePrompts: [], isSearching: false, searchPlaceholder: "검색", canShowDemoFallback: false });

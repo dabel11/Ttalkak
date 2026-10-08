@@ -1,9 +1,7 @@
-import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
-
   "use strict";
 
   function AuthModalView(ctx, data) {
-    const { icons, escapeAttr, escapeHtml } = ctx;
+    const { icons, escapeAttr, escapeHtml, accountWithdrawalNotice } = ctx;
     const {
       title,
       authError,
@@ -27,7 +25,7 @@ import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy
               <h2 id="auth-title">${title}</h2>
               <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
             </div>
-            <p class="auth-helper">${ACCOUNT_WITHDRAWAL_NOTICE}</p>
+            <p class="auth-helper">${accountWithdrawalNotice}</p>
             ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
             <label class="password-field">
               <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />

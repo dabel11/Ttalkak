@@ -150,6 +150,10 @@ public class GlobalExceptionHandler {
             ObjectOptimisticLockingFailureException exception,
             HttpServletRequest request
     ) {
+        if (com.ttalkak.member.Member.class.equals(exception.getPersistentClass())) {
+            return build(HttpStatus.CONFLICT, "AUTH_CONCURRENT_UPDATE",
+                    "계정 상태가 다른 요청에서 변경되었습니다. 다시 확인해주세요.", request);
+        }
         return build(
                 HttpStatus.CONFLICT,
                 MakeApiContract.THREAD_CONCURRENTLY_UPDATED,
@@ -172,6 +176,14 @@ public class GlobalExceptionHandler {
                 ),
                 request
         );
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataConflict(
+            org.springframework.dao.DataIntegrityViolationException exception,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "DATA_CONFLICT",
+                "동일한 정보가 이미 등록되어 있거나 다른 요청과 충돌했습니다. 다시 확인해주세요.", request);
     }
 
     @ExceptionHandler(Exception.class)

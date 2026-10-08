@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
+import com.ttalkak.usage.RagUsageRecorder;
+import com.ttalkak.usage.MemberRequestGuard;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +33,9 @@ public class PromptController {
     private final PromptLikeRepository likeRepository;
     private final TagRepository tagRepository;
     private final AuthService authService;
+    private final GuestUsageService guestUsageService;
+    private final RagUsageRecorder ragUsageRecorder;
+    private final MemberRequestGuard memberRequestGuard;
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
@@ -54,12 +59,18 @@ public class PromptController {
                             // @Value 가 없으면 Spring 이 Duration 타입 빈을 찾다 실패해 기동이 막힌다
                             // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
                             @Value("${rag.response-timeout:75s}")
-                            Duration ragResponseTimeout) {
+                            Duration ragResponseTimeout,
+                            GuestUsageService guestUsageService,
+                            RagUsageRecorder ragUsageRecorder,
+                            MemberRequestGuard memberRequestGuard) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
+        this.guestUsageService = guestUsageService;
+        this.ragUsageRecorder = ragUsageRecorder;
+        this.memberRequestGuard = memberRequestGuard;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
@@ -705,7 +716,9 @@ public class PromptController {
     public Map<String, Object> improve(
             @RequestBody ImproveRequest request,
             @RequestHeader(value = "Authorization", required = false)
-            String authorization
+            String authorization,
+            @RequestHeader(value = "X-Session-UUID", required = false)
+            String sessionUuid
     ) {
         String prompt = request.prompt() == null
                 ? ""
@@ -760,6 +773,8 @@ public class PromptController {
 	int editedMessageIndex = -1;
     String requestId =
         normalizeRequestId(request.requestId());
+    MemberRequestGuard.Permit memberPermit = memberRequestGuard.acquire(memberId);
+    try {
 
     if (requestedThreadId == null
             && memberId != null
@@ -844,7 +859,12 @@ public class PromptController {
 		ragHistory = toRagHistory(messages);
 	}
 
+        memberRequestGuard.checkQuota(memberPermit);
         Map<String, Object> body;
+        GuestUsageService.Permit guestPermit = memberId == null
+                ? guestUsageService.reserve(sessionUuid)
+                : null;
+        boolean aiSucceeded = false;
 
         try {
             Map<String, Object> ragRequest =
@@ -874,8 +894,20 @@ public class PromptController {
             }
 
             body = buildImproveResponse(response);
+            if (memberId != null) {
+                boolean recorded;
+                try {
+                    recorded = ragUsageRecorder.record(memberId, requestId, response);
+                } catch (RuntimeException accountingFailure) {
+                    memberRequestGuard.usageMissing(memberPermit);
+                    throw accountingFailure;
+                }
+                if (!recorded) memberRequestGuard.usageMissing(memberPermit);
+            }
+            aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
             body = buildNoEvidenceResponse(prompt);
+            aiSucceeded = true;
         } catch (WebClientResponseException e) {
             // rag-server 가 알려준 재시도 시점을 그대로 전달한다.
             // 동시 실행 게이트(rag-server app/core/concurrency.py)는 줄이 찼을 때
@@ -909,6 +941,11 @@ public class PromptController {
                     "AI_SERVICE_UNAVAILABLE",
                     "AI 서비스를 일시적으로 사용할 수 없습니다."
             );
+        } finally {
+            if (guestPermit != null) {
+                if (aiSucceeded) guestUsageService.complete(guestPermit);
+                else guestUsageService.release(guestPermit);
+            }
         }
 
         Long savedThreadId = null;
@@ -989,6 +1026,9 @@ public class PromptController {
 		}
 
         return body;
+    } finally {
+        memberRequestGuard.release(memberPermit);
+    }
     }
 
     private Map<String, Object> replayResponse(

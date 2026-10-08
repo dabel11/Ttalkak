@@ -25,16 +25,19 @@ import java.util.stream.Collectors;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final com.ttalkak.auth.AuthRateLimitFilter authRateLimitFilter;
     private final ApiErrorWriter apiErrorWriter;
     private final List<String> allowedOriginPatterns;
 
 	public SecurityConfig(
 			JwtAuthenticationFilter jwtAuthenticationFilter,
+            com.ttalkak.auth.AuthRateLimitFilter authRateLimitFilter,
 			ApiErrorWriter apiErrorWriter,
 			@Value("${ttalkak.cors.allowed-origin-patterns}")
 			String allowedOriginPatterns
 	) {
 		this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authRateLimitFilter = authRateLimitFilter;
 		this.apiErrorWriter = apiErrorWriter;
 		this.allowedOriginPatterns = Arrays.stream(
 						allowedOriginPatterns.split(",")
@@ -172,7 +175,16 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class
                 );
 
+        http.addFilterBefore(authRateLimitFilter, JwtAuthenticationFilter.class);
         return http.build();
+    }
+
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<com.ttalkak.auth.AuthRateLimitFilter>
+            authRateLimitRegistration(com.ttalkak.auth.AuthRateLimitFilter filter) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false); // Runs inside Security after CORS, rather than twice as a servlet filter.
+        return registration;
     }
 
     @Bean

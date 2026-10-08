@@ -1,7 +1,7 @@
 // @ts-check
-import { API_TIMEOUT_MS, DEFAULT_RAG_CONFIG } from "../constants";
-import { assertBackendApiUrl } from "../config/backendConfig";
-import { fetchWithAbortPolicy } from "./fetchPolicy";
+import { API_TIMEOUT_MS, DEFAULT_RAG_CONFIG } from "../constants.js";
+import { assertBackendApiUrl } from "../config/backendConfig.js";
+import { fetchWithAbortPolicy } from "./fetchPolicy.js";
 
 export function getBackendBaseUrl(config = {}) {
   return assertBackendApiUrl(config.backendApiUrl || DEFAULT_RAG_CONFIG.backendApiUrl);
