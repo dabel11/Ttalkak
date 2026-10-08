@@ -43,4 +43,4 @@ COPY . .
 EXPOSE 8000
 
 # 모델이 이미지에 포함됨 → 기동 시 다운로드 없이 HF_HOME 캐시에서 로드
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "::", "--port", "8000"]
