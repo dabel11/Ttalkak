@@ -4047,3 +4047,12 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 → 품질 **동급**(근소 torch 우위이나 n=12 노이즈 수준). 속도는 Jina ~43배(17s→0.4s), /query 31s→10s.
 **결정·근거**: **Jina v3.5 유지**(RAG_RERANK_MODEL=jina-reranker-v3.5) — 속도 이득이 압도적이고 품질 손실 유의하지 않음. torch 폴백 유지.
 **부수 관찰**: 두 리랭커 모두 rel@5 가 ~1/3(0.9x)로 낮음 → 리랭커 문제 아니라 **코퍼스 커버리지**가 이 질문들엔 얇을 가능성(별개 과제). n=12·LLM심판이라 정밀도 한계 — 결론은 "품질 동급 + 속도 압승"으로 충분.
+
+## [2026-10-08] 분석기 기본 백엔드를 GEN_PRIMARY 추종으로 — prod Groq 분석기 자동 회피
+**목적**: 프로덕션 실측에서 analyze 가 Groq(gpt-oss-20b)로 돌아 15~35s + 편차 극심(/query 14~46s). Railway 에 ANALYZER_BACKEND 가 없어 코드 기본값 "groq" 로 떨어진 탓. 매번 Railway env 를 추가하는 대신, 코드 기본값이 GEN_PRIMARY 를 따르게 해 자동 해소.
+**Before**: `_BACKEND = os.environ.get("ANALYZER_BACKEND", "groq")` — 미설정이면 무조건 groq. GEN_PRIMARY=gemini 인 환경도 분석기만 groq 로 떨어져 느림.
+**After**: `_default_analyzer_backend()` 추가 — GEN_PRIMARY=gemini 면 gemini, 아니면 groq. `_BACKEND = os.environ.get("ANALYZER_BACKEND", _default_analyzer_backend())`. 명시 ANALYZER_BACKEND 가 있으면 그게 우선. concurrency._default_concurrency 와 동일 패턴.
+**변경 파일**: app/rag/analyzer.py(기본값 로직), tests/test_backend_routing.py(+1 케이스), .env.example(주석)
+**검증**: CI 동일 venv ruff 통과 + pytest 278 passed. 신규 테스트: GEN_PRIMARY=gemini→gemini / groq→groq / 미설정→groq(무회귀).
+**효과(예상)**: prod 은 GEN_PRIMARY=gemini 가 이미 설정돼 있어 재배포만 하면 분석기가 자동으로 gemini-3.5-flash-lite(로컬 실측 ~1.7s)로 전환 → /query 404 ~2~4s, 정상 ~6~10s + 편차 제거. 별도 Railway env 불필요.
+**결정·근거**: GEN_PRIMARY 미설정(=groq 메인)인 환경은 종전과 동일(무회귀). gemini 메인을 쓰는 곳에서 분석기만 느린 Groq 로 남던 불일치를 구조적으로 제거.

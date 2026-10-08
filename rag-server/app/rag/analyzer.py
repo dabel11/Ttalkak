@@ -56,9 +56,16 @@ _MAX_TOKENS = 1000          # low 기준 실사용 198~447 → 2배 이상 여�
 # 백엔드 선택 (2026-09-27) — Groq 무료 한도(20b, TPD 200k → 하루 ~90건)를 넘으면 분석기가
 # 조용히 None 으로 퇴화한다. 사용량이 늘면 생성기와 같은 제미나이로 통일할 수 있게 열어 둔다.
 #   ANALYZER_BACKEND=gemini + (선택)ANALYZER_MODEL=gemini-3.5-flash-lite 로 전환.
-# 기본값은 groq(gpt-oss-20b) — 미설정 시 종전과 동일 동작(무회귀).
+# 기본값(미설정)은 GEN_PRIMARY 를 따른다(2026-10-08) — 생성이 gemini면 분석도 gemini.
+# Groq 무료 한도의 느리고 편차 큰 분석(실측: prod 분석 15~35s)을 자동으로 피한다.
+# concurrency._default_concurrency 와 같은 패턴 — GEN_PRIMARY 미설정(=groq)이면 종전처럼 groq(무회귀).
 # ⚠️ gemini-2.5-flash-lite 는 신규 계정에 종료(404) → 3.5-flash-lite 가 후속(실측 2026-09-27).
-_BACKEND = os.environ.get("ANALYZER_BACKEND", "groq").strip().lower()
+def _default_analyzer_backend() -> str:
+    """ANALYZER_BACKEND 미설정 시 기본 백엔드 — GEN_PRIMARY=gemini 면 gemini, 아니면 groq."""
+    return "gemini" if os.environ.get("GEN_PRIMARY", "groq").strip().lower() == "gemini" else "groq"
+
+
+_BACKEND = os.environ.get("ANALYZER_BACKEND", _default_analyzer_backend()).strip().lower()
 _GEMINI_MODEL = os.environ.get("ANALYZER_MODEL", "gemini-3.5-flash-lite").strip()
 # 형식 판단이라 사고는 최소로. 단 3.5-flash-lite 는 thinking_budget=0 을 거부(400)하고 512+ 만
 # 받는다 → 기본 512, 거부되면 thinking 설정 없이 1회 재시도(모델별 허용 범위 차이 흡수).

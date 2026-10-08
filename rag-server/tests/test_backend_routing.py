@@ -218,3 +218,16 @@ def test_analyzer_gemini_missing_key_returns_none(monkeypatch):
     monkeypatch.setattr(a, "_gemini_client", None)
     monkeypatch.setattr(a, "_gemini_init_failed", True)   # 재초기화 시도 차단
     assert a.analyze("블로그 글 써줘") is None
+
+
+def test_analyzer_default_follows_gen_primary(monkeypatch):
+    """ANALYZER_BACKEND 미설정 시 기본값은 GEN_PRIMARY 를 따른다(2026-10-08).
+    prod 에서 Groq 분석기(느리고 편차 큼)로 조용히 떨어지던 것을 방지 — GEN_PRIMARY=gemini 면
+    분석도 gemini 로 자동. GEN_PRIMARY 미설정(=groq)이면 종전처럼 groq(무회귀)."""
+    monkeypatch.delenv("ANALYZER_BACKEND", raising=False)
+    monkeypatch.setenv("GEN_PRIMARY", "gemini")
+    assert a._default_analyzer_backend() == "gemini"
+    monkeypatch.setenv("GEN_PRIMARY", "groq")
+    assert a._default_analyzer_backend() == "groq"
+    monkeypatch.delenv("GEN_PRIMARY", raising=False)
+    assert a._default_analyzer_backend() == "groq"      # 미설정 = 무회귀
