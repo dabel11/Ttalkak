@@ -207,6 +207,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   border-radius: 8px;
   box-shadow: none;
 }
+.share-preview-card { min-height: 240px; }
 .modal { border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 54px rgba(23, 32, 48, .14); }
 .modal input, .modal textarea { border: 1px solid var(--line); box-shadow: none; }
 .modal input:focus, .modal textarea:focus { border-color: #78b5eb; box-shadow: 0 0 0 3px rgba(0, 117, 222, .11); }
@@ -541,6 +542,7 @@ summary[aria-label="화면 설정"] span,
     margin-bottom: 18px;
   }
   .share-preview { margin-top: 24px; padding-top: 20px; }
+  .share-preview-card { min-height: 210px; }
 }
 .search-empty { min-height: 190px; padding: 14px 24px; }
 

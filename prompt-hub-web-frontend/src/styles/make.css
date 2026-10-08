@@ -614,6 +614,11 @@
   display: inline;
 }
 
+.make-template-bar:not(.collapsed) .template-toggle-label {
+  position: relative;
+  left: 4px;
+}
+
 .template-toggle-chevron {
   display: block;
   flex: 0 0 auto;
@@ -802,10 +807,10 @@
 
 @media (min-width: 761px) {
   .make-page.is-empty .make-main {
-    align-content: center;
+    align-content: start;
     grid-template-rows: auto auto;
-    gap: 16px;
-    padding: 28px 0 40px;
+    gap: 14px;
+    padding: clamp(44px, 8vh, 72px) 0 40px;
   }
 
   .make-page.is-empty .chat-feed {
@@ -820,8 +825,8 @@
   .make-page.is-empty .make-empty {
     flex: 0 0 auto;
     justify-content: center;
-    min-height: 220px;
-    padding: 20px 0 4px;
+    min-height: 188px;
+    padding: 16px 0 2px;
   }
 
   .make-page.is-empty .composer {

@@ -120,6 +120,48 @@ test("pending billing can be rechecked without starting another payment and retu
   await expect(accountSummary).toBeFocused();
 });
 
+test("mobile billing closes the compact menu and restores focus to its trigger", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await seed(page, {
+    isLoggedIn: true,
+    currentUser: "결제 회원",
+    currentUserId: "29",
+    authToken: "member-token",
+    token: "member-token",
+  }, "member-token");
+  await mockBackend(page, async (route, request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === "/api/me/billing/setup" && request.method() === "POST") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ cardRegistered: true }) });
+      return true;
+    }
+    if (path === "/api/me/billing" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }) });
+      return true;
+    }
+    if (path === "/api/me/usage" && request.method() === "GET") {
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({ plan: "PRO", used: 0, limit: 1000000 }) });
+      return true;
+    }
+    return false;
+  });
+
+  await gotoApp(page);
+  await waitForAppHydration(page);
+  const compactToggle = page.getByRole("button", { name: "메뉴" });
+  await compactToggle.click();
+  await expect(compactToggle).toHaveAttribute("aria-expanded", "true");
+  await page.locator(".topbar-account > summary").click();
+  await page.locator("[data-open-billing]").click();
+
+  const dialog = page.getByRole("dialog", { name: "요금제·결제" });
+  await expect(dialog).toBeVisible();
+  await expect(compactToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".topbar-primary-actions")).not.toHaveClass(/compact-open/);
+  await dialog.getByRole("button", { name: "닫기" }).click();
+  await expect(compactToggle).toBeFocused();
+});
+
 test("signed-out billing deep link opens login and removes its one-time query", async ({ page }) => {
   await seed(page);
   await mockBackend(page);
