@@ -77,6 +77,14 @@ def main():
     api_status, api_headers, _ = request_headers("/api/tags/popular")
     assert api_status == 200
     assert "no-store" in api_headers.get("cache-control", "")
+    # API paths must outrank static-asset regex locations even when their final
+    # segment looks like a CSS, image, or SVG filename. Spring's numeric prompt
+    # id conversion returns this deterministic JSON 400 only after proxying.
+    for extension in ("css", "png", "svg"):
+        status, body = request(f"/api/prompts/not-a-number.{extension}")
+        assert status == 400 and body["code"] == "INVALID_REQUEST", (
+            "API-like asset path did not reach Spring", extension, status, body
+        )
     status, body = request("/api/prompts/improve", {"prompt": "HTTPS proxy check", "history": []}, str(uuid.uuid4()), {
         "Host": "staging.example.test",
         "Origin": "https://staging.example.test",

@@ -37,6 +37,16 @@ test("web container copies every local asset referenced by index.html before bui
   );
 });
 
+test("nginx routes API-looking asset paths to Spring before static regex locations", () => {
+  const nginx = fs.readFileSync(path.resolve(__dirname, "../../docker/nginx-server.conf"), "utf8");
+  const smoke = fs.readFileSync(path.resolve(__dirname, "../../scripts/check-server-guest-policy.py"), "utf8");
+  assert.match(nginx, /location\s+\^~\s+\/api\/\s*\{/);
+  assert.doesNotMatch(nginx, /location\s+\/api\/\s*\{/);
+  assert.match(smoke, /for extension in \("css", "png", "svg"\):/);
+  assert.match(smoke, /f"\/api\/prompts\/not-a-number\.\{extension\}"/);
+  assert.match(smoke, /API-like asset path did not reach Spring/);
+});
+
 test("production build excludes optional demo data while development keeps lazy loading", () => {
   const entry = fs.readFileSync(path.resolve(__dirname, "../src/app-entry.js"), "utf8");
   const build = fs.readFileSync(path.resolve(__dirname, "../../scripts/build-web.cjs"), "utf8");
