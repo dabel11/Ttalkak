@@ -67,7 +67,7 @@ def main():
     css_status, css_headers, _ = request_headers("/assets/styles.css", {"Accept-Encoding": "gzip"})
     assert css_status == 200
     assert css_headers.get("content-encoding") == "gzip"
-    assert css_headers.get("cache-control") == "public, max-age=86400"
+    assert css_headers.get("cache-control") == "no-cache"
     assert "immutable" not in css_headers.get("cache-control", "")
     font_status, font_headers, _ = request_headers("/assets/fonts/pretendard/PretendardVariable.subset.2.woff2")
     assert font_status == 200
