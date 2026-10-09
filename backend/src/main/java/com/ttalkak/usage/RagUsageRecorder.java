@@ -37,12 +37,14 @@ public class RagUsageRecorder {
         TokenCounts counts;
         String details;
         try {
-            counts = new TokenCounts(tokens(reported.get("input_tokens")),
+            boolean nested = reported.containsKey("summary");
+            counts = nested ? nestedCounts(reported) : new TokenCounts(tokens(reported.get("input_tokens")),
                     tokens(reported.get("output_tokens")), tokens(reported.get("total_tokens")));
             // A provider may not supply usage. Zero does not mean a metered request.
             if (counts.totalTokens() == 0) return false;
-            details = mapper.writeValueAsString(Map.of("calls", safeCalls(reported.get("calls"))));
-        } catch (IllegalArgumentException | JsonProcessingException e) {
+            details = mapper.writeValueAsString(Map.of("calls", safeCalls(
+                    reported.get(nested ? "records" : "calls"), nested)));
+        } catch (IllegalArgumentException | ArithmeticException | JsonProcessingException e) {
             // Preserve compatibility with older RAG deployments; never fabricate billing data.
             log.warn("RAG usage invalid; member token usage was not recorded");
             return false;
@@ -51,6 +53,40 @@ public class RagUsageRecorder {
         String key = requestId == null ? UUID.randomUUID().toString() : requestId;
         usage.record(memberId, key, counts, clock.instant(), details);
         return true;
+    }
+
+    /** PR #46 separates visible output from billed output (visible + reasoning). */
+    private static TokenCounts nestedCounts(Map<?, ?> reported) {
+        if (!(reported.get("summary") instanceof Map<?, ?> summary)
+                || !(reported.get("records") instanceof List<?> records) || records.isEmpty()) {
+            throw new IllegalArgumentException("Usage summary or records missing");
+        }
+        if (tokens(summary.get("calls")) != records.size()) {
+            throw new IllegalArgumentException("Usage call count mismatch");
+        }
+        long input = 0, output = 0, thoughts = 0, cached = 0;
+        for (Object item : records) {
+            if (!(item instanceof Map<?, ?> call)) throw new IllegalArgumentException("Invalid usage record");
+            // Required counters must not be silently converted from null to zero.
+            input = Math.addExact(input, tokens(call.get("prompt_tokens")));
+            output = Math.addExact(output, tokens(call.get("completion_tokens")));
+            thoughts = Math.addExact(thoughts, optionalTokens(call.get("thoughts_tokens")));
+            cached = Math.addExact(cached, optionalTokens(call.get("cached_tokens")));
+        }
+        long billedOutput = Math.addExact(output, thoughts);
+        if (tokens(summary.get("input_tokens")) != input
+                || tokens(summary.get("output_tokens")) != output
+                || tokens(summary.get("thoughts_tokens")) != thoughts
+                || tokens(summary.get("billed_output_tokens")) != billedOutput
+                || tokens(summary.get("cached_tokens")) != cached) {
+            throw new IllegalArgumentException("Usage totals mismatch");
+        }
+        // Cached tokens are part of input, and reasoning is already in billedOutput.
+        return new TokenCounts(input, output, Math.addExact(input, billedOutput));
+    }
+
+    private static long optionalTokens(Object value) {
+        return value == null ? 0 : tokens(value);
     }
 
     private static long tokens(Object value) {
@@ -64,7 +100,7 @@ public class RagUsageRecorder {
         }
     }
 
-    private static List<Map<String, Object>> safeCalls(Object value) {
+    private static List<Map<String, Object>> safeCalls(Object value, boolean nested) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (!(value instanceof List<?> calls)) return result;
         for (Object item : calls) {
@@ -75,8 +111,13 @@ public class RagUsageRecorder {
                 if (call.get(field) instanceof String text && text.length() <= 160) safe.put(field, text);
             }
             for (String field : List.of("input_tokens", "output_tokens", "total_tokens",
-                    "thoughts_tokens", "cached_tokens", "prompt", "completion", "thoughts")) {
-                if (call.containsKey(field)) safe.put(field, tokens(call.get(field)));
+                    "thoughts_tokens", "cached_tokens", "prompt", "completion", "thoughts",
+                    "prompt_tokens", "completion_tokens")) {
+                if (call.containsKey(field)) {
+                    if (nested && call.get(field) == null
+                            && (field.equals("thoughts_tokens") || field.equals("cached_tokens"))) continue;
+                    safe.put(field, tokens(call.get(field)));
+                }
             }
             result.add(safe);
         }
