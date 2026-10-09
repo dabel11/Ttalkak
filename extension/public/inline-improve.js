@@ -197,7 +197,7 @@
       if (!enabled || !source.isConnected || source !== input) return;
       const error = chrome.runtime.lastError?.message || reply?.error;
       const candidate = error ? "" : String(reply?.improvedPrompt || "").trim();
-      const unchanged = candidate.replace(/\\s+/g, " ").trim() === original.replace(/\\s+/g, " ").trim();
+      const unchanged = candidate.replace(/\s+/g, " ").trim() === original.replace(/\s+/g, " ").trim();
       const improved = unchanged ? "" : candidate;
       snapshot = { source, original, improved, applied:false };
       preview(original, improved);
