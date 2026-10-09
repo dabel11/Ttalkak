@@ -22,6 +22,16 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 | Chrome Extension | `extension/` | React · Vite · Manifest V3 |
 | RAG Server | `rag-server/` | FastAPI · bge-m3 · MySQL |
 
+## 담당 역할 — 남지원
+
+**PM (Project Manager) · Backend Developer**
+
+- **프로젝트 기획·총괄:** 최초 아이디어 제안, 서비스 기획 및 핵심 기능·운영 정책 설계, 정기 회의 주도와 팀 협업 조율
+- **대외 커뮤니케이션:** 지도교수 미팅 진행 및 피드백 관리
+- **UX/UI 디렉션:** 디자인 개선 방향과 구체적인 요구사항 제시, 프론트엔드 구현 결과 검토
+- **백엔드 개발·시스템 통합:** Spring Boot 기반 API 및 인증·인가 기능 개발, 프론트엔드·RAG 서버 연동 및 API 계약 조율
+- **품질·배포 관리:** 코드·PR 검토, 테스트·CI 검증, 서버 배포 환경 구성 및 운영 준비
+
 ## 목차
 
 - [Backend](#backend)
