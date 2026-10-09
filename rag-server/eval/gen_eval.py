@@ -303,7 +303,7 @@ def main():
         # 종전 복제본은 min_score 를 안 넘겨 항상 5개를 받았고 예시도 주입하지 않았다 —
         # 기준선이 운영과 다른 파이프라인을 재고 있었다(2026-09-16).
         req = QueryRequest(query=query, collection_name=collection, use_hyde=use_hyde)
-        retrieved, examples = retrieve_contexts(req)
+        retrieved, examples, _ = retrieve_contexts(req)
         techniques = [r["metadata"].get("technique") or r["metadata"].get("source", "")
                       for r in retrieved]
         example_ids = [str((e.get("metadata") or {}).get("chunk_id") or e.get("text", "")[:40])

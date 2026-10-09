@@ -87,7 +87,7 @@ def make_prompt(condition: str, item: dict, gen_model: str) -> dict:
     if condition == "rewrite":
         contexts = []
     else:
-        retrieved, examples = retrieve_contexts(QueryRequest(query=query, collection_name="prompt_techniques"))
+        retrieved, examples, _ = retrieve_contexts(QueryRequest(query=query, collection_name="prompt_techniques"))
         contexts = retrieved + examples
     gen = run_generation(query, contexts, gen_model, [])
     prompt = gen.get("improved_prompt") if gen.get("mode") == "improve" else None

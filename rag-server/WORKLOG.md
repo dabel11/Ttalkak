@@ -4086,3 +4086,18 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: CI 동일 venv ruff 통과 + pytest 287 passed(신규 7).
 **결정·근거**: 리뷰어 제안 중 '기법 기반 생성 폴백' 채택(실패를 503으로 올리면 예시 인프라 장애가
   전체 /query 를 막음 — 기법만으로도 유의미한 개선이 가능하므로 폴백이 가용성↑). 게이트 정책(404) 유지.
+
+## [2026-10-09] 리뷰 2차 — eval 호출부 3-tuple 반영 + HTTP /query 테스트로 보강
+**목적**: PR #46 재검토 지적 2건.
+  1) retrieve_contexts 반환이 3-tuple 로 바뀌었는데 eval 3곳이 2개로 언패킹 → 런타임 ValueError.
+  2) test_query_endpoint 가 fastapi 를 대역으로 두고 main.query() 를 직접 호출 → '함수 수준'이지
+     '실제 HTTP 경로'가 아님. 요청대로 TestClient 로 실제 ASGI /query 검증 필요.
+**변경**:
+  - eval/gen_eval.py:306, eval/token_calib.py:145, eval/uplift_score.py:90 — `_` 로 세 번째 값 수용.
+    (eval 은 app.main=torch/fastapi 의존이라 CI 미수집 → pytest 가 못 잡던 것. 전수 grep 로 확인.)
+  - tests/test_query_endpoint.py 재작성 — **fastapi TestClient 로 실제 /query 호출**. 스텁은
+    모델·DB·공급자만(app.rag.retriever/indexer/generator/query_transform/analyzer + uvicorn/dotenv).
+    fastapi·라우팅·gate·concurrency·usage 는 real. 7케이스(무의미 404 / 정상 200 /
+    예시검색실패→기법폴백 200 / 후속턴 200 / 생성실패 503 / 동시성 503+Retry-After / sources).
+  - requirements-test.txt: fastapi 추가(TestClient — starlette, 경량·torch 무관).
+**검증**: CI 동일 venv ruff 통과 + pytest 287 passed.

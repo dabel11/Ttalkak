@@ -142,7 +142,7 @@ def main() -> None:
 
     for n in [int(x) for x in args.items.split(",") if x.strip()]:
         q = data["items"][n - 1]["query"]
-        ret, ex = retrieve_contexts(QueryRequest(query=q, collection_name=data.get("collection", "prompt_techniques")))
+        ret, ex, _ = retrieve_contexts(QueryRequest(query=q, collection_name=data.get("collection", "prompt_techniques")))
         analysis = analyzer.analyze(q, [])
         msgs = GroqGenerator.build_messages(q, ret + ex, [], analysis)
         est = GroqGenerator.estimate_input(q, ret + ex, [], analysis)   # 운영 generate() 와 같은 추정
