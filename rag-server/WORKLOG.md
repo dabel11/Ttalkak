@@ -4066,3 +4066,23 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **변경 파일**: app/core/cpu.py(cgroup cap), app/rag/retriever.py(로그), tests/test_cpu_threads.py(재작성, cgroup cap 케이스)
 **검증**: CI 동일 venv ruff + pytest 280 passed. Mac 로컬: cgroup 없음 → auto=10(불변).
 **결정·근거**: 명시 RAG_TORCH_THREADS 는 여전히 최우선. 컨테이너에선 quota 이하로 자동 제한해 과다할당 제거. 다음 prod 배포에서 스레드 수·리랭크 백엔드를 로그로 재확인 → 지연 원인(과다할당 vs 리랭크) 확정.
+
+## [2026-10-09] 리뷰 반영 — 예시 검색 실패 시 404 버그 수정 + /query 엔드포인트 회귀 테스트
+**목적**: PR #46 리뷰 지적 2건.
+  1) 예시 검색 '실패'(예외)를 `examples=[]`로 흡수한 뒤 게이트에 넘기면, `examples_enabled`가 여전히
+     True라 예시 최고점 0 < 임계치 → **정상 요청도 404**. 검색 실패와 '정상 0건'을 구분해야 함.
+  2) 삭제했던 엔드포인트 회귀 검사를 '게이트 유지' 정책에 맞춰 복원(실 /query 경로).
+**Before**: `retrieve_contexts` 가 (retrieved, examples) 반환. 예시 검색 실패 시 examples=[] 로만
+  처리 → 게이트가 examples_enabled=True + 빈 예시 → 404(정상 요청 차단).
+**After**:
+  - `retrieve_contexts` 가 `(retrieved, examples, examples_ok)` 반환. 예시 검색 예외 시 examples_ok=False.
+  - 게이트 호출: `examples_enabled = use_examples and n_examples>0 and examples_ok`.
+    → 예시 검색 **실패**면 예시 신호 제외 → 게이트가 '기법 0건' 폴백(`not retrieved`).
+    기법이 있으면 생성(기법 기반 폴백), 기법도 없으면 404(종전과 동일, 진짜 무근거).
+  - `tests/test_query_endpoint.py`(신규): heavy app.rag.* 만 스텁하고 실제 /query·게이트·concurrency로
+    검증 — 무의미 입력 404 / 정상 생성 / **예시검색실패→기법폴백(회귀방지)** / 후속턴 생성 /
+    생성실패 503 / 동시성제한 503+Retry-After / sources 보존. (삭제한 test_query_fallback 대체)
+**변경 파일**: app/main.py(retrieve_contexts 3-tuple + 게이트 examples_ok), tests/test_query_endpoint.py(신규 7케이스)
+**검증**: CI 동일 venv ruff 통과 + pytest 287 passed(신규 7).
+**결정·근거**: 리뷰어 제안 중 '기법 기반 생성 폴백' 채택(실패를 503으로 올리면 예시 인프라 장애가
+  전체 /query 를 막음 — 기법만으로도 유의미한 개선이 가능하므로 폴백이 가용성↑). 게이트 정책(404) 유지.

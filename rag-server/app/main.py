@@ -197,8 +197,8 @@ def index_chunks(req: IndexRequest,
 
 
 def retrieve_contexts(req: "QueryRequest",
-                      history: list[dict] | None = None) -> tuple[list[dict], list[dict]]:
-    """검색 단계 전체 — (기법 청크, 예시 청크) 를 돌려준다. /query 와 평가가 **공유**한다.
+                      history: list[dict] | None = None) -> tuple[list[dict], list[dict], bool]:
+    """검색 단계 전체 — (기법 청크, 예시 청크, 예시검색성공) 를 돌려준다. /query 와 평가가 **공유**한다.
 
     왜 함수로 뺐나 (2026-09-16): gen_eval 이 이 로직을 **따로 복제**해 들고 있었고,
     복제본은 `min_score` 를 넘기지 않고(항상 5개) 예시 주입도 하지 않았다. 즉 기준선이
@@ -231,6 +231,7 @@ def retrieve_contexts(req: "QueryRequest",
     # 사용자 원 프롬프트를 닮았을수록 유용). 리랭커는 생략(typed 컬렉션엔 dense로 충분,
     # 쿼리당 리랭크 2회 지연 방지). min_score 미달·빈 컬렉션·검색 실패는 모두 '예시 없음'으로 흡수.
     examples: list[dict] = []
+    examples_ok = True   # 예시 '검색 성공' 여부 — 실패(예외)면 게이트에서 예시 신호를 쓰지 않는다
     if req.use_examples and req.n_examples > 0:
         try:
             examples = retriever.search(
@@ -244,8 +245,9 @@ def retrieve_contexts(req: "QueryRequest",
         except Exception as e:                       # 예시 실패가 본 개선을 막지 않게
             print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
             examples = []
+            examples_ok = False                      # 실패≠'예시 0건' — 게이트에서 제외
 
-    return retrieved, examples
+    return retrieved, examples, examples_ok
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -254,7 +256,7 @@ def query(req: QueryRequest):
     # 사용량 창구 열기 — 이 요청의 모든 LLM 호출(분석기·생성기)이 여기로 기록된다.
     # turn_index = 이전 대화 턴 수(user+assistant), 다중턴을 request_id 로 묶어 집계.
     usage.start(request_id=req.request_id, turn_index=len(history))
-    retrieved, examples = retrieve_contexts(req, history)
+    retrieved, examples, examples_ok = retrieve_contexts(req, history)
 
     # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
     # 기본은 원본 쿼리 그대로 검색(use_hyde=False)이라 dense 점수가 좁은 띠에 눌려, 정상 요청도
@@ -262,8 +264,10 @@ def query(req: QueryRequest):
     # 무의미 입력 게이트 — 예시 코퍼스 기준(AUC 1.000). 종전 '기법 0건'(AUC 0.694)은
     # 무관 입력을 통과시키고 정상 요청을 404 내던 것(RAG_PIPELINE §4·eval/gate_set.json).
     # 후속 피드백 턴은 대화 맥락으로 이어가므로 게이트하지 않는다.
+    # 예시 검색이 '실패'(인프라 장애)면 예시 신호를 게이트에서 빼고 기법 기준으로 폴백한다
+    # — 실패를 '예시 0건'으로 오인해 정상 요청을 404 내는 버그 방지(examples_ok).
     if no_evidence_gate(retrieved, examples, history, req.gate_min_score,
-                        examples_enabled=req.use_examples and req.n_examples > 0):
+                        examples_enabled=req.use_examples and req.n_examples > 0 and examples_ok):
         raise HTTPException(
             status_code=404,
             detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
