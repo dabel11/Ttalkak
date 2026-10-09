@@ -14,13 +14,18 @@ public class MemberRequestLease {
     @Column(nullable = false)
     private boolean usageUncertain;
 
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private long uncertaintyRevision;
+
     protected MemberRequestLease() {}
     public MemberRequestLease(Long memberId) { this.memberId = memberId; }
     public boolean activeAt(Instant now) { return permitId != null && expiresAt.isAfter(now); }
     public boolean abandoned() { return permitId != null; }
     public boolean owns(String id) { return id.equals(permitId); }
     public boolean usageUncertain() { return usageUncertain; }
-    public void uncertain() { usageUncertain = true; }
+    public long uncertaintyRevision() { return uncertaintyRevision; }
+    public void uncertain() { usageUncertain = true; uncertaintyRevision++; }
+    public void reconcile() { usageUncertain = false; release(); }
     public void acquire(String id, Instant end) { permitId = id; expiresAt = end; }
     public void release() { permitId = null; expiresAt = null; }
 }

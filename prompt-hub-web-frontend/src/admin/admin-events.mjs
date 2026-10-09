@@ -12,6 +12,11 @@ export function bindAdminEvents(root, ctx) {
     root.querySelectorAll("[data-admin-tag-prompts]").forEach((button) => button.addEventListener("click", () => { const tag = button.dataset.adminTagPrompts || ""; state.adminTagPromptKey = state.adminTagPromptKey === tag ? "" : tag; actions.render(); }));
     root.querySelectorAll("[data-admin-user-block]").forEach((button) => button.addEventListener("click", () => { state.adminBlockTarget = { memberId: button.dataset.adminUserBlock, nickname: button.dataset.adminUserName || state.adminUserActivityNickname || "사용자" }; actions.render(); }));
     root.querySelectorAll("[data-admin-user-unblock]").forEach((button) => button.addEventListener("click", () => actions.updateUserBlock(button.dataset.adminUserUnblock, false, button.dataset.adminUserName)));
+    root.querySelectorAll("[data-admin-usage-review]").forEach((button) => button.addEventListener("click", () => actions.reviewUserUsage(button.dataset.adminUsageReview)));
+    root.querySelectorAll("[data-admin-usage-reconcile]").forEach((form) => form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      actions.reconcileUserUsage(form.dataset.adminUsageReconcile, form.querySelector('[name="reason"]').value, form.querySelector('[name="recordsReviewed"]').checked);
+    }));
     root.querySelectorAll("[data-admin-tab]").forEach((button) => button.addEventListener("click", () => { state.adminTab = button.dataset.adminTab || "reports"; actions.render(); }));
     root.querySelectorAll("[data-admin-request-revision]").forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); state.adminRequestTargetKey = button.dataset.adminRequestRevision; actions.render(); }));
 }

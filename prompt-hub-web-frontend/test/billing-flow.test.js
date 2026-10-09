@@ -507,6 +507,24 @@ test("billing explains when the displayed token usage is not fully aggregated", 
 
   await controller.refreshBilling();
   const html = controller.renderBilling();
-  assert.match(html, /2,400개 \/ 100,000개 · 집계 중/);
+  assert.match(html, /2,400개 \/ 100,000개 · 과거 요청 사용량 확인 필요/);
   assert.doesNotMatch(html, /사용량 확인 중에는 요청할 수 없습니다/);
+});
+
+test("unconfigured test payments keep usage visible without a retry error", async () => {
+  const controller = createController({
+    state: { isLoggedIn: true, billingOpen: true }, getToken: () => "member-token",
+    isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => { throw Object.assign(new Error("keys missing"), { payload: { code: "BILLING_NOT_CONFIGURED" } }); },
+      getBillingStatus: async () => ({ cardRegistered: false, paymentStatus: "NOT_REGISTERED" }),
+      getUsageStatus: async () => ({ plan: "FREE", totalTokens: 8478, usageAvailable: false }),
+    },
+  });
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /테스트 결제 설정 전/);
+  assert.match(html, /8,478/);
+  assert.match(html, /과거 요청 사용량 확인 필요/);
+  assert.doesNotMatch(html, /일부 결제 정보를 불러오지 못했습니다|data-billing-reload|집계 중/);
 });

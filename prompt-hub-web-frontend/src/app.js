@@ -689,11 +689,11 @@ const modalView = createModalView({
 });
 const { PromptDetailModal, PromptEditModal, ReportModal, ConfirmModal, ExecuteModal } = modalView;
 const adminControllerFacade = createMethodFacade(adminRuntime, "controller", {
-  searchAdminUserCandidates: undefined, openAdminUserActivity: undefined, getAdminKnownMemberId: null, updateAdminUserBlockState: undefined,
+  reviewAdminUserUsage: undefined, reconcileAdminUserUsage: undefined, searchAdminUserCandidates: undefined, openAdminUserActivity: undefined, getAdminKnownMemberId: null, updateAdminUserBlockState: undefined,
   updateAdminTagDecision: undefined, updateReportRecordStatus: undefined, requestPromptRevision: undefined, updateAuthorRevisionRequest: undefined,
   updateAdminCommentHiddenState: undefined, toggleAdminPromptHidden: undefined, refreshAdminAuditLogs: undefined, refreshAdminAfterMutation: undefined,
 }, { defer: true });
-const { searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs } = adminControllerFacade;
+const { reviewAdminUserUsage, reconcileAdminUserUsage, searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs } = adminControllerFacade;
 const openAuth = authController.open;
 const closeTopModal = () => {
   if (state.billingOpen && !state.confirmAction) return billingController.closeBilling();
@@ -1341,6 +1341,8 @@ function bindCoreEvents() {
     scheduleTagSearch: scheduleAdminTagSearchCommit,
     updateReportStatus: updateReportRecordStatus,
     updateTag: updateAdminTagDecision,
+    reviewUserUsage: reviewAdminUserUsage,
+    reconcileUserUsage: reconcileAdminUserUsage,
     updateUserBlock: updateAdminUserBlockState,
     confirm: openConfirmAction,
     render,

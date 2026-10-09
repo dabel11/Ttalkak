@@ -4,7 +4,7 @@
       "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
       "getMakeThread", "createMakeThread", "createMakeFolder", "sharePrompt", "shareExistingPrompt", "updatePrompt",
       "addComment", "addReply", "updateComment", "requestPromptRevision", "getAdminUserActivitySummary",
-      "getAdminUserActivity", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
+      "getAdminUserActivity", "getAdminUserUsage", "reconcileAdminUserUsage", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
       "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
       "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
       "getBillingStatus", "getUsageStatus", "setupBilling", "completeBilling", "cancelBilling", "retryBilling",

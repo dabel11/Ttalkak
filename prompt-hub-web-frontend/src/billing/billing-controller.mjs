@@ -21,7 +21,7 @@ function BillingModalView(ctx, data) {
   const period = usage?.periodStart && usage?.periodEnd
     ? `${escapeHtml(formatShortDate(usage.periodStart))} ~ ${escapeHtml(formatShortDate(usage.periodEnd))}`
     : "확인 중";
-  const usageValue = `${formatTokenCount(usage?.totalTokens)}${usage?.limitTokens == null ? "" : ` / ${formatTokenCount(usage.limitTokens)}`}${usage && !usage.usageAvailable && !usage.usageBlocked ? " · 집계 중" : ""}`;
+  const usageValue = `${formatTokenCount(usage?.totalTokens)}${usage?.limitTokens == null ? "" : ` / ${formatTokenCount(usage.limitTokens)}`}${usage && !usage.usageAvailable && !usage.usageBlocked ? " · 과거 요청 사용량 확인 필요" : ""}`;
   return `<div class="modal-backdrop visible billing-backdrop" role="dialog" aria-modal="true" aria-labelledby="billing-title">
     <article class="modal billing-modal">
       <div class="modal-head"><h2 id="billing-title">요금제·결제</h2><button class="ghost-icon" type="button" data-close-billing aria-label="닫기">×</button></div>
@@ -146,10 +146,15 @@ export function createBillingController(ctx) {
       results.forEach((result) => { if (result.status === "rejected") failures.push(result.reason); });
       const authFailure = failures.find(isUnauthorized);
       if (authFailure && handleAccessError(authFailure)) return false;
-      if (failures.length) {
+      const billingNotConfigured = (error) => String(error?.payload?.code || error?.code || "").toUpperCase() === "BILLING_NOT_CONFIGURED";
+      const unexpectedFailures = failures.filter((error) => !billingNotConfigured(error));
+      if (failures.some(billingNotConfigured)) {
+        message = "테스트 결제 설정 전입니다. 무료 기능과 사용량 조회는 계속 이용할 수 있습니다.";
+      }
+      if (unexpectedFailures.length) {
         errorMessage = setup || billing || usage
           ? "일부 결제 정보를 불러오지 못했습니다. 다시 시도해 주세요."
-          : errorText(failures[0]);
+          : errorText(unexpectedFailures[0]);
       }
       return Boolean(billing);
     } catch (error) {

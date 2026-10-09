@@ -98,6 +98,7 @@ export function createAdminUserController(ctx) {
 
   async function openActivity(nickname, options = {}) {
     const clean = String(nickname || "").trim(); if (!clean) return;
+    state.adminUsageReview = null;
     let resolved = resolveNickname(clean);
     Object.assign(state, { adminUserQuery: options.keepQuery ? clean : resolved, adminUserActivityNickname: resolved, adminUserSearchMessage: "", adminTab: "users", route: "admin", detailPromptId: null, detailHighlightCommentId: null });
     showNotice(`${resolved}님의 활동을 조회합니다.`); render();
@@ -142,5 +143,29 @@ export function createAdminUserController(ctx) {
     }).catch((error) => reportWarning("admin", "refresh-user-after-block", error));
   }
 
-  return Object.freeze({ search, openActivity, updateBlockState, getKnownMemberId });
+  async function reviewUsage(memberId) {
+    if (!hasBackendAuthToken() || !api?.getAdminUserUsage) return;
+    try {
+      const review = await api.getAdminUserUsage(memberId, getAuthToken());
+      state.adminUsageReview = review;
+      render();
+    } catch (error) { handleBackendAccessError(error, "사용량 상태 조회에 실패했습니다."); }
+  }
+
+  async function reconcileUsage(memberId, reason, recordsReviewed) {
+    const review = state.adminUsageReview;
+    if (!review || String(review.memberId) !== String(memberId) || !reason.trim() || !recordsReviewed) {
+      showNotice("사용량 상태를 조회하고 기록 검토 확인과 사유를 입력해 주세요."); return;
+    }
+    const result = await runAdminApiMutation("reconcileAdminUserUsage", [memberId, {
+      expectedRevision: review.uncertaintyRevision, expectedTotalTokens: review.totalTokens,
+      recordsReviewed, reason: reason.trim(),
+    }], { fallbackMessage: "사용량 상태 복구에 실패했습니다. 상태를 다시 조회해 주세요." });
+    if (!result.ok) return;
+    state.adminUsageReview = result.value;
+    showNotice("사용량 상태를 복구했습니다. 기존 토큰 기록은 유지됩니다.");
+    render();
+  }
+
+  return Object.freeze({ search, openActivity, updateBlockState, getKnownMemberId, reviewUsage, reconcileUsage });
 }

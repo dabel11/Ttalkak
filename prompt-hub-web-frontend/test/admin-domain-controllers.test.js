@@ -99,3 +99,24 @@ test("admin user block reports a failed follow-up refresh without rolling back s
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(warnings[0][1], "refresh-user-after-block");
 });
+
+test("usage recovery requires a matching reviewed snapshot and sends its revision", async () => {
+  const { createAdminUserController } = await load("admin-user-controller.mjs");
+  const calls = [];
+  const ctx = createAdminUserContext({
+    api: { getAdminUserUsage: async () => ({ memberId: 42, totalTokens: 8478, uncertaintyRevision: 3, usageUncertain: true }) },
+    runAdminApiMutation: async (action, args) => { calls.push({ action, args }); return { ok: true, value: { memberId: 42, usageUncertain: false } }; },
+  });
+  const controller = createAdminUserController(ctx);
+  await controller.reconcileUsage("42", "checked provider records", true);
+  assert.equal(calls.length, 0);
+  await controller.reviewUsage("42");
+  await controller.reconcileUsage("43", "checked provider records", true);
+  await controller.reconcileUsage("42", "checked provider records", false);
+  assert.equal(calls.length, 0);
+  await controller.reconcileUsage("42", "checked provider records", true);
+  assert.deepEqual(calls[0], { action: "reconcileAdminUserUsage", args: ["42", {
+    expectedRevision: 3, expectedTotalTokens: 8478, recordsReviewed: true, reason: "checked provider records",
+  }] });
+  assert.equal(ctx.state.adminUsageReview.usageUncertain, false);
+});
