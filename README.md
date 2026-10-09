@@ -37,6 +37,19 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 - **대외 커뮤니케이션·발표:** 지도교수 미팅 및 피드백 관리, 학기별 정기 발표와 기타 발표 진행, Figma 기반 발표 자료 기획·제작
 - **서비스 출시 준비:** Chrome Web Store 개발자 등록, 서비스 배포 인프라 및 운영 정책 준비
 
+### 최재원 | Frontend Developer
+
+Web과 Chrome Extension에서 일관되고 직관적인 사용자 경험을 제공하는 것을 목표로, 화면 구현부터 API 연동, 상태 관리, 접근성·반응형 개선 및 배포 품질 검증까지 프론트엔드 전반을 담당.
+
+- **Web Frontend 개발:** Vanilla JavaScript 기반 Home·Make·My Page·Share·인증·관리자 화면 구현 및 개선, 페이지 라우팅과 기능별 상태·이벤트·렌더링 구조 모듈화
+- **Chrome Extension 개발:** React·Vite·Manifest V3 기반 사이드 패널 구현, 프롬프트 개선·보관함·최근 대화·로그인·계정 기능의 사용 흐름 설계 및 Web과의 경험 통일
+- **UX/UI 구현:** Notion 계열의 담백한 디자인 방향을 서비스에 맞게 재해석하고, 컬러·타이포그래피·여백·컴포넌트 토큰과 화면별 시각적 위계를 정리
+- **Backend API 연동:** JWT 인증, 비회원 UUID와 `X-Session-UUID`, 커뮤니티 반응·저장, Make 대화·폴더, 사용량·요금제·결제 상태를 Spring Boot API 계약에 맞춰 연결
+- **상태·오류·접근성 개선:** 로딩·빈 화면·오류·재시도 상태와 401·429 응답 흐름 구현, 키보드 탐색·모달 포커스·ARIA 상태·움직임 축소 설정 보완
+- **반응형 사용성 개선:** 모바일·태블릿·데스크톱과 Chrome 사이드 패널의 제한된 너비를 고려해 탐색, 입력, 카드, 도움말 및 주요 조작 영역을 최적화
+- **품질·성능 관리:** 단위 테스트와 Playwright E2E 보강, Web·Extension 프로덕션 빌드 검증, 번들 용량 예산 관리, nginx 정적 파일 압축·캐시·API 전달 정책 점검
+- **협업·통합 검증:** Backend API 및 결제·사용량 정책 리뷰, 충돌 해결과 PR 검증, 실제 브라우저 조작을 통한 Web·Extension 통합 오류 분석 및 개선
+
 ## 목차
 
 - [Backend](#backend)
