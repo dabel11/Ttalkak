@@ -98,19 +98,68 @@
       input = null; dismiss(); trigger.style.display = "none"; host.remove();
     } else schedule();
   }
+  function keyPhraseRanges(original, improved) {
+    // Prefer the most substantive new sentence, not every word missing from the original.
+    // This is a conservative UI heuristic, not an AI-generated semantic diff.
+    const originalWords = new Set((original.match(/[\p{L}\p{N}_]+/gu) || []).map((word) => word.toLowerCase()));
+    const filler = new Set(["주세요", "해주세요", "해", "그리고", "또한", "먼저", "다음", "대한", "대해", "있다면", "please", "the", "and", "with", "that", "this"]);
+    const sentences = Array.from(improved.matchAll(/[^.!?\n]+/gu), (match) => {
+      const tokens = match[0].match(/[\p{L}\p{N}_]+/gu) || [];
+      const score = tokens.reduce((sum, word) => {
+        const lower = word.toLowerCase();
+        return sum + (!originalWords.has(lower) && !filler.has(lower) ? Math.min(word.length, 10) : 0);
+      }, 0);
+      return { start: match.index, body: match[0], score };
+    }).sort((a, b) => b.score - a.score);
+    const best = sentences[0];
+    if (!best || best.score < 8) return [];
+
+    const connectors = /(?:고려하여|바탕으로|기준으로|포함하여|반영하여|활용하여|참고하여|중심으로|위주로|통해|고려해|포함해|반영해|활용해)\s+/gu;
+    const parts = [];
+    let start = 0;
+    for (const match of best.body.matchAll(connectors)) {
+      const end = match.index + match[0].length;
+      if (end - start < 10) continue;
+      parts.push({ start, end });
+      start = end;
+    }
+    parts.push({ start, end: best.body.length });
+    const ranges = [];
+    for (const part of parts) {
+      let left = part.start, right = part.end;
+      while (left < right && /\s/u.test(best.body[left])) left++;
+      while (right > left && /\s/u.test(best.body[right - 1])) right--;
+      // The request ending is not itself a changed requirement.
+      const candidate = best.body.slice(left, right);
+      const requestEnding = candidate.match(/\s+(?:정리해|작성해|제시해|설명해|추천해|제공해|말해|알려|답변해|구성해|생성해|보여)?\s*주세요\s*$/u);
+      if (requestEnding) right -= requestEnding[0].length;
+      if (right - left > 38) {
+        const prefix = best.body.slice(left, left + 39);
+        const boundary = prefix.lastIndexOf(" ");
+        right = left + (boundary >= 14 ? boundary : 38);
+      }
+      const phrase = best.body.slice(left, right);
+      const words = phrase.match(/[\p{L}\p{N}_]+/gu) || [];
+      const novelty = words.filter((word) => !originalWords.has(word.toLowerCase()) && !filler.has(word.toLowerCase()));
+      if (novelty.length < 2 || phrase.length < 8) continue;
+      ranges.push({ start: best.start + left, end: best.start + right, score: novelty.reduce((sum, word) => sum + word.length, 0) });
+    }
+    // Maximum two cohesive, useful phrases; never color the entire response.
+    return ranges.sort((a, b) => b.score - a.score).slice(0, 2).sort((a, b) => a.start - b.start);
+  }
   function preview(original, improved) {
     text.replaceChildren();
     if (!improved) { text.textContent = "프롬프트를 개선하려면 필요한 정보를 더 입력해 주세요."; return; }
-    const originalWords = new Set((original.match(/[\p{L}\p{N}_]+/gu) || []).map((v) => v.toLowerCase()));
-    for (const token of improved.split(/([\p{L}\p{N}_]+)/u)) {
-      if (!token) continue;
-      if (/^[\p{L}\p{N}_]+$/u.test(token) && !originalWords.has(token.toLowerCase())) {
-        const mark = document.createElement("span");
-        mark.className = "tt-change";
-        mark.textContent = token;
-        text.append(mark);
-      } else text.append(document.createTextNode(token));
+    let cursor = 0;
+    for (const range of keyPhraseRanges(original, improved)) {
+      text.append(document.createTextNode(improved.slice(cursor, range.start)));
+      const mark = document.createElement("span");
+      mark.className = "tt-change";
+      mark.textContent = improved.slice(range.start, range.end);
+      text.append(mark);
+      cursor = range.end;
     }
+    text.append(document.createTextNode(improved.slice(cursor)));
   }
   function writeValue(el, value) {
     if (!el?.isConnected) return false;
