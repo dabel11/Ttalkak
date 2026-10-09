@@ -1,3 +1,48 @@
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "INLINE_IMPROVE") return false;
+  (async () => {
+    const values = await chrome.storage.local.get(["pp_inline_improve_enabled", "pp_auth_session", "pp_session_uuid"]);
+    if (values.pp_inline_improve_enabled !== true) throw Error("인라인 개선 설정을 켜 주세요.");
+    const prompt = String(message.prompt || "");
+    if (!prompt.trim() || prompt.length > 12000) throw Error("프롬프트 길이를 확인해 주세요.");
+    const ai = new Set(["chatgpt.com","chat.openai.com","gemini.google.com","claude.ai"]);
+    const permission = chrome.runtime.getManifest().host_permissions.find((pattern) => {
+      try { const url = new URL(pattern.replace(/\/\*$/, ""));
+        return !ai.has(url.hostname) && ["http:", "https:"].includes(url.protocol);
+      } catch { return false; }
+    });
+    if (!permission) throw Error("백엔드 URL을 찾을 수 없습니다.");
+    const backend = new URL(permission.replace(/\/\*$/, ""));
+    const token = String(values.pp_auth_session?.accessToken || "");
+    let uuid = String(values.pp_session_uuid || "");
+    if (!token && !uuid) {
+      uuid = crypto.randomUUID();
+      await chrome.storage.local.set({ pp_session_uuid: uuid });
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+    let res;
+    try {
+      res = await fetch(new URL("/api/prompts/improve", backend.origin), {
+        method: "POST",
+        headers: { "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : { "X-Session-UUID": uuid }) },
+        body: JSON.stringify({ prompt, category: "prompt_techniques",
+          ...(token ? { requestId: crypto.randomUUID() } : {}) }),
+        signal: controller.signal
+      });
+    } finally { clearTimeout(timeout); }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 429) throw Error("체험 횟수를 초과했습니다. 로그인해 주세요.");
+      if (res.status === 401) throw Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
+      throw Error(String(body.code || "개선 요청에 실패했습니다."));
+    }
+    const data = body.result || body.data || body;
+    sendResponse({ ok: true, improvedPrompt: String(data.improvedPrompt || data.improved_prompt || data.finalPrompt || "").trim() });
+  })().catch((err) => sendResponse({ ok: false, error: err.name === "AbortError" ? "요청 시간이 초과되었습니다." : String(err.message || err) }));
+  return true;
+});
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

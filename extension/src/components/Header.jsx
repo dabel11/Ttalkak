@@ -26,6 +26,8 @@ export function Header({
   ragStatus,
   usage,
   usageStatus,
+  inlineImproveEnabled,
+  onToggleInlineImprove,
 }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef(null);
@@ -126,6 +128,7 @@ export function Header({
         <span className="brand-name">TTALKAK</span>
       </div>
       <div className="header-actions">
+        <label style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,cursor:"pointer"}}><input type="checkbox" checked={Boolean(inlineImproveEnabled)} onChange={(e)=>onToggleInlineImprove?.(e.target.checked)} /> 인라인 개선</label>
         <span className={`rag-status ${ragStatus}`}>{getRagStatusText(ragStatus)}</span>
         {currentUser ? (
           <div
