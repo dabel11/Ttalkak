@@ -33,6 +33,11 @@ async function compressProductionJavaScript(metafile) {
   const datasetProperties = [...new Set(outputs.flatMap((output) =>
     [...fs.readFileSync(path.resolve(output), "utf8").matchAll(/\.dataset\.([A-Za-z_$][\w$]*)/g)].map((match) => match[1]),
   ))];
+  // Esbuild can remove quotes from literal JSON keys before Terser sees them.
+  // Keep the authored persistence contract, including fields read by stored(key).
+  const persistenceSource = fs.readFileSync(path.join(webRoot, "src", "state", "state-persistence.mjs"), "utf8");
+  const persistedProperties = [...persistenceSource.matchAll(/"([A-Za-z_$][\w$]*)"\s*:/g)].map((match) => match[1]);
+  const reservedProperties = [...new Set([...datasetProperties, ...persistedProperties])];
   const nameCache = {};
   for (const output of outputs) {
     const source = fs.readFileSync(path.resolve(output), "utf8");
@@ -52,7 +57,7 @@ async function compressProductionJavaScript(metafile) {
         unsafe_proto: true,
         unsafe_undefined: true,
       },
-      mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern, reserved: datasetProperties } },
+      mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern, reserved: reservedProperties } },
       nameCache,
       format: { comments: false, ecma: 2023, semicolons: false },
     });
