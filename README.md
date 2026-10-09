@@ -24,7 +24,7 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 
 ## 담당 역할 — 남지원
 
-**PM (Project Manager) · Backend Developer**
+**Product Manager · Backend Developer**
 
 - **프로젝트 기획·총괄:** 최초 아이디어 제안, 서비스 기획 및 핵심 기능·운영 정책 설계
 - **백엔드 개발:** Spring Boot 기반 API 개발, 인증·인가, 회원·커뮤니티·대화 관리, 사용량 및 결제 시스템 구현
