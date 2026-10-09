@@ -86,6 +86,7 @@ interface TtalkakApplicationState {
   reportRecords: Record<string, TtalkakStateEntity>; accountScopes: Record<string, unknown>;
   adminRequestTargetKey: string | null; adminBlockTarget: TtalkakStateEntity | null; adminUserActivityNickname: string; adminUserQuery: string;
   adminPromptQuery: string; adminPromptFilter: string; adminTagQuery: string; adminTagFilter: string; adminTagSort: string; adminTagPromptKey: string;
+  adminUsageReview?: TtalkakStateEntity;
   adminReportFilter: string; adminTab: string;
 }
 interface TtalkakStateContext {
@@ -309,6 +310,8 @@ interface TtalkakApi {
   getAdminUserSubmittedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminUserReceivedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminUserActivity(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserUsage(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  reconcileAdminUserUsage(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   blockAdminUser(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   unblockAdminUser(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   getAdminAuditLogs(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
