@@ -116,6 +116,24 @@ def test_concurrency_limit_is_503_with_retry_after():
     assert r.headers.get("Retry-After") == "30"
 
 
+def test_empty_examples_corpus_falls_back_to_technique():
+    """예시 코퍼스가 비어 있으면(미적재) 게이트에서 예시 제외 → 기법 폴백(전건 404 방지)."""
+    with patch.object(main.retriever, "search", side_effect=[[TECH], []]), \
+         patch.object(main.retriever, "collection_size", return_value=0), \
+         patch.object(main, "run_generation", return_value=GEN):
+        r = _post()
+    assert r.status_code == 200
+    assert r.json()["improved_prompt"] == IMPROVED
+
+
+def test_garbage_with_populated_corpus_still_404():
+    """코퍼스에 데이터가 있는데 매칭 0건(무의미 입력)이면 여전히 404 — 안전장치가 게이트를 약화시키지 않음."""
+    with patch.object(main.retriever, "search", side_effect=[[], []]), \
+         patch.object(main.retriever, "collection_size", return_value=20):
+        r = _post()
+    assert r.status_code == 404
+
+
 def test_technique_evidence_preserved_in_sources():
     """기법 근거가 응답 sources 로 보존된다."""
     with patch.object(main.retriever, "search", side_effect=[[TECH], [EX]]), \

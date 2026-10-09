@@ -4101,3 +4101,19 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
     예시검색실패→기법폴백 200 / 후속턴 200 / 생성실패 503 / 동시성 503+Retry-After / sources).
   - requirements-test.txt: fastapi 추가(TestClient — starlette, 경량·torch 무관).
 **검증**: CI 동일 venv ruff 통과 + pytest 287 passed.
+
+## [2026-10-09] 빈-코퍼스 안전장치 — 예시 코퍼스 미적재 시 전건 404 방지
+**목적**: 머지 전 위험 점검에서 발견. `_load_collection`은 빈/없는 컬렉션에 예외 없이 []를 돌려주므로,
+배포 MySQL에 `prompt_examples`가 비어 있으면 게이트가 best=0 < 임계치 → **정상 요청도 전건 404**.
+(리뷰어가 고친 '예시 검색 실패'(예외→폴백)와 다른 경로 — 빈 코퍼스는 폴백되지 않았음.)
+**Before**: 예시 0건이면 원인(코퍼스 빈 것 vs 매칭 없음) 구분 없이 게이트 적용 → 빈 코퍼스에서 전건 404.
+**After**:
+- `retriever.collection_size(name)` 추가 — 컬렉션 청크 수 COUNT(레이어 필터 이전).
+- `retrieve_contexts`: 예시 0건일 때만 `collection_size==0` 확인 → 비었으면 examples_ok=False(기법 폴백).
+  코퍼스에 데이터가 있는데 0건이면(무의미 입력) examples_ok 유지 → 게이트 정상(404). 두 경우를 구분.
+  COUNT는 예시 0건일 때만 1회(흔치 않은 경로) — 정상 요청(예시 매칭됨)엔 추가 쿼리 없음.
+**변경 파일**: app/rag/retriever.py(collection_size + func import), app/main.py(retrieve_contexts),
+  tests/test_query_endpoint.py(+2: 빈코퍼스→기법폴백 200 / 데이터있음+매칭0건→404)
+**검증**: CI 동일 venv ruff + pytest 289 passed.
+**결정·근거**: 코드 안전장치 + 운영 완화책 병행 권장. 운영: `prompt_examples` 적재 전까지
+  `RAG_GATE_MIN_SCORE=0`(게이트 '기법 0건' 폴백)으로도 회피 가능. 근본은 코퍼스 적재.

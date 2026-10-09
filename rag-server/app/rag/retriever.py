@@ -18,7 +18,7 @@ sigmoid 정규화 점수를 쓴다. 응답 스키마·소비자(Spring/익스텐
 import re
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.db import SessionLocal, RagChunk, init_db
 from app.core.embeddings import get_model, get_reranker
@@ -233,6 +233,16 @@ class Retriever:
             c["score"] = c.pop("dense_score", c["score"])
             out.append(c)
         return out
+
+    def collection_size(self, collection_name: str) -> int:
+        """컬렉션의 청크 수(레이어 필터 이전) — '코퍼스 자체가 비었는지' 감지용(빈-코퍼스 안전장치).
+        search 가 0건을 돌려줬을 때 '데이터가 아예 없음'과 '매칭만 없음'을 구분하는 데 쓴다.
+        실패하면 호출부(retrieve_contexts)가 예외로 받아 안전측(예시 신호 제외)으로 처리한다."""
+        with SessionLocal() as session:
+            return int(session.execute(
+                select(func.count()).select_from(RagChunk)
+                .where(RagChunk.collection_name == collection_name)
+            ).scalar_one())
 
     def _load_collection(self, collection_name: str) -> list[dict]:
         with SessionLocal() as session:

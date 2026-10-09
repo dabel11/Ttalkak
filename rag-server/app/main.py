@@ -242,6 +242,13 @@ def retrieve_contexts(req: "QueryRequest",
                 use_hybrid=False,
                 min_score=req.example_min_score,
             )
+            # 빈-코퍼스 안전장치: 예시 0건이 '매칭 없음'인지 '코퍼스 자체가 비었는지' 구분한다.
+            # 코퍼스가 비어 있으면(미적재 MySQL 등) 게이트에서 예시 신호를 빼 기법 폴백 —
+            # 안 그러면 best=0 < 임계치로 **정상 요청도 전건 404**가 된다. 코퍼스에 데이터가
+            # 있는데 0건이면(무의미 입력) examples_ok 유지 → 게이트 정상 작동(404).
+            if not examples and retriever.collection_size(req.example_collection) == 0:
+                print(f"[Main] 예시 코퍼스 비어 있음({req.example_collection}) → 게이트에서 제외(기법 폴백)")
+                examples_ok = False
         except Exception as e:                       # 예시 실패가 본 개선을 막지 않게
             print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
             examples = []
