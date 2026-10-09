@@ -196,12 +196,15 @@
       busy = false; trigger.disabled = false; trigger.textContent = "✨ 딸깍 개선";
       if (!enabled || !source.isConnected || source !== input) return;
       const error = chrome.runtime.lastError?.message || reply?.error;
-      const improved = error ? "" : String(reply?.improvedPrompt || "").trim();
+      const candidate = error ? "" : String(reply?.improvedPrompt || "").trim();
+      const unchanged = candidate.replace(/\\s+/g, " ").trim() === original.replace(/\\s+/g, " ").trim();
+      const improved = unchanged ? "" : candidate;
       snapshot = { source, original, improved, applied:false };
       preview(original, improved);
       if (error) text.textContent = "개선에 실패했습니다. 잠시 후 다시 시도해 주세요.";
       const changed = getText(source) !== original;
       message.textContent = error ? String(error) : changed ? "입력 내용이 변경되어 적용할 수 없습니다. 다시 개선해 주세요." :
+        unchanged ? "적용할 변경 사항이 없습니다. 프롬프트를 더 구체적으로 작성해 주세요." :
         improved ? "" : "추가 정보가 필요한 요청입니다.";
       apply.hidden = !improved; apply.disabled = changed; restore.hidden = true;
       panel.style.display = "block"; position();
