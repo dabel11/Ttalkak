@@ -12,7 +12,7 @@ const finiteCount = (value) => {
 export function normalizeUsageSnapshot(value = {}) {
   const source = value;
   const totalTokens = finiteCount(source.used ?? source.totalTokens ?? source.usedTokens) ?? 0;
-  const limitTokens = finiteCount(source["limit"] ?? source.limitTokens ?? source.tokenLimit);
+  const limitTokens = finiteCount(Reflect.get(source, "limit") ?? source.limitTokens ?? source.tokenLimit);
   const suppliedRemaining = finiteCount(source.remaining ?? source.remainingTokens ?? source.tokensRemaining);
   const remainingTokens = suppliedRemaining ?? (limitTokens == null ? null : Math.max(0, limitTokens - totalTokens));
   const limitReached = source.limitReached === true || (limitTokens != null && totalTokens >= limitTokens);

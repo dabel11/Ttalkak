@@ -4,7 +4,11 @@
 
 ## 환경변수
 
-`backend/.env`에 테스트용 `TOSS_TEST_CLIENT_KEY=test_ck_...`, `TOSS_TEST_SECRET_KEY=test_sk_...`를 설정한다. 같은 상점의 한 쌍을 사용한다. 월 가격은 임시 시연값 `PRO_MONTHLY_PRICE_KRW=5000`이며, 상품 정책 확정 시 바꾼다. 키가 없으면 결제 요청은 503이고 자동 갱신은 실행되지 않는다. Docker Compose 백엔드도 `backend/.env`를 읽는다.
+`backend/.env`에 테스트용 `TOSS_TEST_CLIENT_KEY=test_ck_...`, `TOSS_TEST_SECRET_KEY=test_sk_...`를 설정한다. 같은 상점의 한 쌍을 사용한다. 월 가격은 초기 운영 기준 `PRO_MONTHLY_PRICE_KRW=4900`이며, 상품 정책 확정 시 바꾼다. 키가 없으면 결제 요청은 503이고 자동 갱신은 실행되지 않는다. Docker Compose 백엔드도 `backend/.env`를 읽는다.
+
+요금제 비교는 공개 `/pricing` 페이지, 구독 관리와 사용량 안내는 마이페이지에서 제공하며 기존 토스 결제 모달을 재사용한다. 페이지 조회는 사용량·결제 상태 GET만 실행하며 카드 등록·결제 세션 생성은 사용자가 결제를 선택한 뒤에 수행한다. 원클릭 개선과 Make는 같은 회원 토큰 한도를 사용한다. 월 30회(FREE)·300회(PRO)는 초기 목표치이고, 실제 토큰 한도와 차단 활성화는 비용 검증 후 별도 설정한다.
+
+배포 환경에 `PRO_MONTHLY_PRICE_KRW`가 이미 설정되어 있다면 코드 기본값 변경만으로는 금액이 바뀌지 않는다. 출시 전에 환경변수와 실제 `/api/me/billing/setup` 응답 금액을 4,900원으로 확인한다. 이 브랜치 작업은 운영 환경변수 변경·실결제·배포를 포함하지 않는다.
 
 ## 프론트 흐름
 
@@ -12,7 +16,7 @@
 
 1. `POST /api/me/billing/setup` → `{clientKey, customerKey, amount, cardRegistered}`. `customerKey`는 서버가 생성하며 회원 ID를 노출하지 않는다.
 2. `cardRegistered=false`면 토스페이먼츠 SDK v2로 `TossPayments(clientKey).payment({customerKey}).requestBillingAuth({method:"CARD",successUrl:"https://.../billing/success",failUrl:"https://.../billing/fail"})`를 호출한다. 카드 정보는 SDK 결제창에서 입력한다. `successUrl`과 `failUrl`은 실제 프론트 주소를 넣는다.
-3. 성공 URL의 `authKey`, `customerKey`를 읽어 `POST /api/me/billing/complete` 본문 `{ "authKey":"...", "customerKey":"..." }`으로 보낸다. 서버가 해당 회원의 customerKey를 검사하고, 빌링키 발급 API와 첫 5,000원 테스트 결제 승인 API를 호출한다. 결제 성공(`DONE`, `BILLING`, 주문번호·금액 일치)일 때만 PRO 기간을 저장한다. authKey는 URL에 남겨두지 말고 처리 뒤 지운다.
+3. 성공 URL의 `authKey`, `customerKey`를 읽어 `POST /api/me/billing/complete` 본문 `{ "authKey":"...", "customerKey":"..." }`으로 보낸다. 서버가 해당 회원의 customerKey를 검사하고, 빌링키 발급 API와 첫 4,900원 테스트 결제 승인 API를 호출한다. 결제 성공(`DONE`, `BILLING`, 주문번호·금액 일치)일 때만 PRO 기간을 저장한다. authKey는 URL에 남겨두지 말고 처리 뒤 지운다.
 4. `GET /api/me/billing` → `{cardRegistered,autoRenew,nextChargeAt}`. `GET /api/me/usage` → 현재 FREE/PRO 기간과 사용량. 카드 등록 성공과 결제 성공은 별개다.
 5. `POST /api/me/billing/cancel`은 다음 자동 갱신만 끈다. 현재 결제된 기간은 만료일까지 유지된다. `POST /api/me/billing/retry`는 기존 등록 카드로 결제를 재시도하거나 취소한 갱신을 재개한다.
 

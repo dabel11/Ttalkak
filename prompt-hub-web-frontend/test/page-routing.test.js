@@ -16,6 +16,27 @@ test("page routes have stable hashes", () => {
   assert.equal(routing.resolveRouteHash("#/unknown"), "home");
 });
 
+test("public pricing deep links survive refresh and return to normal hash routes", () => {
+  const url = new URL("https://web.example/pricing?source=extension");
+  const window = {
+    get location() { return url; },
+    history: { replaceState(_state, _title, path) { url.href = new URL(path, url).href; }, pushState(_state, _title, path) { url.href = new URL(path, url).href; } },
+  };
+  const state = { route: "home", isLoggedIn: false };
+  const location = routing.createRouteLocation({ window, state, isAdminAccount: () => false });
+  location.apply();
+  assert.equal(state.route, "pricing");
+  assert.equal(url.pathname, "/pricing");
+  assert.equal(url.search, "?source=extension");
+  location.sync("home");
+  assert.equal(url.pathname, "/");
+  assert.equal(url.hash, "#/home");
+  location.sync("pricing");
+  assert.equal(url.pathname, "/pricing");
+  assert.equal(url.hash, "");
+  assert.equal(routing.resolveRouteHash("#/pricing"), "pricing");
+});
+
 test("route location redirects protected routes and writes stable history", () => {
   const historyCalls = [];
   const window = {

@@ -4,6 +4,7 @@ import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncate
 import { getDisplayPromptAuthor as resolveDisplayPromptAuthor, getPromptAuthorId as resolvePromptAuthorId, isWithdrawnAuthorName as matchesWithdrawnAuthorName, renderAuthorControl } from "./prompts/prompt-display-policy.mjs";
 import { getBackendTotalPages, getSearchPlaceholder, getTotalPages, normalizeBackendPageMeta } from "./home/home-page-policy.mjs";
 import { consumeBillingRedirect, consumeOpenBillingRequest, createBillingController } from "./billing/billing-controller.mjs";
+import { PricingPageView, SubscriptionSummaryView } from "./billing/pricing-page.mjs";
 /** @param {TtalkakModuleRegistry} modules */
 export function startApp(modules) {
 const moduleLoadError = (area) => new Error(`TTALKAK ${area} 모듈을 불러오지 못했습니다.`);
@@ -979,6 +980,7 @@ function navigateTo(route, { historyMode = "push", animate = true } = {}) {
   const commitRoute = () => {
     commitPendingUnsaves(route);
     state.route = route;
+    if (["pricing", "saved"].includes(route)) void billingController.hydrateSummary({ force: true });
     if (historyMode !== "none") routeLocation.sync(route, { replace: historyMode === "replace" });
     if (route === "home") resetHomeView();
     render();
@@ -1035,6 +1037,7 @@ function getPageRouteContext() {
     MakePage,
     SavedPage,
     SharePage,
+    PricingPage: () => PricingPageView({ state, escapeHtml, formatShortDate }, billingController.getSnapshot()),
   };
 }
 function HomePage() {
@@ -1179,7 +1182,7 @@ function SavedPage() {
     { id: "reports", label: "신고 내역", count: getMyReports().length },
   ];
   return SavedPageView(
-    { icons, state, formatNumber, MyPagePanel },
+    { icons, state, formatNumber, MyPagePanel, SubscriptionSummary: () => SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, billingController.getSnapshot()) },
     {
       tabs,
       hideMyPagePanel: !canUseDemoFallback() && state.myBackendStatus === "fallback",
@@ -1328,6 +1331,12 @@ function bindCoreEvents() {
   bindDiscoveryEvents();
   bindAuthControls(document, authController);
   billingController.bindBilling(document);
+  if (["pricing", "saved"].includes(state.route) && !state.billingOpen) void billingController.hydrateSummary();
+  document.querySelector("[data-start-pro]")?.addEventListener("click", () => {
+    state.pendingBillingOpen = true;
+    state.authView = "login";
+    render();
+  });
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();

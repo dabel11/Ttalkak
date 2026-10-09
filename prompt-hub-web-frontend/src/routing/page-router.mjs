@@ -1,25 +1,36 @@
   "use strict";
 
-  const routeHashes = {
-    home: "#/home",
-    make: "#/make",
-    saved: "#/mypage",
-    share: "#/share",
-    admin: "#/admin",
-  };
+  const routeHashes = new Map([
+    ["home", "#/home"], ["make", "#/make"], ["saved", "#/mypage"],
+    ["share", "#/share"], ["admin", "#/admin"], ["pricing", "#/pricing"],
+  ]);
+  const routeNames = new Map([
+    ["home", "home"], ["make", "make"], ["mypage", "saved"],
+    ["share", "share"], ["admin", "admin"], ["pricing", "pricing"],
+  ]);
 
   function getRouteHash(route) {
-    return routeHashes[route] || routeHashes.home;
+    return routeHashes.get(route) || routeHashes.get("home");
   }
 
   function resolveRouteHash(hash) {
     const normalized = String(hash || "").replace(/^#\/?/, "");
-    return { make: "make", mypage: "saved", share: "share", admin: "admin" }[normalized] || "home";
+    return routeNames.get(normalized) || "home";
   }
 
   function createRouteLocation({ window, state, isAdminAccount }) {
     function sync(route, { replace = false } = {}) {
       const hash = getRouteHash(route);
+      const isPricingPath = window.location.pathname === "/pricing" || window.location.pathname === "/pricing/";
+      if (route === "pricing") {
+        if (window.location.pathname === "/pricing" && !window.location.hash) return;
+        window.history[replace ? "replaceState" : "pushState"](null, "", `/pricing${window.location.search || ""}`);
+        return;
+      }
+      if (isPricingPath) {
+        window.history[replace ? "replaceState" : "pushState"](null, "", `/${window.location.search || ""}${hash}`);
+        return;
+      }
       if (window.location.hash === hash) return;
       window.history[replace ? "replaceState" : "pushState"](null, "", hash);
     }
@@ -36,7 +47,9 @@
       sync(requestedRoute, { replace: true });
     }
 
-    const read = () => resolveRouteHash(window.location.hash || getRouteHash(state.route));
+    const read = () => window.location.hash ? resolveRouteHash(window.location.hash)
+      : ["/pricing", "/pricing/"].includes(window.location.pathname) ? "pricing"
+        : resolveRouteHash(getRouteHash(state.route));
     function bind(navigate) {
       const handleLocationNavigation = () => {
         const route = read();
@@ -56,6 +69,7 @@
       MakePage,
       SavedPage,
       SharePage,
+      PricingPage,
     } = ctx;
 
     if (state.adminMode) return AdminPage();
@@ -75,6 +89,7 @@
       return HomePage();
     }
     if (state.route === "share") return SharePage();
+    if (state.route === "pricing") return PricingPage();
     if (state.route === "admin") return AdminPage();
     return HomePage();
   }

@@ -54,7 +54,7 @@
   }
 
   function SavedPageView(ctx, data) {
-    const { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel } = ctx;
+    const { icons, state, formatNumber, DemoLibraryPrompt, MyPagePanel, SubscriptionSummary } = ctx;
     const { hideMyPagePanel, libraryStatus, tabs } = data;
     const statusPrompt = typeof DemoLibraryPrompt === "function" ? DemoLibraryPrompt() : LibraryStatusPromptView(libraryStatus);
 
@@ -66,6 +66,7 @@
             <h1 id="my-page-heading">마이페이지</h1>
           </div>
         </div>
+        ${typeof SubscriptionSummary === "function" ? SubscriptionSummary() : ""}
         <nav class="my-page-tabs" aria-label="마이페이지 메뉴">
           ${tabs
             .map(

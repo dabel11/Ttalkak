@@ -15,6 +15,42 @@ test("billing deep links are consumed without losing their route", () => {
 
 const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx });
 
+test("pricing summaries only read data and never create a payment session", async () => {
+  const calls = [];
+  const controller = createController({
+    state: { isLoggedIn: true }, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      getUsageStatus: async () => { calls.push("usage"); return { plan: "FREE", used: 50 }; },
+      getBillingStatus: async () => { calls.push("status"); return { paymentStatus: "NOT_REGISTERED" }; },
+      setupBilling: async () => { calls.push("setup"); },
+    },
+  });
+  await controller.hydrateSummary();
+  await controller.hydrateSummary();
+  assert.deepEqual(calls, ["usage", "status"]);
+  assert.equal(controller.getSnapshot().usage.totalTokens, 50);
+});
+
+test("a delayed account summary cannot overwrite a newer payment refresh", async () => {
+  let resolveUsage;
+  let usageCalls = 0;
+  const oldUsage = new Promise((resolve) => { resolveUsage = resolve; });
+  const controller = createController({
+    state: { isLoggedIn: true }, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      getUsageStatus: () => ++usageCalls === 1 ? oldUsage : Promise.resolve({ plan: "PRO", used: 500 }),
+      getBillingStatus: async () => ({ paymentStatus: "ACTIVE" }),
+      setupBilling: async () => ({ amount: 4900 }),
+    },
+  });
+  const summary = controller.hydrateSummary();
+  await controller.refreshBilling();
+  resolveUsage({ plan: "FREE", used: 1 });
+  await summary;
+  assert.equal(controller.getSnapshot().usage.plan, "PRO");
+  assert.equal(controller.getSnapshot().usage.totalTokens, 500);
+});
+
 test("billing callback removes the one-time auth key before it can remain in browser history", () => {
   const history = { state: { from: "home" }, replaceState(state, title, url) { this.saved = { state, title, url }; } };
   const callback = consumeBillingRedirect({ href: "http://localhost:5500/?view=home&ttalkakBilling=success&authKey=single-use&customerKey=generated#help" }, history);

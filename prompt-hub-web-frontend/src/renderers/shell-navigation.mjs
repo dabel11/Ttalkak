@@ -35,6 +35,7 @@
                 ${!isAdminAccount ? item("make", "첨삭", icons.make) : ""}
                 ${state.isLoggedIn && !isAdminAccount ? item("saved", "마이페이지", icons.user) : ""}
                 ${!isAdminAccount ? item("share", "공유", icons.share) : ""}
+                ${!isAdminAccount ? item("pricing", "요금제", icons.bookmark) : ""}
               `
           }
         </nav>
@@ -93,6 +94,7 @@
                 <button class="${state.route === "make" ? "active" : ""}" type="button" data-route="make">첨삭</button>
                 ${state.isLoggedIn ? `<button class="${state.route === "saved" ? "active" : ""}" type="button" data-route="saved">마이페이지</button>` : ""}
                 <button class="${state.route === "share" ? "active" : ""}" type="button" data-route="share">공유</button>
+                <button class="${state.route === "pricing" ? "active" : ""}" type="button" data-route="pricing">요금제</button>
               </nav>
               ${makeAuthHint ? `<p class="make-auth-hint make-auth-hint-mobile">${makeAuthHint}</p>` : ""}
               ${resolvedAuthButton}
