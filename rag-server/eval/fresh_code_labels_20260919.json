@@ -1,0 +1,264 @@
+{
+  "note": "새 결과물(fresh_outputs_20260919.json)에 대한 코드 규칙 라벨. 코드를 돌리기 전에 결과물을 읽고 작성했다. placeholders=채울 칸으로 남긴 표시, invented_values=요청에 없던 숫자 값(entity_facts 문항만, 결과물에 나온 표기 그대로). predicted_miss=라벨 작성 중 현재 규칙이 틀릴 것으로 예상한 것 — 규칙은 고치지 않았다.",
+  "items": {
+    "up_01": {
+      "invented_values": [
+        "7:00"
+      ],
+      "non_numeric": [
+        "(금) — 2026-07-15 는 수요일"
+      ],
+      "placeholders": []
+    },
+    "up_02": {
+      "placeholders": [
+        "[이름]"
+      ],
+      "not_placeholders": [
+        "[신입백엔드]"
+      ],
+      "invented_values": [
+        "17",
+        "3.x",
+        "주 2회",
+        "10:00",
+        "18:00",
+        "4,500만 원",
+        "6,000만 원",
+        "30만원",
+        "연 1회",
+        "주 1회",
+        "1~2페이지",
+        "2026년",
+        "12:00",
+        "2주",
+        "오전 10시"
+      ],
+      "non_numeric": [
+        "FinWave",
+        "recruit@finwave.com",
+        "학사 이상",
+        "(화·목)"
+      ],
+      "predicted_miss": [
+        "1️⃣~7️⃣ 제목 번호를 지어낸 값으로 잡을 수 있음(이모지 숫자)"
+      ]
+    },
+    "up_06": {
+      "placeholders": [
+        "[회사명]",
+        "[제품명]"
+      ],
+      "invented_values": [
+        "2026년 9월 10일",
+        "2026년 9월 18일",
+        "8일",
+        "02-1234-5678",
+        "10% 할인",
+        "24시간",
+        "09:00",
+        "18:00"
+      ],
+      "non_numeric": [
+        "support@company.com"
+      ]
+    },
+    "up_09": {
+      "placeholders": [
+        "[카페이름]",
+        "[주소]"
+      ],
+      "invented_values": [
+        "2024년",
+        "1%",
+        "1,200원",
+        "100명",
+        "5,500원",
+        "1잔",
+        "5명",
+        "10:00",
+        "22:00",
+        "12:00"
+      ],
+      "non_numeric": [
+        "서울시 강남구"
+      ]
+    },
+    "up_10": {
+      "invented_values": [
+        "1:1",
+        "2026년 10월 31일",
+        "11월 5~10일",
+        "11월 15일",
+        "200자",
+        "2~3일",
+        "010-1234-5678"
+      ],
+      "non_numeric": [
+        "www.ourclub.com",
+        "recruit@ourclub.com",
+        "@ourclub_official"
+      ],
+      "placeholders": []
+    },
+    "up_11": {
+      "invented_values": [
+        "2024년",
+        "3·4호기",
+        "02-1234-5678"
+      ],
+      "non_numeric": [
+        "(월)",
+        "a101@apartment.co.kr"
+      ],
+      "predicted_miss": [
+        "'내선 101' 은 요청의 '101동'과 숫자가 같아 놓칠 것"
+      ],
+      "placeholders": []
+    },
+    "up_25": {
+      "invented_values": [],
+      "placeholders": []
+    },
+    "up_38": {
+      "invented_values": [
+        "5.3",
+        "1.5초",
+        "120dB",
+        "20Hz",
+        "20kHz",
+        "10dB",
+        "15분",
+        "4시간",
+        "2배",
+        "30분",
+        "45,000원~55,000원",
+        "1년",
+        "30일",
+        "30%",
+        "28",
+        "26"
+      ],
+      "non_numeric": [
+        "프리미엄 30H(제품명)",
+        "가짜 사용 후기 인물"
+      ],
+      "predicted_miss": [
+        "30분·30일·30% 는 요청의 '30시간'과 숫자가 같아 놓칠 것(단위를 안 봄)"
+      ],
+      "placeholders": []
+    },
+    "up_41": {
+      "invented_values": [
+        "2026년 10월 4일",
+        "6시 30분",
+        "9시 30분",
+        "123-45",
+        "2호선",
+        "3번 출구",
+        "9월 28일",
+        "1인당",
+        "30,000원",
+        "010-1234-5678"
+      ],
+      "non_numeric": [
+        "(금)",
+        "삼거리포차",
+        "김지훈",
+        "jhkim@company.com"
+      ],
+      "placeholders": []
+    },
+    "up_43": {
+      "placeholders": [
+        "[회사명]",
+        "[부서명]",
+        "[본인 이름]",
+        "[인수인계 담당자]",
+        "[이메일]",
+        "[링크]",
+        "[본인 이메일]",
+        "[본인 전화번호]",
+        "[연락처]",
+        "20XX년 X월 X일"
+      ],
+      "invented_values": [],
+      "predicted_miss": [
+        "'20XX년'의 20 을 지어낸 값으로 잡을 것",
+        "'20XX년 X월 X일'은 대괄호가 없어 자리표시자로 못 잡을 것"
+      ]
+    },
+    "up_45": {
+      "placeholders": [
+        "[이름]",
+        "[사건이 발생한 시기]",
+        "[당신의 이름]"
+      ],
+      "invented_values": [],
+      "predicted_miss": [
+        "'[사건이 발생한 시기]' 는 '시기'가 채울 칸 명사 목록에 없어 놓칠 것"
+      ]
+    },
+    "up_46": {
+      "invented_values": [
+        "10%",
+        "3,000원"
+      ],
+      "placeholders": []
+    },
+    "up_03": {
+      "placeholders": []
+    },
+    "up_04": {
+      "placeholders": []
+    },
+    "up_08": {
+      "placeholders": []
+    },
+    "up_14": {
+      "placeholders": []
+    },
+    "up_15": {
+      "placeholders": []
+    },
+    "up_16": {
+      "placeholders": []
+    },
+    "up_17": {
+      "placeholders": []
+    },
+    "up_18": {
+      "placeholders": []
+    },
+    "up_19": {
+      "placeholders": []
+    },
+    "up_20": {
+      "placeholders": []
+    },
+    "up_29": {
+      "placeholders": []
+    },
+    "up_30": {
+      "placeholders": []
+    },
+    "up_34": {
+      "placeholders": []
+    },
+    "up_35": {
+      "placeholders": []
+    },
+    "up_36": {
+      "placeholders": []
+    },
+    "up_39": {
+      "placeholders": []
+    },
+    "up_47": {
+      "placeholders": []
+    },
+    "up_48": {
+      "placeholders": []
+    }
+  }
+}

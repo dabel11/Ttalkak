@@ -1,0 +1,424 @@
+{
+  "records": {
+    "up_04|raw|0": {
+      "item": "up_04",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "다음 회의록을 결정사항·액션아이템 위주로 핵심 3줄로 요약해줘:\n'오늘 신규 결제 모듈 일정 논의. 6월 말 QA 시작에 합의. 김대리가 API 문서를 금주 내 작성하기로 함. 외부 PG 연동은 7월로 연기. 다음 회의 6/30.'",
+      "output": "- 6월 말 QA를 시작하기로 합의하고, 외부 PG 연동은 7월로 연기했다.  \n- 김대리가 금주 내에 API 문서를 작성하기로 결정했다.  \n- 다음 회의는 6월 30일로 잡았다.",
+      "exec_finish": "stop",
+      "exec_usage": 273,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 합의하고, 외부 PG 연동은 7월로 연기했다."
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 합의하고, 외부 PG 연동은 7월로 연기했다."
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "김대리가 금주 내에 API 문서를 작성하기로 결정했다."
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "3줄로 구성된 요약"
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 합의"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "김대리가 금주 내에 API 문서를 작성하기로"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "외부 PG 연동은 7월로 연기"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 901
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 2.8
+    },
+    "up_04|rewrite|0": {
+      "item": "up_04",
+      "condition": "rewrite",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 0,
+      "questions": 0,
+      "prompt": "너는 회의록 요약 전문가다. 아래 회의록을 결정사항·액션아이템 위주로 핵심 3줄로 요약하라.\n[회의록]\n오늘 신규 결제 모듈 일정 논의. 6월 말 QA 시작에 합의. 김대리가 API 문서를 금주 내 작성하기로 함. 외부 PG 연동은 7월로 연기. 다음 회의 6/30.",
+      "output": "- 6월 말 QA 시작에 합의하고 신규 결제 모듈 일정 확정  \n- 김대리에게 API 문서 금주 내 작성 요청, 외부 PG 연동은 7월로 연기  \n- 다음 회의는 6월 30일에 개최 예정, 액션 아이템은 API 문서 완성 및 일정 재검토이다",
+      "exec_finish": "stop",
+      "exec_usage": 295,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 합의하고 신규 결제 모듈 일정 확정"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 합의하고 신규 결제 모듈 일정 확정"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "김대리에게 API 문서 금주 내 작성 요청"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "- 6월 말 QA 시작에 합의하고 신규 결제 모듈 일정 확정"
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 합의"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "김대리에게 API 문서 금주 내 작성 요청"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "외부 PG 연동은 7월로 연기"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": true,
+          "fabricated_items": [
+            "신규 결제 모듈 일정 확정",
+            "액션 아이템은 API 문서 완성 및 일정 재검토이다"
+          ],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1001
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": true,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 16.6
+    },
+    "up_04|ttalkak|0": {
+      "item": "up_04",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 0,
+      "prompt": "당신은 회의록 요약 전문가이다. 아래 회의록을 대상으로, 먼저 결정사항·액션아이템을 근거 문장으로 추출하고, 각 추출된 항목을 간결히 요약한 뒤, 최종적으로 3줄 이내의 핵심 요약을 생성하라.\n[본문]\n오늘 신규 결제 모듈 일정 논의. 6월 말 QA 시작에 합의. 김대리가 API 문서를 금주 내 작성하기로 함. 외부 PG 연동은 7월로 연기. 다음 회의 6/30.\n[요구사항]\n- 요약은 결정사항·액션아이템 위주로.\n- 총 3줄 이하, 각 줄은 핵심 하나씩.\n- 길이 제한을 엄격히 지킬 것.",
+      "output": "**근거 문장 및 요약**  \n1. **결정사항** – “6월 말 QA 시작에 합의.” → 6월 말부터 QA를 시작한다.  \n2. **액션아이템** – “김대리가 API 문서를 금주 내 작성하기로 함.” → 김대리, 금주 내에 API 문서 작성.  \n3. **액션아이템** – “외부 PG 연동은 7월로 연기.” → 외부 PG 연동을 7월로 미루기.  \n\n**핵심 요약 (3줄)**  \n- 6월 말 QA를 시작한다.  \n- 김대리, 금주 내에 API 문서를 작성한다.  \n- 외부 PG 연동은 7월로 연기된다.",
+      "exec_finish": "stop",
+      "exec_usage": 479,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "핵심 요약 (3줄)"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 합의"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "김대리, 금주 내에 API 문서를 작성한다"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "- 6월 말 QA를 시작한다."
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 합의"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "김대리, 금주 내에 API 문서를 작성한다"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "외부 PG 연동은 7월로 연기된다"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 989
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 59.5
+    },
+    "up_46|raw|0": {
+      "item": "up_46",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "우리 빵집 인스타 홍보 문구 써줘.",
+      "output": "🍞✨ **달콤한 하루, 우리 빵집에서 시작하세요!** ✨🍞  \n\n📍 **[빵집 이름]** – 신선한 재료와 사랑으로 만든 빵이 가득한 곳  \n🕒 **오픈 시간**: 매일 6:00 ~ 18:00  \n📸 **인스타그램**: @빵집_이름\n\n---\n\n### 🎉 오늘의 특별 메뉴 🎉  \n- **아침에 부드러운 크로아상** – 바삭한 겉과 촉촉한 속이 일품  \n- **수제 바게트** – 프랑스식 바삭함, 한국식 풍미  \n- **신선한 과일 타르트** – 계절 과일이 가득한 달콤한 마무리  \n- **특제 커피 & 차** – 빵과 완벽한 조화를 이룹니다  \n\n---\n\n### 📸 인스타그램 스토리 필수 포인트  \n1. **빵이 입 안에서 터지는 순간**  \n2. **아름답게 장식된 테이블 세팅**  \n3. **직원과 고객의 웃는 얼굴**  \n\n#빵집이름 #신선한빵 #아침빵 #수제빵 #맛있는시간 #인스타그램맛집\n\n---\n\n### 🌟 이벤트 안내 🌟  \n- **첫 방문 고객**: 10% 할인 쿠폰 제공  \n- **인스타그램 포스트**: #빵집이름 태그 + 3개의 해시태그로 공유하면 추첨을 통해 **무료 빵 1개** 증정!  \n- **주말 특별 메뉴**: 한정판 바나나 크루아상, 토마토 바게트\n\n---\n\n### 📞 예약 & 문의  \n- 전화: 02‑1234‑5678  \n- 인스타 DM: 언제든지 환영합니다!\n\n---\n\n**우리 빵집과 함께라면, 매일이 더 달콤해집니다.**  \n지금 바로 인스타에서 @빵집_이름을 팔로우하고, 맛있는 순간을 공유해 보세요! 🚀\n\n---",
+      "exec_finish": "stop",
+      "exec_usage": 608,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "🍞✨ **달콤한 하루, 우리 빵집에서 시작하세요!**"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "우리 빵집과 함께라면, 매일이 더 달콤해집니다"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1192
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": true,
+        "invented_values": [
+          "6:00",
+          "18:00",
+          "10%",
+          "3개",
+          "1개",
+          "02",
+          "1234",
+          "5678"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 22.9
+    },
+    "up_46|rewrite|0": {
+      "item": "up_46",
+      "condition": "rewrite",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 0,
+      "questions": 2,
+      "prompt": "너는 인스타그램 마케팅 카피라이터다. 아래 정보를 바탕으로 우리 빵집의 인스타그램 홍보 문구를 친근하고 활기찬 톤으로, 3~4줄 정도의 짧은 캡션 형식으로 작성하라.\n[홍보 대상] 우리 빵집\n[제품명] [제품명 입력]\n[가격] [가격 입력]\n[대상 독자] 인스타그램 사용자 및 빵을 좋아하는 일반 소비자\n[톤] 친근하고 활기찬\n[분량] 3~4줄\n[형식] 인스타그램 캡션",
+      "output": "🍞✨ 오늘의 특별한 한 조각, **[제품명 입력]**!  \n가격은 **[가격 입력]**에요 – 그치만 한 입이면 행복이 두 배로!  \n빵집에서만 느낄 수 있는 부드러움과 풍미를 지금 바로 만나보세요.  \n#빵집 #신상빵 #맛있는순간 #인스타그램빵🍞",
+      "exec_finish": "stop",
+      "exec_usage": 345,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "🍞✨ 오늘의 특별한 한 조각, **⟦자리표시자⟧**!"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "빵집에서만 느낄 수 있는 부드러움과 풍미를"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 820
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 47.0
+    },
+    "up_46|ttalkak|0": {
+      "item": "up_46",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 4,
+      "questions": 3,
+      "prompt": "당신은 인스타그램 마케팅 전문가다. 아래 조건을 모두 만족하는 우리 빵집의 인스타그램 홍보 문구를 작성하라.\n- 홍보 대상: 우리 빵집\n- 제품명: [제품명 입력]\n- 가격: [가격 입력]\n- 특징: [특징 입력]\n- 톤: 친근하고 따뜻한 어조 (Tone Prompting 적용)\n- 스타일: 제공된 샘플의 문체를 분석하여 동일한 분위기로 작성한다 (Style Imitation Prompting 적용)\n- 내용: 제품의 매력을 강조하고, 구매를 유도하는 문구와 적절한 이모지를 포함한다.\n- 해시태그: 관련 해시태그 5개 이상 포함한다.\n- 분량: 200자 이내.",
+      "output": "🌟 우리 빵집에서 새로 출시한 **[제품명 입력]**을 만나보세요!  \n🍞 부드러운 식감과 풍부한 향이 한입에 퍼지는 이 빵은 **[가격 입력]**에 여러분을 초대합니다.  \n✨ 특징: **[특징 입력]** – 언제나 따뜻한 마음으로 만든 최고의 맛!  \n\n지금 바로 방문해 보세요. 여러분의 하루를 달콤하게 만들어 드릴게요! 😋💕\n\n#우리빵집 #신제품 #맛있는빵 #따뜻한구매 #행복한한입 #빵사랑\n\n(총 198자)",
+      "exec_finish": "stop",
+      "exec_usage": 463,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "🌟 우리 빵집에서 새로 출시한 **⟦자리표시자⟧**을 만나보세요!"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "우리 빵집에서 새로 출시한"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": "The assistant provided the requested promotional text without refusing or fabricating specific factual details."
+        },
+        "usage": 898
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "fabrication": true,
+        "invented_values": [
+          "198자"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 60.4
+    }
+  },
+  "pairs": {
+    "up_46|pair_raw_vs_ttalkak|0": {
+      "winner": "a",
+      "passes": [
+        "a",
+        "a"
+      ]
+    },
+    "up_46|pair_rewrite_vs_ttalkak|0": {
+      "winner": "tie",
+      "passes": [
+        "tie",
+        "b"
+      ]
+    }
+  },
+  "runs": [
+    {
+      "git_head": "6691461",
+      "dirty": [
+        "ag-server/RAG_PIPELINE.md",
+        "rag-server/WORKLOG.md",
+        "rag-server/app/rag/generator.py",
+        "rag-server/tests/test_analyzer.py",
+        "rag-server/tests/test_token_budget.py",
+        ".codex/",
+        "rag-server/tests/test_code_defects.py",
+        "rag-server/tests/test_uplift_score.py",
+        "rag-server/tests/test_uplift_set_v2.py"
+      ],
+      "generator_prompt_sha": "7495fae98c92",
+      "at": "2026-09-20T01:45:54",
+      "args": {
+        "set": "uplift_set_v2.json",
+        "items": "up_04,up_46",
+        "conditions": [
+          "raw",
+          "rewrite",
+          "ttalkak"
+        ],
+        "repeats": 1,
+        "gen_model": "gemini-2.0-flash",
+        "target_model": "openai/gpt-oss-20b",
+        "judge_model": "openai/gpt-oss-120b",
+        "skip_pairwise": false,
+        "max_wait": 21600,
+        "out": "eval/results/uplift_smoke_20260920.json"
+      }
+    }
+  ]
+}

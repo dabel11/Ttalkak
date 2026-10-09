@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from eval.multi_turn_eval import (
+    analyzer_fingerprint,
     build_judge_prompt,
     normalize_judge_result,
     parse_judge_json,
@@ -464,6 +465,23 @@ def test_cache_key_changes_with_examples_and_analyzer_settings() -> None:
 
     assert key_a != key_b
     assert key_a != key_without_analyzer
+
+
+def test_analyzer_fingerprint_tracks_model_and_code_but_not_comments() -> None:
+    """분석기가 바뀌면 캐시 키가 바뀌어야 한다 — 종전엔 폐기된 모델 라벨이 박혀 있었다."""
+    src = "X = 1\n# 주석\n\ndef f():\n    return X\n"
+    base = analyzer_fingerprint("openai/gpt-oss-20b", src)
+
+    assert base == analyzer_fingerprint("openai/gpt-oss-20b", src)
+    assert base != analyzer_fingerprint("openai/gpt-oss-120b", src)          # 모델
+    assert base != analyzer_fingerprint("openai/gpt-oss-20b", src.replace("X = 1", "X = 2"))  # 코드(규칙·프롬프트)
+    # 주석·빈 줄만 바뀐 편집은 값비싼 캐시를 날리지 않는다
+    assert base == analyzer_fingerprint("openai/gpt-oss-20b", "X = 1\n# 다른 주석\n# 더\ndef f():\n    return X\n")
+
+    common = {"query": "q", "history": [], "technique_names": [], "model": "m", "temperature": "0.7",
+              "system_prompt": "s", "analyzer_temperature": "0.2"}
+    assert (build_cache_key(analyzer_model=base, **common)
+            != build_cache_key(analyzer_model=analyzer_fingerprint("openai/gpt-oss-20b", src + "Y = 3\n"), **common))
 
 
 def test_context_identifier_is_stable() -> None:
