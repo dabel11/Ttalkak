@@ -877,6 +877,11 @@ public class PromptController {
             );
             ragRequest.put("top_k", 5);
             ragRequest.put("history", ragHistory);
+            // Correlate Spring's member usage row with the RAG /query invocation.
+            // A missing client id still gets a fresh server-generated invocation id.
+            String ragRequestId = requestId != null ? requestId
+                    : memberPermit != null ? memberPermit.id() : UUID.randomUUID().toString();
+            ragRequest.put("request_id", ragRequestId);
 
             Map<?, ?> response = webClient.post()
                     .uri(ragServerUrl + "/query")
@@ -897,7 +902,7 @@ public class PromptController {
             if (memberId != null) {
                 boolean recorded;
                 try {
-                    recorded = ragUsageRecorder.record(memberId, requestId, response);
+                    recorded = ragUsageRecorder.record(memberId, ragRequestId, response);
                 } catch (RuntimeException accountingFailure) {
                     memberRequestGuard.usageMissing(memberPermit);
                     throw accountingFailure;
