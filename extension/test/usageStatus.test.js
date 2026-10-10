@@ -57,8 +57,9 @@ test("usage requests use the member bearer token", async () => {
   }
 });
 
-test("billing links open the web account flow without losing the Home route", () => {
+test("billing links open the public pricing page without starting payment", () => {
   const url = new URL(getBillingPageUrl("https://web.ttalkak.example"));
-  assert.equal(url.searchParams.get("openBilling"), "1");
-  assert.equal(url.hash, "#/home");
+  assert.equal(url.pathname, "/pricing");
+  assert.equal(url.searchParams.has("openBilling"), false);
+  assert.equal(url.hash, "");
 });

@@ -12,8 +12,9 @@ export function getDefaultWebAppUrl() {
 
 export function getBillingPageUrl(webAppUrl = getDefaultWebAppUrl()) {
   const url = new URL(cleanUrl(webAppUrl));
-  url.searchParams.set("openBilling", "1");
-  url.hash = "/home";
+  url.pathname = "/pricing";
+  url.searchParams.delete("openBilling");
+  url.hash = "";
   return url.toString();
 }
 

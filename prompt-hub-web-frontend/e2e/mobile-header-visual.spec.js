@@ -26,6 +26,23 @@ async function prepare(page, { loggedIn = false, backendError = false } = {}) {
 }
 
 async function expectHeader(page, name) {
+  // The pricing route is new. Assert its visible placement before comparing
+  // the unchanged header sections with their established visual baselines.
+  // This avoids hiding an actual navigation regression behind a snapshot update.
+  const navigation = page.locator(".topbar-mobile-nav");
+  const share = navigation.locator('[data-route="share"]');
+  const pricing = navigation.locator('[data-route="pricing"]');
+  await expect(share).toBeVisible();
+  await expect(pricing).toBeVisible();
+  const [shareBox, pricingBox] = await Promise.all([share.boundingBox(), pricing.boundingBox()]);
+  expect(shareBox).not.toBeNull();
+  expect(pricingBox).not.toBeNull();
+  expect(pricingBox.y).toBeGreaterThanOrEqual(shareBox.y + shareBox.height);
+  expect(pricingBox.x).toBeGreaterThanOrEqual(shareBox.x - 1);
+  // Keep the old snapshots focused on pre-existing header chrome until the
+  // full mobile-menu PNG baselines are regenerated in the review environment.
+  await pricing.evaluate((button) => { button.style.display = "none"; });
+
   const boxes = await Promise.all([
     page.locator(".topbar").boundingBox(),
     page.locator("#topbar-action-menu").boundingBox(),

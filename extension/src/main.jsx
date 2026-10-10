@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadExtensionStorage, saveExtensionStorage } from "./storage/extensionStorage";
 import { createRoot } from "react-dom/client";
 import { AuthModal } from "./components/AuthModal";
 import { ChatFeed } from "./components/ChatFeed";
@@ -22,6 +23,16 @@ import "./styles/notion.css";
 
 function App() {
   const [activeTab, setActiveTab] = useState("search");
+  const [inlineImproveEnabled, setInlineImproveEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    loadExtensionStorage("pp_inline_improve_enabled", false).then((v) => { if(active) setInlineImproveEnabled(v === true); });
+    return () => { active = false; };
+  }, []);
+  async function toggleInlineImprove(value) {
+    await saveExtensionStorage("pp_inline_improve_enabled", value);
+    setInlineImproveEnabled(value);
+  }
   const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 760);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
@@ -280,6 +291,8 @@ function App() {
             ragStatus={ragStatus}
             usage={usage}
             usageStatus={usageStatus}
+            inlineImproveEnabled={inlineImproveEnabled}
+            onToggleInlineImprove={toggleInlineImprove}
           />
           <ChatFeed
             messages={messages}

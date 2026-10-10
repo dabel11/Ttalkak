@@ -22,7 +22,10 @@ const types = {
 const server = http.createServer((request, response) => {
     const url = new URL(request.url, `http://${host}:${port}`);
     const requestedPath = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
-    const normalizedPath = requestedPath === "/" || requestedPath === "\\" ? "index.html" : requestedPath.replace(/^[/\\]/, "");
+    if (url.pathname === "/pricing/") {
+      response.writeHead(308, { Location: `/pricing${url.search}` }); response.end(); return;
+    }
+    const normalizedPath = requestedPath === "/" || requestedPath === "\\" || requestedPath === "/pricing" ? "index.html" : requestedPath.replace(/^[/\\]/, "");
     const filePath = path.join(root, normalizedPath);
 
     fs.readFile(filePath, (error, content) => {
