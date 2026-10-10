@@ -60,7 +60,7 @@ public class MemberRequestGuard {
 
     /** Call only after checking saved replays, immediately before a new RAG invocation. */
     public void checkQuota(Permit permit) {
-        if (permit == null || !policy.enabled()) return;
+        if (permit == null || (!policy.enabled() && !policy.requestQuotaEnabled())) return;
         MemberRequestLease lease = leases.findById(permit.memberId()).orElseThrow();
         if (!lease.owns(permit.id()) || !lease.activeAt(clock.instant())) {
             throw new ApiException(HttpStatus.CONFLICT, "MEMBER_REQUEST_IN_PROGRESS", "요청 상태를 다시 확인해 주세요.");
@@ -70,9 +70,15 @@ public class MemberRequestGuard {
                     "사용량을 확인하고 있습니다. 잠시 후 다시 시도해 주세요.");
         }
         var snapshot = periods.at(permit.memberId(), clock.instant());
-        if (snapshot.totalTokens() >= policy.limit(snapshot.plan())) {
+        if (policy.enabled() && snapshot.totalTokens() >= policy.limit(snapshot.plan())) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_TOKEN_LIMIT_EXCEEDED",
-                    "현재 이용 기간의 AI 사용 한도를 모두 사용했습니다.");
+                    "현재 이용 기간의 AI 토큰 한도를 모두 사용했습니다.");
+        }
+        // Only one active member lease can pass this check. Successful metered
+        // invocations are counted once by the (memberId, requestKey) unique key.
+        if (policy.requestQuotaEnabled() && snapshot.requests() >= policy.requestLimit(snapshot.plan())) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_REQUEST_LIMIT_EXCEEDED",
+                    "현재 이용 기간의 AI 요청 횟수를 모두 사용했습니다.");
         }
     }
 
