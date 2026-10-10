@@ -30,11 +30,11 @@ test("guest can read pricing, refresh the path and start PRO through login", asy
   await gotoApp(page, "/pricing");
   await waitForAppHydration(page);
   await expect(page.getByRole("heading", { name: "필요한 만큼, 더 편하게 개선하세요." })).toBeVisible();
-  await expect(page.locator(".pricing-pro")).toContainText("4,900원");
+  await expect(page.locator(".pricing-pro")).toContainText("가격 미정");
   await page.reload();
   await waitForAppHydration(page);
   expect(calls.filter((call) => call.includes("/api/me/billing"))).toEqual([]);
-  await page.getByRole("button", { name: "PRO 시작하기" }).click();
+  await page.getByRole("button", { name: "테스트 구독 확인" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText("로그인");
 });
