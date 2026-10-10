@@ -127,6 +127,8 @@ class PromptImproveConversationTest {
         when(memberRequestGuard.acquire(7L)).thenReturn(permit);
         Map<String, Object> response = improve(request("usage missing", null, null), AUTHORIZATION);
         assertEquals(false, response.get("replayed"));
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("missing-permit"), any(Map.class));
         verify(memberRequestGuard).usageMissing(permit);
         verify(memberRequestGuard).release(permit);
         verify(makeThreadRepository).save(any(MakeThread.class));
@@ -827,6 +829,22 @@ class PromptImproveConversationTest {
 				makeThreadRepository,
 				never()).save(any(MakeThread.class));
 	}
+
+    @Test
+    void memberRagNotFoundCountsActualInvocationAndUsesProvidedRequestId() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "not-found-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":\"no evidence\"}");
+
+        Map<String, Object> response = improve(new PromptController.ImproveRequest(
+                "관련 기법 찾기", "prompt_techniques", null, null, null,
+                "no-evidence-request", List.of()), AUTHORIZATION);
+
+        assertEquals("no_evidence", response.get("ragStatus"));
+        verify(ragUsageRecorder).recordNoEvidence(7L, "no-evidence-request");
+        verify(memberRequestGuard).release(permit);
+    }
 
 	@Test
 	void ragNotFoundReturnsNoEvidence() {
