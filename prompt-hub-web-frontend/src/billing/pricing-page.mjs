@@ -15,13 +15,15 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
       <div><dt>현재 요금제</dt><dd>${usage.plan}</dd></div>
       <div><dt>사용한 토큰</dt><dd>${formatTokenCount(usage.totalTokens)}</dd></div>
       <div><dt>남은 토큰</dt><dd>${usage.remainingTokens == null ? "한도 설정 전" : formatTokenCount(usage.remainingTokens)}</dd></div>
+      ${usage.requestQuotaEnforced && usage.requestLimit != null ? `<div><dt>AI 요청 횟수</dt><dd>${usage.requests} / ${usage.requestLimit}회</dd></div><div><dt>남은 AI 요청</dt><dd>${usage.requestRemaining}회</dd></div>` : ""}
       <div><dt>사용량 초기화</dt><dd>${date(usage.resetsAt || usage.periodEnd)}</dd></div>
       ${billing ? `<div><dt>결제 상태</dt><dd>${labels[status] || "확인 중"}</dd></div><div><dt>자동 갱신</dt><dd>${billing.autoRenew ? "사용" : "중지"}</dd></div>` : ""}
       ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${date(billing.nextChargeAt)}</dd></div>` : ""}
     </dl>
     ${usage.usageBlocked ? '<p class="billing-alert" role="status">사용량 확인이 필요하여 AI 요청이 일시적으로 제한됩니다.</p>'
       : !usage.usageAvailable ? '<p role="status">과거 요청 사용량 확인 필요</p>'
-        : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : ""}
+        : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
+          : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : ""}
     ${!usage.quotaEnforced ? '<p class="pricing-note">현재 회원 사용량 한도 차단은 적용 전입니다.</p>' : ""}` : ""}
   </section>`;
 }
