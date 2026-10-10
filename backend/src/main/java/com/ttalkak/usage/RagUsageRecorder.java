@@ -55,6 +55,16 @@ public class RagUsageRecorder {
         return true;
     }
 
+    /**
+     * A confirmed /query 404 still consumed an actual search invocation.
+     * Count that invocation without fabricating any LLM tokens or Jina charges.
+     */
+    public void recordNoEvidence(Long memberId, String requestId) {
+        if (memberId == null) return;
+        usage.record(memberId, requestId, new TokenCounts(0, 0, 0), clock.instant(),
+                "{\"reason\":\"NO_EVIDENCE\",\"calls\":[]}");
+    }
+
     /** PR #46 separates visible output from billed output (visible + reasoning). */
     private static TokenCounts nestedCounts(Map<?, ?> reported) {
         if (!(reported.get("summary") instanceof Map<?, ?> summary)
