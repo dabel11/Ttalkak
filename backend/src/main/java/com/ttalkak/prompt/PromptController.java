@@ -865,6 +865,8 @@ public class PromptController {
                 ? guestUsageService.reserve(sessionUuid)
                 : null;
         boolean aiSucceeded = false;
+        String ragRequestId = requestId != null ? requestId
+                : memberPermit != null ? memberPermit.id() : UUID.randomUUID().toString();
 
         try {
             Map<String, Object> ragRequest =
@@ -879,8 +881,6 @@ public class PromptController {
             ragRequest.put("history", ragHistory);
             // Correlate Spring's member usage row with the RAG /query invocation.
             // A missing client id still gets a fresh server-generated invocation id.
-            String ragRequestId = requestId != null ? requestId
-                    : memberPermit != null ? memberPermit.id() : UUID.randomUUID().toString();
             ragRequest.put("request_id", ragRequestId);
 
             Map<?, ?> response = webClient.post()
@@ -911,6 +911,16 @@ public class PromptController {
             }
             aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
+            // The upstream no-evidence gate returned 404 after a real search.
+            // Record one request, without inventing LLM/Jina token usage.
+            if (memberId != null) {
+                try {
+                    ragUsageRecorder.recordNoEvidence(memberId, ragRequestId);
+                } catch (RuntimeException accountingFailure) {
+                    memberRequestGuard.usageMissing(memberPermit);
+                    throw accountingFailure;
+                }
+            }
             body = buildNoEvidenceResponse(prompt);
             aiSucceeded = true;
         } catch (WebClientResponseException e) {
