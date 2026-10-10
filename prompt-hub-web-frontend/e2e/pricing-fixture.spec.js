@@ -16,7 +16,7 @@ async function fixture(page, member = false) {
     if (request.method() === "OPTIONS") { await route.fulfill({ status: 204, headers: HEADERS }); return; }
     calls.push(`${request.method()} ${path}`);
     let body = { items: [] };
-    if (path === "/api/me/usage") body = { plan: "PRO", used: 800, limit: 10000, remaining: 9200, quotaEnforced: true, usageAvailable: true, resetsAt: "2026-11-01T00:00:00Z" };
+    if (path === "/api/me/usage") body = { plan: "PRO", used: 800, limit: 10000, remaining: 9200, requests: 3, requestLimit: 150, requestRemaining: 147, requestQuotaEnforced: true, quotaEnforced: true, usageAvailable: true, resetsAt: "2026-11-01T00:00:00Z" };
     if (path === "/api/me/billing/setup") body = { clientKey: "test_ck_fixture", customerKey: "customer", amount: 4900, cardRegistered: true };
     if (path === "/api/me/billing/cancel") cancelled = true;
     if (["/api/me/billing", "/api/me/billing/cancel"].includes(path)) body = { cardRegistered: true, autoRenew: !cancelled, paymentStatus: "ACTIVE", nextChargeAt: "2026-11-01T00:00:00Z" };
@@ -45,6 +45,8 @@ test("member sees live usage without setup and can stop renewal from the existin
   await waitForAppHydration(page);
   const summary = page.locator(".subscription-card");
   await expect(summary).toContainText("9,200개");
+  await expect(summary).toContainText("147회");
+  await expect(summary).toContainText("3 / 150회");
   await expect(summary).toContainText("PRO");
   expect(calls).not.toContain("POST /api/me/billing/setup");
   await summary.getByRole("button", { name: "구독·결제 관리" }).click();
