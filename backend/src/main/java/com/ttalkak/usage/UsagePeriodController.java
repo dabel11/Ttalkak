@@ -35,16 +35,23 @@ public class UsagePeriodController {
         var usage = periods.current(memberId);
         Long limit = policy.limit(usage.plan());
         Long remaining = limit == null ? null : Math.max(0L, limit - usage.totalTokens());
+        Long requestLimit = policy.requestLimit(usage.plan());
+        Long requestRemaining = requestLimit == null ? null : Math.max(0L, requestLimit - usage.requests());
+        boolean requestLimitReached = requestLimit != null && usage.requests() >= requestLimit;
+        boolean quotaEnforced = policy.enabled() || policy.requestQuotaEnabled();
         boolean uncertain = guard.usageUncertain(memberId);
         return new Snapshot(usage.plan(), usage.periodStart(), usage.periodEnd(),
                 usage.inputTokens(), usage.outputTokens(), usage.totalTokens(), usage.requests(),
                 usage.totalTokens(), limit, remaining, limit != null && usage.totalTokens() >= limit,
-                policy.enabled(), !uncertain, policy.enabled() && uncertain,
-                usage.periodEnd());
+                quotaEnforced, !uncertain, quotaEnforced && uncertain,
+                usage.periodEnd(), requestLimit, requestRemaining, requestLimitReached,
+                policy.requestQuotaEnabled());
     }
     public record Snapshot(String plan, java.time.Instant periodStart, java.time.Instant periodEnd,
                            long inputTokens, long outputTokens, long totalTokens, long requests,
                            long used, Long limit, Long remaining, boolean limitReached,
                            boolean quotaEnforced, boolean usageAvailable, boolean usageBlocked,
-                           java.time.Instant resetsAt) {}
+                           java.time.Instant resetsAt,
+                           Long requestLimit, Long requestRemaining, boolean requestLimitReached,
+                           boolean requestQuotaEnforced) {}
 }
