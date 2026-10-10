@@ -33,24 +33,24 @@ export function PricingPageView(ctx, snapshot) {
     <div class="pricing-intro"><p class="pricing-eyebrow">TTALKAK 요금제</p><h1 id="pricing-heading">필요한 만큼, 더 편하게 개선하세요.</h1>
       <p>원클릭 개선과 대화형 개선(Make)을 모든 요금제에서 같은 품질로 제공합니다.</p></div>
     <div class="pricing-grid">
-      <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 30회 수준의 개선을 목표로 합니다.</p>
+      <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 제공량은 확정 후 안내합니다.</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>PRO와 동일한 개선 품질</li></ul>
         <button class="secondary-button" type="button" data-route="make">${state.isLoggedIn ? "첨삭 시작하기" : "무료로 체험하기"}</button>
         ${plan === "FREE" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
-      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">4,900원 <span>/ 월</span></p><p>월 300회 수준의 개선을 목표로 합니다.</p>
+      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">가격 미정 <span>/ 월</span></p><p>가격과 월 제공량은 확정 후 안내합니다.</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>FREE보다 넉넉한 AI 사용량</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing' : 'data-start-pro'}>${plan === "PRO" ? "구독 관리하기" : "PRO 시작하기"}</button>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing' : 'data-start-pro'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
         ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
     </div>
     <p class="pricing-note">비회원은 총 3회 무료 체험할 수 있으며, 프롬프트 저장은 로그인 후 가능합니다.</p>
-    <p class="pricing-note">30회·300회는 초기 목표치입니다. 실제 이용 가능 횟수는 입력 길이와 후속 대화의 토큰 사용량에 따라 달라집니다. 가격과 한도는 실제 호출 비용 확인 후 조정될 수 있습니다.</p>
+    <p class="pricing-note">유료 요금과 FREE·PRO의 월 제공량은 검토 중입니다. 확정된 요금과 제공량은 추후 안내합니다.</p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
       <p>원클릭 개선과 Make는 하나의 AI 사용량 한도를 공유합니다. 미리보기 생성·후속 질문·재개선처럼 AI를 새로 호출하면 사용량이 발생합니다.</p>
       <p>미리보기를 적용하지 않아도 사용량에 포함됩니다. 개선안 적용·원본 복원·저장 결과 조회·같은 요청의 결과 재조회에는 사용량을 추가 차감하지 않습니다.</p>
-      <p class="pricing-note">현재 결제는 테스트 환경으로 실제 청구되지 않습니다. 결제창에서 금액과 상태를 확인한 뒤 진행해 주세요.</p>
+      <p class="pricing-note">현재 결제는 테스트 환경으로 실제 청구되지 않습니다. 결제창의 금액은 기능 검증용이며, 최종 서비스 요금이 아닙니다.</p>
     </section>
   </section>`;
 }
