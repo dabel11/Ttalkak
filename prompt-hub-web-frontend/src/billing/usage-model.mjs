@@ -19,6 +19,13 @@ export function normalizeUsageSnapshot(value = {}) {
   const usagePercent = limitTokens && limitTokens > 0
     ? Math.min(100, Math.round((totalTokens / limitTokens) * 100))
     : null;
+  const requests = finiteCount(source.requests) ?? 0;
+  const requestLimit = finiteCount(source.requestLimit);
+  const requestRemaining = finiteCount(source.requestRemaining)
+    ?? (requestLimit == null ? null : Math.max(0, requestLimit - requests));
+  const requestQuotaEnforced = source.requestQuotaEnforced === true;
+  const requestLimitReached = requestQuotaEnforced
+    && (source.requestLimitReached === true || (requestLimit != null && requests >= requestLimit));
 
   return {
     ...source,
@@ -27,6 +34,11 @@ export function normalizeUsageSnapshot(value = {}) {
     limitTokens,
     remainingTokens,
     limitReached,
+    requests,
+    requestLimit,
+    requestRemaining,
+    requestQuotaEnforced,
+    requestLimitReached,
     quotaEnforced: source.quotaEnforced === true,
     usageAvailable: source.usageAvailable !== false,
     usageBlocked: source.usageBlocked === true,
