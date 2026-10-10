@@ -37,6 +37,10 @@ ttalkak:
     quota-enabled: ${MEMBER_QUOTA_ENABLED:false}
     free-token-limit: ${FREE_TOKEN_LIMIT:0}
     pro-token-limit: ${PRO_TOKEN_LIMIT:0}
+    # Draft allowances: enable only after pricing approval and E2E verification.
+    request-quota-enabled: ${MEMBER_REQUEST_QUOTA_ENABLED:false}
+    free-request-limit: ${FREE_REQUEST_LIMIT:10}
+    pro-request-limit: ${PRO_REQUEST_LIMIT:150}
   auth:
     password-reset-enabled: ${PASSWORD_RESET_ENABLED:false}
     mail-from: ${AUTH_MAIL_FROM:}
