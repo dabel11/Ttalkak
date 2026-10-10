@@ -11,7 +11,11 @@ const requiredEntries = ["index.html", "src"];
 const esbuild = require(path.join(webRoot, "node_modules", "esbuild"));
 const terser = require(path.join(webRoot, "node_modules", "terser"));
 const terserVersion = require(path.join(webRoot, "node_modules", "terser", "package.json")).version;
-const productionCompressionPolicy = `${terserVersion}/12`;
+const productionCompressionRevision = 13;
+const productionCompressionPolicy = `${terserVersion}/${productionCompressionRevision}`;
+// Esbuild hashes precede Terser. Version filenames when the compression policy
+// changes so immutable browser caches cannot mix old and new compressed chunks.
+const productionAssetVersion = `V${productionCompressionRevision}`;
 const internalContextPropertyPattern = /^(?:reportWarning|isCurrentRequest|canUseDemoFallback|normalizeTag|updateThread|setThinking|canDeleteComment|getCommentMutationContext|classifyError|runMutation|failRequest|requestState|refreshMyPage|refreshThread|queueScroll|hasBackendToken|completeRequest|isBackendNumericId|getBackendThreadId|renderCancellation|setBackendFailure|getPromptMutationContext|normalizeRecentThreads|getReportRecord|mapBackendReportStatus|hydrateComments|renderPreservingScroll|isBackendId|findPromptIdByComment|getStatusLabel|countThreadsInFolder|normalizeText|hasBackendAuthToken|togglePendingUnsave|shouldSync|reportFailure|reportOutcome|applyPendingThread|clearPendingGuestThreadTransfer|canSplitMakeThread|scrollLatest|stopInFlight|refreshBackendHomePromptsEffect|normalizeAssistantPromptOutputs|cancelHomeSearch|restoreHomeFocus|hydrateBackendMyPageDataEffect|normalizeResult|formatShortDate|getCommentCount|normalizePersistedLikeCounts|hydrateBackendMakeDataEffect|hydrateBackendHomeDataEffect|findMakeThread|sanitizeMakeBackendMessage|updateBackendHomePageMeta|clearAuthenticatedSession|getMakeInteractionVersion|handleBackendAccessError|reportConcurrencyRefresh|getCustomMakeFolderCount|hydrateBackendAdminData|buildHistory|startRequest|waitForPaint|findEditableMessage|normalizeMakeFolders|discardCurrentScope|getValidSearchScope|applyBackendUnsaved|isOwnedRevisionTarget|syncCommentCount|prepareDemoData|incrementViews|escapeHtml|escapeAttr|showNotice|clearEditing|messageModel|getMessages|parseTags|getIcons|getToken|setDraft|emailValid|phoneValid|appendUser|applyUser|uniquePrompts|getAuthToken|removePrompt|focusAsk|makePreview|addPromptCommentState|getApiFailureMessage|logMessage|applyState|syncThread|getActiveFolderName|getThreadFolderId|searchDebounceMs|applySearchQuery|applyPromptLiked|toggleReplyState|getMakeApiToken|getCommentLikes|toggleEditState|bumpInteraction|appendAssistant|getLikes|normalizeLikes|isMakeThinking|refreshThreads|canTransition|applyIdentity|applyNewSaved|addReplyState|focusRestored|isPromptSaved|clearSession|resetBackend|upsertPrompt|getCreatedAt|applyUnsaved|refreshAdmin|formatNumber|isHiddenDemo|getKnownTags|hydrateMake|removeToken|applyAuthor|keepSession|recoveryPrompt|revisionKey|applySort|applyPage|getAuthor|applyEdit|applyTag|hasToken|isFinal|setMakeComposerDraft|setMakeBackendState|setMakeRecentThreads|setActiveThreadId|render|notice|guard|icons|interactions|effects|runtimeConfig|maxCustomFolders|freeLimit|existingNicknames|existingUserIds|MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView|applyExistingSaved|applyPromptUnliked|toggleCommentLiked|updateCommentState|deleteCommentState|getMutationContext|getRecord|canUseApi|fromBackendStatus|keepQuery|findCommentInList|getActiveThreadId|getRevisionTarget|refreshOnFailure|applyShared|finishEdit|closeState|showStatus|writeToken|clearState|getMakeApi|validScope|isApproved|myBackendStatus|adminBackendStatus|backendStatusMessage|backendStatus|adminUserSearchResults|backendAdminUserActivities|detailHighlightCommentId|detailPromptId|pendingUnsaveIds|openPromptCardMenuId|creatingThreadFolderId|openThreadMenuId|backendLikedPrompts|executeMessageId|executePromptId|editingCommentId|openFolderMenuId|adminUserSearchMessage|adminRequestTargetKey|adminAuditSyncMessage|backendLibraryPrompts|backendLibraryPromptIds|backendAdminPrompts|popularPage|reportCommentId|reportPromptId|backendMyPrompts|backendAdminTags|backendAdminAuditLogs|backendAdminReports|backendAdminReportsLoaded|backendHomePage|backendMyComments|backendMyReports|backendAdminRevisionRequests|backendPopularTags|authView|authDuplicateChecks|editingPromptId|replyingCommentId|savedFilter|shareDraft|adminBlockTarget|expandedComments|savedPage|confirmAction|creatingFolder|isComposingShareTag|shareTagQuery|editingFolderId|isComposingAdminPromptSearch|authUserIdWarning|editingMessageId|isComposingAdminTagSearch|authError|copiedMessageId|pendingMakeImproveThread|pendingGuestThreadTransferId|pendingGuestThreadTransferErrorCode|isComposingSearch|myPageTab|makeBackendStatus|shareError|searchTipVisible|authDraft|makeBackendMessage|searchTipShown)$/;
 
 const dynamicRendererPropertyPattern = /^(?:MakeFolderButtonView|MakeTemplateBarView|MakeSidePanelView|MessageBubbleView|MakeComposerView|MakePageView|MakeFeedView)$/;
@@ -28,6 +32,16 @@ const productionManglePropertyPattern = new RegExp(
 
 async function compressProductionJavaScript(metafile) {
   const outputs = Object.keys(metafile.outputs).filter((file) => file.endsWith(".js"));
+  // HTML data-* names survive JS minification. Preserve matching DOMStringMap
+  // keys even when an internal state property has the same name (e.g. adminTab).
+  const datasetProperties = [...new Set(outputs.flatMap((output) =>
+    [...fs.readFileSync(path.resolve(output), "utf8").matchAll(/\.dataset\.([A-Za-z_$][\w$]*)/g)].map((match) => match[1]),
+  ))];
+  // Esbuild can remove quotes from literal JSON keys before Terser sees them.
+  // Keep the authored persistence contract, including fields read by stored(key).
+  const persistenceSource = fs.readFileSync(path.join(webRoot, "src", "state", "state-persistence.mjs"), "utf8");
+  const persistedProperties = [...persistenceSource.matchAll(/"([A-Za-z_$][\w$]*)"\s*:/g)].map((match) => match[1]);
+  const reservedProperties = [...new Set([...datasetProperties, ...persistedProperties])];
   const nameCache = {};
   for (const output of outputs) {
     const source = fs.readFileSync(path.resolve(output), "utf8");
@@ -47,7 +61,7 @@ async function compressProductionJavaScript(metafile) {
         unsafe_proto: true,
         unsafe_undefined: true,
       },
-      mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern } },
+      mangle: { properties: { keep_quoted: "strict", regex: productionManglePropertyPattern, reserved: reservedProperties } },
       nameCache,
       format: { comments: false, ecma: 2023, semicolons: false },
     });
@@ -142,8 +156,8 @@ async function build() {
       target: ["es2023"],
       define: { "globalThis.TTALKAK_PRODUCTION_BUILD": "true" },
       outdir: path.join(outputRoot, "assets"),
-      entryNames: "app-[hash]",
-      chunkNames: "chunks/[name]-[hash]",
+      entryNames: `app-${productionAssetVersion}[hash]`,
+      chunkNames: `chunks/[name]-${productionAssetVersion}[hash]`,
       metafile: true,
     });
     bundleMetafile = result.metafile;

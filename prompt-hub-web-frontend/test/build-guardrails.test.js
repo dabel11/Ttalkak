@@ -73,7 +73,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /Production bundle must not contain development-only library controls/);
   assert.match(build, /Production bundle must not contain development-only reset controls/);
   assert.match(build, /charset:\s*["']utf8["']/);
-  assert.match(build, /chunkNames:\s*["']chunks\//);
+  assert.match(build, /chunkNames:\s*["'`]chunks\//);
   assert.match(build, /bundle-metafile\.json/);
   assert.match(build, /maxRetries:\s*5/);
   const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8"));
