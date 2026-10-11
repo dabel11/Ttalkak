@@ -166,13 +166,16 @@ public class BillingService {
             Instant now = clock.instant();
             if (subscription.getNextChargeAt() != null && subscription.getNextChargeAt().isAfter(now)) return null;
             var previous = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+            if (previous.isPresent() && "UPGRADE".equals(previous.get().getChargeKind())) return null;
             BillingCharge pending = previous.orElseGet(() -> {
                         Instant start = now;
                         Instant end = start.atZone(SEOUL).plusMonths(1).toInstant();
-                        return charges.saveAndFlush(new BillingCharge(memberId, start, end));
+                        BillingPlan plan = subscription.getPlan();
+                        return charges.saveAndFlush(new BillingCharge(memberId, start, end,
+                                plan, price(plan), "RENEWAL"));
                     });
             return new Prepared(subscription.getBillingKey(), subscription.getCustomerKey(),
-                    pending.getOrderId(), previous.isPresent());
+                    pending.getOrderId(), previous.isPresent(), pending.getPlan(), pending.getAmount());
         });
         if (prepared == null) return;
 
@@ -180,7 +183,7 @@ public class BillingService {
         try {
             payment = prepared.retry() ? gateway.lookup(prepared.orderId()) : null;
             if (payment == null) {
-                payment = gateway.charge(prepared.billingKey(), prepared.customerKey(), prepared.orderId(), amount);
+                payment = gateway.charge(prepared.billingKey(), prepared.customerKey(), prepared.orderId(), prepared.amount());
             }
         } catch (BillingDeclinedException e) {
             boolean declined = Boolean.TRUE.equals(transactions.execute(tx -> {
@@ -196,7 +199,7 @@ public class BillingService {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_PAYMENT_FAILED", "결제 승인에 실패했습니다.");
         }
         if (payment == null || !"DONE".equals(payment.status()) || !"BILLING".equals(payment.type())
-                || !prepared.orderId().equals(payment.orderId()) || payment.totalAmount() != amount
+                || !prepared.orderId().equals(payment.orderId()) || payment.totalAmount() != prepared.amount()
                 || payment.paymentKey() == null || payment.paymentKey().isBlank()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UNCERTAIN",
                     "결제 결과를 검증하지 못했습니다. 같은 주문으로 재확인해야 합니다.");
@@ -208,7 +211,7 @@ public class BillingService {
             if (attempt.getStatus().equals("DONE")) return;
             if (!attempt.getStatus().equals("PENDING")) throw new IllegalStateException("Charge is not pending");
             periods.saveAndFlush(new PaidUsagePeriod(memberId, confirmedPayment.paymentKey(),
-                    attempt.getPeriodStart(), attempt.getPeriodEnd()));
+                    attempt.getPeriodStart(), attempt.getPeriodEnd(), attempt.getPlan().name()));
             attempt.complete(confirmedPayment.paymentKey());
             subscription.paidUntil(attempt.getPeriodEnd());
         });
