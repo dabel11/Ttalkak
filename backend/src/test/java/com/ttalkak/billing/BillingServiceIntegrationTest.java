@@ -202,7 +202,7 @@ class BillingServiceIntegrationTest {
         when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
                 .thenAnswer(invocation -> new BillingGateway.Payment(
                         "payment-" + invocation.getArgument(2),
-                        invocation.getArgument(2), "DONE", "BILLING", invocation.getArgument(3)));
+                        invocation.getArgument(2), "DONE", "BILLING", ((Integer) invocation.getArgument(3)).longValue()));
 
         billing.completeRegistration(id, setup.customerKey(), "first-auth");
         assertEquals("LIGHT", periods.at(id, now.get().plusSeconds(1)).plan());
