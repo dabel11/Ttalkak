@@ -217,6 +217,127 @@ public class BillingService {
         });
     }
 
+    /**
+     * Upgrade the current paid term without resetting its start/end dates.
+     * The additional fee and additional calls are both proportional to remaining time.
+     * The next recurring charge uses the selected tier's full monthly price.
+     */
+    public UpgradeQuote upgradeQuote(Long memberId, String planCode) {
+        return quoteAt(memberId, BillingPlan.parse(planCode), clock.instant());
+    }
+
+    private UpgradeQuote quoteAt(Long memberId, BillingPlan target, Instant now) {
+        var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
+                memberId, now, now).orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT, "BILLING_UPGRADE_REQUIRES_ACTIVE",
+                        "진행 중인 유료 구독이 있어야 업그레이드할 수 있습니다."));
+        BillingPlan current = BillingPlan.parse(active.getPlanCode());
+        if (target.ordinal() <= current.ordinal()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_UPGRADE_INVALID",
+                    "현재 요금제보다 높은 등급만 업그레이드할 수 있습니다.");
+        }
+        long total = java.time.Duration.between(active.getStartsAt(), active.getEndsAt()).toMillis();
+        long remaining = java.time.Duration.between(now, active.getEndsAt()).toMillis();
+        if (total <= 0 || remaining <= 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "BILLING_PERIOD_EXPIRED",
+                    "현재 결제 기간이 만료됐습니다.");
+        }
+        // Integer-ceiling of remaining-term fees and additional entitlements.
+        long fractionNumerator = Math.min(total, remaining);
+        int difference = price(target) - price(current);
+        if (difference < 1) throw new IllegalArgumentException("Tier prices must increase");
+        int dueNow = Math.toIntExact((difference * fractionNumerator + total - 1) / total);
+        long oldAllowance = active.getRequestLimitOverride() == null
+                ? current.monthlyRequests() : active.getRequestLimitOverride();
+        long delta = target.monthlyRequests() - current.monthlyRequests();
+        long extra = (delta * fractionNumerator + total - 1) / total;
+        long revisedLimit = Math.min(target.monthlyRequests(), oldAllowance + extra);
+        return new UpgradeQuote(current.name(), target.name(), dueNow, price(target),
+                revisedLimit, active.getEndsAt());
+    }
+
+    public Status upgrade(Long memberId, String planCode, Integer expectedAmount) {
+        return gateway.withinRequestBudget(() -> upgradeWithinBudget(memberId, planCode, expectedAmount));
+    }
+
+    private Status upgradeWithinBudget(Long memberId, String planCode, Integer expectedAmount) {
+        configured();
+        BillingPlan target = BillingPlan.parse(planCode);
+        if (expectedAmount == null || expectedAmount <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_UPGRADE_QUOTE_REQUIRED",
+                    "추가 결제 금액을 먼저 확인해 주세요.");
+        }
+        PreparedUpgrade prepared = transactions.execute(tx -> {
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
+                            "등록된 구독이 없습니다."));
+            if (subscription.getBillingKey() == null) {
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_CARD_REQUIRED",
+                        "카드를 먼저 등록해 주세요.");
+            }
+            var previous = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+            BillingCharge pending;
+            boolean retry;
+            if (previous.isPresent()) {
+                pending = previous.get();
+                if (!"UPGRADE".equals(pending.getChargeKind())
+                        || pending.getPlan() != target || pending.getAmount() != expectedAmount) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                            "진행 중인 다른 결제가 있습니다. 먼저 결제 상태를 확인해 주세요.");
+                }
+                retry = true;
+            } else {
+                UpgradeQuote quote = quoteAt(memberId, target, clock.instant());
+                if (quote.amount() != expectedAmount) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_UPGRADE_QUOTE_CHANGED",
+                            "남은 기간이 변경됐습니다. 추가 결제 금액을 다시 확인해 주세요.");
+                }
+                pending = charges.saveAndFlush(BillingCharge.upgrade(memberId, clock.instant(),
+                        quote.periodEnd(), target, quote.amount(), quote.requestLimitAfterUpgrade()));
+                retry = false;
+            }
+            return new PreparedUpgrade(subscription.getBillingKey(), subscription.getCustomerKey(),
+                    pending.getOrderId(), pending.getAmount(), retry);
+        });
+        BillingGateway.Payment payment = prepared.retry()
+                ? gateway.lookup(prepared.orderId()) : null;
+        if (payment == null) {
+            payment = gateway.charge(prepared.billingKey(), prepared.customerKey(),
+                    prepared.orderId(), prepared.amount());
+        }
+        if (payment == null || !"DONE".equals(payment.status()) || !"BILLING".equals(payment.type())
+                || !prepared.orderId().equals(payment.orderId())
+                || payment.totalAmount() != prepared.amount()
+                || payment.paymentKey() == null || payment.paymentKey().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UNCERTAIN",
+                    "결제 결과를 확인할 수 없습니다. 같은 주문으로 재확인해 주세요.");
+        }
+        BillingGateway.Payment confirmed = payment;
+        transactions.executeWithoutResult(tx -> {
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            BillingCharge charge = charges.findByOrderId(prepared.orderId()).orElseThrow();
+            if ("DONE".equals(charge.getStatus())) return;
+            Instant now = clock.instant();
+            var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
+                    memberId, now, now).orElseThrow(() -> new ApiException(
+                            HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                            "결제는 확인됐으나 이용 기간이 만료됐습니다. 관리자 확인이 필요합니다."));
+            if (!active.getEndsAt().equals(charge.getPeriodEnd())) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                        "이용 기간이 변경돼 결제 대사가 필요합니다.");
+            }
+            active.upgradeTo(charge.getPlan().name(), charge.getUpgradeRequestLimit());
+            subscription.selectPlan(charge.getPlan());
+            charge.complete(confirmed.paymentKey());
+        });
+        return status(memberId);
+    }
+
+    private record PreparedUpgrade(String billingKey, String customerKey, String orderId,
+                                   int amount, boolean retry) {}
+    public record UpgradeQuote(String fromPlan, String targetPlan, int amount, int nextMonthlyAmount,
+                               long requestLimitAfterUpgrade, Instant periodEnd) {}
+
     private record Prepared(String billingKey, String customerKey, String orderId,
                             boolean retry, BillingPlan plan, int amount) {}
     public record Setup(String clientKey, String customerKey, int amount, boolean cardRegistered, String plan) {}
