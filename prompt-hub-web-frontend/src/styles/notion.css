@@ -11,7 +11,10 @@
 .pricing-price span { font-size: 14px; font-weight: 400; color: var(--muted); }
 .pricing-plan ul { padding-left: 20px; margin: 24px 0; line-height: 2; }
 .pricing-plan > button { width: 100%; }
-.pricing-pro { border-color: var(--brand-green); }
+.pricing-standard { border-color: var(--brand-green); }
+.pricing-upgrade-tip { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.pricing-upgrade-tip p { margin: 8px 0; }
+.pricing-upgrade-tip button { margin-top: 6px; }
 .pricing-badge { display: inline-block; color: var(--brand-green); background: #e8f2fb; border-radius: 5px; padding: 3px 9px; font-size: 12px; margin: 0 0 12px; }
 .pricing-current { margin: 10px 0 0; text-align: center; font-size: 12px; }
 .pricing-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 12px 0; }
