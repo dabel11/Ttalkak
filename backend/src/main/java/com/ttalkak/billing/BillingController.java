@@ -28,8 +28,23 @@ public class BillingController {
     }
 
     @PostMapping("/setup")
-    public BillingService.Setup setup(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        return billing.setup(member(authorization));
+    public BillingService.Setup setup(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                      @RequestBody(required = false) PlanSelection request) {
+        return billing.setup(member(authorization), request == null ? null : request.plan());
+    }
+
+    @GetMapping("/upgrade-quote")
+    public BillingService.UpgradeQuote upgradeQuote(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam String plan) {
+        return billing.upgradeQuote(member(authorization), plan);
+    }
+
+    @PostMapping("/upgrade")
+    public BillingService.Status upgrade(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody UpgradeRequest request) {
+        return billing.upgrade(member(authorization), request.plan(), request.expectedAmount());
     }
 
     @PostMapping("/complete")
@@ -49,4 +64,6 @@ public class BillingController {
     }
 
     public record CompleteRequest(String customerKey, String authKey) {}
+    public record PlanSelection(String plan) {}
+    public record UpgradeRequest(String plan, Integer expectedAmount) {}
 }
