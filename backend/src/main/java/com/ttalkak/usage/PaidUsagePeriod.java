@@ -52,7 +52,7 @@ public class PaidUsagePeriod {
     /** Product identity is supplied by verified billing, never by the caller's client payload. */
     public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
                            String planCode) {
-        if (!java.util.Set.of("LIGHT", "STANDARD", "PRO").contains(planCode)) {
+        if (planCode == null || !java.util.Set.of("LIGHT", "STANDARD", "PRO").contains(planCode)) {
             throw new IllegalArgumentException("Unknown paid plan");
         }
         if (memberId == null || memberId <= 0) throw new IllegalArgumentException("memberId");
