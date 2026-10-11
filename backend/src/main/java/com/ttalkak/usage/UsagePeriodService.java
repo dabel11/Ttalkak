@@ -32,8 +32,10 @@ public class UsagePeriodService {
         String plan;
         Instant start;
         Instant end;
+        Long requestLimitOverride = null;
         if (active.isPresent()) {
             plan = active.get().getPlanCode();
+            requestLimitOverride = active.get().getRequestLimitOverride();
             start = active.get().getStartsAt();
             end = active.get().getEndsAt();
         } else {
@@ -52,9 +54,10 @@ public class UsagePeriodService {
                 ? usage.sum(memberId, start, sumEnd)
                 : new MemberTokenUsageService.Totals(0, 0, 0, 0);
         return new Snapshot(plan, start, end, totals.inputTokens(), totals.outputTokens(),
-                totals.totalTokens(), totals.requests());
+                totals.totalTokens(), totals.requests(), requestLimitOverride);
     }
 
     public record Snapshot(String plan, Instant periodStart, Instant periodEnd,
-                           long inputTokens, long outputTokens, long totalTokens, long requests) {}
+                           long inputTokens, long outputTokens, long totalTokens, long requests,
+                           Long requestLimitOverride) {}
 }
