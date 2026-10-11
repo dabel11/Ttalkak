@@ -222,7 +222,7 @@ class BillingServiceIntegrationTest {
         assertEquals("STANDARD", billing.status(id).plan());
         assertEquals(paidUntil, billing.status(id).nextChargeAt());
         assertEquals(quote.requestLimitAfterUpgrade(),
-                periods.at(id, now.get().plusSeconds(1)).requestLimitOverride());
+                periods.at(id, now.get().plusSeconds(1)).requestLimitOverride().longValue());
         verify(gateway).charge(anyString(), anyString(), anyString(), eq(quote.amount()));
 
         now.set(paidUntil.plusSeconds(1));
