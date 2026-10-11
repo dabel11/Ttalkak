@@ -29,7 +29,8 @@ export function normalizeUsageSnapshot(value = {}) {
 
   return {
     ...source,
-    plan: String(source.plan).toUpperCase() === "PRO" ? "PRO" : "FREE",
+    plan: ["FREE", "LIGHT", "STANDARD", "PRO"].includes(String(source.plan).toUpperCase())
+      ? String(source.plan).toUpperCase() : "FREE",
     totalTokens,
     limitTokens,
     remainingTokens,
