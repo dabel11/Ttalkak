@@ -33,7 +33,7 @@ public class UsagePeriodService {
         Instant start;
         Instant end;
         if (active.isPresent()) {
-            plan = "PRO";
+            plan = active.get().getPlanCode();
             start = active.get().getStartsAt();
             end = active.get().getEndsAt();
         } else {
