@@ -28,6 +28,8 @@ public class BillingCharge {
     private Integer amountKrw;
     @Column(name = "charge_kind", length = 16)
     private String chargeKind;
+    @Column(name = "upgrade_request_limit")
+    private Long upgradeRequestLimit;
 
     protected BillingCharge() {}
     BillingCharge(Long memberId, Instant start, Instant end) {
@@ -47,6 +49,14 @@ public class BillingCharge {
         this.orderId = "ttalkak-" + UUID.randomUUID();
         this.status = "PENDING";
     }
+    static BillingCharge upgrade(Long memberId, Instant start, Instant end,
+                                 BillingPlan plan, int amount, long requestLimit) {
+        if (requestLimit < 1) throw new IllegalArgumentException("Invalid request limit");
+        BillingCharge charge = new BillingCharge(memberId, start, end, plan, amount, "UPGRADE");
+        charge.upgradeRequestLimit = requestLimit;
+        return charge;
+    }
+    Long getUpgradeRequestLimit() { return upgradeRequestLimit; }
     Long getMemberId() { return memberId; }
     String getOrderId() { return orderId; }
     Instant getPeriodStart() { return periodStart; }
