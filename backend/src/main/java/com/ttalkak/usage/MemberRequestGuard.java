@@ -76,7 +76,9 @@ public class MemberRequestGuard {
         }
         // Only one active member lease can pass this check. Successful metered
         // invocations are counted once by the (memberId, requestKey) unique key.
-        if (policy.requestQuotaEnabled() && snapshot.requests() >= policy.requestLimit(snapshot.plan())) {
+        Long countLimit = snapshot.requestLimitOverride() != null
+                ? snapshot.requestLimitOverride() : policy.requestLimit(snapshot.plan());
+        if (policy.requestQuotaEnabled() && snapshot.requests() >= countLimit) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_REQUEST_LIMIT_EXCEEDED",
                     "현재 이용 기간의 AI 요청 횟수를 모두 사용했습니다.");
         }
