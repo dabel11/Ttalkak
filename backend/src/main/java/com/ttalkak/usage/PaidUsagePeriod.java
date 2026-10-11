@@ -43,6 +43,9 @@ public class PaidUsagePeriod {
     @Column(name = "plan_code", length = 16)
     private String planCode;
 
+    @Column(name = "request_limit_override")
+    private Long requestLimitOverride;
+
     protected PaidUsagePeriod() {}
 
     public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
@@ -72,6 +75,20 @@ public class PaidUsagePeriod {
 
     /** Legacy rows with no plan_code were created as PRO entitlements. */
     public String getPlanCode() { return planCode == null ? "PRO" : planCode; }
+    public Long getRequestLimitOverride() { return requestLimitOverride; }
+
+    /** Only a confirmed supplemental test payment can upgrade the current paid period. */
+    public void upgradeTo(String nextPlan, long allowance) {
+        java.util.List<String> order = java.util.List.of("LIGHT", "STANDARD", "PRO");
+        int from = order.indexOf(getPlanCode());
+        int to = order.indexOf(nextPlan);
+        if (from < 0 || to <= from || allowance < 1) {
+            throw new IllegalArgumentException("Paid tier upgrade must increase the plan");
+        }
+        this.planCode = nextPlan;
+        this.requestLimitOverride = allowance;
+    }
+
 
     public Instant getStartsAt() { return startsAt; }
     public Instant getEndsAt() { return endsAt; }
