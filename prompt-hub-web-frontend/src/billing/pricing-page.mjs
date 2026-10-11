@@ -27,11 +27,11 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
       ${billing ? `<div><dt>결제 상태</dt><dd>${labels[status] || "확인 중"}</dd></div><div><dt>자동 갱신</dt><dd>${billing.autoRenew ? "사용" : "중지"}</dd></div>` : ""}
       ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${date(billing.nextChargeAt)}</dd></div>` : ""}
     </dl>
-    ${usage.usageBlocked ? '<p class="billing-alert" role="status">사용량 확인이 필요하여 AI 요청이 일시적으로 제한됩니다.</p>'
+    ${usage && usage.usageBlocked ? '<p class="billing-alert" role="status">사용량 확인이 필요하여 AI 요청이 일시적으로 제한됩니다.</p>'
       : !usage.usageAvailable ? '<p role="status">과거 요청 사용량 확인 필요</p>'
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : ""}
-    ${!usage.quotaEnforced ? '<p class="pricing-note">현재 회원 사용량 한도 차단은 적용 전입니다.</p>' : ""}` : ""}
+    ${usage && !usage.quotaEnforced ? '<p class="pricing-note">현재 회원 사용량 한도 차단은 적용 전입니다.</p>' : ""}` : ""}
     ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>이번 기간 사용량이 70% 이상입니다. ${planPrices[nextTier]}원/월 요금제로 업그레이드할 수 있어요. 현재 결제 기간이 남아 있다면 추가 결제액을 먼저 확인할 수 있습니다.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
 }
