@@ -40,6 +40,8 @@ ttalkak:
     # Draft allowances: enable only after pricing approval and E2E verification.
     request-quota-enabled: ${MEMBER_REQUEST_QUOTA_ENABLED:false}
     free-request-limit: ${FREE_REQUEST_LIMIT:10}
+    light-request-limit: ${LIGHT_REQUEST_LIMIT:30}
+    standard-request-limit: ${STANDARD_REQUEST_LIMIT:70}
     pro-request-limit: ${PRO_REQUEST_LIMIT:150}
   auth:
     password-reset-enabled: ${PASSWORD_RESET_ENABLED:false}
