@@ -191,6 +191,59 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void lightSubscriptionCanPayProratedUpgradeAndRenewAtStandardPrice() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-11T09:00:00Z"));
+        when(clock.instant()).thenAnswer(invocation -> now.get());
+        Long id = newMember().getId();
+        var setup = billing.setup(id, "LIGHT");
+        assertEquals("LIGHT", setup.plan());
+        assertEquals(3900, setup.amount());
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenAnswer(invocation -> new BillingGateway.Payment(
+                        "payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING", invocation.getArgument(3)));
+
+        billing.completeRegistration(id, setup.customerKey(), "first-auth");
+        assertEquals("LIGHT", periods.at(id, now.get().plusSeconds(1)).plan());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(3900));
+        Instant paidUntil = billing.status(id).nextChargeAt();
+        now.set(Instant.ofEpochMilli((now.get().toEpochMilli() + paidUntil.toEpochMilli()) / 2));
+
+        var quote = billing.upgradeQuote(id, "STANDARD");
+        assertTrue(quote.amount() > 0 && quote.amount() < 2000);
+        assertEquals(5900, quote.nextMonthlyAmount());
+        assertTrue(quote.requestLimitAfterUpgrade() > 30);
+        assertTrue(quote.requestLimitAfterUpgrade() <= 70);
+        assertEquals("BILLING_UPGRADE_QUOTE_CHANGED", assertThrows(ApiException.class,
+                () -> billing.upgrade(id, "STANDARD", quote.amount() + 1)).getCode());
+        billing.upgrade(id, "STANDARD", quote.amount());
+        assertEquals("STANDARD", periods.at(id, now.get().plusSeconds(1)).plan());
+        assertEquals("STANDARD", billing.status(id).plan());
+        assertEquals(paidUntil, billing.status(id).nextChargeAt());
+        assertEquals(quote.requestLimitAfterUpgrade(),
+                periods.at(id, now.get().plusSeconds(1)).requestLimitOverride());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(quote.amount()));
+
+        now.set(paidUntil.plusSeconds(1));
+        billing.chargeDue();
+        assertEquals("STANDARD", periods.at(id, now.get().plusSeconds(1)).plan());
+        assertNull(periods.at(id, now.get().plusSeconds(1)).requestLimitOverride());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(5900));
+    }
+
+    @Test
+    void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
+        Long id = newMember().getId();
+        var setup = billing.setup(id, "STANDARD");
+        assertEquals("STANDARD", setup.plan());
+        assertEquals(5900, setup.amount());
+        assertEquals("BILLING_PLAN_INVALID", assertThrows(ApiException.class,
+                () -> billing.setup(id, "ENTERPRISE")).getCode());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
     void onlySignedInMemberCanRegisterAndForeignCustomerKeyIsRejected() throws Exception {
         mvc.perform(post("/api/me/billing/setup")).andExpect(status().isUnauthorized());
         Member member = newMember();
