@@ -46,7 +46,7 @@ public class BillingService {
     }
 
     private void configured() {
-        if (!clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_") || amount <= 0) {
+        if (!clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_") || amount != BillingPlan.PRO.amount()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "BILLING_NOT_CONFIGURED",
                     "테스트 결제 키와 월 결제 금액을 설정해야 합니다.");
         }
