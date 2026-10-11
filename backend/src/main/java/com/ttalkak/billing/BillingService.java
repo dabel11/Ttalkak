@@ -53,16 +53,38 @@ public class BillingService {
     }
 
     public Setup setup(Long memberId) {
+        return setup(memberId, null);
+    }
+
+    /** Selected plan is server-priced; an active paid plan may only change via a paid upgrade. */
+    public Setup setup(Long memberId, String planCode) {
         configured();
-        BillingSubscription subscription = transactions.execute(tx -> subscriptions.findByMemberId(memberId)
-                .orElseGet(() -> subscriptions.saveAndFlush(new BillingSubscription(memberId))));
-        return new Setup(clientKey, subscription.getCustomerKey(), amount, subscription.getBillingKey() != null);
+        BillingPlan selected = planCode == null ? null : BillingPlan.parse(planCode);
+        BillingSubscription subscription = transactions.execute(tx -> {
+            BillingSubscription found = subscriptions.findByMemberId(memberId)
+                    .orElseGet(() -> subscriptions.saveAndFlush(new BillingSubscription(memberId)));
+            BillingSubscription locked = subscriptions.lockByMemberId(memberId).orElseThrow();
+            if (selected != null && locked.getPlan() != selected) {
+                boolean active = locked.getNextChargeAt() != null
+                        && locked.getNextChargeAt().isAfter(clock.instant());
+                boolean pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isPresent();
+                if (active || pending) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_PLAN_CHANGE_REQUIRES_UPGRADE",
+                            "진행 중인 결제 또는 구독은 업그레이드 절차를 이용해 주세요.");
+                }
+                locked.selectPlan(selected);
+            }
+            return locked;
+        });
+        BillingPlan plan = subscription.getPlan();
+        return new Setup(clientKey, subscription.getCustomerKey(), price(plan),
+                subscription.getBillingKey() != null, plan.name());
     }
 
     public Status status(Long memberId) {
         return subscriptions.findByMemberId(memberId)
-                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(), paymentStatus(s)))
-                .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED"));
+                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(), paymentStatus(s), s.getPlan().name()))
+                .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED", "FREE"));
     }
 
     private String paymentStatus(BillingSubscription subscription) {
@@ -192,7 +214,10 @@ public class BillingService {
         });
     }
 
-    private record Prepared(String billingKey, String customerKey, String orderId, boolean retry) {}
-    public record Setup(String clientKey, String customerKey, int amount, boolean cardRegistered) {}
-    public record Status(boolean cardRegistered, boolean autoRenew, Instant nextChargeAt, String paymentStatus) {}
+    private record Prepared(String billingKey, String customerKey, String orderId,
+                            boolean retry, BillingPlan plan, int amount) {}
+    public record Setup(String clientKey, String customerKey, int amount, boolean cardRegistered, String plan) {}
+    public record Status(boolean cardRegistered, boolean autoRenew, Instant nextChargeAt,
+                         String paymentStatus, String plan) {}
+    private int price(BillingPlan plan) { return plan == BillingPlan.PRO ? amount : plan.amount(); }
 }
