@@ -61,11 +61,11 @@ class BillingServiceIntegrationTest {
         Long memberId = member.getId();
         assertEquals("NOT_REGISTERED", billing.status(memberId).paymentStatus());
         var setup = billing.setup(memberId);
-        assertEquals(4900, setup.amount());
+        assertEquals(9900, setup.amount());
         when(gateway.issueBillingKey("auth-once", setup.customerKey())).thenReturn("billing-key");
-        when(gateway.charge(eq("billing-key"), eq(setup.customerKey()), anyString(), eq(4900)))
+        when(gateway.charge(eq("billing-key"), eq(setup.customerKey()), anyString(), eq(9900)))
                 .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
 
         billing.completeRegistration(memberId, setup.customerKey(), "auth-once");
         assertEquals("PRO", periods.at(memberId, now.get().plusSeconds(1)).plan());
@@ -100,7 +100,7 @@ class BillingServiceIntegrationTest {
         when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
                 .thenThrow(new BillingDeclinedException())
                 .thenAnswer(invocation -> new BillingGateway.Payment("paid-after-retry",
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
 
         ApiException failed = assertThrows(ApiException.class,
                 () -> billing.completeRegistration(memberId, setup.customerKey(), "auth-decline"));
@@ -135,7 +135,7 @@ class BillingServiceIntegrationTest {
         String orderId = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
                 .orElseThrow().getOrderId();
         when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
-                "payment-confirmed-later", orderId, "DONE", "BILLING", 4900));
+                "payment-confirmed-later", orderId, "DONE", "BILLING", 9900));
 
         assertEquals("PENDING", billing.status(memberId).paymentStatus());
         assertNull(billing.status(memberId).nextChargeAt());
@@ -154,9 +154,9 @@ class BillingServiceIntegrationTest {
         var setup = billing.setup(memberId);
         transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
                 .orElseThrow().register("billing-before-crash"));
-        when(gateway.charge(eq("billing-before-crash"), eq(setup.customerKey()), anyString(), eq(4900)))
+        when(gateway.charge(eq("billing-before-crash"), eq(setup.customerKey()), anyString(), eq(9900)))
                 .thenAnswer(invocation -> new BillingGateway.Payment("recovered-first-payment",
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
         assertEquals("PENDING", billing.status(memberId).paymentStatus());
         billing.chargeDue();
         assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
