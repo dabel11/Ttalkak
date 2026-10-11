@@ -38,7 +38,7 @@ function BillingModalView(ctx, data) {
         <p>다음 갱신일부터 월 ${Number(quote.nextMonthlyAmount).toLocaleString("ko-KR")}원</p>
         <p>이번 기간 사용 가능 횟수: 총 ${Number(quote.requestLimitAfterUpgrade)}회 (사용량 유지)</p>
         <p>현재 이용 기간 종료: ${escapeHtml(formatShortDate(quote.periodEnd))}</p>
-        <button class="primary-button" type="button" data-billing-upgrade ${busy || pending ? "disabled" : ""}>위 금액으로 테스트 업그레이드 결제</button>
+        <button class="primary-button" type="button" data-billing-upgrade ${busy ? "disabled" : ""}>${pending ? "이전 업그레이드 결제 확인" : "위 금액으로 테스트 업그레이드 결제"}</button>
       </div>` : ""}
       ${hasDetails ? `<dl class="billing-summary">
         ${usage ? `<div><dt>현재 요금제</dt><dd>${usage.plan}</dd></div>
