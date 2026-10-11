@@ -35,7 +35,9 @@ public class UsagePeriodController {
         var usage = periods.current(memberId);
         Long limit = policy.limit(usage.plan());
         Long remaining = limit == null ? null : Math.max(0L, limit - usage.totalTokens());
-        Long requestLimit = policy.requestLimit(usage.plan());
+        Long requestLimit = policy.requestQuotaEnabled()
+                ? usage.requestLimitOverride() != null ? usage.requestLimitOverride() : policy.requestLimit(usage.plan())
+                : null;
         Long requestRemaining = requestLimit == null ? null : Math.max(0L, requestLimit - usage.requests());
         boolean requestLimitReached = requestLimit != null && usage.requests() >= requestLimit;
         boolean quotaEnforced = policy.enabled() || policy.requestQuotaEnabled();
