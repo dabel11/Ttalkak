@@ -225,7 +225,22 @@ public class BillingService {
      * The next recurring charge uses the selected tier's full monthly price.
      */
     public UpgradeQuote upgradeQuote(Long memberId, String planCode) {
-        return quoteAt(memberId, BillingPlan.parse(planCode), clock.instant());
+        BillingPlan target = BillingPlan.parse(planCode);
+        var pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+        if (pending.isPresent()) {
+            BillingCharge order = pending.get();
+            if (!"UPGRADE".equals(order.getChargeKind()) || order.getPlan() != target) {
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                        "이전 결제의 확인이 필요합니다.");
+            }
+            Instant now = clock.instant();
+            var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
+                    memberId, now, now).orElseThrow(() -> new ApiException(
+                            HttpStatus.CONFLICT, "BILLING_PERIOD_EXPIRED", "이용 기간이 만료됐습니다."));
+            return new UpgradeQuote(active.getPlanCode(), target.name(), order.getAmount(),
+                    price(target), order.getUpgradeRequestLimit(), order.getPeriodEnd());
+        }
+        return quoteAt(memberId, target, clock.instant());
     }
 
     private UpgradeQuote quoteAt(Long memberId, BillingPlan target, Instant now) {
@@ -301,11 +316,21 @@ public class BillingService {
             return new PreparedUpgrade(subscription.getBillingKey(), subscription.getCustomerKey(),
                     pending.getOrderId(), pending.getAmount(), retry);
         });
-        BillingGateway.Payment payment = prepared.retry()
-                ? gateway.lookup(prepared.orderId()) : null;
-        if (payment == null) {
-            payment = gateway.charge(prepared.billingKey(), prepared.customerKey(),
-                    prepared.orderId(), prepared.amount());
+        BillingGateway.Payment payment;
+        try {
+            payment = prepared.retry() ? gateway.lookup(prepared.orderId()) : null;
+            if (payment == null) {
+                payment = gateway.charge(prepared.billingKey(), prepared.customerKey(),
+                        prepared.orderId(), prepared.amount());
+            }
+        } catch (BillingDeclinedException declined) {
+            transactions.executeWithoutResult(tx -> {
+                subscriptions.lockByMemberId(memberId).orElseThrow();
+                BillingCharge pending = charges.findByOrderId(prepared.orderId()).orElseThrow();
+                if ("PENDING".equals(pending.getStatus())) pending.fail();
+            });
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_PAYMENT_FAILED",
+                    "업그레이드 결제 승인이 거절됐습니다. 기존 요금제는 유지됩니다.");
         }
         if (payment == null || !"DONE".equals(payment.status()) || !"BILLING".equals(payment.type())
                 || !prepared.orderId().equals(payment.orderId())
