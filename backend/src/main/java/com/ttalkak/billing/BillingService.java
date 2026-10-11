@@ -68,11 +68,13 @@ public class BillingService {
                 boolean active = locked.getNextChargeAt() != null
                         && locked.getNextChargeAt().isAfter(clock.instant());
                 boolean pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isPresent();
-                if (active || pending) {
-                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_PLAN_CHANGE_REQUIRES_UPGRADE",
-                            "진행 중인 결제 또는 구독은 업그레이드 절차를 이용해 주세요.");
+                if (pending) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                            "진행 중인 결제를 먼저 확인해 주세요.");
                 }
-                locked.selectPlan(selected);
+                // An active paid tier is immutable until a verified upgrade payment.
+                // Reading its setup for an upgrade preview must not change the tier.
+                if (!active) locked.selectPlan(selected);
             }
             return locked;
         });
