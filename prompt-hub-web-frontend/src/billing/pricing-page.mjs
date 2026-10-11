@@ -35,19 +35,29 @@ export function PricingPageView(ctx, snapshot) {
     <div class="pricing-intro"><p class="pricing-eyebrow">TTALKAK 요금제</p><h1 id="pricing-heading">필요한 만큼, 더 편하게 개선하세요.</h1>
       <p>원클릭 개선과 대화형 개선(Make)을 모든 요금제에서 같은 품질로 제공합니다.</p></div>
     <div class="pricing-grid">
-      <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 제공량은 확정 후 안내합니다.</p>
+      <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>검토안: 월 10회. 실제 제공량은 확정 전입니다.</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>PRO와 동일한 개선 품질</li></ul>
         <button class="secondary-button" type="button" data-route="make">${state.isLoggedIn ? "첨삭 시작하기" : "무료로 체험하기"}</button>
         ${plan === "FREE" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
-      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">가격 미정 <span>/ 월</span></p><p>가격과 월 제공량은 확정 후 안내합니다.</p>
+      <article class="pricing-plan pricing-light"><h2>LIGHT</h2><p class="pricing-price">3,900원 <span>/ 월 · 검토안</span></p><p>월 30회 개선 요청 (제안)</p>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
+        <p class="pricing-note">준비 중 · 현재 가입 및 결제 불가</p>
+        ${plan === "LIGHT" ? '<p class="pricing-current">현재 요금제</p>' : ""}
+      </article>
+      <article class="pricing-plan pricing-standard"><p class="pricing-badge">주력 추천 검토안</p><h2>STANDARD</h2><p class="pricing-price">5,900원 <span>/ 월 · 검토안</span></p><p>월 70회 개선 요청 (제안)</p>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
+        <p class="pricing-note">준비 중 · 현재 가입 및 결제 불가</p>
+        ${plan === "STANDARD" ? '<p class="pricing-current">현재 요금제</p>' : ""}
+      </article>
+      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">가격 미정 <span>/ 월</span></p><p>검토안: 월 9,900원·150회. 현재 판매 가격은 미정입니다.</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>FREE보다 넉넉한 AI 사용량</li></ul>
         <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing' : 'data-start-pro'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
         ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
     </div>
     <p class="pricing-note">비회원은 총 3회 무료 체험할 수 있으며, 프롬프트 저장은 로그인 후 가능합니다.</p>
-    <p class="pricing-note">유료 요금과 FREE·PRO의 월 제공량은 검토 중입니다. 확정된 요금과 제공량은 추후 안내합니다.</p>
+    <p class="pricing-note">표시된 LIGHT·STANDARD·PRO 가격과 제공량은 팀 검토용 제안이며 확정된 판매 조건이 아닙니다. 현재 LIGHT·STANDARD 결제는 제공하지 않습니다.</p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
       <p>원클릭 개선과 Make는 하나의 AI 사용량 한도를 공유합니다. 미리보기 생성·후속 질문·재개선처럼 AI를 새로 호출하면 사용량이 발생합니다.</p>
