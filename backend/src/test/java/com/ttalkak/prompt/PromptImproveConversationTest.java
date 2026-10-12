@@ -416,6 +416,33 @@ class PromptImproveConversationTest {
 		);
 	}
 
+    @Test
+    void sameClientRequestIdInDifferentThreadsGetsTwoDistinctServerUsageKeys() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var firstPermit = new MemberRequestGuard.Permit(7L, "server-invocation-a");
+        var secondPermit = new MemberRequestGuard.Permit(7L, "server-invocation-b");
+        when(memberRequestGuard.acquire(7L)).thenReturn(firstPermit, secondPermit);
+
+        MakeThread firstThread = new MakeThread(7L, "one", "[]", null);
+        MakeThread secondThread = new MakeThread(7L, "two", "[]", null);
+        ReflectionTestUtils.setField(firstThread, "id", 111L);
+        ReflectionTestUtils.setField(secondThread, "id", 222L);
+        when(makeThreadRepository.findByIdAndMemberId(111L, 7L)).thenReturn(Optional.of(firstThread));
+        when(makeThreadRepository.findByIdAndMemberId(222L, 7L)).thenReturn(Optional.of(secondThread));
+
+        improve(new PromptController.ImproveRequest(
+                "different question one", "prompt_techniques", null, 111L, null, "same-client-id", List.of()), AUTHORIZATION);
+        improve(new PromptController.ImproveRequest(
+                "different question two", "prompt_techniques", null, 222L, null, "same-client-id", List.of()), AUTHORIZATION);
+
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("server-invocation-a"), any(Map.class));
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("server-invocation-b"), any(Map.class));
+        verify(memberRequestGuard).release(firstPermit);
+        verify(memberRequestGuard).release(secondPermit);
+    }
+
 	@Test
 	void repeatedInitialRequestIdReplaysTheCreatedThreadWithoutThreadId()
 			throws Exception {
