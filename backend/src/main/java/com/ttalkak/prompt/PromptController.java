@@ -44,6 +44,21 @@ public class PromptController {
 
     private final Duration ragResponseTimeout;
 
+    private boolean isRagNoEvidence(WebClientResponseException.NotFound exception) {
+        try {
+            var json = objectMapper.readTree(exception.getResponseBodyAsString());
+            if (json == null) return false;
+            var detail = json.path("detail");
+            // Forward-compatible structured RAG error, and the current RAG gate's exact
+            // legacy message. Never classify arbitrary 404s as valid metered searches.
+            return "NO_EVIDENCE".equals(json.path("code").asText())
+                    || "NO_EVIDENCE".equals(detail.path("code").asText())
+                    || (detail.isTextual() && "입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다.".equals(detail.asText()));
+        } catch (Exception malformedUpstreamResponse) {
+            return false;
+        }
+    }
+
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
 
@@ -865,8 +880,10 @@ public class PromptController {
                 ? guestUsageService.reserve(sessionUuid)
                 : null;
         boolean aiSucceeded = false;
-        String ragRequestId = requestId != null ? requestId
-                : memberPermit != null ? memberPermit.id() : UUID.randomUUID().toString();
+        // Only the server-issued invocation ID is allowed to affect usage accounting.
+        // Client requestId remains scoped to a Make thread's replay semantics.
+        String ragRequestId = memberPermit != null
+                ? memberPermit.id() : UUID.randomUUID().toString();
 
         try {
             Map<String, Object> ragRequest =
@@ -911,8 +928,13 @@ public class PromptController {
             }
             aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
-            // The upstream no-evidence gate returned 404 after a real search.
-            // Record one request, without inventing LLM/Jina token usage.
+            // A proxy/path 404 is not a successful search: fail closed without charging.
+            if (!isRagNoEvidence(e)) {
+                throw ApiException.retryable(
+                        HttpStatus.SERVICE_UNAVAILABLE, "AI_SERVICE_UNAVAILABLE",
+                        "AI 서비스를 일시적으로 사용할 수 없습니다.", upstreamRetryAfter(e));
+            }
+            // Only an identified RAG no-evidence response consumes one search invocation.
             if (memberId != null) {
                 try {
                     ragUsageRecorder.recordNoEvidence(memberId, ragRequestId);
