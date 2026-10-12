@@ -234,7 +234,7 @@ test("after reload pending upgrade is recovered by lookup without creating a new
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(reconcileCalls, 1);
   assert.equal(controller.getSnapshot().usage.plan, "STANDARD");
-  assert.match(controller.renderBilling(), /기존 결제가 확인되어 STANDARD 요금제가 적용/);
+  assert.match(controller.renderBilling(), /기존 결제 상태를 다시 확인했습니다/);
 });
 
 test("first LIGHT card payment confirms the actual tier rather than PRO", async () => {
