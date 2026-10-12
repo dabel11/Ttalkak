@@ -204,7 +204,7 @@ function App() {
 
   async function handleResolveError(message) {
     if (recoveryCoordinator.isActive()) return;
-    if (["token_limit", "usage_unavailable"].includes(message?.failure?.kind)) {
+    if (["token_limit", "request_limit", "usage_unavailable"].includes(message?.failure?.kind)) {
       await handleOpenBilling();
       return;
     }
