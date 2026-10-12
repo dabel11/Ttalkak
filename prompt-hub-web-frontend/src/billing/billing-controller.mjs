@@ -1,4 +1,5 @@
 import { formatTokenCount, normalizeUsageSnapshot } from "./usage-model.mjs";
+import { readRuntimeConfig } from "../runtime/runtime-config.mjs";
 
 const CUSTOMER_KEY_STORAGE = "ttalkak-billing-pending-customer";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
@@ -123,7 +124,7 @@ export function createBillingController(ctx) {
     "BILLING_CARD_REGISTRATION_UNCERTAIN",
   ].includes(errorCode(error));
   const isCurrent = () => state.isLoggedIn && activeToken && activeToken === getToken();
-  const renderBilling = () => BillingModalView({ escapeHtml, formatShortDate }, state.billingOpen && state.isLoggedIn
+  const renderBilling = () => BillingModalView({ escapeHtml, formatShortDate }, readRuntimeConfig().billingPreviewEnabled && state.billingOpen && state.isLoggedIn
     ? { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage }
     : null);
 
@@ -228,6 +229,7 @@ export function createBillingController(ctx) {
   }
 
   function open(plan = null) {
+    if (!readRuntimeConfig().billingPreviewEnabled) return false;
     selectedPlan = ["LIGHT", "STANDARD", "PRO"].includes(plan) ? plan : null;
     quote = null;
     state.compactHeaderOpen = false;
@@ -353,6 +355,7 @@ export function createBillingController(ctx) {
   }
 
   async function handleRedirect(callback) {
+    if (!readRuntimeConfig().billingPreviewEnabled) return;
     state.billingOpen = true;
     busy = true;
     errorMessage = message = "";
