@@ -334,31 +334,6 @@ export function createBillingController(ctx) {
     }
   }
 
-  async function reconcilePendingUpgrade() {
-    if (busy || !isCurrent() || billing?.pendingCharge?.kind !== "UPGRADE") return;
-    busy = true;
-    errorMessage = "";
-    render();
-    try {
-      // This endpoint performs provider LOOKUP only; it cannot initiate a new charge.
-      const result = await api.reconcileBillingUpgrade(activeToken);
-      if (!isCurrent()) return;
-      selectedPlan = null;
-      if (!(await refresh())) return;
-      if (!isCurrent()) return;
-      message = isPaymentPending(result)
-        ? "기존 업그레이드 주문을 확인했지만 아직 승인 결과가 없습니다. 잠시 후 다시 확인해 주세요."
-        : `기존 결제가 확인되어 ${usage?.plan || result.plan} 요금제가 적용됐습니다.`;
-      render();
-    } catch (error) {
-      if (!isCurrent()) return;
-      if (handleAccessError(error)) return;
-      errorMessage = errorText(error);
-      busy = false;
-      render();
-    }
-  }
-
   async function recoverPaymentTimeout(firstPayment) {
     const refreshed = await refresh();
     if (!refreshed || !isCurrent()) return;
@@ -438,7 +413,7 @@ export function createBillingController(ctx) {
     on("[data-close-billing]", close);
     on("[data-billing-reload]", () => { void refresh(); });
     on("[data-billing-refresh]", () => { void refresh("결제 상태를 다시 확인했습니다."); });
-    on("[data-billing-reconcile]", () => { void reconcilePendingUpgrade(); });
+    on("[data-billing-reconcile]", () => { void mutate("reconcileBillingUpgrade", "기존 결제 상태를 다시 확인했습니다."); });
     on("[data-billing-register]", () => { void register(); });
     on("[data-billing-upgrade]", () => { void confirmUpgrade(); });
     on("[data-billing-cancel]", () => { void mutate("cancelBilling", "다음 자동 갱신이 중지됐습니다."); });
