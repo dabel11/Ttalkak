@@ -292,6 +292,8 @@ interface TtalkakApi {
   getMyRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getBillingStatus(token: TtalkakToken): Promise<unknown>;
+  getBillingCharges(token: TtalkakToken): Promise<unknown>;
+  requestBillingRefund(token: TtalkakToken, orderId: string, reason: string): Promise<unknown>;
   getUsageStatus(token: TtalkakToken): Promise<unknown>;
   setupBilling(token: TtalkakToken, plan?: string): Promise<unknown>;
   quoteBillingUpgrade(token: TtalkakToken, plan: string): Promise<unknown>;

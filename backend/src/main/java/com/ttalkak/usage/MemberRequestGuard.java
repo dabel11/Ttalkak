@@ -23,11 +23,16 @@ public class MemberRequestGuard {
     private final Clock clock;
     private final Duration ttl;
     private final TransactionTemplate transaction;
+    private final com.ttalkak.billing.BillingChargeRepository charges;
+    private final com.ttalkak.billing.BillingContext context;
 
     public MemberRequestGuard(MemberRepository members, MemberRequestLeaseRepository leases,
                               UsagePeriodService periods, MemberQuotaPolicy policy, Clock clock,
                               PlatformTransactionManager manager,
-                              @Value("${rag.response-timeout:75s}") Duration timeout) {
+                              @Value("${rag.response-timeout:75s}") Duration timeout, com.ttalkak.billing.BillingChargeRepository charges,
+                              com.ttalkak.billing.BillingContext context) {
+        this.charges = charges;
+        this.context = context;
         this.members = members;
         this.leases = leases;
         this.periods = periods;
@@ -43,6 +48,8 @@ public class MemberRequestGuard {
         return transaction.execute(tx -> {
             members.lockById(memberId).orElseThrow(() -> new ApiException(
                     HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다."));
+            if (charges.pendingRefunds(memberId, context.scope()) > 0) throw new ApiException(
+                    HttpStatus.CONFLICT, "BILLING_REFUND_PENDING", "결제 취소 확인 중에는 새 AI 요청을 시작할 수 없습니다.");
             MemberRequestLease lease = leases.findById(memberId)
                     .orElseGet(() -> new MemberRequestLease(memberId));
             if (lease.activeAt(clock.instant())) {

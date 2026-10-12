@@ -28,12 +28,13 @@ public class BillingService {
     private final String secretKey;
     private final int amount;
     private final Clock clock;
+    private final BillingContext context;
 
     public BillingService(BillingSubscriptionRepository subscriptions, BillingChargeRepository charges,
             PaidUsagePeriodRepository periods, BillingGateway gateway, TransactionTemplate transactions,
             @Value("${ttalkak.billing.toss-client-key:}") String clientKey,
             @Value("${ttalkak.billing.toss-secret-key:}") String secretKey,
-            @Value("${ttalkak.billing.monthly-price-krw:9900}") int amount, Clock clock) {
+            @Value("${ttalkak.billing.monthly-price-krw:9900}") int amount, Clock clock, BillingContext context) {
         this.subscriptions = subscriptions;
         this.charges = charges;
         this.periods = periods;
@@ -43,9 +44,11 @@ public class BillingService {
         this.secretKey = secretKey;
         this.amount = amount;
         this.clock = clock;
+        this.context = context;
     }
 
     private void configured() {
+        context.requireTest();
         if (!clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_") || amount != BillingPlan.PRO.amount()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "BILLING_NOT_CONFIGURED",
                     "테스트 결제 키와 월 결제 금액을 설정해야 합니다.");
@@ -62,12 +65,13 @@ public class BillingService {
         BillingPlan selected = planCode == null ? null : BillingPlan.parse(planCode);
         BillingSubscription subscription = transactions.execute(tx -> {
             BillingSubscription found = subscriptions.findByMemberId(memberId)
-                    .orElseGet(() -> subscriptions.saveAndFlush(new BillingSubscription(memberId)));
+                    .orElseGet(() -> subscriptions.saveAndFlush(new BillingSubscription(memberId, context.scope())));
             BillingSubscription locked = subscriptions.lockByMemberId(memberId).orElseThrow();
+            context.requireScope(locked.getBillingScope());
             if (selected != null && locked.getPlan() != selected) {
                 boolean active = locked.getNextChargeAt() != null
                         && locked.getNextChargeAt().isAfter(clock.instant());
-                boolean pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isPresent();
+                boolean pending = pending(memberId).isPresent();
                 if (pending) {
                     throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
                             "진행 중인 결제를 먼저 확인해 주세요.");
@@ -84,26 +88,32 @@ public class BillingService {
     }
 
     public Status status(Long memberId) {
-        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+        BillingCharge pending = pending(memberId)
                 .orElse(null);
         PendingCharge pendingInfo = pending == null ? null
                 : new PendingCharge(pending.getChargeKind(), pending.getPlan().name(), pending.getAmount());
         return subscriptions.findByMemberId(memberId)
-                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(),
-                        paymentStatus(s), s.getPlan().name(), pendingInfo))
+                .filter(s -> context.matches(s.getBillingScope()))
+                .map(s -> {
+                    String paymentStatus = paymentStatus(s);
+                    return new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(),
+                            paymentStatus, "REFUNDED".equals(paymentStatus) ? "FREE" : s.getPlan().name(), pendingInfo);
+                })
                 .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED", "FREE", null));
     }
 
     private String paymentStatus(BillingSubscription subscription) {
         Long memberId = subscription.getMemberId();
-        if (charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isPresent()) {
+        if (pending(memberId).isPresent()) {
             return "PENDING";
         }
+        if (latest(memberId).map(c -> "CANCELED".equals(c.getStatus())).orElse(false)
+                && activePeriod(memberId, clock.instant()).isEmpty()) return "REFUNDED";
         if (subscription.getNextChargeAt() != null && subscription.getNextChargeAt().isAfter(clock.instant())) {
             return "ACTIVE";
         }
         if (subscription.getBillingKey() == null) return "NOT_REGISTERED";
-        if (charges.findFirstByMemberIdOrderByIdDesc(memberId)
+        if (latest(memberId)
                 .map(charge -> "FAILED".equals(charge.getStatus())).orElse(false)) return "FAILED";
         return subscription.getNextChargeAt() == null ? "PENDING" : "EXPIRED";
     }
@@ -116,6 +126,8 @@ public class BillingService {
         configured();
         BillingSubscription subscription = subscriptions.findByMemberId(memberId)
                 .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "먼저 결제 등록을 시작해 주세요."));
+        context.requireScope(subscription.getBillingScope());
+        ensureNoRefund(memberId);
         if (!subscription.getCustomerKey().equals(customerKey) || authKey == null || authKey.isBlank()
                 || authKey.length() > 300) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_AUTH_INVALID", "카드 인증 정보를 확인해 주세요.");
@@ -124,6 +136,7 @@ public class BillingService {
             String billingKey = gateway.issueBillingKey(authKey, customerKey);
             transactions.executeWithoutResult(tx -> {
                 BillingSubscription locked = subscriptions.lockByMemberId(memberId).orElseThrow();
+                context.requireScope(locked.getBillingScope());
                 if (locked.getBillingKey() == null) locked.register(billingKey);
             });
         }
@@ -137,25 +150,32 @@ public class BillingService {
 
     private Status retryWithinBudget(Long memberId) {
         configured();
-        transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다."))
-                .resume());
+        transactions.executeWithoutResult(tx -> {
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다."));
+            context.requireScope(subscription.getBillingScope());
+            ensureNoRefund(memberId);
+            subscription.resume();
+        });
         charge(memberId);
         return status(memberId);
     }
 
     public Status cancelRenewal(Long memberId) {
-        transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 구독이 없습니다."))
-                .cancelRenewal());
+        transactions.executeWithoutResult(tx -> {
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 구독이 없습니다."));
+            context.requireScope(subscription.getBillingScope());
+            subscription.cancelRenewal();
+        });
         return status(memberId);
     }
 
     @Scheduled(fixedDelayString = "${ttalkak.billing.poll-ms:60000}",
             initialDelayString = "${ttalkak.billing.poll-ms:60000}")
     public void chargeDue() {
-        if (!clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_")) return;
-        for (Long memberId : subscriptions.dueMemberIds(clock.instant())) {
+        if (!context.testEnabled() || !clientKey.startsWith("test_ck_") || !secretKey.startsWith("test_sk_")) return;
+        for (Long memberId : subscriptions.dueMemberIds(clock.instant(), context.scope())) {
             try {
                 gateway.withinRequestBudget(() -> { charge(memberId); return null; });
             } catch (RuntimeException e) {
@@ -169,17 +189,19 @@ public class BillingService {
         configured();
         Prepared prepared = transactions.execute(tx -> {
             BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            context.requireScope(subscription.getBillingScope());
+            if (charges.openRefunds(memberId, context.scope()) > 0) return null;
             if (!subscription.isAutoRenew() || subscription.getBillingKey() == null) return null;
             Instant now = clock.instant();
             if (subscription.getNextChargeAt() != null && subscription.getNextChargeAt().isAfter(now)) return null;
-            var previous = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+            var previous = pending(memberId);
             if (previous.isPresent() && "UPGRADE".equals(previous.get().getChargeKind())) return null;
             BillingCharge pending = previous.orElseGet(() -> {
                         Instant start = now;
                         Instant end = start.atZone(SEOUL).plusMonths(1).toInstant();
                         BillingPlan plan = subscription.getPlan();
                         return charges.saveAndFlush(new BillingCharge(memberId, start, end,
-                                plan, price(plan), "RENEWAL"));
+                                plan, price(plan), "RENEWAL", context.scope()));
                     });
             return new Prepared(subscription.getBillingKey(), subscription.getCustomerKey(),
                     pending.getOrderId(), previous.isPresent(), pending.getPlan(), pending.getAmount());
@@ -196,6 +218,7 @@ public class BillingService {
         } catch (BillingDeclinedException e) {
             boolean declined = Boolean.TRUE.equals(transactions.execute(tx -> {
                 BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            context.requireScope(subscription.getBillingScope());
                 BillingCharge attempt = charges.findByOrderId(prepared.orderId()).orElseThrow();
                 // A parallel worker may already have confirmed this order.
                 if (!attempt.getStatus().equals("PENDING")) return false;
@@ -215,11 +238,12 @@ public class BillingService {
         BillingGateway.Payment confirmedPayment = payment;
         transactions.executeWithoutResult(tx -> {
             BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            context.requireScope(subscription.getBillingScope());
             BillingCharge attempt = charges.findByOrderId(prepared.orderId()).orElseThrow();
             if (attempt.getStatus().equals("DONE")) return;
             if (!attempt.getStatus().equals("PENDING")) throw new IllegalStateException("Charge is not pending");
             periods.saveAndFlush(new PaidUsagePeriod(memberId, confirmedPayment.paymentKey(),
-                    attempt.getPeriodStart(), attempt.getPeriodEnd(), attempt.getPlan().name()));
+                    attempt.getPeriodStart(), attempt.getPeriodEnd(), attempt.getPlan().name(), context.scope()));
             attempt.complete(confirmedPayment.paymentKey());
             subscription.paidUntil(attempt.getPeriodEnd());
         });
@@ -232,7 +256,7 @@ public class BillingService {
      */
     public UpgradeQuote upgradeQuote(Long memberId, String planCode) {
         BillingPlan target = BillingPlan.parse(planCode);
-        var pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+        var pending = pending(memberId);
         if (pending.isPresent()) {
             BillingCharge order = pending.get();
             if (!"UPGRADE".equals(order.getChargeKind()) || order.getPlan() != target) {
@@ -240,8 +264,7 @@ public class BillingService {
                         "이전 결제의 확인이 필요합니다.");
             }
             Instant now = clock.instant();
-            var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
-                    memberId, now, now).orElseThrow(() -> new ApiException(
+            var active = activePeriod(memberId, now).orElseThrow(() -> new ApiException(
                             HttpStatus.CONFLICT, "BILLING_PERIOD_EXPIRED", "이용 기간이 만료됐습니다."));
             return new UpgradeQuote(active.getPlanCode(), target.name(), order.getAmount(),
                     price(target), order.getUpgradeRequestLimit(), order.getPeriodEnd());
@@ -250,8 +273,7 @@ public class BillingService {
     }
 
     private UpgradeQuote quoteAt(Long memberId, BillingPlan target, Instant now) {
-        var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
-                memberId, now, now).orElseThrow(() -> new ApiException(
+        var active = activePeriod(memberId, now).orElseThrow(() -> new ApiException(
                         HttpStatus.CONFLICT, "BILLING_UPGRADE_REQUIRES_ACTIVE",
                         "진행 중인 유료 구독이 있어야 업그레이드할 수 있습니다."));
         BillingPlan current = BillingPlan.parse(active.getPlanCode());
@@ -294,11 +316,13 @@ public class BillingService {
             BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
                     .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
                             "등록된 구독이 없습니다."));
+            context.requireScope(subscription.getBillingScope());
+            ensureNoRefund(memberId);
             if (subscription.getBillingKey() == null) {
                 throw new ApiException(HttpStatus.CONFLICT, "BILLING_CARD_REQUIRED",
                         "카드를 먼저 등록해 주세요.");
             }
-            var previous = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING");
+            var previous = pending(memberId);
             BillingCharge pending;
             boolean retry;
             if (previous.isPresent()) {
@@ -317,6 +341,7 @@ public class BillingService {
                 }
                 pending = charges.saveAndFlush(BillingCharge.upgrade(memberId, clock.instant(),
                         quote.periodEnd(), target, quote.amount(), quote.requestLimitAfterUpgrade()));
+                pending.stampScope(context.scope());
                 retry = false;
             }
             return new PreparedUpgrade(subscription.getBillingKey(), subscription.getCustomerKey(),
@@ -349,7 +374,7 @@ public class BillingService {
     public Status reconcileUpgrade(Long memberId) {
         return gateway.withinRequestBudget(() -> {
             configured();
-            BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+            BillingCharge pending = pending(memberId)
                     .orElse(null);
             if (pending == null) return status(memberId);
             if (!"UPGRADE".equals(pending.getChargeKind())) {
@@ -374,6 +399,7 @@ public class BillingService {
         }
         transactions.executeWithoutResult(tx -> {
             BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            context.requireScope(subscription.getBillingScope());
             BillingCharge charge = charges.findByOrderId(orderId).orElseThrow();
             if (!memberId.equals(charge.getMemberId()) || !"UPGRADE".equals(charge.getChargeKind())
                     || charge.getAmount() != expectedAmount) {
@@ -386,8 +412,7 @@ public class BillingService {
                         "업그레이드 주문 상태가 변경됐습니다.");
             }
             Instant now = clock.instant();
-            var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
-                    memberId, now, now).orElseThrow(() -> new ApiException(
+            var active = activePeriod(memberId, now).orElseThrow(() -> new ApiException(
                             HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
                             "결제는 확인됐으나 이용 기간이 만료됐습니다. 관리자 확인이 필요합니다."));
             if (!active.getEndsAt().equals(charge.getPeriodEnd())) {
@@ -398,6 +423,23 @@ public class BillingService {
             subscription.selectPlan(charge.getPlan());
             charge.complete(payment.paymentKey());
         });
+    }
+
+    private java.util.Optional<BillingCharge> pending(Long memberId) {
+        return charges.scopedCharges(memberId, context.scope(), "PENDING",
+                org.springframework.data.domain.PageRequest.of(0, 1)).stream().findFirst();
+    }
+    private java.util.Optional<BillingCharge> latest(Long memberId) {
+        return charges.scopedCharges(memberId, context.scope(), null,
+                org.springframework.data.domain.PageRequest.of(0, 1)).stream().findFirst();
+    }
+    private java.util.Optional<PaidUsagePeriod> activePeriod(Long memberId, Instant now) {
+        return periods.activeForScope(memberId, now, context.scope(),
+                org.springframework.data.domain.PageRequest.of(0, 1)).stream().findFirst();
+    }
+    private void ensureNoRefund(Long memberId) {
+        if (charges.openRefunds(memberId, context.scope()) > 0) throw new ApiException(
+                HttpStatus.CONFLICT, "BILLING_REFUND_REVIEW_PENDING", "환불 검토가 진행 중입니다.");
     }
 
     private record PreparedUpgrade(String billingKey, String customerKey, String orderId,

@@ -7,10 +7,10 @@
       "getAdminUserActivity", "getAdminUserUsage", "reconcileAdminUserUsage", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
       "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
       "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
-      "getBillingStatus", "getUsageStatus", "setupBilling", "quoteBillingUpgrade", "upgradeBilling", "reconcileBillingUpgrade", "completeBilling", "cancelBilling", "retryBilling",
+      "getBillingStatus", "requestBillingRefund", "getUsageStatus", "setupBilling", "quoteBillingUpgrade", "upgradeBilling", "reconcileBillingUpgrade", "completeBilling", "cancelBilling", "retryBilling",
     ],
     collection: [
-      "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
+      "getBillingCharges", "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
       "getPromptComments", "getSavedPrompts", "getMyLibrary", "getMyPrompts", "getMyComments", "getMyReports",
       "getMyRevisionRequests", "getAdminReports", "getAdminPrompts", "getAdminTags", "searchAdminUsers",
       "getAdminAuditLogs", "getAdminRevisionRequests", "getAdminUserPrompts", "getAdminUserComments", "getAdminUserReplies",

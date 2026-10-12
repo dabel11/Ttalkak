@@ -659,3 +659,47 @@ test("unconfigured test payments keep usage visible without a retry error", asyn
   assert.match(html, /과거 요청 사용량 확인 필요/);
   assert.doesNotMatch(html, /일부 결제 정보를 불러오지 못했습니다|data-billing-reload|집계 중/);
 });
+
+test("refund requests use the owner token and encoded saved order", async () => {
+  const calls = [];
+  const api = createBillingApi({ request: async (...args) => { calls.push(args); return {}; } });
+  await api.getBillingCharges("owner");
+  await api.requestBillingRefund("owner", "order /?", "검토 요청");
+  assert.equal(calls[0][0], "/api/me/billing/charges");
+  assert.equal(calls[1][0], "/api/me/billing/charges/order%20%2F%3F/refund-request");
+  assert.equal(calls[1][1].token, "owner");
+  assert.deepEqual(JSON.parse(calls[1][1].body), { reason: "검토 요청" });
+});
+
+test("billing shows review separately from refund completion and submits only clicked orders", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { TTALKAK_RUNTIME_CONFIG: { billingPreviewEnabled: true } };
+  try {
+    let requested = false;
+    const listeners = {};
+    const state = { isLoggedIn: true, billingOpen: true };
+    const refundButton = { dataset: { billingRefund: "order-one" }, addEventListener(_event, handler) { listeners.refund = handler; } };
+    const root = { querySelector: () => null, querySelectorAll: (selector) => selector === "[data-billing-refund]" ? [refundButton] : [] };
+    const controller = createController({ state, root, getToken: () => "owner", isDemoToken: () => false,
+      escapeHtml: String, render() {}, api: {
+        setupBilling: async () => ({ cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ cardRegistered: true, autoRenew: !requested, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT", totalTokens: 15 }),
+        getBillingCharges: async () => [{ orderId: "order-one", plan: "LIGHT", amount: 3900,
+          periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE" }],
+        requestBillingRefund: async (token, orderId) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); requested = true; },
+      } });
+    await controller.refreshBilling();
+    assert.equal(requested, false);
+    assert.match(controller.renderBilling(), /환불 검토 요청/);
+    controller.bindBilling(root);
+    listeners.refund();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(requested, true);
+    assert.match(controller.renderBilling(), /환불 검토 중/);
+    assert.match(controller.renderBilling(), /요청만으로 환불이 확정되지는/);
+    assert.doesNotMatch(controller.renderBilling(), /data-billing-refund=/);
+    state.isLoggedIn = false;
+    assert.equal(controller.renderBilling(), "");
+  } finally { globalThis.window = previousWindow; }
+});

@@ -6,7 +6,7 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
   const { usage, billing, busy, message, errorMessage } = snapshot;
   const date = (value) => value ? escapeHtml(formatShortDate(value)) : "확인 중";
   const status = String(billing?.paymentStatus || "").toUpperCase();
-  const labels = { NOT_REGISTERED: "미등록", ACTIVE: "완료", PENDING: "확인 중", FAILED: "실패", EXPIRED: "기간 만료" };
+  const labels = { NOT_REGISTERED: "미등록", ACTIVE: "완료", PENDING: "확인 중", FAILED: "실패", EXPIRED: "기간 만료", REFUNDED: "환불 완료" };
   const tiers = ["FREE", "LIGHT", "STANDARD", "PRO"];
   const planIndex = tiers.indexOf(usage?.plan);
   const nextTier = planIndex >= 0 && planIndex < tiers.length - 1 ? tiers[planIndex + 1] : null;

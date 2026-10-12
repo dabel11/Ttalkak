@@ -16,4 +16,7 @@ public interface BillingSubscriptionRepository extends JpaRepository<BillingSubs
     Optional<BillingSubscription> lockByMemberId(@Param("memberId") Long memberId);
     @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
     List<Long> dueMemberIds(@Param("now") Instant now);
+    @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null "
+            + "and coalesce(b.billingScope, 'test:legacy') = :scope and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
+    List<Long> dueMemberIds(@Param("now") Instant now, @Param("scope") String scope);
 }

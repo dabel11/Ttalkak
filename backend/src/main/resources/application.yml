@@ -65,6 +65,8 @@ ttalkak:
     issuer: "${JWT_ISSUER:ttalkak}"
 
   billing:
+    mode: "${BILLING_MODE:test}"
+    store-scope: "${BILLING_STORE_SCOPE:test:legacy}"
     toss-client-key: "${TOSS_TEST_CLIENT_KEY:}"
     toss-secret-key: "${TOSS_TEST_SECRET_KEY:}"
     monthly-price-krw: "${PRO_MONTHLY_PRICE_KRW:9900}"

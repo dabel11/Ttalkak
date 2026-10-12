@@ -129,6 +129,37 @@ class TossBillingGatewayTest {
         }
     }
 
+    @Test
+    void cancelSendsPersistedIdempotencyKeyAndExplicitFullAmount() {
+        var gateway = new TossBillingGateway(WebClient.builder().exchangeFunction(request -> {
+            assertEquals("/v1/payments/payment/cancel", request.url().getPath());
+            assertEquals("refund-saved-key", request.headers().getFirst("Idempotency-Key"));
+            var output = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(request.method(), request.url());
+            return request.writeTo(output, org.springframework.web.reactive.function.client.ExchangeStrategies.withDefaults())
+                    .then(Mono.defer(output::getBodyAsString)).map(body -> {
+                        assertTrue(body.contains("\"cancelAmount\":3900"));
+                        assertTrue(body.contains("\"cancelReason\""));
+                        return ClientResponse.create(HttpStatus.OK).header("Content-Type", "application/json")
+                                .body("{\"paymentKey\":\"payment\",\"orderId\":\"order\",\"type\":\"BILLING\",\"status\":\"CANCELED\",\"totalAmount\":3900,\"balanceAmount\":0}").build();
+                    });
+        }), "test_sk_example", Duration.ofSeconds(20), Duration.ofSeconds(60));
+        assertEquals(0L, gateway.cancel("payment", "refund-saved-key", 3900).balanceAmount());
+        ApiException error = assertThrows(ApiException.class, () -> responding(HttpStatus.BAD_REQUEST,
+                "ALREADY_CANCELED_PAYMENT").cancel("payment", "refund-saved-key", 3900));
+        assertEquals("BILLING_REFUND_UNCERTAIN", error.getCode());
+    }
+
+    @Test
+    void disabledProviderDoesNotStartEvenWithTestKeys() {
+        AtomicInteger calls = new AtomicInteger();
+        var gateway = new TossBillingGateway(WebClient.builder().exchangeFunction(request -> {
+            calls.incrementAndGet(); return Mono.never();
+        }), "test_sk_example", Duration.ofSeconds(20), Duration.ofSeconds(60),
+                new BillingContext("disabled", "test:legacy"));
+        assertThrows(ApiException.class, () -> gateway.lookup("order"));
+        assertEquals(0, calls.get());
+    }
+
     private TossBillingGateway responding(HttpStatus status) {
         return responding(status, "");
     }

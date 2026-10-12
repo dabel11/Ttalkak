@@ -31,6 +31,7 @@ class TossBillingGateway implements BillingGateway {
     private static final Set<String> CONFIGURATION_ERRORS = Set.of(
             "INVALID_API_KEY", "UNAUTHORIZED_KEY", "INCORRECT_BASIC_AUTH_FORMAT",
             "NOT_SUPPORTED_METHOD", "NOT_MATCHES_CUSTOMER_KEY", "KYC_BLOCKED");
+    private BillingContext context = new BillingContext("test", BillingContext.LEGACY_TEST);
     private final WebClient client;
     private final String secretKey;
     private final Duration providerTimeout;
@@ -39,6 +40,14 @@ class TossBillingGateway implements BillingGateway {
     private final ThreadLocal<Long> deadline = new ThreadLocal<>();
 
     @Autowired
+    TossBillingGateway(WebClient.Builder builder,
+            @Value("${ttalkak.billing.toss-secret-key:}") String secretKey,
+            @Value("${ttalkak.billing.provider-timeout:20s}") Duration providerTimeout,
+            @Value("${ttalkak.billing.request-budget:60s}") Duration requestBudget, BillingContext context) {
+        this(builder, secretKey, providerTimeout, requestBudget, System::nanoTime);
+        this.context = context;
+    }
+
     TossBillingGateway(WebClient.Builder builder,
             @Value("${ttalkak.billing.toss-secret-key:}") String secretKey,
             @Value("${ttalkak.billing.provider-timeout:20s}") Duration providerTimeout,
@@ -85,6 +94,7 @@ class TossBillingGateway implements BillingGateway {
     }
 
     private String authorization() {
+        context.requireTest();
         if (!secretKey.startsWith("test_sk_")) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "BILLING_NOT_CONFIGURED",
                     "토스페이먼츠 테스트 시크릿 키가 필요합니다.");
@@ -149,6 +159,23 @@ class TossBillingGateway implements BillingGateway {
             return null;
         } catch (WebClientResponseException e) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UNCERTAIN", "결제 조회에 실패했습니다.");
+        }
+    }
+
+    @Override
+    public Payment cancel(String paymentKey, String refundKey, int amount) {
+        try {
+            return await(client.post().uri("/v1/payments/{paymentKey}/cancel", paymentKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Authorization", authorization())
+                    .header("Idempotency-Key", refundKey)
+                    .bodyValue(Map.of("cancelReason", "고객 요청에 따른 관리자 승인 전액 취소", "cancelAmount", amount))
+                    .retrieve().bodyToMono(Payment.class), "BILLING_REFUND_UNCERTAIN",
+                    "결제 취소 결과를 확인하지 못했습니다. 기존 취소 요청을 재확인해 주세요.");
+        } catch (WebClientResponseException error) {
+            // Even ALREADY_CANCELED_PAYMENT needs a verified lookup before local entitlement removal.
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_REFUND_UNCERTAIN",
+                    "결제 취소 결과를 확인하지 못했습니다. 기존 취소 요청을 재확인해 주세요.");
         }
     }
 
