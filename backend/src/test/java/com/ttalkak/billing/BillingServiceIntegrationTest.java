@@ -233,6 +233,58 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void reloadRecoversPendingUpgradeUsingOnlySavedOrderAndProviderLookup() throws Exception {
+        Instant now = Instant.parse("2026-10-12T09:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Member member = newMember();
+        Long id = member.getId();
+        var setup = billing.setup(id, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("light-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("first-payment",
+                        invocation.getArgument(2), "DONE", "BILLING", 3900));
+        billing.completeRegistration(id, setup.customerKey(), "auth");
+        var quote = billing.upgradeQuote(id, "STANDARD");
+
+        org.mockito.Mockito.reset(gateway);
+        doCallRealMethod().when(gateway).withinRequestBudget(any());
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                        "BILLING_UNCERTAIN", "network timeout"));
+        assertEquals("BILLING_UNCERTAIN", assertThrows(ApiException.class,
+                () -> billing.upgrade(id, "STANDARD", quote.amount())).getCode());
+
+        var pending = billing.status(id);
+        assertEquals("PENDING", pending.paymentStatus());
+        assertEquals("UPGRADE", pending.pendingCharge().kind());
+        assertEquals("STANDARD", pending.pendingCharge().plan());
+        assertEquals(quote.amount(), pending.pendingCharge().amount());
+        String orderId = charges.findFirstByMemberIdAndStatusOrderByIdDesc(id, "PENDING").orElseThrow().getOrderId();
+
+        String token = auth.issueAccessToken(member);
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingCharge.kind").value("UPGRADE"))
+                .andExpect(jsonPath("$.pendingCharge.plan").value("STANDARD"))
+                .andExpect(jsonPath("$.pendingCharge.amount").value(quote.amount()));
+
+        when(gateway.lookup(orderId)).thenReturn(null);
+        assertEquals("PENDING", billing.reconcileUpgrade(id).paymentStatus());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "recovered-payment", orderId, "DONE", "BILLING", quote.amount()));
+        mvc.perform(post("/api/me/billing/reconcile-upgrade").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("STANDARD"))
+                .andExpect(jsonPath("$.pendingCharge").isEmpty());
+        assertEquals("STANDARD", periods.at(id, now.plusSeconds(1)).plan());
+        assertEquals("ACTIVE", billing.reconcileUpgrade(id).paymentStatus());
+        assertEquals(2, charges.countByMemberId(id));
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
     void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
         Long id = newMember().getId();
         var setup = billing.setup(id, "STANDARD");
