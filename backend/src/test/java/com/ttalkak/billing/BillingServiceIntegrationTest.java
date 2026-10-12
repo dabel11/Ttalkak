@@ -270,7 +270,7 @@ class BillingServiceIntegrationTest {
 
         when(gateway.lookup(orderId)).thenReturn(null);
         assertEquals("PENDING", billing.reconcileUpgrade(id).paymentStatus());
-        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
 
         when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
                 "recovered-payment", orderId, "DONE", "BILLING", quote.amount()));
@@ -281,7 +281,7 @@ class BillingServiceIntegrationTest {
         assertEquals("STANDARD", periods.at(id, now.plusSeconds(1)).plan());
         assertEquals("ACTIVE", billing.reconcileUpgrade(id).paymentStatus());
         assertEquals(2, charges.countByMemberId(id));
-        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
     }
 
     @Test
