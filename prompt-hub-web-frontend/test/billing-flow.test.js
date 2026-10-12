@@ -6,6 +6,32 @@ test.before(async () => {
   ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
 });
 
+test("unlaunched pricing is hidden in production unless explicitly enabled", async () => {
+  const previousWindow = globalThis.window;
+  const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
+  const state = { isLoggedIn: true, billingOpen: false };
+  let paymentCalls = 0;
+  globalThis.window = { __API_BASE_URL__: "https://backend.example" };
+  try {
+    const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
+    assert.match(page, /요금제 준비 중/);
+    assert.doesNotMatch(page, /3,900|5,900|9,900|구독 신청/);
+    assert.equal(SubscriptionSummaryView({ state }, { usage: { plan: "PRO" } }), "");
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: { setupBilling: async () => { paymentCalls += 1; } },
+    });
+    assert.equal(controller.openBilling("PRO"), false);
+    assert.equal(state.billingOpen, false);
+    assert.equal(controller.renderBilling(), "");
+    assert.equal(paymentCalls, 0);
+    globalThis.window.TTALKAK_BILLING_PREVIEW_ENABLED = true;
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /9,900원/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("billing deep links are consumed without losing their route", () => {
   const history = { state: null, replaceState(_state, _title, url) { this.url = url; } };
   assert.equal(consumeOpenBillingRequest({ href: "https://web.example/?openBilling=1#/home" }, history), true);
