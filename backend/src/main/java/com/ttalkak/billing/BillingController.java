@@ -47,6 +47,12 @@ public class BillingController {
         return billing.upgrade(member(authorization), request.plan(), request.expectedAmount());
     }
 
+    @PostMapping("/reconcile-upgrade")
+    public BillingService.Status reconcileUpgrade(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        return billing.reconcileUpgrade(member(authorization));
+    }
+
     @PostMapping("/complete")
     public BillingService.Status complete(@RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody CompleteRequest request) {
