@@ -72,7 +72,7 @@ export function PricingPageView(ctx, snapshot) {
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
       <p>원클릭·Make의 미리보기·후속 질문·재개선은 AI 호출당 1회 차감됩니다.</p>
       <p>미리보기는 적용하지 않아도 차감됩니다. 적용·복원·저장 결과 조회·중복 재조회는 추가 차감되지 않습니다.</p>
-      <p class="pricing-note">결제 금액은 테스트용이며 실제 청구되지 않습니다.</p>
+
     </section>
   </section>`;
 }
