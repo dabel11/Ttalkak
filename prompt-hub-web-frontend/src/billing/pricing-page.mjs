@@ -28,12 +28,12 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
       ${billing ? `<div><dt>결제 상태</dt><dd>${labels[status] || "확인 중"}</dd></div><div><dt>자동 갱신</dt><dd>${billing.autoRenew ? "사용" : "중지"}</dd></div>` : ""}
       ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${date(billing.nextChargeAt)}</dd></div>` : ""}
     </dl>
-    ${usage ? (usage.usageBlocked ? '<p class="billing-alert" role="status">사용량 확인이 필요하여 AI 요청이 일시적으로 제한됩니다.</p>'
+    ${usage ? (usage.usageBlocked ? '<p class="billing-alert" role="status">사용량 확인 중 AI 요청이 제한됩니다.</p>'
       : !usage.usageAvailable ? '<p role="status">과거 요청 사용량 확인 필요</p>'
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : "") : ""}
-    ${usage && !usage.quotaEnforced ? '<p class="pricing-note">현재 회원 사용량 한도 차단은 적용 전입니다.</p>' : ""}` : ""}
-    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>이번 기간 사용량이 70% 이상입니다. ${planPrices[nextTier]}원/월 상위 요금제의 추가 결제액을 먼저 확인해 보세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
+    ${usage && !usage.quotaEnforced ? '<p class="pricing-note">사용량 제한은 적용 전입니다.</p>' : ""}` : ""}
+    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>사용량 70% 도달. ${planPrices[nextTier]}원/월 요금제의 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
 }
 
@@ -43,7 +43,7 @@ export function PricingPageView(ctx, snapshot) {
   const plan = snapshot.usage?.plan;
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
     <div class="pricing-intro"><p class="pricing-eyebrow">TTALKAK 요금제</p><h1 id="pricing-heading">필요한 만큼, 더 편하게 개선하세요.</h1>
-      <p>모든 요금제에서 원클릭·Make의 AI 개선 품질은 동일합니다.</p></div>
+      <p>모든 요금제의 AI 개선 품질은 같습니다.</p></div>
     <div class="pricing-grid">
       <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 10회 AI 개선</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>동일한 AI 개선 품질</li></ul>
@@ -66,13 +66,13 @@ export function PricingPageView(ctx, snapshot) {
         ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
     </div>
-    <p class="pricing-note">비회원은 총 3회 체험할 수 있고, 로그인 후 프롬프트를 저장할 수 있습니다.</p>
-    <p class="pricing-note">세 유료 요금제는 테스트 결제만 지원하며 실제 청구·운영 판매는 하지 않습니다.</p>
+    <p class="pricing-note">비회원은 총 3회 체험, 저장은 로그인 후 가능합니다.</p>
+    <p class="pricing-note">유료 요금제는 테스트 결제 전용이며 실제 청구되지 않습니다.</p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
-      <p>원클릭과 Make는 AI 사용량을 공유합니다. 미리보기·후속 질문·재개선 등 신규 AI 호출마다 1회 차감됩니다.</p>
-      <p>미리보기를 적용하지 않아도 차감됩니다. 개선안 적용·원본 복원·저장 결과 조회·동일 요청 재조회는 추가 차감되지 않습니다.</p>
-      <p class="pricing-note">결제창 금액은 기능 검증용이며 실제 청구되지 않습니다. 최종 판매 가격은 미정입니다.</p>
+      <p>원클릭·Make의 미리보기·후속 질문·재개선은 AI 호출당 1회 차감됩니다.</p>
+      <p>미리보기는 적용하지 않아도 차감됩니다. 적용·복원·저장 결과 조회·중복 재조회는 추가 차감되지 않습니다.</p>
+      <p class="pricing-note">결제 금액은 테스트용이며 실제 청구되지 않습니다.</p>
     </section>
   </section>`;
 }
