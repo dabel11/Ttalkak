@@ -171,7 +171,8 @@ export function createBillingController(ctx) {
       setup = results[0].status === "fulfilled" ? results[0].value : null;
       billing = results[1].status === "fulfilled" ? results[1].value : null;
       usage = results[2].status === "fulfilled" ? normalizeUsageSnapshot(results[2].value) : null;
-      charges = results[3].value?.items || results[3].value || [];
+      const historyResult = results[3];
+      charges = historyResult.status === "fulfilled" ? historyResult.value?.items || historyResult.value : [];
       quote = null;
       const levels = ["FREE", "LIGHT", "STANDARD", "PRO"];
       if (selectedPlan && usage && levels.indexOf(selectedPlan) > levels.indexOf(usage.plan)
@@ -207,7 +208,7 @@ export function createBillingController(ctx) {
   }
 
   function snapshot() {
-    return isCurrent() ? { usage, billing, busy, message, errorMessage, charges }
+    return isCurrent() ? { usage, billing, busy, message, errorMessage }
       : { usage: null, billing: null, busy: false, message: "", errorMessage: "" };
   }
 
