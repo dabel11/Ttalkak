@@ -15,6 +15,7 @@ const toWarningError = (...args) => {
 };
 const reportWarning = (area, action, error) => modules.observability.reportWarning(area, action, error);
 let authFocusReturnView = "login";
+let pendingBillingPlan = null;
 function restoreAuthFocus() {
   window.requestAnimationFrame(() => document.querySelector(`[data-open-auth="${authFocusReturnView}"]`)?.focus());
 }
@@ -618,18 +619,16 @@ const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded, onAuthenticated: resumeAuthenticatedUi });
 const billingController = createBillingController({ state, root: document, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, handleBackendAccessError, render, escapeHtml, formatShortDate });
-function resumeAuthenticatedUi() {
-  if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); });
-  return resumePendingBillingOpen();
-}
+function resumeAuthenticatedUi() { if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); }); return resumePendingBillingOpen(); }
 function resumePendingBillingOpen() {
   if (!state.pendingBillingOpen) return false;
   state.pendingBillingOpen = false;
+  const selectedPlan = pendingBillingPlan; pendingBillingPlan = null;
   if (!getAuthToken() || isDemoAuthToken(getAuthToken())) {
     showNotice("실제 계정으로 로그인한 뒤 요금제와 사용량을 확인해 주세요.");
     return false;
   }
-  billingController.openBilling();
+  billingController.openBilling(selectedPlan);
   return true;
 }
 const authView = createAuthView({ state, AuthModalView, escapeAttr, escapeHtml, getIcons: () => icons, runtimeConfig });
@@ -702,7 +701,10 @@ const { reviewAdminUserUsage, reconcileAdminUserUsage, searchAdminUserCandidates
 const openAuth = authController.open;
 const closeTopModal = () => {
   if (state.billingOpen && !state.confirmAction) return billingController.closeBilling();
-  if (state.pendingBillingOpen && state.authView) state.pendingBillingOpen = false;
+  if (state.pendingBillingOpen && state.authView) {
+    state.pendingBillingOpen = false;
+    pendingBillingPlan = null;
+  }
   return modalController.closeTop();
 };
 const focusActiveModal = modalController.focusActive;
@@ -1336,11 +1338,13 @@ function bindCoreEvents() {
   bindAuthControls(document, authController);
   billingController.bindBilling(document);
   if (["pricing", "saved"].includes(state.route) && !state.billingOpen) void billingController.hydrateSummary();
-  document.querySelector("[data-start-pro]")?.addEventListener("click", () => {
+  document.querySelectorAll("[data-start-pro]").forEach((button) => button.addEventListener("click", () => {
+    pendingBillingPlan = ["LIGHT", "STANDARD", "PRO"].includes(button.dataset.selectedPlan)
+      ? button.dataset.selectedPlan : null;
     state.pendingBillingOpen = true;
     state.authView = "login";
     render();
-  });
+  }));
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();

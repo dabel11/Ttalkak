@@ -39,9 +39,25 @@ public class PaidUsagePeriod {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
+    // Nullable for existing paid rows. Previously all paid subscriptions were PRO.
+    @Column(name = "plan_code", length = 16)
+    private String planCode;
+
+    @Column(name = "request_limit_override")
+    private Long requestLimitOverride;
+
     protected PaidUsagePeriod() {}
 
     public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
+        this(memberId, paymentReference, startsAt, endsAt, "PRO");
+    }
+
+    /** Product identity is supplied by verified billing, never by the caller's client payload. */
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
+                           String planCode) {
+        if (planCode == null || !java.util.Set.of("LIGHT", "STANDARD", "PRO").contains(planCode)) {
+            throw new IllegalArgumentException("Unknown paid plan");
+        }
         if (memberId == null || memberId <= 0) throw new IllegalArgumentException("memberId");
         if (paymentReference == null || paymentReference.isBlank()
                 || paymentReference.length() > 200) throw new IllegalArgumentException("paymentReference");
@@ -52,9 +68,27 @@ public class PaidUsagePeriod {
         this.paymentReference = paymentReference;
         this.startsAt = startsAt;
         this.endsAt = endsAt;
+        this.planCode = planCode;
     }
 
     void revoke(Instant when) { this.revokedAt = Objects.requireNonNull(when); }
+
+    /** Legacy rows with no plan_code were created as PRO entitlements. */
+    public String getPlanCode() { return planCode == null ? "PRO" : planCode; }
+    public Long getRequestLimitOverride() { return requestLimitOverride; }
+
+    /** Only a confirmed supplemental test payment can upgrade the current paid period. */
+    public void upgradeTo(String nextPlan, long allowance) {
+        java.util.List<String> order = java.util.List.of("LIGHT", "STANDARD", "PRO");
+        int from = order.indexOf(getPlanCode());
+        int to = order.indexOf(nextPlan);
+        if (from < 0 || to <= from || allowance < 1) {
+            throw new IllegalArgumentException("Paid tier upgrade must increase the plan");
+        }
+        this.planCode = nextPlan;
+        this.requestLimitOverride = allowance;
+    }
+
 
     public Instant getStartsAt() { return startsAt; }
     public Instant getEndsAt() { return endsAt; }

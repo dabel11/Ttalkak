@@ -141,6 +141,22 @@ class RagUsageRecorderIntegrationTest {
     }
 
     @Test
+    void noEvidenceInvocationCountsOnceWithoutInventedProviderTokens() throws Exception {
+        long member = member();
+        String key = UUID.randomUUID().toString();
+        recorder.recordNoEvidence(member, key);
+        recorder.recordNoEvidence(member, key);
+        var row = repository.findByMemberIdAndRequestKey(member, key).orElseThrow();
+        assertEquals(0L, row.getInputTokens());
+        assertEquals(0L, row.getOutputTokens());
+        assertEquals(0L, row.getTotalTokens());
+        assertEquals("NO_EVIDENCE", mapper.readTree(row.getUsageDetailsJson()).get("reason").asText());
+        var snapshot = periods.at(member, Instant.now().plusSeconds(1));
+        assertEquals(1L, snapshot.requests());
+        assertEquals(0L, snapshot.totalTokens());
+    }
+
+    @Test
     void absentRequestIdCountsEachActualInvocationAndGuestsAreNotMemberUsage() {
         long member = member();
         recorder.record(member, null, response());

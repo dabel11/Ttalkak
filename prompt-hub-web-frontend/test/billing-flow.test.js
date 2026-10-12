@@ -6,6 +6,32 @@ test.before(async () => {
   ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
 });
 
+test("unlaunched pricing is hidden in production unless explicitly enabled", async () => {
+  const previousWindow = globalThis.window;
+  const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
+  const state = { isLoggedIn: true, billingOpen: false };
+  let paymentCalls = 0;
+  globalThis.window = { __API_BASE_URL__: "http://localhost:8080", location: { hostname: "ttalkak.example" } };
+  try {
+    const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
+    assert.match(page, /요금제 준비 중/);
+    assert.doesNotMatch(page, /3,900|5,900|9,900|구독 신청/);
+    assert.equal(SubscriptionSummaryView({ state }, { usage: { plan: "PRO" } }), "");
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: { setupBilling: async () => { paymentCalls += 1; } },
+    });
+    assert.equal(controller.openBilling("PRO"), false);
+    assert.equal(state.billingOpen, false);
+    assert.equal(controller.renderBilling(), "");
+    assert.equal(paymentCalls, 0);
+    globalThis.window.TTALKAK_BILLING_PREVIEW_ENABLED = true;
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /9,900원/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("billing deep links are consumed without losing their route", () => {
   const history = { state: null, replaceState(_state, _title, url) { this.url = url; } };
   assert.equal(consumeOpenBillingRequest({ href: "https://web.example/?openBilling=1#/home" }, history), true);
@@ -66,12 +92,14 @@ test("billing API sends a bearer token and one-time callback data to the intende
   await api.completeBilling({ authKey: "one-time", customerKey: "customer" }, "member-jwt");
   await api.cancelBilling("member-jwt");
   await api.retryBilling("member-jwt");
+  await api.reconcileBillingUpgrade("member-jwt");
   assert.deepEqual(calls[0], ["/api/me/billing/setup", { method: "POST", token: "member-jwt" }]);
   assert.deepEqual(calls[1], ["/api/me/billing/complete", {
     method: "POST", body: '{"authKey":"one-time","customerKey":"customer"}', token: "member-jwt", timeoutMs: 90000,
   }]);
   assert.deepEqual(calls[2], ["/api/me/billing/cancel", { method: "POST", token: "member-jwt" }]);
   assert.deepEqual(calls[3], ["/api/me/billing/retry", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
+  assert.deepEqual(calls[4], ["/api/me/billing/reconcile-upgrade", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
 });
 
 test("billing callback does not complete a registration for a different customer key", async () => {
@@ -166,6 +194,72 @@ test("card registration preserves the route in Toss return URLs", async () => {
   } finally {
     globalThis.window = previousWindow;
     globalThis.TossPayments = previousToss;
+  }
+});
+
+test("after reload pending upgrade is recovered by lookup without creating a new order", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const listeners = {};
+  let status = {
+    paymentStatus: "PENDING", cardRegistered: true, autoRenew: true, plan: "LIGHT",
+    pendingCharge: { kind: "UPGRADE", plan: "STANDARD", amount: 1234 },
+  };
+  let reconcileCalls = 0;
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+      getBillingStatus: async () => status,
+      getUsageStatus: async () => ({ plan: status.paymentStatus === "PENDING" ? "LIGHT" : "STANDARD" }),
+      reconcileBillingUpgrade: async () => {
+        reconcileCalls += 1;
+        status = { paymentStatus: "ACTIVE", cardRegistered: true, autoRenew: true, plan: "STANDARD", pendingCharge: null };
+        return status;
+      },
+      upgradeBilling: async () => assert.fail("reconciliation must never initiate a charge"),
+    },
+  });
+  await controller.refreshBilling();
+  assert.match(controller.renderBilling(), /확인 중인 업그레이드: STANDARD/);
+  assert.match(controller.renderBilling(), /data-billing-reconcile/);
+  assert.doesNotMatch(controller.renderBilling(), /data-billing-upgrade/);
+  controller.bindBilling({
+    querySelectorAll: () => [],
+    querySelector(selector) {
+      if (selector !== "[data-billing-reconcile]") return null;
+      return { addEventListener(_event, listener) { listeners.reconcile = listener; } };
+    },
+  });
+  listeners.reconcile();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(reconcileCalls, 1);
+  assert.equal(controller.getSnapshot().usage.plan, "STANDARD");
+  assert.match(controller.renderBilling(), /기존 결제 상태를 다시 확인했습니다/);
+});
+
+test("first LIGHT card payment confirms the actual tier rather than PRO", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const state = { isLoggedIn: true, billingOpen: true };
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        completeBilling: async () => ({ plan: "LIGHT", paymentStatus: "ACTIVE" }),
+        setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ plan: "LIGHT", cardRegistered: true, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT" }),
+      },
+    });
+    await controller.handleBillingRedirect({ result: "success", authKey: "auth", customerKey: "customer" });
+    assert.match(controller.renderBilling(), /LIGHT 요금제가 적용됐습니다/);
+    assert.doesNotMatch(controller.renderBilling(), /PRO가 적용됐습니다/);
+  } finally {
+    globalThis.window = previousWindow;
   }
 });
 
@@ -445,7 +539,7 @@ test("a successful complete still refreshes the PRO status", async () => {
     const controller = createController({
       state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
       api: {
-        completeBilling: async () => { completed += 1; },
+        completeBilling: async () => { completed += 1; return { plan: "PRO", paymentStatus: "ACTIVE" }; },
         setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }),
         getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
         getUsageStatus: async () => ({ plan: "PRO", totalTokens: 20 }),
@@ -455,7 +549,7 @@ test("a successful complete still refreshes the PRO status", async () => {
     await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
 
     assert.equal(completed, 1);
-    assert.match(controller.renderBilling(), /첫 테스트 결제가 완료되어 PRO가 적용됐습니다/);
+    assert.match(controller.renderBilling(), /첫 테스트 결제가 완료되어 PRO 요금제가 적용됐습니다/);
     assert.match(controller.renderBilling(), /<dd>PRO<\/dd>/);
   } finally {
     globalThis.window = previousWindow;
@@ -468,6 +562,7 @@ test("closing billing restores focus to the control that opened it", async () =>
   let focusCount = 0;
   const opener = {
     isConnected: true,
+    dataset: { selectedPlan: "PRO" },
     addEventListener(_event, listener) { openListener = listener; },
     closest() { return null; },
     focus() { focusCount += 1; },

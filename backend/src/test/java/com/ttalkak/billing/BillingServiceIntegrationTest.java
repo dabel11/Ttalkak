@@ -61,11 +61,11 @@ class BillingServiceIntegrationTest {
         Long memberId = member.getId();
         assertEquals("NOT_REGISTERED", billing.status(memberId).paymentStatus());
         var setup = billing.setup(memberId);
-        assertEquals(4900, setup.amount());
+        assertEquals(9900, setup.amount());
         when(gateway.issueBillingKey("auth-once", setup.customerKey())).thenReturn("billing-key");
-        when(gateway.charge(eq("billing-key"), eq(setup.customerKey()), anyString(), eq(4900)))
+        when(gateway.charge(eq("billing-key"), eq(setup.customerKey()), anyString(), eq(9900)))
                 .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
 
         billing.completeRegistration(memberId, setup.customerKey(), "auth-once");
         assertEquals("PRO", periods.at(memberId, now.get().plusSeconds(1)).plan());
@@ -100,7 +100,7 @@ class BillingServiceIntegrationTest {
         when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
                 .thenThrow(new BillingDeclinedException())
                 .thenAnswer(invocation -> new BillingGateway.Payment("paid-after-retry",
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
 
         ApiException failed = assertThrows(ApiException.class,
                 () -> billing.completeRegistration(memberId, setup.customerKey(), "auth-decline"));
@@ -135,7 +135,7 @@ class BillingServiceIntegrationTest {
         String orderId = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
                 .orElseThrow().getOrderId();
         when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
-                "payment-confirmed-later", orderId, "DONE", "BILLING", 4900));
+                "payment-confirmed-later", orderId, "DONE", "BILLING", 9900));
 
         assertEquals("PENDING", billing.status(memberId).paymentStatus());
         assertNull(billing.status(memberId).nextChargeAt());
@@ -154,9 +154,9 @@ class BillingServiceIntegrationTest {
         var setup = billing.setup(memberId);
         transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
                 .orElseThrow().register("billing-before-crash"));
-        when(gateway.charge(eq("billing-before-crash"), eq(setup.customerKey()), anyString(), eq(4900)))
+        when(gateway.charge(eq("billing-before-crash"), eq(setup.customerKey()), anyString(), eq(9900)))
                 .thenAnswer(invocation -> new BillingGateway.Payment("recovered-first-payment",
-                        invocation.getArgument(2), "DONE", "BILLING", 4900));
+                        invocation.getArgument(2), "DONE", "BILLING", 9900));
         assertEquals("PENDING", billing.status(memberId).paymentStatus());
         billing.chargeDue();
         assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
@@ -188,6 +188,111 @@ class BillingServiceIntegrationTest {
         assertTrue(billing.status(memberId).autoRenew());
         assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
         assertEquals("DONE", charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow().getStatus());
+    }
+
+    @Test
+    void lightSubscriptionCanPayProratedUpgradeAndRenewAtStandardPrice() {
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-11T09:00:00Z"));
+        when(clock.instant()).thenAnswer(invocation -> now.get());
+        Long id = newMember().getId();
+        var setup = billing.setup(id, "LIGHT");
+        assertEquals("LIGHT", setup.plan());
+        assertEquals(3900, setup.amount());
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenAnswer(invocation -> new BillingGateway.Payment(
+                        "payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING", ((Integer) invocation.getArgument(3)).longValue()));
+
+        billing.completeRegistration(id, setup.customerKey(), "first-auth");
+        assertEquals("LIGHT", periods.at(id, now.get().plusSeconds(1)).plan());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(3900));
+        Instant paidUntil = billing.status(id).nextChargeAt();
+        now.set(Instant.ofEpochMilli((now.get().toEpochMilli() + paidUntil.toEpochMilli()) / 2));
+
+        var quote = billing.upgradeQuote(id, "STANDARD");
+        assertTrue(quote.amount() > 0 && quote.amount() < 2000);
+        assertEquals(5900, quote.nextMonthlyAmount());
+        assertTrue(quote.requestLimitAfterUpgrade() > 30);
+        assertTrue(quote.requestLimitAfterUpgrade() <= 70);
+        assertEquals("BILLING_UPGRADE_QUOTE_CHANGED", assertThrows(ApiException.class,
+                () -> billing.upgrade(id, "STANDARD", quote.amount() + 1)).getCode());
+        billing.upgrade(id, "STANDARD", quote.amount());
+        assertEquals("STANDARD", periods.at(id, now.get().plusSeconds(1)).plan());
+        assertEquals("STANDARD", billing.status(id).plan());
+        assertEquals(paidUntil, billing.status(id).nextChargeAt());
+        assertEquals(quote.requestLimitAfterUpgrade(),
+                periods.at(id, now.get().plusSeconds(1)).requestLimitOverride().longValue());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(quote.amount()));
+
+        now.set(paidUntil.plusSeconds(1));
+        billing.chargeDue();
+        assertEquals("STANDARD", periods.at(id, now.get().plusSeconds(1)).plan());
+        assertNull(periods.at(id, now.get().plusSeconds(1)).requestLimitOverride());
+        verify(gateway).charge(anyString(), anyString(), anyString(), eq(5900));
+    }
+
+    @Test
+    void reloadRecoversPendingUpgradeUsingOnlySavedOrderAndProviderLookup() throws Exception {
+        Instant now = Instant.parse("2026-10-12T09:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Member member = newMember();
+        Long id = member.getId();
+        var setup = billing.setup(id, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("light-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("first-payment",
+                        invocation.getArgument(2), "DONE", "BILLING", 3900));
+        billing.completeRegistration(id, setup.customerKey(), "auth");
+        var quote = billing.upgradeQuote(id, "STANDARD");
+
+        org.mockito.Mockito.reset(gateway);
+        doCallRealMethod().when(gateway).withinRequestBudget(any());
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt()))
+                .thenThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                        "BILLING_UNCERTAIN", "network timeout"));
+        assertEquals("BILLING_UNCERTAIN", assertThrows(ApiException.class,
+                () -> billing.upgrade(id, "STANDARD", quote.amount())).getCode());
+
+        var pending = billing.status(id);
+        assertEquals("PENDING", pending.paymentStatus());
+        assertEquals("UPGRADE", pending.pendingCharge().kind());
+        assertEquals("STANDARD", pending.pendingCharge().plan());
+        assertEquals(quote.amount(), pending.pendingCharge().amount());
+        String orderId = charges.findFirstByMemberIdAndStatusOrderByIdDesc(id, "PENDING").orElseThrow().getOrderId();
+
+        String token = auth.issueAccessToken(member);
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingCharge.kind").value("UPGRADE"))
+                .andExpect(jsonPath("$.pendingCharge.plan").value("STANDARD"))
+                .andExpect(jsonPath("$.pendingCharge.amount").value(quote.amount()));
+
+        when(gateway.lookup(orderId)).thenReturn(null);
+        assertEquals("PENDING", billing.reconcileUpgrade(id).paymentStatus());
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
+
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "recovered-payment", orderId, "DONE", "BILLING", quote.amount()));
+        mvc.perform(post("/api/me/billing/reconcile-upgrade").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("STANDARD"))
+                .andExpect(jsonPath("$.pendingCharge").isEmpty());
+        assertEquals("STANDARD", periods.at(id, now.plusSeconds(1)).plan());
+        assertEquals("ACTIVE", billing.reconcileUpgrade(id).paymentStatus());
+        assertEquals(2, charges.countByMemberId(id));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
+        Long id = newMember().getId();
+        var setup = billing.setup(id, "STANDARD");
+        assertEquals("STANDARD", setup.plan());
+        assertEquals(5900, setup.amount());
+        assertEquals("BILLING_PLAN_INVALID", assertThrows(ApiException.class,
+                () -> billing.setup(id, "ENTERPRISE")).getCode());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt());
     }
 
     @Test

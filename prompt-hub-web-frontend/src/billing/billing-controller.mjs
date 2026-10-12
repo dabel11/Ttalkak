@@ -1,16 +1,18 @@
 import { formatTokenCount, normalizeUsageSnapshot } from "./usage-model.mjs";
+import { readRuntimeConfig } from "../runtime/runtime-config.mjs";
 
 const CUSTOMER_KEY_STORAGE = "ttalkak-billing-pending-customer";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const BILLING_AUTH_MESSAGE = "로그인이 만료되었습니다. 다시 로그인해 주세요.";
-const BILLING_RETURN_AUTH_MESSAGE = "로그인이 만료되었습니다. 다시 로그인한 뒤 카드 등록을 처음부터 시작해 주세요.";
+const BILLING_RETURN_AUTH_MESSAGE = "다시 로그인한 뒤 카드 등록을 처음부터 시작해 주세요.";
 
 function BillingModalView(ctx, data) {
   if (!data) return "";
-  const { setup, billing, usage, busy, message, errorMessage } = data;
+  const { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage } = data;
   const { escapeHtml, formatShortDate } = ctx;
   const paymentStatus = String(billing?.paymentStatus || "").toUpperCase();
   const pending = paymentStatus === "PENDING";
+  const upgrading = pending && billing?.pendingCharge?.kind === "UPGRADE";
   const paymentStatusLabel = paymentStatus === "NOT_REGISTERED" ? "미등록"
     : paymentStatus === "PENDING" ? "확인 중"
       : paymentStatus === "ACTIVE" ? "완료"
@@ -32,6 +34,14 @@ function BillingModalView(ctx, data) {
       ${usage?.usageBlocked ? `<p class="billing-alert" role="status">사용량 확인 중에는 요청할 수 없습니다.</p>` : ""}
       ${!usage?.usageBlocked && usage?.limitReached && usage?.quotaEnforced ? `<p class="billing-alert" role="status">토큰을 모두 사용했습니다.</p>` : ""}
       ${!usage?.usageBlocked && usage?.limitReached && !usage?.quotaEnforced ? `<p class="billing-progress" role="status">참고 한도에 도달했습니다.</p>` : ""}
+      ${quote && !pending ? `<div class="billing-upgrade-quote" role="status">
+        <p><strong>${escapeHtml(quote.fromPlan)} → ${escapeHtml(quote.targetPlan)} 업그레이드</strong></p>
+        <p>지금 추가 결제 <strong>${Number(quote.amount).toLocaleString("ko-KR")}원</strong></p>
+        <p>다음 갱신일부터 월 ${Number(quote.nextMonthlyAmount).toLocaleString("ko-KR")}원</p>
+        <p>이번 기간 사용 가능 횟수: 총 ${Number(quote.requestLimitAfterUpgrade)}회 (사용량 유지)</p>
+        <button class="primary-button" type="button" data-billing-upgrade ${busy ? "disabled" : ""}>위 금액으로 테스트 업그레이드 결제</button>
+      </div>` : ""}
+      ${upgrading ? `<p class="billing-progress">확인 중인 업그레이드: ${escapeHtml(billing.pendingCharge.plan)} · ${Number(billing.pendingCharge.amount).toLocaleString("ko-KR")}원</p>` : ""}
       ${hasDetails ? `<dl class="billing-summary">
         ${usage ? `<div><dt>현재 요금제</dt><dd>${usage.plan}</dd></div>
         <div><dt>이번 기간</dt><dd>${period}</dd></div>
@@ -42,8 +52,8 @@ function BillingModalView(ctx, data) {
         ${billing ? `<div><dt>자동 갱신</dt><dd>${billing.autoRenew ? "사용" : "중지"}</dd></div>` : ""}
         ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${escapeHtml(formatShortDate(billing.nextChargeAt))}</dd></div>` : ""}
       </dl>${usage?.usagePercent != null ? `<div class="billing-usage-meter"><span style="width:${usage.usagePercent}%"></span></div>` : ""}<div class="billing-actions">
-        ${pending ? `<button class="primary-button" type="button" data-billing-refresh ${busy ? "disabled" : ""}>결제 상태 다시 확인</button>` : ""}
-        ${!pending && setup && !registered ? `<button class="primary-button" type="button" data-billing-register ${busy ? "disabled" : ""}>테스트 카드 등록 · 첫 결제</button>` : ""}
+        ${pending ? `<button class="primary-button" type="button" ${upgrading ? "data-billing-reconcile" : "data-billing-refresh"} ${busy ? "disabled" : ""}>${upgrading ? "기존 주문 재확인" : "결제 상태 다시 확인"}</button>` : ""}
+        ${!pending && setup && !registered ? `<button class="primary-button" type="button" data-billing-register ${busy ? "disabled" : ""}>카드 등록 · 테스트 결제</button>` : ""}
         ${!pending && registered && billing?.autoRenew ? `<button class="secondary-button" type="button" data-billing-cancel ${busy ? "disabled" : ""}>자동 갱신 중지</button>` : ""}
         ${!pending && registered && billing && !billing.autoRenew ? `<button class="primary-button" type="button" data-billing-retry ${busy ? "disabled" : ""}>결제 재시도·자동 갱신 사용</button>` : ""}
         ${errorMessage && !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
@@ -72,6 +82,8 @@ export function createBillingController(ctx) {
   const { state, root, api, getToken, isDemoToken, handleBackendAccessError, render, escapeHtml, formatShortDate } = ctx;
   let busy = false;
   let setup = null;
+  let quote = null;
+  let selectedPlan = null;
   let billing = null;
   let usage = null;
   let message = "";
@@ -113,8 +125,8 @@ export function createBillingController(ctx) {
     "BILLING_CARD_REGISTRATION_UNCERTAIN",
   ].includes(errorCode(error));
   const isCurrent = () => state.isLoggedIn && activeToken && activeToken === getToken();
-  const renderBilling = () => BillingModalView({ escapeHtml, formatShortDate }, state.billingOpen && state.isLoggedIn
-    ? { setup, billing, usage, busy, message, errorMessage }
+  const renderBilling = () => BillingModalView({ escapeHtml, formatShortDate }, readRuntimeConfig().billingPreviewEnabled && state.billingOpen && state.isLoggedIn
+    ? { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage }
     : null);
 
   function handleAccessError(error, message = BILLING_AUTH_MESSAGE) {
@@ -141,13 +153,24 @@ export function createBillingController(ctx) {
     render();
     try {
       const results = await Promise.allSettled([
-        api.setupBilling(token), api.getBillingStatus(token), api.getUsageStatus(token),
+        api.setupBilling(token, selectedPlan), api.getBillingStatus(token), api.getUsageStatus(token),
       ]);
       if (!isCurrent() || revision !== requestRevision) return false;
       const failures = [];
       setup = results[0].status === "fulfilled" ? results[0].value : null;
       billing = results[1].status === "fulfilled" ? results[1].value : null;
       usage = results[2].status === "fulfilled" ? normalizeUsageSnapshot(results[2].value) : null;
+      quote = null;
+      const levels = ["FREE", "LIGHT", "STANDARD", "PRO"];
+      if (selectedPlan && usage && levels.indexOf(selectedPlan) > levels.indexOf(usage.plan)
+          && usage.plan !== "FREE" && billing?.cardRegistered) {
+        try {
+          quote = await api.quoteBillingUpgrade(token, selectedPlan);
+        } catch (quoteError) {
+          if (!isCurrent() || revision !== requestRevision) return false;
+          errorMessage = errorText(quoteError);
+        }
+      }
       results.forEach((result) => { if (result.status === "rejected") failures.push(result.reason); });
       const authFailure = failures.find(isUnauthorized);
       if (authFailure && handleAccessError(authFailure)) return false;
@@ -198,7 +221,7 @@ export function createBillingController(ctx) {
         const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason);
         const unauthorized = failures.find(isUnauthorized);
         if (unauthorized && handleAccessError(unauthorized)) return;
-        if (failures.length) errorMessage = "사용량 또는 구독 정보를 불러오지 못했습니다. 다시 확인해 주세요.";
+        if (failures.length) errorMessage = "사용량·구독 조회에 실패했습니다. 다시 시도해 주세요.";
       } finally {
         if (revision === requestRevision) { summaryPromise = null; busy = false; render(); }
       }
@@ -206,7 +229,10 @@ export function createBillingController(ctx) {
     return summaryPromise;
   }
 
-  function open() {
+  function open(plan = null) {
+    if (!readRuntimeConfig().billingPreviewEnabled) return false;
+    selectedPlan = ["LIGHT", "STANDARD", "PRO"].includes(plan) ? plan : null;
+    quote = null;
     state.compactHeaderOpen = false;
     state.billingOpen = true;
     setup = billing = usage = null;
@@ -232,6 +258,26 @@ export function createBillingController(ctx) {
       document.head.append(script);
     }).catch((error) => { sdkPromise = null; throw error; });
     return sdkPromise;
+  }
+
+  async function confirmUpgrade() {
+    if (busy || !quote || !isCurrent()) return;
+    const confirmedQuote = quote;
+    busy = true;
+    errorMessage = "";
+    render();
+    try {
+      const updated = await api.upgradeBilling(activeToken, confirmedQuote.targetPlan, confirmedQuote.amount);
+      if (!isCurrent()) return;
+      selectedPlan = null;
+      await refresh(`테스트 결제가 완료되어 ${updated.plan} 요금제가 적용됐습니다.`);
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (handleAccessError(error)) return;
+      errorMessage = errorText(error);
+      busy = false;
+      render();
+    }
   }
 
   async function register() {
@@ -289,14 +335,14 @@ export function createBillingController(ctx) {
   async function recoverPaymentTimeout(firstPayment) {
     const refreshed = await refresh();
     if (!refreshed || !isCurrent()) return;
-    if ((usage?.plan === "PRO" || String(billing?.paymentStatus || "").toUpperCase() === "ACTIVE") && !isPaymentPending(billing)) {
-      message = firstPayment ? "첫 테스트 결제가 완료되어 PRO가 적용됐습니다." : "결제가 완료되어 PRO가 적용됐습니다.";
+    if (String(billing?.paymentStatus || "").toUpperCase() === "ACTIVE" && !isPaymentPending(billing)) {
+      message = `${firstPayment ? "첫 테스트 결제가" : "결제가"} 완료되어 ${usage?.plan || billing?.plan || "선택한"} 요금제가 적용됐습니다.`;
     } else if (isPaymentPending(billing)) {
       message = "결제 응답이 지연되어 서버에서 현재 상태를 다시 확인했습니다.";
     } else {
       errorMessage = firstPayment
-        ? "결제 응답이 늦어 상태를 다시 확인했습니다. 필요하면 카드 등록을 다시 시작하세요."
-        : "결제 응답이 늦어 상태를 다시 확인했습니다. 처리 중이면 잠시 후 다시 확인하세요.";
+        ? "결제 결과가 불확실합니다. 필요하면 카드 등록을 다시 진행하세요."
+        : "결제 처리 중일 수 있습니다. 잠시 후 다시 확인하세요.";
     }
     render();
   }
@@ -310,6 +356,7 @@ export function createBillingController(ctx) {
   }
 
   async function handleRedirect(callback) {
+    if (!readRuntimeConfig().billingPreviewEnabled) return;
     state.billingOpen = true;
     busy = true;
     errorMessage = message = "";
@@ -337,8 +384,8 @@ export function createBillingController(ctx) {
     }
     activeToken = token;
     try {
-      await api.completeBilling({ authKey: callback.authKey, customerKey: callback.customerKey }, token);
-      if (isCurrent()) await refresh("첫 테스트 결제가 완료되어 PRO가 적용됐습니다.");
+      const completed = await api.completeBilling({ authKey: callback.authKey, customerKey: callback.customerKey }, token);
+      if (isCurrent()) await refresh(`첫 테스트 결제가 완료되어 ${completed.plan} 요금제가 적용됐습니다.`);
     } catch (error) {
       if (!isCurrent()) return;
       if (handleAccessError(error, BILLING_RETURN_AUTH_MESSAGE)) return;
@@ -347,7 +394,7 @@ export function createBillingController(ctx) {
         return;
       }
       busy = false;
-      errorMessage = `결제 결과를 확인하지 못했습니다. 상태를 다시 불러와 확인해 주세요. ${errorText(error)}`;
+      errorMessage = `결제 결과를 확인할 수 없습니다. 다시 조회해 주세요. ${errorText(error)}`;
       render();
     }
   }
@@ -357,12 +404,14 @@ export function createBillingController(ctx) {
     root.querySelectorAll?.("[data-open-billing]").forEach((button) => button.addEventListener("click", () => {
       focusReturnSelector = state.compactHeaderOpen ? ".topbar-mobile-toggle" : "";
       focusReturnElement = state.compactHeaderOpen ? null : button;
-      open();
+      open(button.dataset.selectedPlan || null);
     }));
     on("[data-close-billing]", close);
     on("[data-billing-reload]", () => { void refresh(); });
     on("[data-billing-refresh]", () => { void refresh("결제 상태를 다시 확인했습니다."); });
+    on("[data-billing-reconcile]", () => { void mutate("reconcileBillingUpgrade", "기존 결제 상태를 다시 확인했습니다."); });
     on("[data-billing-register]", () => { void register(); });
+    on("[data-billing-upgrade]", () => { void confirmUpgrade(); });
     on("[data-billing-cancel]", () => { void mutate("cancelBilling", "다음 자동 갱신이 중지됐습니다."); });
     on("[data-billing-retry]", () => { void mutate("retryBilling", "결제 상태를 다시 확인했습니다."); });
     on("[data-subscription-refresh]", () => { void hydrateSummary({ force: true }); });

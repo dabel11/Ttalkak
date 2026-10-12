@@ -36,6 +36,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!res.ok) {
       const code = String(body.code || "").toUpperCase();
       if (code === "MEMBER_TOKEN_LIMIT_EXCEEDED") throw Error("이번 기간의 AI 사용량을 모두 사용했습니다. 웹 요금제 페이지에서 확인해 주세요.");
+      if (code === "MEMBER_REQUEST_LIMIT_EXCEEDED") throw Error("이번 기간의 AI 개선 요청 횟수를 모두 사용했습니다. 웹 요금제 페이지에서 확인해 주세요.");
       if (code === "FREE_TRIAL_LIMIT_EXCEEDED") throw Error("체험 횟수를 초과했습니다. 로그인해 주세요.");
       if (res.status === 429) throw Error("AI 요청이 많습니다. 잠시 후 다시 시도해 주세요.");
       if (code === "MEMBER_USAGE_UNAVAILABLE") throw Error("과거 요청의 사용량 확인이 필요합니다. 웹 요금제 페이지에서 상태를 확인해 주세요.");

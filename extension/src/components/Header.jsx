@@ -11,6 +11,11 @@ function getUsageText(usage, usageStatus) {
   if (!usage) return "사용량 확인 전";
   if (usage.usageBlocked) return "사용량 확인 문제로 요청이 잠시 중단됐습니다.";
   if (usage.usageAvailable === false) return "일부 사용량 기록을 확인하고 있습니다.";
+  if (usage.requestQuotaEnforced && usage.requestLimit != null) {
+    const used = formatTokens(usage.requests);
+    const limit = formatTokens(usage.requestLimit);
+    return `${used} / ${limit}회 개선 요청${usage.requestLimitReached ? " · 제공 횟수 소진" : ""}`;
+  }
   if (usage.limitTokens == null) return `${formatTokens(usage.totalTokens)} 토큰 사용`;
   const base = `${formatTokens(usage.totalTokens)} / ${formatTokens(usage.limitTokens)} 토큰`;
   return usage.limitReached ? `${base} · 한도 도달` : base;
@@ -120,7 +125,7 @@ export function Header({
   }
 
   const usageText = getUsageText(usage, usageStatus);
-  const usageNeedsAttention = usageStatus === "error" || usage?.limitReached || usage?.usageBlocked || usage?.usageAvailable === false;
+  const usageNeedsAttention = usageStatus === "error" || usage?.limitReached || usage?.requestLimitReached || usage?.usageBlocked || usage?.usageAvailable === false;
 
   return (
     <header className="header">

@@ -293,7 +293,10 @@ interface TtalkakApi {
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getBillingStatus(token: TtalkakToken): Promise<unknown>;
   getUsageStatus(token: TtalkakToken): Promise<unknown>;
-  setupBilling(token: TtalkakToken): Promise<unknown>;
+  setupBilling(token: TtalkakToken, plan?: string): Promise<unknown>;
+  quoteBillingUpgrade(token: TtalkakToken, plan: string): Promise<unknown>;
+  upgradeBilling(token: TtalkakToken, plan: string, expectedAmount: number): Promise<unknown>;
+  reconcileBillingUpgrade(token: TtalkakToken): Promise<unknown>;
   completeBilling(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   cancelBilling(token: TtalkakToken): Promise<unknown>;
   retryBilling(token: TtalkakToken): Promise<unknown>;
@@ -335,6 +338,7 @@ interface Window {
   TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS?: number | string;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
+  TTALKAK_BILLING_PREVIEW_ENABLED?: boolean;
 }
 
 interface EventTarget {

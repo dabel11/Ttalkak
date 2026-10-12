@@ -5,8 +5,8 @@ let readRuntimeConfig;
 test.before(async () => ({ readRuntimeConfig } = await import("../src/runtime/runtime-config.mjs")));
 
 test("runtime config centralizes defaults and normalizes the API URL", () => {
-  const config = readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.example.test/" });
-  assert.deepEqual(config, { apiBaseUrl: "https://api.example.test", apiEnvironment: "production", apiTimeoutMs: 60_000, improveTimeoutMs: 90_000, myPageHydrationTimeoutMs: 15_000, googleCredential: "", demoFallbackEnabled: false });
+  const config = readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.example.test/", location: { hostname: "web.example.test" } });
+  assert.deepEqual(config, { apiBaseUrl: "https://api.example.test", apiEnvironment: "production", billingPreviewEnabled: false, apiTimeoutMs: 60_000, improveTimeoutMs: 90_000, myPageHydrationTimeoutMs: 15_000, googleCredential: "", demoFallbackEnabled: false });
 });
 
 test("runtime config distinguishes local development APIs from production APIs", () => {
@@ -14,6 +14,12 @@ test("runtime config distinguishes local development APIs from production APIs",
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://127.0.0.1:8080" }).apiEnvironment, "development");
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://[::1]:8080" }).apiEnvironment, "development");
   assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.ttalkak.com" }).apiEnvironment, "production");
+});
+
+test("billing preview is controlled by website origin rather than backend URL", () => {
+  assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "http://localhost:8080", location: { hostname: "web.example.test" } }).billingPreviewEnabled, false);
+  assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.example.test", location: { hostname: "localhost" } }).billingPreviewEnabled, true);
+  assert.equal(readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.example.test", location: { hostname: "web.example.test" }, TTALKAK_BILLING_PREVIEW_ENABLED: true }).billingPreviewEnabled, true);
 });
 
 test("runtime config rejects malformed URLs and timeout values", () => {

@@ -23,6 +23,8 @@ public class BillingSubscription {
     private boolean autoRenew;
     @Column(name = "next_charge_at")
     private Instant nextChargeAt;
+    @Column(name = "plan_code", length = 16)
+    private String planCode;
 
     protected BillingSubscription() {}
     BillingSubscription(Long memberId) {
@@ -34,6 +36,8 @@ public class BillingSubscription {
     String getBillingKey() { return billingKey; }
     boolean isAutoRenew() { return autoRenew; }
     Instant getNextChargeAt() { return nextChargeAt; }
+    BillingPlan getPlan() { return BillingPlan.parse(planCode); }
+    void selectPlan(BillingPlan plan) { this.planCode = plan.name(); }
     void register(String billingKey) {
         if (billingKey == null || billingKey.isBlank() || billingKey.length() > 200) throw new IllegalArgumentException("billingKey");
         this.billingKey = billingKey;

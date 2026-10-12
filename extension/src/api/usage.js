@@ -19,12 +19,18 @@ export function normalizeUsageSnapshot(payload = {}) {
 
   return {
     ...value,
-    plan: String(value.plan || "FREE").toUpperCase() === "PRO" ? "PRO" : "FREE",
+    plan: ["FREE", "LIGHT", "STANDARD", "PRO"].includes(String(value.plan || "").toUpperCase())
+      ? String(value.plan).toUpperCase() : "FREE",
     totalTokens: usedTokens,
     usedTokens,
     limitTokens,
     remainingTokens,
     limitReached: value.limitReached === true || (limitTokens != null && usedTokens >= limitTokens),
+    requests: finiteCount(value.requests) ?? 0,
+    requestLimit: value.requestLimit == null ? null : finiteCount(value.requestLimit),
+    requestRemaining: value.requestRemaining == null ? null : finiteCount(value.requestRemaining),
+    requestQuotaEnforced: value.requestQuotaEnforced === true,
+    requestLimitReached: value.requestQuotaEnforced === true && value.requestLimitReached === true,
     quotaEnforced: value.quotaEnforced === true,
     usageAvailable: value.usageAvailable !== false,
     usageBlocked: value.usageBlocked === true,
