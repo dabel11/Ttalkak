@@ -619,15 +619,11 @@ const applyAuthenticatedUser = authSession.applyUser;
 const clearAuthenticatedSession = authSession.clear;
 const authController = createAuthController({ state, root: document, document, render, normalizeText: normalizeSearchText, existingNicknames: DEMO_EXISTING_NICKNAMES, existingUserIds: DEMO_EXISTING_USER_IDS, userIdError: getUserIdValidationMessage, emailValid: isValidEmail, phoneValid: isValidPhone, futureDate: isFutureDate, api: apiClient, normalizeResult: normalizeAuthResult, applyUser: applyAuthenticatedUser, clearSession: clearAuthenticatedSession, getToken: getAuthToken, demoToken: DEMO_AUTH_TOKEN, icons: { get eye() { return icons.eye; }, get eyeOff() { return icons.eyeOff; } }, notice: showNotice, warn: (...args) => reportWarning("authentication", "controller-warning", toWarningError(...args)), confirm: (...args) => modalController.openConfirm(...args), handleError: handleBackendAccessError, hydrateMake: hydrateBackendMakeDataIfNeeded, onAuthenticated: resumeAuthenticatedUi });
 const billingController = createBillingController({ state, root: document, api: apiClient, getToken: getAuthToken, isDemoToken: isDemoAuthToken, handleBackendAccessError, render, escapeHtml, formatShortDate });
-function resumeAuthenticatedUi() {
-  if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); });
-  return resumePendingBillingOpen();
-}
+function resumeAuthenticatedUi() { if (state.adminMode) ensureAdminRuntime().then((loaded) => { if (loaded && state.adminMode) render(); }); return resumePendingBillingOpen(); }
 function resumePendingBillingOpen() {
   if (!state.pendingBillingOpen) return false;
   state.pendingBillingOpen = false;
-  const selectedPlan = pendingBillingPlan;
-  pendingBillingPlan = null;
+  const selectedPlan = pendingBillingPlan; pendingBillingPlan = null;
   if (!getAuthToken() || isDemoAuthToken(getAuthToken())) {
     showNotice("실제 계정으로 로그인한 뒤 요금제와 사용량을 확인해 주세요.");
     return false;
