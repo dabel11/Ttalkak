@@ -21,7 +21,7 @@ class TossBillingGatewayTest {
                 Mono.<ClientResponse>never().doOnCancel(cancelled::incrementAndGet)),
                 "test_sk_example", Duration.ofMillis(50), Duration.ofSeconds(1));
         ApiException error = assertThrows(ApiException.class, () -> gateway.withinRequestBudget(() ->
-                gateway.charge("test-billing", "customer", "same-order", 5000)));
+                gateway.charge("test-billing", "customer", "same-order", 5000, "TTALKAK LIGHT monthly")));
         assertEquals("BILLING_UNCERTAIN", error.getCode());
         assertEquals(HttpStatus.GATEWAY_TIMEOUT, error.getStatusCode());
         assertEquals(1, cancelled.get());
@@ -43,7 +43,7 @@ class TossBillingGatewayTest {
         ApiException error = assertThrows(ApiException.class, () -> gateway.withinRequestBudget(() -> {
             assertEquals("test-billing", gateway.issueBillingKey("auth", "customer"));
             nanoTime.set(Duration.ofSeconds(61).toNanos());
-            return gateway.charge("test-billing", "customer", "same-order", 5000);
+            return gateway.charge("test-billing", "customer", "same-order", 5000, "TTALKAK LIGHT monthly");
         }));
         assertEquals("BILLING_UNCERTAIN", error.getCode());
         assertEquals(1, providerCalls.get(), "Expired budget must not start another provider request");
@@ -57,11 +57,11 @@ class TossBillingGatewayTest {
                 HttpStatus.TOO_MANY_REQUESTS, HttpStatus.INTERNAL_SERVER_ERROR}) {
             var gateway = responding(status);
             ApiException error = assertThrows(ApiException.class, () ->
-                    gateway.charge("test-billing", "customer", "same-order", 5000));
+                    gateway.charge("test-billing", "customer", "same-order", 5000, "TTALKAK LIGHT monthly"));
             assertEquals("BILLING_UNCERTAIN", error.getCode());
         }
         assertThrows(BillingDeclinedException.class, () ->
-                responding(HttpStatus.BAD_REQUEST).charge("test-billing", "customer", "order", 5000));
+                responding(HttpStatus.BAD_REQUEST, "INVALID_REJECT_CARD").charge("test-billing", "customer", "order", 5000, "TTALKAK LIGHT monthly"));
     }
 
     @Test
@@ -78,9 +78,65 @@ class TossBillingGatewayTest {
                 "test_sk_example", Duration.ofSeconds(20), Duration.ofSeconds(90)));
     }
 
+    @Test
+    void configurationErrorsAreNotCustomerCardDeclines() {
+        for (String code : new String[]{"INVALID_API_KEY", "UNAUTHORIZED_KEY",
+                "INCORRECT_BASIC_AUTH_FORMAT", "KYC_BLOCKED"}) {
+            ApiException error = assertThrows(ApiException.class, () ->
+                    responding(HttpStatus.BAD_REQUEST, code)
+                            .charge("billing", "customer", "order", 3900, "TTALKAK LIGHT monthly"));
+            assertEquals("BILLING_PROVIDER_CONFIGURATION", error.getCode());
+            assertFalse(error.getMessage().contains("private detail"));
+        }
+        ApiException error = assertThrows(ApiException.class, () ->
+                responding(HttpStatus.UNAUTHORIZED)
+                        .charge("billing", "customer", "order", 3900, "TTALKAK LIGHT monthly"));
+        assertEquals("BILLING_PROVIDER_CONFIGURATION", error.getCode());
+    }
+
+    @Test
+    void duplicateAndUnknownErrorsRequireReconciliation() {
+        for (String code : new String[]{"DUPLICATED_ORDER_ID", "ALREADY_PROCESSED_PAYMENT",
+                "PROVIDER_ERROR", "INVALID_REQUEST", "FUTURE_ERROR", ""}) {
+            ApiException error = assertThrows(ApiException.class, () ->
+                    responding(HttpStatus.BAD_REQUEST, code)
+                            .charge("billing", "customer", "order", 3900, "TTALKAK LIGHT monthly"));
+            assertEquals("BILLING_UNCERTAIN", error.getCode());
+        }
+    }
+
+    @Test
+    void serializesTierAndUpgradeNameWithOriginalOrderAndIdempotencyKey() {
+        for (String name : new String[]{"TTALKAK LIGHT monthly", "TTALKAK STANDARD upgrade"}) {
+            AtomicInteger calls = new AtomicInteger();
+            var gateway = new TossBillingGateway(WebClient.builder().exchangeFunction(request -> {
+                assertEquals("same-order", request.headers().getFirst("Idempotency-Key"));
+                var output = new org.springframework.mock.http.client.reactive.MockClientHttpRequest(
+                        request.method(), request.url());
+                return request.writeTo(output,
+                        org.springframework.web.reactive.function.client.ExchangeStrategies.withDefaults())
+                        .then(output.getBodyAsString()).map(body -> {
+                            calls.incrementAndGet();
+                            assertTrue(body.contains("\"orderName\":\"" + name + "\""));
+                            assertTrue(body.contains("\"amount\":3900"));
+                            assertTrue(body.contains("\"orderId\":\"same-order\""));
+                            return ClientResponse.create(HttpStatus.OK).header("Content-Type", "application/json")
+                                    .body("{\"paymentKey\":\"payment\",\"orderId\":\"same-order\",\"status\":\"DONE\",\"type\":\"BILLING\",\"totalAmount\":3900}").build();
+                        });
+            }), "test_sk_example", Duration.ofSeconds(20), Duration.ofSeconds(60));
+            assertEquals("DONE", gateway.charge("billing", "customer", "same-order", 3900, name).status());
+            assertEquals(1, calls.get());
+        }
+    }
+
     private TossBillingGateway responding(HttpStatus status) {
+        return responding(status, "");
+    }
+
+    private TossBillingGateway responding(HttpStatus status, String code) {
         return new TossBillingGateway(WebClient.builder().exchangeFunction(request ->
-                Mono.just(ClientResponse.create(status).build())), "test_sk_example",
+                Mono.just(ClientResponse.create(status).header("Content-Type", "application/json")
+                        .body("{\"code\":\"" + code + "\",\"message\":\"private detail\"}").build())), "test_sk_example",
                 Duration.ofSeconds(20), Duration.ofSeconds(60));
     }
 }

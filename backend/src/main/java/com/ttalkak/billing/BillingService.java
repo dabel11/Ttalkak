@@ -190,7 +190,8 @@ public class BillingService {
         try {
             payment = prepared.retry() ? gateway.lookup(prepared.orderId()) : null;
             if (payment == null) {
-                payment = gateway.charge(prepared.billingKey(), prepared.customerKey(), prepared.orderId(), prepared.amount());
+                payment = gateway.charge(prepared.billingKey(), prepared.customerKey(),
+                        prepared.orderId(), prepared.amount(), "TTALKAK " + prepared.plan().name() + " monthly");
             }
         } catch (BillingDeclinedException e) {
             boolean declined = Boolean.TRUE.equals(transactions.execute(tx -> {
@@ -326,7 +327,7 @@ public class BillingService {
             payment = prepared.retry() ? gateway.lookup(prepared.orderId()) : null;
             if (payment == null) {
                 payment = gateway.charge(prepared.billingKey(), prepared.customerKey(),
-                        prepared.orderId(), prepared.amount());
+                        prepared.orderId(), prepared.amount(), "TTALKAK " + target.name() + " upgrade");
             }
         } catch (BillingDeclinedException declined) {
             transactions.executeWithoutResult(tx -> {
