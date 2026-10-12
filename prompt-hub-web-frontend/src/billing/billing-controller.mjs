@@ -12,6 +12,7 @@ function BillingModalView(ctx, data) {
   const { escapeHtml, formatShortDate } = ctx;
   const paymentStatus = String(billing?.paymentStatus || "").toUpperCase();
   const pending = paymentStatus === "PENDING";
+  const upgrading = pending && billing?.pendingCharge?.kind === "UPGRADE";
   const paymentStatusLabel = paymentStatus === "NOT_REGISTERED" ? "미등록"
     : paymentStatus === "PENDING" ? "확인 중"
       : paymentStatus === "ACTIVE" ? "완료"
@@ -39,9 +40,9 @@ function BillingModalView(ctx, data) {
         <p>다음 갱신일부터 월 ${Number(quote.nextMonthlyAmount).toLocaleString("ko-KR")}원</p>
         <p>이번 기간 사용 가능 횟수: 총 ${Number(quote.requestLimitAfterUpgrade)}회 (사용량 유지)</p>
         <p>현재 이용 기간 종료: ${escapeHtml(formatShortDate(quote.periodEnd))}</p>
-        <button class="primary-button" type="button" data-billing-upgrade ${busy ? "disabled" : ""}>${pending ? "이전 업그레이드 결제 확인" : "위 금액으로 테스트 업그레이드 결제"}</button>
+        <button class="primary-button" type="button" data-billing-upgrade ${busy ? "disabled" : ""}>위 금액으로 테스트 업그레이드 결제</button>
       </div>` : ""}
-      ${pending && billing?.pendingCharge?.kind === "UPGRADE" ? `<p class="billing-progress" role="status">확인 중인 업그레이드: ${escapeHtml(billing.pendingCharge.plan)} · ${Number(billing.pendingCharge.amount).toLocaleString("ko-KR")}원. 기존 주문만 재조회하며 추가 결제하지 않습니다.</p>` : ""}
+      ${upgrading ? `<p class="billing-progress">확인 중인 업그레이드: ${escapeHtml(billing.pendingCharge.plan)} · ${Number(billing.pendingCharge.amount).toLocaleString("ko-KR")}원</p>` : ""}
       ${hasDetails ? `<dl class="billing-summary">
         ${usage ? `<div><dt>현재 요금제</dt><dd>${usage.plan}</dd></div>
         <div><dt>이번 기간</dt><dd>${period}</dd></div>
@@ -52,9 +53,7 @@ function BillingModalView(ctx, data) {
         ${billing ? `<div><dt>자동 갱신</dt><dd>${billing.autoRenew ? "사용" : "중지"}</dd></div>` : ""}
         ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${escapeHtml(formatShortDate(billing.nextChargeAt))}</dd></div>` : ""}
       </dl>${usage?.usagePercent != null ? `<div class="billing-usage-meter"><span style="width:${usage.usagePercent}%"></span></div>` : ""}<div class="billing-actions">
-        ${pending ? billing?.pendingCharge?.kind === "UPGRADE"
-          ? `<button class="primary-button" type="button" data-billing-reconcile ${busy ? "disabled" : ""}>기존 업그레이드 주문 재확인</button>`
-          : `<button class="primary-button" type="button" data-billing-refresh ${busy ? "disabled" : ""}>결제 상태 다시 확인</button>` : ""}
+        ${pending ? `<button class="primary-button" type="button" ${upgrading ? "data-billing-reconcile" : "data-billing-refresh"} ${busy ? "disabled" : ""}>${upgrading ? "기존 주문 재확인" : "결제 상태 다시 확인"}</button>` : ""}
         ${!pending && setup && !registered ? `<button class="primary-button" type="button" data-billing-register ${busy ? "disabled" : ""}>테스트 카드 등록 · 첫 결제</button>` : ""}
         ${!pending && registered && billing?.autoRenew ? `<button class="secondary-button" type="button" data-billing-cancel ${busy ? "disabled" : ""}>자동 갱신 중지</button>` : ""}
         ${!pending && registered && billing && !billing.autoRenew ? `<button class="primary-button" type="button" data-billing-retry ${busy ? "disabled" : ""}>결제 재시도·자동 갱신 사용</button>` : ""}
