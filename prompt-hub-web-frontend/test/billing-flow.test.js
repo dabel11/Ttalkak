@@ -687,7 +687,7 @@ test("billing shows review separately from refund completion and submits only cl
         getBillingStatus: async () => ({ cardRegistered: true, autoRenew: !requested, paymentStatus: "ACTIVE" }),
         getUsageStatus: async () => ({ plan: "LIGHT", totalTokens: 15 }),
         getBillingCharges: async () => [{ orderId: "order-one", plan: "LIGHT", amount: 3900,
-          periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE" }],
+          periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE", refundLabel: requested ? "환불 검토 중" : "" }],
         requestBillingRefund: async (token, orderId) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); requested = true; },
       } });
     await controller.refreshBilling();

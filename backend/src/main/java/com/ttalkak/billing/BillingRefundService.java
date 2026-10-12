@@ -217,12 +217,21 @@ public class BillingRefundService {
     }
     private ChargeView view(BillingCharge charge) {
         return new ChargeView(charge.getOrderId(), charge.getMemberId(), charge.getPlan().name(), charge.getAmount(),
-                charge.getChargeKind(), charge.getStatus(), charge.getRefundState(), charge.getRefundReason(),
+                charge.getChargeKind(), charge.getStatus(), charge.getRefundState(), refundLabel(charge), charge.getRefundReason(),
                 charge.getPeriodStart(), charge.getPeriodEnd(), charge.getRefundedAt());
+    }
+    private String refundLabel(BillingCharge charge) {
+        return switch (charge.getRefundState()) {
+            case "REQUESTED" -> "환불 검토 중";
+            case "PENDING" -> "취소 확인 중";
+            case "DONE" -> "환불 완료";
+            case "REJECTED" -> "미승인";
+            default -> "";
+        };
     }
     private ApiException error(HttpStatus status, String code, String message) { return new ApiException(status, code, message); }
     private record Prepared(Long memberId, String orderId, String paymentKey, String refundKey, int amount) {}
     public record ChargeView(String orderId, Long memberId, String plan, int amount, String kind,
-                             String status, String refundState, String refundReason,
+                             String status, String refundState, String refundLabel, String refundReason,
                              Instant periodStart, Instant periodEnd, Instant refundedAt) {}
 }

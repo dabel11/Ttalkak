@@ -60,10 +60,10 @@ function BillingModalView(ctx, data) {
         ${errorMessage && !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
       </div>` : !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
       ${charges.length ? `<section><h3>결제 내역</h3>
-        <p class="pricing-note">환불 요청 시 자동 갱신을 중지합니다. 환불 여부는 관리자 검토 후 결정됩니다.</p>
+        <p class="pricing-note">요청 시 자동 갱신 중지 · 환불 여부는 관리자 검토 후 결정</p>
         <ul>${charges.map((charge) => `<li>
           ${escapeHtml(charge.plan)} · ${Number(charge.amount).toLocaleString("ko-KR")}원 · ${escapeHtml(formatShortDate(charge.periodStart))} · ${escapeHtml(charge.status)}
-          ${escapeHtml(({ NONE: "", REQUESTED: "환불 검토 중", PENDING: "취소 확인 중", DONE: "환불 완료", REJECTED: "미승인" })[charge.refundState] || "")}
+          ${escapeHtml(charge.refundLabel || "")}
           ${charge.status === "DONE" && charge.refundState === "NONE" ? `<button class="secondary-button" type="button" data-billing-refund="${escapeHtml(charge.orderId)}" ${busy ? "disabled" : ""}>환불 검토 요청</button>` : ""}
         </li>`).join("")}</ul>
       </section>` : ""}
@@ -171,7 +171,7 @@ export function createBillingController(ctx) {
       setup = results[0].status === "fulfilled" ? results[0].value : null;
       billing = results[1].status === "fulfilled" ? results[1].value : null;
       usage = results[2].status === "fulfilled" ? normalizeUsageSnapshot(results[2].value) : null;
-      charges = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
+      charges = results[3].value?.items || results[3].value || [];
       quote = null;
       const levels = ["FREE", "LIGHT", "STANDARD", "PRO"];
       if (selectedPlan && usage && levels.indexOf(selectedPlan) > levels.indexOf(usage.plan)
@@ -421,7 +421,7 @@ export function createBillingController(ctx) {
       open(button.dataset.selectedPlan || null);
     }));
     root.querySelectorAll?.("[data-billing-refund]").forEach((button) => button.addEventListener("click", () => {
-      void mutate("requestBillingRefund", "환불 검토를 요청했습니다.",
+      void mutate("requestBillingRefund", "환불 검토 요청 완료",
         button.dataset.billingRefund, "환불 검토 요청");
     }));
     on("[data-close-billing]", close);
