@@ -115,7 +115,7 @@ class TossBillingGatewayTest {
                         request.method(), request.url());
                 return request.writeTo(output,
                         org.springframework.web.reactive.function.client.ExchangeStrategies.withDefaults())
-                        .then(output.getBodyAsString()).map(body -> {
+                        .then(Mono.defer(output::getBodyAsString)).map(body -> {
                             calls.incrementAndGet();
                             assertTrue(body.contains("\"orderName\":\"" + name + "\""));
                             assertTrue(body.contains("\"amount\":3900"));
