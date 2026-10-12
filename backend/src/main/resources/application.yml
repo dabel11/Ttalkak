@@ -50,7 +50,7 @@ ttalkak:
     mail-test-recipient: ${AUTH_MAIL_TEST_RECIPIENT:}
     resend-api-key: ${RESEND_API_KEY:}
   cors:
-    allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,chrome-extension://djbhhlahjhaeccghbnajnhmbcdilccmn}"
+    allowed-origin-patterns: "${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,chrome-extension://djbhhlahjhaeccghbnajnhmbcdilccmn,chrome-extension://dgbmmjembonnhfkknohmbhlepagicnpc}"
 
   admin:
     seed-enabled: "${ADMIN_SEED_ENABLED:false}"
