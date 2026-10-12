@@ -1,7 +1,8 @@
 import { formatTokenCount } from "./usage-model.mjs";
+import { readRuntimeConfig } from "../runtime/runtime-config.mjs";
 
 export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, snapshot) {
-  if (!state.isLoggedIn) return "";
+  if (!state.isLoggedIn || !readRuntimeConfig().billingPreviewEnabled) return "";
   const { usage, billing, busy, message, errorMessage } = snapshot;
   const date = (value) => value ? escapeHtml(formatShortDate(value)) : "확인 중";
   const status = String(billing?.paymentStatus || "").toUpperCase();
@@ -37,6 +38,7 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
 }
 
 export function PricingPageView(ctx, snapshot) {
+  if (!readRuntimeConfig().billingPreviewEnabled) return '<section class="pricing-page"><h1>요금제 준비 중</h1><p>정식 출시 후 안내하겠습니다.</p></section>';
   const { state } = ctx;
   const plan = snapshot.usage?.plan;
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
