@@ -336,9 +336,7 @@ export function createBillingController(ctx) {
     const refreshed = await refresh();
     if (!refreshed || !isCurrent()) return;
     if (String(billing?.paymentStatus || "").toUpperCase() === "ACTIVE" && !isPaymentPending(billing)) {
-      const confirmedPlan = usage?.plan || billing?.plan || "선택한";
-      message = firstPayment ? `첫 테스트 결제가 완료되어 ${confirmedPlan} 요금제가 적용됐습니다.`
-        : `결제가 완료되어 ${confirmedPlan} 요금제가 적용됐습니다.`;
+      message = `${firstPayment ? "첫 테스트 결제가" : "결제가"} 완료되어 ${usage?.plan || billing?.plan || "선택한"} 요금제가 적용됐습니다.`;
     } else if (isPaymentPending(billing)) {
       message = "결제 응답이 지연되어 서버에서 현재 상태를 다시 확인했습니다.";
     } else {
