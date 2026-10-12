@@ -408,7 +408,7 @@ class PromptImproveConversationTest {
 				response.get("requestId")
 		);
 		verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
-                org.mockito.ArgumentMatchers.eq("request-new-123"), any(Map.class));
+                org.mockito.ArgumentMatchers.argThat(id -> id != null && !id.equals("request-new-123")), any(Map.class));
 		assertEquals(false, response.get("replayed"));
 		assertEquals(
 				"request-new-123",
@@ -835,14 +835,29 @@ class PromptImproveConversationTest {
         when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
         var permit = new MemberRequestGuard.Permit(7L, "not-found-permit");
         when(memberRequestGuard.acquire(7L)).thenReturn(permit);
-        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":\"no evidence\"}");
+        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":{\"code\":\"NO_EVIDENCE\"}}");
 
         Map<String, Object> response = improve(new PromptController.ImproveRequest(
                 "관련 기법 찾기", "prompt_techniques", null, null, null,
                 "no-evidence-request", List.of()), AUTHORIZATION);
 
         assertEquals("no_evidence", response.get("ragStatus"));
-        verify(ragUsageRecorder).recordNoEvidence(7L, "no-evidence-request");
+        verify(ragUsageRecorder).recordNoEvidence(7L, "not-found-permit");
+        verify(memberRequestGuard).release(permit);
+    }
+
+    @Test
+    void genericRag404IsNotChargedOrSaved() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "generic-404-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":\"Not Found\"}");
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> improve(request("valid prompt", null, null), AUTHORIZATION));
+        assertEquals("AI_SERVICE_UNAVAILABLE", error.getCode());
+        verifyNoInteractions(ragUsageRecorder);
+        verify(makeThreadRepository, never()).save(any(MakeThread.class));
         verify(memberRequestGuard).release(permit);
     }
 
@@ -855,7 +870,7 @@ class PromptImproveConversationTest {
 				HttpStatus.NOT_FOUND,
 				"""
 						{
-						  "detail": "관련 근거를 찾지 못했습니다."
+						  "detail": "입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
 						}
 						""");
 
