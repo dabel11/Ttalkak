@@ -4,7 +4,7 @@ import { readRuntimeConfig } from "../runtime/runtime-config.mjs";
 const CUSTOMER_KEY_STORAGE = "ttalkak-billing-pending-customer";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const BILLING_AUTH_MESSAGE = "로그인이 만료되었습니다. 다시 로그인해 주세요.";
-const BILLING_RETURN_AUTH_MESSAGE = "로그인이 만료되었습니다. 다시 로그인한 뒤 카드 등록을 처음부터 시작해 주세요.";
+const BILLING_RETURN_AUTH_MESSAGE = "다시 로그인한 뒤 카드 등록을 처음부터 시작해 주세요.";
 
 function BillingModalView(ctx, data) {
   if (!data) return "";
@@ -39,7 +39,6 @@ function BillingModalView(ctx, data) {
         <p>지금 추가 결제 <strong>${Number(quote.amount).toLocaleString("ko-KR")}원</strong></p>
         <p>다음 갱신일부터 월 ${Number(quote.nextMonthlyAmount).toLocaleString("ko-KR")}원</p>
         <p>이번 기간 사용 가능 횟수: 총 ${Number(quote.requestLimitAfterUpgrade)}회 (사용량 유지)</p>
-        <p>현재 이용 기간 종료: ${escapeHtml(formatShortDate(quote.periodEnd))}</p>
         <button class="primary-button" type="button" data-billing-upgrade ${busy ? "disabled" : ""}>위 금액으로 테스트 업그레이드 결제</button>
       </div>` : ""}
       ${upgrading ? `<p class="billing-progress">확인 중인 업그레이드: ${escapeHtml(billing.pendingCharge.plan)} · ${Number(billing.pendingCharge.amount).toLocaleString("ko-KR")}원</p>` : ""}
