@@ -294,24 +294,6 @@ export function createBillingController(ctx) {
     }
   }
 
-  async function requestRefund(orderId) {
-    if (busy || !isCurrent() || typeof api.requestBillingRefund !== "function"
-        || !charges.some((c) => c.orderId === orderId && c.status === "DONE" && (c.refundState || "NONE") === "NONE")) return;
-    busy = true;
-    errorMessage = "";
-    render();
-    try {
-      await api.requestBillingRefund(activeToken, orderId, "서비스 내 환불 검토 요청");
-      if (isCurrent()) await refresh("환불 검토를 요청하고 자동 갱신을 중지했습니다. 검토 결과를 확인해 주세요.");
-    } catch (error) {
-      if (!isCurrent()) return;
-      if (handleAccessError(error)) return;
-      errorMessage = errorText(error);
-      busy = false;
-      render();
-    }
-  }
-
   async function register() {
     if (busy || !setup || setup.cardRegistered || !isCurrent()) return;
     const { clientKey, customerKey, amount } = setup;
@@ -343,13 +325,13 @@ export function createBillingController(ctx) {
     }
   }
 
-  async function mutate(method, message) {
+  async function mutate(method, message, ...args) {
     if (busy || !isCurrent()) return;
     busy = true;
     errorMessage = "";
     render();
     try {
-      await api[method](activeToken);
+      await api[method](activeToken, ...args);
       if (isCurrent()) await refresh(message);
     } catch (error) {
       if (!isCurrent()) return;
@@ -439,7 +421,8 @@ export function createBillingController(ctx) {
       open(button.dataset.selectedPlan || null);
     }));
     root.querySelectorAll?.("[data-billing-refund]").forEach((button) => button.addEventListener("click", () => {
-      void requestRefund(button.dataset.billingRefund);
+      void mutate("requestBillingRefund", "환불 검토를 요청하고 자동 갱신을 중지했습니다.",
+        button.dataset.billingRefund, "서비스 내 환불 검토 요청");
     }));
     on("[data-close-billing]", close);
     on("[data-billing-reload]", () => { void refresh(); });
