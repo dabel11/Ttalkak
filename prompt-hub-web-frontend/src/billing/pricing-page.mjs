@@ -36,6 +36,22 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
   </section>`;
 }
 
+
+const PAID_PLANS = [
+  { name: "LIGHT", price: "3,900", requests: 30, style: "pricing-light" },
+  { name: "STANDARD", price: "5,900", requests: 70, style: "pricing-standard", badge: "추천 요금제" },
+  { name: "PRO", price: "9,900", requests: 150, style: "pricing-pro", badge: "더 넉넉한 사용량" },
+];
+
+function paidPlanCard(tier, currentPlan, signedIn) {
+  const { name, price, requests, style, badge } = tier;
+  return `<article class="pricing-plan ${style}">${badge ? `<p class="pricing-badge">${badge}</p>` : ""}<h2>${name}</h2><p class="pricing-price">${price}원 <span>/ 월</span></p><p>월 ${requests}회 개선 요청</p>
+    <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>${name === "PRO" ? "FREE보다 넉넉한 AI 사용량" : "모든 등급과 동일한 AI 품질"}</li></ul>
+    <button class="primary-button" type="button" ${signedIn ? "data-open-billing" : "data-start-pro"} data-selected-plan="${name}">${name === "PRO" ? currentPlan === "PRO" ? "구독 관리하기" : "테스트 구독 확인" : "테스트 구독 신청"}</button>
+    ${currentPlan === name ? '<p class="pricing-current">현재 요금제</p>' : ""}
+  </article>`;
+}
+
 export function PricingPageView(ctx, snapshot) {
   const { state } = ctx;
   const plan = snapshot.usage?.plan;
@@ -48,21 +64,7 @@ export function PricingPageView(ctx, snapshot) {
         <button class="secondary-button" type="button" data-route="make">${state.isLoggedIn ? "첨삭 시작하기" : "무료로 체험하기"}</button>
         ${plan === "FREE" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
-      <article class="pricing-plan pricing-light"><h2>LIGHT</h2><p class="pricing-price">3,900원 <span>/ 월</span></p><p>월 30회 개선 요청</p>
-        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="LIGHT"' : 'data-start-pro data-selected-plan="LIGHT"'}>테스트 구독 신청</button>
-        ${plan === "LIGHT" ? '<p class="pricing-current">현재 요금제</p>' : ""}
-      </article>
-      <article class="pricing-plan pricing-standard"><p class="pricing-badge">추천 요금제</p><h2>STANDARD</h2><p class="pricing-price">5,900원 <span>/ 월</span></p><p>월 70회 개선 요청</p>
-        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="STANDARD"' : 'data-start-pro data-selected-plan="STANDARD"'}>테스트 구독 신청</button>
-        ${plan === "STANDARD" ? '<p class="pricing-current">현재 요금제</p>' : ""}
-      </article>
-      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">9,900원 <span>/ 월</span></p><p>월 150회 개선 요청</p>
-        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>FREE보다 넉넉한 AI 사용량</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="PRO"' : 'data-start-pro data-selected-plan="PRO"'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
-        ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
-      </article>
+      ${PAID_PLANS.map((tier) => paidPlanCard(tier, plan, state.isLoggedIn)).join("")}
     </div>
     <p class="pricing-note">비회원은 총 3회 무료 체험할 수 있으며, 프롬프트 저장은 로그인 후 가능합니다.</p>
     <p class="pricing-note">세 유료 요금제 모두 테스트 결제가 가능합니다. 실제 청구는 없으며, 운영 판매는 별도 승인 후 진행합니다.</p>
