@@ -11,7 +11,7 @@ test("unlaunched pricing is hidden in production unless explicitly enabled", asy
   const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
   const state = { isLoggedIn: true, billingOpen: false };
   let paymentCalls = 0;
-  globalThis.window = { __API_BASE_URL__: "https://backend.example" };
+  globalThis.window = { __API_BASE_URL__: "http://localhost:8080", location: { hostname: "ttalkak.example" } };
   try {
     const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
     assert.match(page, /요금제 준비 중/);
