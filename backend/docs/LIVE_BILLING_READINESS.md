@@ -105,7 +105,6 @@ TTALKAK은 사용자가 입력한 프롬프트를 AI로 개선하고 개선 결�
 
 ### 공식 확인 위치
 
-- 국세청 사업자등록 안내: https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7777&mi=2464
 - 홈택스(검색: 사업자등록 신청): https://www.hometax.go.kr/
 - 국세청 제출서류 안내: https://s.nts.go.kr/nts/ad/cntnts/cntntsView.do?mi=2445
 - 토스 계약 신청: https://www.tosspayments.com/
