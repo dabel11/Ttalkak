@@ -539,7 +539,7 @@ test("a successful complete still refreshes the PRO status", async () => {
     const controller = createController({
       state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
       api: {
-        completeBilling: async () => { completed += 1; },
+        completeBilling: async () => { completed += 1; return { plan: "PRO", paymentStatus: "ACTIVE" }; },
         setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }),
         getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
         getUsageStatus: async () => ({ plan: "PRO", totalTokens: 20 }),
@@ -549,7 +549,7 @@ test("a successful complete still refreshes the PRO status", async () => {
     await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
 
     assert.equal(completed, 1);
-    assert.match(controller.renderBilling(), /첫 테스트 결제가 완료되어 PRO가 적용됐습니다/);
+    assert.match(controller.renderBilling(), /첫 테스트 결제가 완료되어 PRO 요금제가 적용됐습니다/);
     assert.match(controller.renderBilling(), /<dd>PRO<\/dd>/);
   } finally {
     globalThis.window = previousWindow;
