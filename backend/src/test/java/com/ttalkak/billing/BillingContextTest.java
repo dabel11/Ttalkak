@@ -5,6 +5,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BillingContextTest {
+    @Test void caseAliasesAreRejectedInsteadOfSharingDatabaseNamespaces() {
+        assertThrows(IllegalArgumentException.class, () -> new BillingContext("test", "test:Legacy"));
+        assertThrows(IllegalArgumentException.class, () -> new BillingContext("test", "test:SHOP"));
+        assertThrows(IllegalArgumentException.class, () -> new BillingContext("live", "live:Shop"));
+        assertThrows(IllegalArgumentException.class, () -> new BillingContext("disabled", "test:Legacy"));
+        assertEquals("test:shop_1-2", new BillingContext("test", "test:shop_1-2").scope());
+        assertFalse(new BillingContext("test", "test:shop_1-2").matches(null));
+    }
     @Test void legacyNullRowsOnlyBelongToOriginalTestStore() {
         assertTrue(new BillingContext("test", "test:legacy").matches(null));
         assertFalse(new BillingContext("test", "test:another").matches(null));

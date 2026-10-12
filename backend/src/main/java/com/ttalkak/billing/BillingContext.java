@@ -24,8 +24,10 @@ public class BillingContext {
             throw new IllegalArgumentException("Test mode requires a test store scope");
         }
         this.mode = mode;
-        if (scope == null || !scope.matches("(?:test|live):[A-Za-z0-9_-]{1,64}")) {
-            throw new IllegalArgumentException("Invalid billing store scope");
+        // Reject case aliases: Java equality and case-insensitive MySQL queries must
+        // identify the same namespace, especially the nullable test:legacy rows.
+        if (scope == null || !scope.matches("(?:test|live):[a-z0-9_-]{1,64}")) {
+            throw new IllegalArgumentException("Billing store scope must use lowercase ASCII");
         }
         this.scope = scope;
     }

@@ -28,6 +28,9 @@
   새 행에는 scope를 저장하고 기존 NULL은 test:legacy로만 해석한다.
   다른 scope의 유료 권한·사용량 기간·자동 갱신·주문 조회를 차단한다.
 - 기본 설정은 test / test:legacy다. disabled는 결제사 호출을 차단한다.
+  scope는 소문자 ASCII 영문·숫자·밑줄·하이픈만 허용한다. 대문자가 포함된 설정은
+  시작 시 거부하며 자동 소문자 변환은 하지 않는다. Java와 MySQL의 대소문자 비교 차이로
+  test:Legacy 등이 기존 NULL/test:legacy 데이터와 혼동되는 것을 방지한다.
   live는 독립적인 live: 상점 scope가 필요하며, 이 PR에서는 **실제 결제사 호출을 계속 차단**한다.
   라이브 키를 테스트 키 변수에 넣거나 모드만 live로 바꿔 실결제를 여는 방식은 지원하지 않는다.
 - 신규 nullable 컬럼: 세 테이블의 billing_scope VARCHAR(80), billing_charges의
