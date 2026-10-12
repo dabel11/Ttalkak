@@ -1332,11 +1332,11 @@ function bindCoreEvents() {
   bindAuthControls(document, authController);
   billingController.bindBilling(document);
   if (["pricing", "saved"].includes(state.route) && !state.billingOpen) void billingController.hydrateSummary();
-  document.querySelector("[data-start-pro]")?.addEventListener("click", () => {
+  document.querySelectorAll("[data-start-pro]").forEach((button) => button.addEventListener("click", () => {
     state.pendingBillingOpen = true;
     state.authView = "login";
     render();
-  });
+  }));
   bindModalControlEvents();
   bindPromptInteractionEvents();
   bindPromptEditAndExecuteEvents();
