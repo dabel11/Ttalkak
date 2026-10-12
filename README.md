@@ -26,17 +26,39 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 
 ### 남지원 | Product Manager · Backend Developer
 
-사용자의 프롬프트 작성 부담을 줄이고 직관적인 사용 경험을 제공하는 것을 핵심 기획 원칙으로 삼아, 최초 아이디어 제안부터 제품 기획, 백엔드 개발, 핵심 기능의 프론트엔드 구현, 시스템 통합 및 배포 준비까지 프로젝트 전반을 주도했습니다.
+**사용자 요구를 서비스 정책과 API로 구체화하고, 개발·통합·배포까지 연결한 기획·백엔드 담당자입니다.** 3인 팀에서 최초 아이디어 제안, 요구사항 정의, 역할·일정 조율, 백엔드 개발을 맡았으며, 원클릭 개선 등 핵심 기능의 프론트엔드 구현과 운영 준비에도 참여했습니다.
 
-- **제품 기획·정책 설계:** 서비스 아이디어 제안 및 핵심 기능 기획, 사용자 의도를 우선하는 프롬프트 개선 흐름 설계(가능한 경우 즉시 개선안 제공, 추가 질문은 선택적으로 제시), 비회원 체험·회원 이용 및 요금제 정책 수립
-- **백엔드 설계·개발:** Spring Boot 기반 REST API 개발, JWT 인증·인가, 회원·커뮤니티·대화 관리, 구독·결제 및 AI 토큰 사용량 관리 기능 구현
-- **원클릭 개선·요금제 화면 개발:** Chrome Extension의 원클릭 개선 미리보기·적용·원본 복원·설정 기능 구현, 웹 공개 요금제 페이지와 마이페이지 구독·사용량 안내 구현, 기존 AI 개선 API 및 결제 흐름 연동
-- **시스템 설계·통합:** Web·Chrome Extension·Spring Boot·FastAPI(RAG) 간 연동 구조 및 API 계약 설계·조율, 대화 이력·멱등성 처리 및 통합 검증
-- **프로젝트 리딩·협업 관리:** 초기 협업 체계 구축 및 개발 진행 방식 안내, 정기 회의 주도, 팀원 간 업무 조율 및 개발 진행 관리
-- **품질 관리·배포:** PR 코드 리뷰, CI 및 통합 테스트, 장애 원인 분석과 안정성 개선, Railway 배포 환경 구성 및 운영 점검
-- **UX/UI 디렉션:** 사용자 편의성과 직관적 사용성을 기준으로 화면 구성·탐색·작업 흐름의 기획 방향과 요구사항 제시, 디자인 레퍼런스 검토 및 프론트엔드 구현 결과 검토
-- **대외 커뮤니케이션·발표:** 지도교수 미팅 및 피드백 관리, 학기별 정기 발표와 기타 발표 진행, Figma 기반 발표 자료 기획·제작
-- **서비스 출시 준비:** Chrome Web Store 개발자 등록, 서비스 배포 인프라 및 운영 정책 준비
+#### 주요 역할
+
+- **제품 기획·요구사항 정의:** 사용자의 프롬프트 작성 부담을 줄이는 서비스 아이디어 제안. 즉시 개선안을 제공하고 추가 질문은 선택적으로 제시하는 흐름, 비회원 체험·회원 저장·요금제·사용량 정책을 정의하고 화면·API 요구사항으로 구체화
+- **프로젝트 총괄·협업:** 초기 협업 체계와 개발 진행 방식 정리, 역할 배분·일정 관리·정기 회의 주도. 프론트엔드·AI 담당자와 API 필드, 요청 식별자, 오류 안내 및 완료 기준을 조율하고 지도교수 피드백을 후속 작업에 반영
+- **백엔드 설계·개발:** Java 17·Spring Boot·Spring Security·JPA·MySQL 기반 REST API 개발. JWT 인증·인가, 회원·커뮤니티·대화·관리자 기능과 구독·결제·AI 사용량 관리 구현
+- **시스템 통합:** Web·Chrome Extension → Spring Boot → FastAPI/RAG 연동 구조 조율. 응답 계약과 대화 이력, 재요청의 중복 저장 방지, 비회원·회원의 권한 및 오류 처리 기준 정리
+- **핵심 UX 구현·검토:** Chrome Extension 원클릭 개선의 미리보기·변경 강조·적용·원본 복원·설정 기능 구현. 웹 요금제와 마이페이지 구독·사용량 안내 구현 및 연동. 화면 탐색·작업 흐름의 요구사항 제시와 구현 결과 검토
+- **품질·배포·운영 준비:** PR 리뷰, CI·통합 검증, 장애 재현과 원인 분석. Railway 배포 환경·환경변수·서비스 연결 설정 및 운영 점검, 점검·복구 절차 문서화
+- **발표·출시 준비:** 지도교수 미팅·피드백 관리, 학기별 발표와 Figma 발표 자료 기획·제작. Chrome Web Store 개발자 등록 및 출시·운영 정책 준비
+
+#### 대표 문제 해결 사례
+
+| 문제·요구 | 설계·구현한 대응 | 확인 가능한 코드·문서 |
+| --- | --- | --- |
+| 결제 응답이 늦거나 유실됐을 때 실패로 단정하면 중복 결제·권한 불일치가 발생할 수 있음 | 미확정 주문을 `PENDING`으로 유지하고 조회·재확인 흐름과 결제 멱등성을 구성. 결제 결과와 유료 이용 기간을 연결 | [결제 서비스](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/billing/BillingService.java), [결제 통합 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/test/java/com/ttalkak/billing/BillingServiceIntegrationTest.java) |
+| AI 요청의 동시 실행·중복 집계·사용량 누락이 요금제 판단을 왜곡할 수 있음 | 회원별 DB 요청 lease와 요청 식별자를 활용해 실행·기록을 조정. 사용량 불확실성을 별도 상태로 관리하고 한도 적용 및 복구 기준을 문서화 | [요청 lease](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/usage/MemberRequestLease.java), [사용량 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/usage/RagUsageRecorder.java), [회원 사용량 정책](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/MEMBER_QUOTA.md) |
+| 웹·확장·AI 서버 사이 응답 형식과 오류 처리 기준이 달라 연동 오류가 발생함 | API 응답 계약, 요청 식별자, 비회원 체험 제한 및 401·429 등 상태별 안내 기준을 조율하고 통합 검증에 연결 | [응답 스키마](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/docs/prompt-improve-contract.schema.json), [CI 구성](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/.github/workflows/ci.yml) |
+| 사용자가 개선 결과를 확인하기 전에 원본이 변경되면 통제감을 잃을 수 있음 | 미리보기 → 변경 강조 → 명시적 적용 → 원본 복원 흐름을 제안·구현하여 결과 채택을 사용자가 결정하도록 설계 | [원클릭 개선 구현](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/public/inline-improve.js), [동작 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/test/improveRequestBehavior.test.jsx) |
+| 로컬 구현만으로는 서비스 간 연결·배포 설정·장애 대응을 확인하기 어려움 | Railway 환경 구성과 서비스 연동을 점검하고 컨테이너 smoke·통합 검증 및 운영 체크리스트를 준비 | [배포 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/RAILWAY_STAGING.md), [운영 준비 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/OPERATIONS_READINESS.md) |
+
+#### 최신 개발: 결제 환경 분리·환불 검토 흐름
+
+[PR #57](https://github.com/dabel11/Ttalkak/pull/57)에서 테스트·라이브 결제 데이터의 scope 분리, 회원의 환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다. 취소 응답이 불확실한 경우 `PENDING`을 유지하고 동일 멱등키로 재시도하며, 진행 중인 AI 요청 및 취소 대기 상태와의 충돌을 방지하는 검증을 추가했습니다.
+
+**2026-10-13 기준 PR #57은 draft·미병합 상태이며, 해당 커밋의 CI 6개 검사는 통과했습니다.** 일반 구독의 전액 취소를 대상으로 하며, 부분·업그레이드 환불과 관리자 운영 화면은 후속 과제입니다. 실결제 활성화 및 실제 승인·취소 검증은 아직 완료하지 않았습니다.
+
+#### 담당 범위와 현재 단계
+
+AI 모델·검색·리랭킹 자체 개발은 AI 담당자, Web·Extension 전반의 프론트엔드 개발은 프론트엔드 담당자와 협업했습니다. 위 내용은 남지원이 맡은 기획·정책·백엔드·핵심 UX·통합·운영 준비 범위를 설명합니다.
+
+위 사례의 코드 링크는 병합 완료된 [PR #56](https://github.com/dabel11/Ttalkak/pull/56)의 커밋을 기준으로 고정했습니다. 최신 환불 기능은 PR #57에서 별도로 확인할 수 있습니다. 테스트 가격과 사용량 한도 적용을 실제 유료 출시·수익성 검증 완료로 표현하지 않으며, 상용화 조건과 운영 구성은 협의·준비 중입니다.
 
 ### 최재원 | Frontend Developer
 
