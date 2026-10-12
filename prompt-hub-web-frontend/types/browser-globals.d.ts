@@ -293,7 +293,9 @@ interface TtalkakApi {
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getBillingStatus(token: TtalkakToken): Promise<unknown>;
   getUsageStatus(token: TtalkakToken): Promise<unknown>;
-  setupBilling(token: TtalkakToken): Promise<unknown>;
+  setupBilling(token: TtalkakToken, plan?: string): Promise<unknown>;
+  quoteBillingUpgrade(token: TtalkakToken, plan: string): Promise<unknown>;
+  upgradeBilling(token: TtalkakToken, plan: string, expectedAmount: number): Promise<unknown>;
   completeBilling(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   cancelBilling(token: TtalkakToken): Promise<unknown>;
   retryBilling(token: TtalkakToken): Promise<unknown>;
