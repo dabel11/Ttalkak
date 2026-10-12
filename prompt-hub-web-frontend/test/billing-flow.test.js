@@ -468,6 +468,7 @@ test("closing billing restores focus to the control that opened it", async () =>
   let focusCount = 0;
   const opener = {
     isConnected: true,
+    dataset: { selectedPlan: "PRO" },
     addEventListener(_event, listener) { openListener = listener; },
     closest() { return null; },
     focus() { focusCount += 1; },
