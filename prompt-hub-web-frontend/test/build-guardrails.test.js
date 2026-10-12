@@ -103,10 +103,10 @@ test("production renderers keep primary and secondary runtime chunks outside the
   ["admin-panels.mjs", "pages/admin-page.mjs", "pages/make-message-parts.mjs", "pages/make-page.mjs", "pages/share-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(`import ["']\\./${file.replaceAll(".", "\\.")}["']`));
   });
-  assert.match(loader, /admin: \(\) => import\(["']\.\.\/admin\/admin-runtime\.mjs["']\)/);
-  assert.match(loader, /make: \(\) => import\(["']\.\.\/make\/make-runtime\.mjs["']\)/);
+  assert.match(loader, /routeImports\.set\(["']admin["'], \(\) => import\(["']\.\.\/admin\/admin-runtime\.mjs["']\)/);
+  assert.match(loader, /routeImports\.set\(["']make["'], \(\) => import\(["']\.\.\/make\/make-runtime\.mjs["']\)/);
   ["overlays", "saved", "share"].forEach((route) => {
-    assert.match(loader, new RegExp(`${route}: \\(\\) => import\\(["']\\.\\/secondary-runtime\\.mjs["']\\)`));
+    assert.match(loader, new RegExp(`routeImports\\.set\\(["']${route}["'], \\(\\) => import\\(["']\\.\\/secondary-runtime\\.mjs["']\\)`));
   });
   const runtimeSources = {
     admin: fs.readFileSync(path.resolve(__dirname, "../src/admin/admin-runtime.mjs"), "utf8"),
@@ -127,8 +127,8 @@ test("auth, prompt overlays, and Saved renderers stay outside the initial render
   ["auth-modal.mjs", "modal-renderers.mjs", "prompt-modals.mjs", "pages/saved-page.mjs"].forEach((file) => {
     assert.doesNotMatch(rendererEntry, new RegExp(file.replaceAll(".", "\\.")));
   });
-  assert.match(loader, /overlays: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
-  assert.match(loader, /saved: \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
+  assert.match(loader, /routeImports\.set\(["']overlays["'], \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
+  assert.match(loader, /routeImports\.set\(["']saved["'], \(\) => import\(["']\.\/secondary-runtime\.mjs["']\)/);
   const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8");
   assert.match(app, /event\.detail\?\.route === ["']overlays["']/);
 });

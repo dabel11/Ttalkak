@@ -1,10 +1,10 @@
-const routeImports = Object.freeze({
-  admin: () => import("../admin/admin-runtime.mjs"),
-  make: () => import("../make/make-runtime.mjs"),
-  overlays: () => import("./secondary-runtime.mjs"),
-  saved: () => import("./secondary-runtime.mjs"),
-  share: () => import("./secondary-runtime.mjs"),
-});
+/** @type {Map<string, () => Promise<{renderers: Record<string, (...args: any[]) => string>}>>} */
+const routeImports = new Map();
+routeImports.set("admin", () => import("../admin/admin-runtime.mjs"));
+routeImports.set("make", () => import("../make/make-runtime.mjs"));
+routeImports.set("overlays", () => import("./secondary-runtime.mjs"));
+routeImports.set("saved", () => import("./secondary-runtime.mjs"));
+routeImports.set("share", () => import("./secondary-runtime.mjs"));
 
 const routeState = new Map();
 const loadedRenderers = Object.create(null);
@@ -14,7 +14,7 @@ document.addEventListener("ttalkak:route-renderers-registered", (event) => {
 });
 
 function ensureRouteRenderers(route) {
-  const load = routeImports[route];
+  const load = routeImports.get(route);
   if (!load) return Promise.resolve();
   const current = routeState.get(route);
   if (current?.status === "loaded") return Promise.resolve();

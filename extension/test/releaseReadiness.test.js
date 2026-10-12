@@ -62,7 +62,7 @@ test("release web-app gate verifies the public billing destination", async () =>
     requested = { url: String(url), options };
     return new Response("<!doctype html>", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
   });
-  assert.equal(requested.url, `${config.webAppUrl}/?openBilling=1#/home`);
+  assert.equal(requested.url, `${config.webAppUrl}/pricing`);
   assert.deepEqual(requested.options, { method: "GET", redirect: "follow" });
   await assert.rejects(() => verifyWebApp(config, async () => new Response("down", { status: 503, headers: { "content-type": "text/plain" } })), /billing destination/);
 });

@@ -9,7 +9,7 @@ const productionBaseURL = `http://127.0.0.1:${productionPort}`;
 
 module.exports = defineConfig({
   ...base,
-  testMatch: ["startup.spec.js", "production-loading.spec.js"],
+  testMatch: ["startup.spec.js", "production-loading.spec.js", "billing-fixture.spec.js", "pricing-fixture.spec.js"],
   testIgnore: [],
   workers: 1,
   use: { ...base.use, baseURL: productionBaseURL },

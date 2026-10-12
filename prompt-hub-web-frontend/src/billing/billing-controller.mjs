@@ -80,6 +80,9 @@ export function createBillingController(ctx) {
   let sdkPromise = null;
   let focusReturnElement = null;
   let focusReturnSelector = "";
+  let summaryToken = "";
+  let summaryPromise = null;
+  let requestRevision = 0;
 
   function restoreFocus() {
     globalThis.setTimeout(() => {
@@ -123,6 +126,8 @@ export function createBillingController(ctx) {
   }
 
   async function refresh(statusMessage = "") {
+    const revision = ++requestRevision;
+    summaryPromise = null;
     const token = getToken();
     if (!state.isLoggedIn || !token || isDemoToken(token)) {
       errorMessage = "실제 계정으로 로그인한 뒤 결제를 이용해 주세요.";
@@ -138,7 +143,7 @@ export function createBillingController(ctx) {
       const results = await Promise.allSettled([
         api.setupBilling(token), api.getBillingStatus(token), api.getUsageStatus(token),
       ]);
-      if (!isCurrent()) return false;
+      if (!isCurrent() || revision !== requestRevision) return false;
       const failures = [];
       setup = results[0].status === "fulfilled" ? results[0].value : null;
       billing = results[1].status === "fulfilled" ? results[1].value : null;
@@ -158,12 +163,47 @@ export function createBillingController(ctx) {
       }
       return Boolean(billing);
     } catch (error) {
-      if (!isCurrent()) return false;
+      if (!isCurrent() || revision !== requestRevision) return false;
       if (!handleAccessError(error)) errorMessage = errorText(error);
       return false;
     } finally {
-      if (isCurrent()) { busy = false; render(); }
+      if (isCurrent() && revision === requestRevision) { summaryToken = token; busy = false; render(); }
     }
+  }
+
+  function snapshot() {
+    return isCurrent() ? { usage, billing, busy, message, errorMessage }
+      : { usage: null, billing: null, busy: false, message: "", errorMessage: "" };
+  }
+
+  function hydrateSummary({ force = false } = {}) {
+    const token = getToken();
+    if (!state.isLoggedIn || !token || isDemoToken(token)) return;
+    if (summaryPromise && activeToken === token) return summaryPromise;
+    if (busy && activeToken === token) return;
+    if (!force && summaryToken === token) return;
+    const revision = ++requestRevision;
+    activeToken = token;
+    summaryToken = token;
+    setup = billing = usage = null;
+    busy = true;
+    message = errorMessage = "";
+    summaryPromise = (async () => {
+      try {
+        // Read-only: viewing a plan must not create a payment session.
+        const results = await Promise.allSettled([api.getUsageStatus(token), api.getBillingStatus(token)]);
+        if (!isCurrent() || revision !== requestRevision) return;
+        usage = results[0].status === "fulfilled" ? normalizeUsageSnapshot(results[0].value) : null;
+        billing = results[1].status === "fulfilled" ? results[1].value : null;
+        const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason);
+        const unauthorized = failures.find(isUnauthorized);
+        if (unauthorized && handleAccessError(unauthorized)) return;
+        if (failures.length) errorMessage = "사용량 또는 구독 정보를 불러오지 못했습니다. 다시 확인해 주세요.";
+      } finally {
+        if (revision === requestRevision) { summaryPromise = null; busy = false; render(); }
+      }
+    })();
+    return summaryPromise;
   }
 
   function open() {
@@ -325,9 +365,10 @@ export function createBillingController(ctx) {
     on("[data-billing-register]", () => { void register(); });
     on("[data-billing-cancel]", () => { void mutate("cancelBilling", "다음 자동 갱신이 중지됐습니다."); });
     on("[data-billing-retry]", () => { void mutate("retryBilling", "결제 상태를 다시 확인했습니다."); });
+    on("[data-subscription-refresh]", () => { void hydrateSummary({ force: true }); });
   }
 
-  return Object.freeze({ renderBilling, openBilling: open, closeBilling: close, refreshBilling: refresh, registerBilling: register, handleBillingRedirect: handleRedirect, bindBilling: bind });
+  return Object.freeze({ renderBilling, openBilling: open, closeBilling: close, refreshBilling: refresh, registerBilling: register, handleBillingRedirect: handleRedirect, bindBilling: bind, hydrateSummary, getSnapshot: snapshot });
 }
 
 export function consumeOpenBillingRequest(location, history) {

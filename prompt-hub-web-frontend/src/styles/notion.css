@@ -1,4 +1,34 @@
 /* TTALKAK paper workspace direction, inspired by Notion's design analysis. */
+.pricing-page { max-width: 1040px; margin: 0 auto; padding: 36px 24px; }
+.pricing-intro { margin-bottom: 28px; }
+.pricing-intro h1 { font-size: clamp(25px, 3vw, 38px); line-height: 1.3; letter-spacing: -.05em; margin: 8px 0 14px; }
+.pricing-eyebrow { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .06em; }
+.pricing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.pricing-plan { position: relative; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.pricing-plan h2 { font-size: 21px; margin: 0 0 16px; }
+.pricing-plan > p:not(.pricing-price):not(.pricing-badge) { color: var(--muted); }
+.pricing-price { font-size: 34px; font-weight: 700; letter-spacing: -.04em; margin: 12px 0; }
+.pricing-price span { font-size: 14px; font-weight: 400; color: var(--muted); }
+.pricing-plan ul { padding-left: 20px; margin: 24px 0; line-height: 2; }
+.pricing-plan > button { width: 100%; }
+.pricing-pro { border-color: var(--brand-green); }
+.pricing-badge { display: inline-block; color: var(--brand-green); background: #e8f2fb; border-radius: 5px; padding: 3px 9px; font-size: 12px; margin: 0 0 12px; }
+.pricing-current { margin: 10px 0 0; text-align: center; font-size: 12px; }
+.pricing-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 12px 0; }
+.pricing-policy { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+.pricing-policy h2, .subscription-card h2 { font-size: 17px; margin: 0 0 12px; }
+.subscription-card { margin: 24px 0; padding: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.subscription-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.subscription-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 0; }
+.subscription-details dt { font-size: 12px; color: var(--muted); }
+.subscription-details dd { margin: 4px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .pricing-page { padding: 20px 16px; }
+  .pricing-grid { grid-template-columns: 1fr; gap: 14px; }
+  .pricing-plan { padding: 22px; }
+  .subscription-head { align-items: flex-start; flex-direction: column; }
+  .subscription-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 body, .app-shell, .main-area, .content-area { background: var(--bg); }
 body, button, input, textarea, select { font-family: "Pretendard Variable", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
 button, input, textarea, select { accent-color: var(--brand-green); }

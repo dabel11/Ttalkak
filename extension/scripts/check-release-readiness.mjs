@@ -74,8 +74,9 @@ export async function verifyPublicPages(config, fetchImpl = globalThis.fetch) {
 
 export async function verifyWebApp(config, fetchImpl = globalThis.fetch) {
   const destination = new URL(config.webAppUrl);
-  destination.searchParams.set("openBilling", "1");
-  destination.hash = "/home";
+  destination.pathname = "/pricing";
+  destination.searchParams.delete("openBilling");
+  destination.hash = "";
   const response = await fetchImpl(destination, { method: "GET", redirect: "follow" });
   const contentType = response.headers.get("content-type") || "";
   if (!response.ok || !/text\/html/i.test(contentType)) {

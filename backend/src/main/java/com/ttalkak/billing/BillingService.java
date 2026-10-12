@@ -33,7 +33,7 @@ public class BillingService {
             PaidUsagePeriodRepository periods, BillingGateway gateway, TransactionTemplate transactions,
             @Value("${ttalkak.billing.toss-client-key:}") String clientKey,
             @Value("${ttalkak.billing.toss-secret-key:}") String secretKey,
-            @Value("${ttalkak.billing.monthly-price-krw:5000}") int amount, Clock clock) {
+            @Value("${ttalkak.billing.monthly-price-krw:4900}") int amount, Clock clock) {
         this.subscriptions = subscriptions;
         this.charges = charges;
         this.periods = periods;
