@@ -32,24 +32,8 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : "") : ""}
     ${usage && !usage.quotaEnforced ? '<p class="pricing-note">현재 회원 사용량 한도 차단은 적용 전입니다.</p>' : ""}` : ""}
-    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>이번 기간 사용량이 70% 이상입니다. ${planPrices[nextTier]}원/월 요금제로 업그레이드할 수 있어요. 현재 결제 기간이 남아 있다면 추가 결제액을 먼저 확인할 수 있습니다.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
+    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>이번 기간 사용량이 70% 이상입니다. ${planPrices[nextTier]}원/월 상위 요금제의 추가 결제액을 먼저 확인해 보세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
-}
-
-
-const PAID_PLANS = [
-  { name: "LIGHT", price: "3,900", requests: 30, style: "pricing-light" },
-  { name: "STANDARD", price: "5,900", requests: 70, style: "pricing-standard", badge: "추천 요금제" },
-  { name: "PRO", price: "9,900", requests: 150, style: "pricing-pro", badge: "더 넉넉한 사용량" },
-];
-
-function paidPlanCard(tier, currentPlan, signedIn) {
-  const { name, price, requests, style, badge } = tier;
-  return `<article class="pricing-plan ${style}">${badge ? `<p class="pricing-badge">${badge}</p>` : ""}<h2>${name}</h2><p class="pricing-price">${price}원 <span>/ 월</span></p><p>월 ${requests}회 개선 요청</p>
-    <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>${name === "PRO" ? "FREE보다 넉넉한 AI 사용량" : "모든 등급과 동일한 AI 품질"}</li></ul>
-    <button class="primary-button" type="button" ${signedIn ? "data-open-billing" : "data-start-pro"} data-selected-plan="${name}">${name === "PRO" ? currentPlan === "PRO" ? "구독 관리하기" : "테스트 구독 확인" : "테스트 구독 신청"}</button>
-    ${currentPlan === name ? '<p class="pricing-current">현재 요금제</p>' : ""}
-  </article>`;
 }
 
 export function PricingPageView(ctx, snapshot) {
@@ -57,22 +41,36 @@ export function PricingPageView(ctx, snapshot) {
   const plan = snapshot.usage?.plan;
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
     <div class="pricing-intro"><p class="pricing-eyebrow">TTALKAK 요금제</p><h1 id="pricing-heading">필요한 만큼, 더 편하게 개선하세요.</h1>
-      <p>원클릭 개선과 대화형 개선(Make)을 모든 요금제에서 같은 품질로 제공합니다.</p></div>
+      <p>모든 요금제에서 원클릭·Make의 AI 개선 품질은 동일합니다.</p></div>
     <div class="pricing-grid">
       <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 10회 AI 개선</p>
-        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>PRO와 동일한 개선 품질</li></ul>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>동일한 AI 개선 품질</li></ul>
         <button class="secondary-button" type="button" data-route="make">${state.isLoggedIn ? "첨삭 시작하기" : "무료로 체험하기"}</button>
         ${plan === "FREE" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
-      ${PAID_PLANS.map((tier) => paidPlanCard(tier, plan, state.isLoggedIn)).join("")}
+      <article class="pricing-plan pricing-light"><h2>LIGHT</h2><p class="pricing-price">3,900원 <span>/ 월</span></p><p>월 30회 개선 요청</p>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>동일한 AI 개선 품질</li></ul>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="LIGHT"' : 'data-start-pro data-selected-plan="LIGHT"'}>테스트 구독 신청</button>
+        ${plan === "LIGHT" ? '<p class="pricing-current">현재 요금제</p>' : ""}
+      </article>
+      <article class="pricing-plan pricing-standard"><p class="pricing-badge">추천 요금제</p><h2>STANDARD</h2><p class="pricing-price">5,900원 <span>/ 월</span></p><p>월 70회 개선 요청</p>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>동일한 AI 개선 품질</li></ul>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="STANDARD"' : 'data-start-pro data-selected-plan="STANDARD"'}>테스트 구독 신청</button>
+        ${plan === "STANDARD" ? '<p class="pricing-current">현재 요금제</p>' : ""}
+      </article>
+      <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">9,900원 <span>/ 월</span></p><p>월 150회 개선 요청</p>
+        <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>더 넉넉한 AI 사용량</li></ul>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="PRO"' : 'data-start-pro data-selected-plan="PRO"'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
+        ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
+      </article>
     </div>
-    <p class="pricing-note">비회원은 총 3회 무료 체험할 수 있으며, 프롬프트 저장은 로그인 후 가능합니다.</p>
-    <p class="pricing-note">세 유료 요금제 모두 테스트 결제가 가능합니다. 실제 청구는 없으며, 운영 판매는 별도 승인 후 진행합니다.</p>
+    <p class="pricing-note">비회원은 총 3회 체험할 수 있고, 로그인 후 프롬프트를 저장할 수 있습니다.</p>
+    <p class="pricing-note">세 유료 요금제는 테스트 결제만 지원하며 실제 청구·운영 판매는 하지 않습니다.</p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
-      <p>원클릭 개선과 Make는 하나의 AI 사용량 한도를 공유합니다. 미리보기 생성·후속 질문·재개선처럼 AI를 새로 호출하면 사용량이 발생합니다.</p>
-      <p>미리보기를 적용하지 않아도 사용량에 포함됩니다. 개선안 적용·원본 복원·저장 결과 조회·같은 요청의 결과 재조회에는 사용량을 추가 차감하지 않습니다.</p>
-      <p class="pricing-note">현재 결제는 테스트 환경으로 실제 청구되지 않습니다. 결제창의 금액은 기능 검증용이며, 최종 서비스 요금이 아닙니다.</p>
+      <p>원클릭과 Make는 AI 사용량을 공유합니다. 미리보기·후속 질문·재개선 등 신규 AI 호출마다 1회 차감됩니다.</p>
+      <p>미리보기를 적용하지 않아도 차감됩니다. 개선안 적용·원본 복원·저장 결과 조회·동일 요청 재조회는 추가 차감되지 않습니다.</p>
+      <p class="pricing-note">결제창 금액은 기능 검증용이며 실제 청구되지 않습니다. 최종 판매 가격은 미정입니다.</p>
     </section>
   </section>`;
 }
