@@ -53,7 +53,7 @@ function BillingModalView(ctx, data) {
         ${billing?.nextChargeAt ? `<div><dt>다음 결제일</dt><dd>${escapeHtml(formatShortDate(billing.nextChargeAt))}</dd></div>` : ""}
       </dl>${usage?.usagePercent != null ? `<div class="billing-usage-meter"><span style="width:${usage.usagePercent}%"></span></div>` : ""}<div class="billing-actions">
         ${pending ? `<button class="primary-button" type="button" ${upgrading ? "data-billing-reconcile" : "data-billing-refresh"} ${busy ? "disabled" : ""}>${upgrading ? "기존 주문 재확인" : "결제 상태 다시 확인"}</button>` : ""}
-        ${!pending && setup && !registered ? `<button class="primary-button" type="button" data-billing-register ${busy ? "disabled" : ""}>테스트 카드 등록 · 첫 결제</button>` : ""}
+        ${!pending && setup && !registered ? `<button class="primary-button" type="button" data-billing-register ${busy ? "disabled" : ""}>카드 등록 · 테스트 결제</button>` : ""}
         ${!pending && registered && billing?.autoRenew ? `<button class="secondary-button" type="button" data-billing-cancel ${busy ? "disabled" : ""}>자동 갱신 중지</button>` : ""}
         ${!pending && registered && billing && !billing.autoRenew ? `<button class="primary-button" type="button" data-billing-retry ${busy ? "disabled" : ""}>결제 재시도·자동 갱신 사용</button>` : ""}
         ${errorMessage && !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
@@ -221,7 +221,7 @@ export function createBillingController(ctx) {
         const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason);
         const unauthorized = failures.find(isUnauthorized);
         if (unauthorized && handleAccessError(unauthorized)) return;
-        if (failures.length) errorMessage = "사용량 또는 구독 정보를 불러오지 못했습니다. 다시 확인해 주세요.";
+        if (failures.length) errorMessage = "사용량·구독 조회에 실패했습니다. 다시 시도해 주세요.";
       } finally {
         if (revision === requestRevision) { summaryPromise = null; busy = false; render(); }
       }
@@ -341,8 +341,8 @@ export function createBillingController(ctx) {
       message = "결제 응답이 지연되어 서버에서 현재 상태를 다시 확인했습니다.";
     } else {
       errorMessage = firstPayment
-        ? "결제 응답이 늦어 상태를 다시 확인했습니다. 필요하면 카드 등록을 다시 시작하세요."
-        : "결제 응답이 늦어 상태를 다시 확인했습니다. 처리 중이면 잠시 후 다시 확인하세요.";
+        ? "결제 결과가 불확실합니다. 필요하면 카드 등록을 다시 진행하세요."
+        : "결제 처리 중일 수 있습니다. 잠시 후 다시 확인하세요.";
     }
     render();
   }
@@ -394,7 +394,7 @@ export function createBillingController(ctx) {
         return;
       }
       busy = false;
-      errorMessage = `결제 결과를 확인하지 못했습니다. 상태를 다시 불러와 확인해 주세요. ${errorText(error)}`;
+      errorMessage = `결제 결과를 확인할 수 없습니다. 다시 조회해 주세요. ${errorText(error)}`;
       render();
     }
   }
