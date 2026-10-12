@@ -19,10 +19,12 @@ export function readRuntimeConfig(browserWindow = globalThis.window) {
   if (!/^https?:$/.test(parsedUrl.protocol)) throw new TypeError("TTALKAK API base URL must use HTTP or HTTPS.");
   const normalizedHostname = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   const apiEnvironment = normalizedHostname === "localhost" || normalizedHostname === "127.0.0.1" || normalizedHostname === "::1" ? "development" : "production";
+  const siteHost = String(browserWindow?.location?.hostname || "").toLowerCase();
+  const localPreview = !browserWindow?.location || ["localhost", "127.0.0.1", "::1"].includes(siteHost);
   return Object.freeze({
     apiBaseUrl,
     apiEnvironment,
-    billingPreviewEnabled: apiEnvironment === "development" || browserWindow?.TTALKAK_BILLING_PREVIEW_ENABLED === true,
+    billingPreviewEnabled: localPreview || browserWindow?.TTALKAK_BILLING_PREVIEW_ENABLED === true,
     apiTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_API_TIMEOUT_MS, DEFAULT_API_TIMEOUT_MS, "TTALKAK_API_TIMEOUT_MS"),
     improveTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_IMPROVE_TIMEOUT_MS, DEFAULT_IMPROVE_TIMEOUT_MS, "TTALKAK_IMPROVE_TIMEOUT_MS"),
     myPageHydrationTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS, DEFAULT_MY_PAGE_HYDRATION_TIMEOUT_MS, "TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS"),
