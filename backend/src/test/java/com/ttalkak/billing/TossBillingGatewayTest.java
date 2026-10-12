@@ -143,7 +143,7 @@ class TossBillingGatewayTest {
                                 .body("{\"paymentKey\":\"payment\",\"orderId\":\"order\",\"type\":\"BILLING\",\"status\":\"CANCELED\",\"totalAmount\":3900,\"balanceAmount\":0}").build();
                     });
         }), "test_sk_example", Duration.ofSeconds(20), Duration.ofSeconds(60));
-        assertEquals(0L, gateway.cancel("payment", "refund-saved-key", 3900).balanceAmount());
+        assertEquals(0L, gateway.cancel("payment", "refund-saved-key", 3900).balanceAmount().longValue());
         ApiException error = assertThrows(ApiException.class, () -> responding(HttpStatus.BAD_REQUEST,
                 "ALREADY_CANCELED_PAYMENT").cancel("payment", "refund-saved-key", 3900));
         assertEquals("BILLING_REFUND_UNCERTAIN", error.getCode());

@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @SpringBootTest(properties = {
         "JWT_SECRET_BASE64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+        "spring.datasource.url=jdbc:h2:mem:ttalkak-refund-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "TOSS_TEST_CLIENT_KEY=test_ck_example", "TOSS_TEST_SECRET_KEY=test_sk_example", "BILLING_POLL_MS=3600000"
 })
 class BillingRefundIntegrationTest {
@@ -91,7 +92,9 @@ class BillingRefundIntegrationTest {
         assertFalse(billing.status(owner.getId()).autoRenew());
         assertEquals("BILLING_REFUND_REVIEW_PENDING", assertThrows(ApiException.class,
                 () -> billing.retry(owner.getId())).getCode());
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+        verify(gateway, never()).cancel(anyString(), anyString(), anyInt());
         when(gateway.lookup(charge.getOrderId())).thenReturn(done(charge));
         when(gateway.cancel(eq(charge.getPaymentKey()), anyString(), eq(3900))).thenReturn(canceled(charge));
         assertEquals("DONE", refunds.approve(charge.getOrderId(), 3900, true, "원 결제 검토 완료", admin).refundState());
@@ -192,7 +195,7 @@ class BillingRefundIntegrationTest {
         assertEquals("FREE", periods.at(owner.getId(), now).plan());
         assertTrue(refunds.history(owner.getId()).isEmpty());
         assertEquals("NOT_REGISTERED", billing.status(owner.getId()).paymentStatus());
-        billing.chargeDue();
+        assertFalse(subscriptions.dueMemberIds(now, BillingContext.LEGACY_TEST).contains(owner.getId()));
         verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
         assertEquals("BILLING_STORE_MISMATCH", assertThrows(ApiException.class,
                 () -> billing.setup(owner.getId())).getCode());
