@@ -32,7 +32,7 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : "") : ""}
     ${usage && !usage.quotaEnforced ? '<p class="pricing-note">사용량 제한은 적용 전입니다.</p>' : ""}` : ""}
-    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>사용량 70% 도달. 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
+    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>70% 사용. 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
 }
 
@@ -42,7 +42,7 @@ export function PricingPageView(ctx, snapshot) {
   const plan = snapshot.usage?.plan;
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
     <div class="pricing-intro"><p class="pricing-eyebrow">TTALKAK 요금제</p><h1 id="pricing-heading">필요한 만큼, 더 편하게 개선하세요.</h1>
-      <p>모든 요금제의 AI 개선 품질은 같습니다.</p></div>
+    </div>
     <div class="pricing-grid">
       <article class="pricing-plan"><h2>FREE</h2><p class="pricing-price">0원 <span>/ 월</span></p><p>월 10회 AI 개선</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>동일한 AI 개선 품질</li></ul>
