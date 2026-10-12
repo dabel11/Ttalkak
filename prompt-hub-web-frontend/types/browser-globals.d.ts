@@ -337,6 +337,7 @@ interface Window {
   TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS?: number | string;
   TTALKAK_GOOGLE_CREDENTIAL?: string;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
+  TTALKAK_BILLING_PREVIEW_ENABLED?: boolean;
 }
 
 interface EventTarget {
