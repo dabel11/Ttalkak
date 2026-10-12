@@ -92,12 +92,14 @@ test("billing API sends a bearer token and one-time callback data to the intende
   await api.completeBilling({ authKey: "one-time", customerKey: "customer" }, "member-jwt");
   await api.cancelBilling("member-jwt");
   await api.retryBilling("member-jwt");
+  await api.reconcileBillingUpgrade("member-jwt");
   assert.deepEqual(calls[0], ["/api/me/billing/setup", { method: "POST", token: "member-jwt" }]);
   assert.deepEqual(calls[1], ["/api/me/billing/complete", {
     method: "POST", body: '{"authKey":"one-time","customerKey":"customer"}', token: "member-jwt", timeoutMs: 90000,
   }]);
   assert.deepEqual(calls[2], ["/api/me/billing/cancel", { method: "POST", token: "member-jwt" }]);
   assert.deepEqual(calls[3], ["/api/me/billing/retry", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
+  assert.deepEqual(calls[4], ["/api/me/billing/reconcile-upgrade", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
 });
 
 test("billing callback does not complete a registration for a different customer key", async () => {
@@ -192,6 +194,72 @@ test("card registration preserves the route in Toss return URLs", async () => {
   } finally {
     globalThis.window = previousWindow;
     globalThis.TossPayments = previousToss;
+  }
+});
+
+test("after reload pending upgrade is recovered by lookup without creating a new order", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const listeners = {};
+  let status = {
+    paymentStatus: "PENDING", cardRegistered: true, autoRenew: true, plan: "LIGHT",
+    pendingCharge: { kind: "UPGRADE", plan: "STANDARD", amount: 1234 },
+  };
+  let reconcileCalls = 0;
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+      getBillingStatus: async () => status,
+      getUsageStatus: async () => ({ plan: status.paymentStatus === "PENDING" ? "LIGHT" : "STANDARD" }),
+      reconcileBillingUpgrade: async () => {
+        reconcileCalls += 1;
+        status = { paymentStatus: "ACTIVE", cardRegistered: true, autoRenew: true, plan: "STANDARD", pendingCharge: null };
+        return status;
+      },
+      upgradeBilling: async () => assert.fail("reconciliation must never initiate a charge"),
+    },
+  });
+  await controller.refreshBilling();
+  assert.match(controller.renderBilling(), /확인 중인 업그레이드: STANDARD/);
+  assert.match(controller.renderBilling(), /data-billing-reconcile/);
+  assert.doesNotMatch(controller.renderBilling(), /data-billing-upgrade/);
+  controller.bindBilling({
+    querySelectorAll: () => [],
+    querySelector(selector) {
+      if (selector !== "[data-billing-reconcile]") return null;
+      return { addEventListener(_event, listener) { listeners.reconcile = listener; } };
+    },
+  });
+  listeners.reconcile();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(reconcileCalls, 1);
+  assert.equal(controller.getSnapshot().usage.plan, "STANDARD");
+  assert.match(controller.renderBilling(), /기존 결제가 확인되어 STANDARD 요금제가 적용/);
+});
+
+test("first LIGHT card payment confirms the actual tier rather than PRO", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const state = { isLoggedIn: true, billingOpen: true };
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        completeBilling: async () => ({ plan: "LIGHT", paymentStatus: "ACTIVE" }),
+        setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ plan: "LIGHT", cardRegistered: true, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT" }),
+      },
+    });
+    await controller.handleBillingRedirect({ result: "success", authKey: "auth", customerKey: "customer" });
+    assert.match(controller.renderBilling(), /LIGHT 요금제가 적용됐습니다/);
+    assert.doesNotMatch(controller.renderBilling(), /PRO가 적용됐습니다/);
+  } finally {
+    globalThis.window = previousWindow;
   }
 });
 
