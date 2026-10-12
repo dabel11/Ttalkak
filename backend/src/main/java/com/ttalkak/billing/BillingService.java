@@ -84,9 +84,14 @@ public class BillingService {
     }
 
     public Status status(Long memberId) {
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElse(null);
+        PendingCharge pendingInfo = pending == null ? null
+                : new PendingCharge(pending.getChargeKind(), pending.getPlan().name(), pending.getAmount());
         return subscriptions.findByMemberId(memberId)
-                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(), paymentStatus(s), s.getPlan().name()))
-                .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED", "FREE"));
+                .map(s -> new Status(s.getBillingKey() != null, s.isAutoRenew(), s.getNextChargeAt(),
+                        paymentStatus(s), s.getPlan().name(), pendingInfo))
+                .orElseGet(() -> new Status(false, false, null, "NOT_REGISTERED", "FREE", null));
     }
 
     private String paymentStatus(BillingSubscription subscription) {
@@ -332,18 +337,53 @@ public class BillingService {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_PAYMENT_FAILED",
                     "업그레이드 결제 승인이 거절됐습니다. 기존 요금제는 유지됩니다.");
         }
+        completeUpgradePayment(memberId, prepared.orderId(), prepared.amount(), payment);
+        return status(memberId);
+    }
+
+    /**
+     * Read-only provider reconciliation of an existing UPGRADE order after a reload.
+     * Never calls charge(): uncertain payments must not create a second charge.
+     */
+    public Status reconcileUpgrade(Long memberId) {
+        return gateway.withinRequestBudget(() -> {
+            configured();
+            BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                    .orElse(null);
+            if (pending == null) return status(memberId);
+            if (!"UPGRADE".equals(pending.getChargeKind())) {
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                        "진행 중인 다른 종류의 결제입니다.");
+            }
+            BillingGateway.Payment payment = gateway.lookup(pending.getOrderId());
+            if (payment == null || !"DONE".equals(payment.status())) return status(memberId);
+            completeUpgradePayment(memberId, pending.getOrderId(), pending.getAmount(), payment);
+            return status(memberId);
+        });
+    }
+
+    private void completeUpgradePayment(Long memberId, String orderId, int expectedAmount,
+                                        BillingGateway.Payment payment) {
         if (payment == null || !"DONE".equals(payment.status()) || !"BILLING".equals(payment.type())
-                || !prepared.orderId().equals(payment.orderId())
-                || payment.totalAmount() != prepared.amount()
+                || !orderId.equals(payment.orderId())
+                || payment.totalAmount() != expectedAmount
                 || payment.paymentKey() == null || payment.paymentKey().isBlank()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UNCERTAIN",
                     "결제 결과를 확인할 수 없습니다. 같은 주문으로 재확인해 주세요.");
         }
-        BillingGateway.Payment confirmed = payment;
         transactions.executeWithoutResult(tx -> {
             BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
-            BillingCharge charge = charges.findByOrderId(prepared.orderId()).orElseThrow();
+            BillingCharge charge = charges.findByOrderId(orderId).orElseThrow();
+            if (!memberId.equals(charge.getMemberId()) || !"UPGRADE".equals(charge.getChargeKind())
+                    || charge.getAmount() != expectedAmount) {
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                        "현재 계정의 업그레이드 주문이 아닙니다.");
+            }
             if ("DONE".equals(charge.getStatus())) return;
+            if (!"PENDING".equals(charge.getStatus())) {
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
+                        "업그레이드 주문 상태가 변경됐습니다.");
+            }
             Instant now = clock.instant();
             var active = periods.findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
                     memberId, now, now).orElseThrow(() -> new ApiException(
@@ -355,9 +395,8 @@ public class BillingService {
             }
             active.upgradeTo(charge.getPlan().name(), charge.getUpgradeRequestLimit());
             subscription.selectPlan(charge.getPlan());
-            charge.complete(confirmed.paymentKey());
+            charge.complete(payment.paymentKey());
         });
-        return status(memberId);
     }
 
     private record PreparedUpgrade(String billingKey, String customerKey, String orderId,
@@ -368,7 +407,8 @@ public class BillingService {
     private record Prepared(String billingKey, String customerKey, String orderId,
                             boolean retry, BillingPlan plan, int amount) {}
     public record Setup(String clientKey, String customerKey, int amount, boolean cardRegistered, String plan) {}
+    public record PendingCharge(String kind, String plan, int amount) {}
     public record Status(boolean cardRegistered, boolean autoRenew, Instant nextChargeAt,
-                         String paymentStatus, String plan) {}
+                         String paymentStatus, String plan, PendingCharge pendingCharge) {}
     private int price(BillingPlan plan) { return plan == BillingPlan.PRO ? amount : plan.amount(); }
 }
