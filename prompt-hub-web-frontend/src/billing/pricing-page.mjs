@@ -13,7 +13,6 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
   const ratio = usage?.requestLimit > 0 ? (usage.requests || 0) / usage.requestLimit : 0;
   const suggestUpgrade = Boolean(nextTier && usage?.requestQuotaEnforced
     && ratio >= 0.7 && !usage.usageBlocked);
-  const planPrices = { LIGHT: "3,900", STANDARD: "5,900", PRO: "9,900" };
   return `<section class="subscription-card" aria-labelledby="subscription-heading">
     <div class="subscription-head"><h2 id="subscription-heading">내 요금제·사용량</h2><button class="secondary-button" type="button" data-open-billing>구독·결제 관리</button></div>
     ${busy ? '<p role="status">사용량을 확인하는 중입니다…</p>' : ""}
@@ -33,7 +32,7 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : "") : ""}
     ${usage && !usage.quotaEnforced ? '<p class="pricing-note">사용량 제한은 적용 전입니다.</p>' : ""}` : ""}
-    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>사용량 70% 도달. ${planPrices[nextTier]}원/월 요금제의 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
+    ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>사용량 70% 도달. 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
 }
 
