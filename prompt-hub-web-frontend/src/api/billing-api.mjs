@@ -17,6 +17,9 @@ export function createBillingApi({ request }) {
       return request("/api/me/billing/upgrade", { method: "POST", token,
         body: JSON.stringify({ plan, expectedAmount }), timeoutMs: 90000 });
     },
+      reconcileBillingUpgrade(token) {
+      return request("/api/me/billing/reconcile-upgrade", { method: "POST", token, timeoutMs: 90000 });
+    },
       completeBilling(payload, token) {
       return request("/api/me/billing/complete", { method: "POST", body: JSON.stringify(payload), token, timeoutMs: 90000 });
     },
