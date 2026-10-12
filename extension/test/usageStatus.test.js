@@ -24,11 +24,29 @@ test("member usage normalizes the current backend fields and status flags", () =
     usageAvailable: false,
     usageBlocked: true,
     resetsAt: "2026-11-01T00:00:00Z",
+    requests: 0,
+    requestLimit: null,
+    requestRemaining: null,
+    requestQuotaEnforced: false,
+    requestLimitReached: false,
     totalTokens: 25_000,
     usedTokens: 25_000,
     limitTokens: 100_000,
     remainingTokens: 75_000,
   });
+});
+
+test("four-tier request quotas keep LIGHT and STANDARD identities", () => {
+  for (const plan of ["LIGHT", "STANDARD"]) {
+    const usage = normalizeUsageSnapshot({ plan: plan.toLowerCase(), requests: 30, requestLimit: 30,
+      requestRemaining: 0, requestQuotaEnforced: true, requestLimitReached: true, limit: null });
+    assert.equal(usage.plan, plan);
+    assert.equal(usage.requestLimit, 30);
+    assert.equal(usage.requestLimitReached, true);
+    assert.equal(usage.limitTokens, null);
+  }
+  const disabled = normalizeUsageSnapshot({ plan: "PRO", requestLimit: null, requestQuotaEnforced: false });
+  assert.equal(disabled.requestLimit, null);
 });
 
 test("member usage keeps legacy aliases and derives missing remaining tokens", () => {
