@@ -39,10 +39,13 @@ test("inline guest requests use the same guest session and do not send member id
 
 test("inline errors distinguish member quota, guest trial and provider throttling", async () => {
   const member = await requestInline({ status: 429, body: { code: "MEMBER_TOKEN_LIMIT_EXCEEDED" } });
+  const requestLimit = await requestInline({ status: 429, body: { code: "MEMBER_REQUEST_LIMIT_EXCEEDED" } });
   const guest = await requestInline({ status: 429, body: { code: "FREE_TRIAL_LIMIT_EXCEEDED" }, token: "" });
   const provider = await requestInline({ status: 429, body: { code: "AI_RATE_LIMIT_EXCEEDED" } });
   assert.match(member.reply.error, /이번 기간의 AI 사용량/);
   assert.doesNotMatch(member.reply.error, /로그인/);
+  assert.match(requestLimit.reply.error, /요청 횟수/);
+  assert.doesNotMatch(requestLimit.reply.error, /잠시 후/);
   assert.match(guest.reply.error, /체험 횟수/);
   assert.match(provider.reply.error, /잠시 후/);
 });
