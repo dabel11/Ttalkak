@@ -39,7 +39,8 @@ test("billing deep links are consumed without losing their route", () => {
   assert.equal(consumeOpenBillingRequest({ href: "https://web.example/#/home" }, history), false);
 });
 
-const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx });
+const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx,
+  api: { getBillingCharges: async () => [], ...ctx.api } });
 
 test("pricing summaries only read data and never create a payment session", async () => {
   const calls = [];
@@ -697,7 +698,7 @@ test("billing shows review separately from refund completion and submits only cl
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(requested, true);
     assert.match(controller.renderBilling(), /환불 검토 중/);
-    assert.match(controller.renderBilling(), /요청만으로 환불이 확정되지는/);
+    assert.match(controller.renderBilling(), /환불 여부는 관리자 검토 후 결정/);
     assert.doesNotMatch(controller.renderBilling(), /data-billing-refund=/);
     state.isLoggedIn = false;
     assert.equal(controller.renderBilling(), "");

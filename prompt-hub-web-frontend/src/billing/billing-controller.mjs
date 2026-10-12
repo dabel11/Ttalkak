@@ -8,7 +8,7 @@ const BILLING_RETURN_AUTH_MESSAGE = "다시 로그인한 뒤 카드 등록을 �
 
 function BillingModalView(ctx, data) {
   if (!data) return "";
-  const { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage, charges = [] } = data;
+  const { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage, charges } = data;
   const { escapeHtml, formatShortDate } = ctx;
   const paymentStatus = String(billing?.paymentStatus || "").toUpperCase();
   const pending = paymentStatus === "PENDING";
@@ -59,12 +59,12 @@ function BillingModalView(ctx, data) {
         ${!pending && registered && billing && !billing.autoRenew ? `<button class="primary-button" type="button" data-billing-retry ${busy ? "disabled" : ""}>결제 재시도·자동 갱신 사용</button>` : ""}
         ${errorMessage && !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
       </div>` : !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
-      ${charges.length ? `<section aria-labelledby="billing-history-title"><h3 id="billing-history-title">최근 결제·환불 요청</h3>
-        <p class="pricing-note">환불 검토 요청 시 자동 갱신이 중지됩니다. 요청만으로 환불이 확정되지는 않으며, 관리자 검토 후 처리됩니다.</p>
+      ${charges.length ? `<section><h3>결제 내역</h3>
+        <p class="pricing-note">환불 요청 시 자동 갱신을 중지합니다. 환불 여부는 관리자 검토 후 결정됩니다.</p>
         <ul>${charges.map((charge) => `<li>
-          <span>${escapeHtml(charge.plan)} · ${Number(charge.amount).toLocaleString("ko-KR")}원 · ${escapeHtml(formatShortDate(charge.periodStart))}</span>
-          <span>${escapeHtml(({ NONE: "", REQUESTED: "환불 검토 중", PENDING: "취소 확인 중", DONE: "환불 완료", REJECTED: "검토 완료 · 미승인" })[charge.refundState] || "")}</span>
-          ${charge.status === "DONE" && (charge.refundState || "NONE") === "NONE" ? `<button class="secondary-button" type="button" data-billing-refund="${escapeHtml(charge.orderId)}" ${busy ? "disabled" : ""}>환불 검토 요청</button>` : ""}
+          ${escapeHtml(charge.plan)} · ${Number(charge.amount).toLocaleString("ko-KR")}원 · ${escapeHtml(formatShortDate(charge.periodStart))} · ${escapeHtml(charge.status)}
+          ${escapeHtml(({ NONE: "", REQUESTED: "환불 검토 중", PENDING: "취소 확인 중", DONE: "환불 완료", REJECTED: "미승인" })[charge.refundState] || "")}
+          ${charge.status === "DONE" && charge.refundState === "NONE" ? `<button class="secondary-button" type="button" data-billing-refund="${escapeHtml(charge.orderId)}" ${busy ? "disabled" : ""}>환불 검토 요청</button>` : ""}
         </li>`).join("")}</ul>
       </section>` : ""}
     </article>
@@ -164,7 +164,7 @@ export function createBillingController(ctx) {
     try {
       const results = await Promise.allSettled([
         api.setupBilling(token, selectedPlan), api.getBillingStatus(token), api.getUsageStatus(token),
-        typeof api.getBillingCharges === "function" ? api.getBillingCharges(token) : Promise.resolve([]),
+        api.getBillingCharges(token),
       ]);
       if (!isCurrent() || revision !== requestRevision) return false;
       const failures = [];
@@ -421,8 +421,8 @@ export function createBillingController(ctx) {
       open(button.dataset.selectedPlan || null);
     }));
     root.querySelectorAll?.("[data-billing-refund]").forEach((button) => button.addEventListener("click", () => {
-      void mutate("requestBillingRefund", "환불 검토를 요청하고 자동 갱신을 중지했습니다.",
-        button.dataset.billingRefund, "서비스 내 환불 검토 요청");
+      void mutate("requestBillingRefund", "환불 검토를 요청했습니다.",
+        button.dataset.billingRefund, "환불 검토 요청");
     }));
     on("[data-close-billing]", close);
     on("[data-billing-reload]", () => { void refresh(); });
