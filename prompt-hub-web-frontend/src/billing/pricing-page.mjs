@@ -50,17 +50,17 @@ export function PricingPageView(ctx, snapshot) {
       </article>
       <article class="pricing-plan pricing-light"><h2>LIGHT</h2><p class="pricing-price">3,900원 <span>/ 월</span></p><p>월 30회 개선 요청</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="LIGHT"' : 'data-start-pro'}>테스트 구독 신청</button>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="LIGHT"' : 'data-start-pro data-selected-plan="LIGHT"'}>테스트 구독 신청</button>
         ${plan === "LIGHT" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
       <article class="pricing-plan pricing-standard"><p class="pricing-badge">추천 요금제</p><h2>STANDARD</h2><p class="pricing-price">5,900원 <span>/ 월</span></p><p>월 70회 개선 요청</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>모든 등급과 동일한 AI 품질</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="STANDARD"' : 'data-start-pro'}>테스트 구독 신청</button>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="STANDARD"' : 'data-start-pro data-selected-plan="STANDARD"'}>테스트 구독 신청</button>
         ${plan === "STANDARD" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
       <article class="pricing-plan pricing-pro"><p class="pricing-badge">더 넉넉한 사용량</p><h2>PRO</h2><p class="pricing-price">9,900원 <span>/ 월</span></p><p>월 150회 개선 요청</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>FREE보다 넉넉한 AI 사용량</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="PRO"' : 'data-start-pro'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
+        <button class="primary-button" type="button" ${state.isLoggedIn ? 'data-open-billing data-selected-plan="PRO"' : 'data-start-pro data-selected-plan="PRO"'}>${plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인"}</button>
         ${plan === "PRO" ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>
     </div>
