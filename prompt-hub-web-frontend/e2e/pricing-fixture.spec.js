@@ -60,6 +60,36 @@ test("guest can read pricing, refresh the path and start PRO through login", asy
   await expect(page.getByRole("dialog")).toContainText("로그인");
 });
 
+for (const [tier, planClass] of [["LIGHT", "pricing-light"], ["STANDARD", "pricing-standard"], ["PRO", "pricing-pro"]]) {
+  test(`guest choosing ${tier} continues with the same tier after login`, async ({ page }) => {
+    await fixture(page);
+    const selectedPlans = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/me/billing/setup" && request.method() === "POST") {
+        selectedPlans.push(request.postDataJSON()?.plan);
+      }
+    });
+    await page.route("http://localhost:8080/api/auth/login", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: HEADERS,
+        body: JSON.stringify({
+          accessToken: "fixture-token",
+          member: { memberId: 7, username: "fixture", nickname: "Fixture User", role: "ROLE_USER" },
+        }),
+      }));
+    await gotoApp(page, "/pricing");
+    await waitForAppHydration(page);
+    await page.locator(`.${planClass}`).getByRole("button").click();
+    await expect(page.locator("[data-auth-form]")).toBeVisible();
+    await page.locator('[data-auth-form] input[name="userId"]').fill("fixture");
+    await page.locator('[data-auth-form] input[name="password"]').fill("password123!");
+    await page.locator("[data-auth-form]").getByRole("button", { name: "로그인", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "요금제·결제" })).toBeVisible();
+    await expect.poll(() => selectedPlans.at(-1)).toBe(tier);
+  });
+}
+
 test("member sees live usage without setup and can stop renewal from the existing flow", async ({ page }) => {
   const calls = await fixture(page, true);
   await gotoApp(page, "/pricing");
