@@ -4,7 +4,7 @@ const { gotoApp } = require("./support/app-ready.js");
 test("Google signup, logout and relogin preserve the same real backend identity", async ({ page }) => {
   let created = false;
   const user = { id: 57, userId: "google_fixture", nickname: "Google Fixture", role: "user", provider: "google", active: true };
-  const headers = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, authorization", "access-control-allow-methods": "GET, POST, OPTIONS", "content-type": "application/json" };
+  const headers = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, authorization", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS", "content-type": "application/json" };
   await page.addInitScript(() => {
     window.google = { accounts: { id: {
       initialize(options) { this.callback = options.callback; },
@@ -37,6 +37,12 @@ test("Google signup, logout and relogin preserve the same real backend identity"
     }
     if (pathname === "/api/auth/me") body = { user };
     if (pathname === "/api/auth/logout") body = { ok: true };
+    if (pathname === "/api/auth/withdraw") {
+      expect(request.method()).toBe("DELETE");
+      expect(request.postDataJSON().googleCredential).toBe("fixture-google-credential");
+      expect(request.postDataJSON().password).toBe("");
+      body = { ok: true };
+    }
     return route.fulfill({ status, headers, body: JSON.stringify(body) });
   });
   await gotoApp(page);
@@ -57,4 +63,12 @@ test("Google signup, logout and relogin preserve the same real backend identity"
   await page.getByRole("button", { name: "Google 계정 선택" }).click();
   await expect(page.locator(".topbar-account > summary")).toContainText("Google Fixture");
   expect(await page.evaluate(() => localStorage.getItem("ttalkak_access_token"))).toBe("fixture-real-google-session");
+  await page.locator(".topbar-account > summary").click();
+  await page.locator('[data-open-auth="withdraw"]').click();
+  await expect(page.locator('[data-auth-form] input[name="password"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Google 계정 선택" }).click();
+  await expect(page.locator(".confirm-modal")).toBeVisible();
+  await page.locator("[data-confirm-action]").click();
+  await expect(page.locator('[data-open-auth="login"]')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("ttalkak_access_token"))).toBeNull();
 });

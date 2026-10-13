@@ -82,3 +82,31 @@ test("Google API sends credentials and explicit signup consent without putting t
   assert.equal(calls[1][0], "/api/auth/google");
   assert.deepEqual(JSON.parse(calls[1][1].body), { credential: "private-token", agreeTerms: true, agreePrivacy: true });
 });
+
+
+test("Google withdrawal requires fresh identity and explicit confirmation without logging in again", async () => {
+  const { createAuthController } = await import("../src/auth/auth-controller.mjs");
+  const previousGoogle = global.google;
+  let callback;
+  let confirmed;
+  let submitted;
+  let cleared = false;
+  global.google = { accounts: { id: { initialize(options) { callback = options.callback; }, renderButton() {} } } };
+  const ctx = { state: { authView: "withdraw" },
+    api: { googleConfig: async () => ({ clientId: "configured" }),
+      googleLogin() { throw new Error("Withdrawal must not log in again"); },
+      withdrawAccount: async (payload, token) => { submitted = { payload, token }; return { ok: true }; } },
+    confirm: (action) => { confirmed = action; }, getToken: () => "existing-session",
+    clearSession() { cleared = true; }, notice() {},
+  };
+  try {
+    const controller = createAuthController(ctx);
+    await controller.mountGoogle({ isConnected: true, replaceChildren() {} });
+    await callback({ credential: "fresh-google-proof" });
+    assert.equal(submitted, undefined);
+    assert.equal(confirmed.type, "withdraw");
+    await controller.withdraw(confirmed);
+    assert.deepEqual(submitted, { payload: { password: "", googleCredential: "fresh-google-proof" }, token: "existing-session" });
+    assert.equal(cleared, true);
+  } finally { global.google = previousGoogle; }
+});

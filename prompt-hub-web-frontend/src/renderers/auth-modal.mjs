@@ -9,6 +9,7 @@
       isFindId,
       isFindPassword,
       isWithdraw,
+      isGoogleWithdraw,
       isLoggedIn,
       nicknameChecked,
       userIdChecked,
@@ -26,12 +27,13 @@
             </div>
             <p class="auth-helper">${accountWithdrawalNotice}</p>
             ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
-            <label class="password-field">
+            ${isGoogleWithdraw ? '<div data-google-auth aria-live="polite">Google 재인증</div>' : `            <label class="password-field">
               <input name="password" type="password" placeholder="비밀번호 확인" autocomplete="current-password" />
               <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
             </label>
             <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
             <button class="primary-button danger-primary full" type="submit">회원탈퇴</button>
+`}
             <button class="text-button" type="button" data-close-auth>취소</button>
           </form>
         </div>
@@ -46,7 +48,7 @@
               <h2 id="auth-title">${title}</h2>
               <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
             </div>
-            <p class="auth-helper">${isFindId ? "이름과 이메일로 아이디 찾기 데모를 진행합니다. 전화번호는 선택 보조 정보입니다." : "아이디와 이메일로 비밀번호 재설정 데모를 진행합니다. 전화번호는 선택 보조 정보입니다."}</p>
+            <p class="auth-helper">가입한 계정 정보를 입력해 주세요.</p>
             ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
             ${
               isFindId

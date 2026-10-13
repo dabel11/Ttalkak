@@ -29,6 +29,7 @@ import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy
           isFindId,
           isFindPassword,
           isWithdraw,
+          isGoogleWithdraw: isWithdraw && state.currentUserProvider === "google",
           isLoggedIn: state.isLoggedIn,
           nicknameChecked,
           userIdChecked,

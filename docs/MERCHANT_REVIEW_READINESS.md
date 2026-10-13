@@ -58,6 +58,7 @@ PR #57은 팀원 재검토·승인 후 병합한다. 운영 서비스의 소스 
 
 - 브라우저는 `/api/auth/google/config`에서 **공개 Client ID만** 읽고 Google Identity Services 공식 버튼을 띄운다. 설정 누락·SDK 오류·서버 인증 실패 시 데모 계정을 부여하지 않는다. 전역 ID 토큰 주입 경로를 제거했다.
 - Google에서 받은 현재 ID 토큰을 POST 본문으로 전달하고 backend가 발급자·대상·유효기간·인증 이메일을 검증한다. 최초 가입은 약관·개인정보 동의가 있어야 일반 회원으로 저장한다. 가입 후 같은 Google subject로 로그인하면 기존 계정과 권한을 재사용한다. 동일 이메일이라는 이유만으로 로컬 계정에 연결하지 않는다.
+- Google 회원탈퇴는 Google Identity Services에서 새 ID 토큰을 받은 후 최종 확인 모달을 거쳐 탈퇴 API에 전달한다. 로그인 API로 재가입하거나 로컬 비밀번호를 요구하지 않는다.
 - 최초 로그인에서 가입 동의가 필요하면 가입 화면으로 안내한다. Google 가입에는 로컬 아이디·비밀번호 필드를 채울 필요 없이 동의 후 Google 버튼으로 진행한다. 기존 회원 재로그인에는 최초 가입 동의를 반복 요구하지 않는다.
 - 운영 backend에는 GOOGLE_CLIENT_ID 변수 이름이 존재한다. 실제 값과 Google 콘솔의 허용 JavaScript 출처·동의 화면 상태는 아직 확인하지 못했다. 운영 웹 주소 `https://web-production-a82d94.up.railway.app` 및 실제 사용하는 사용자 웹 도메인을 콘솔에 등록하고 배포 후 Google 계정으로 가입 → 새로고침 → 로그아웃 → 재로그인을 확인해야 한다. Client Secret은 브라우저에 필요하지 않다.
 - 독립 결제 테스트 compose에는 Google Client ID를 주입하지 않는다. 이메일 없는 심사 계정을 Google 계정으로 바꾸지 않는다.
