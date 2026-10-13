@@ -3,6 +3,8 @@ package com.ttalkak.auth;
 import com.ttalkak.auth.GoogleAuthService.GoogleLoginResult;
 import com.ttalkak.member.Member;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,12 +20,21 @@ public class GoogleAuthController {
     private final GoogleAuthService googleAuthService;
     private final AuthService authService;
 
+    @Value("${GOOGLE_CLIENT_ID:}")
+    private String googleClientId = "";
+
     public GoogleAuthController(
             GoogleAuthService googleAuthService,
             AuthService authService
     ) {
         this.googleAuthService = googleAuthService;
         this.authService = authService;
+    }
+
+    @GetMapping("/google/config")
+    public ResponseEntity<Map<String, String>> configuration() {
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+                .body(Map.of("clientId", googleClientId.trim()));
     }
 
     @PostMapping("/google")

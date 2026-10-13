@@ -57,6 +57,17 @@ def main():
     index_html = index_body.decode()
     assert index_status == 200
     assert index_headers.get("cache-control") == "no-cache"
+    policy_status, policy_headers, policy_body = request_headers("/refund-policy.html")
+    assert policy_status == 200
+    assert "text/html" in policy_headers.get("content-type", "")
+    assert "구독 해지·환불 정책" in policy_body.decode()
+    for page, title in [("/service.html", "AI 프롬프트 개선 웹서비스"), ("/terms.html", "이용약관")]:
+        public_status, public_headers, public_body = request_headers(page)
+        assert public_status == 200, (page, public_status)
+        assert "text/html" in public_headers.get("content-type", "")
+        assert title in public_body.decode()
+        assert 'aria-label="사업자 정보"' in public_body.decode()
+    assert 'aria-label="사업자 정보"' in index_html
     assert "window.TTALKAK_API_BASE_URL = window.location.origin" in index_html
     app_match = re.search(r'src="\./(assets/app-[^"]+\.js)"', index_html)
     assert app_match, "Production HTML must reference a hashed application bundle"

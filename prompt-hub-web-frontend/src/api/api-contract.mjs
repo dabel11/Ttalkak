@@ -1,16 +1,16 @@
   const CONTRACT_METHODS = Object.freeze({
     auth: ["login", "signup", "googleLogin"],
     record: [
-      "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
+      "googleConfig", "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
       "getMakeThread", "createMakeThread", "createMakeFolder", "sharePrompt", "shareExistingPrompt", "updatePrompt",
       "addComment", "addReply", "updateComment", "requestPromptRevision", "getAdminUserActivitySummary",
       "getAdminUserActivity", "getAdminUserUsage", "reconcileAdminUserUsage", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",
       "requestAuthorRevision", "updateAuthorRevisionRequest", "updateAdminRevisionRequestStatus", "hideAdminComment",
       "unhideAdminComment", "hideAdminPrompt", "restoreAdminPrompt",
-      "getBillingStatus", "getUsageStatus", "setupBilling", "quoteBillingUpgrade", "upgradeBilling", "reconcileBillingUpgrade", "completeBilling", "cancelBilling", "retryBilling",
+      "getBillingStatus", "requestBillingRefund", "getUsageStatus", "setupBilling", "quoteBillingUpgrade", "upgradeBilling", "reconcileBillingUpgrade", "completeBilling", "cancelBilling", "retryBilling",
     ],
     collection: [
-      "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
+      "getBillingCharges", "getCommunityPosts", "searchCommunityPosts", "getPopularTags", "searchTags", "getMakeThreads", "getMakeFolders",
       "getPromptComments", "getSavedPrompts", "getMyLibrary", "getMyPrompts", "getMyComments", "getMyReports",
       "getMyRevisionRequests", "getAdminReports", "getAdminPrompts", "getAdminTags", "searchAdminUsers",
       "getAdminAuditLogs", "getAdminRevisionRequests", "getAdminUserPrompts", "getAdminUserComments", "getAdminUserReplies",

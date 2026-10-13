@@ -26,11 +26,19 @@ public class BillingSubscription {
     @Column(name = "plan_code", length = 16)
     private String planCode;
 
+    @Column(name = "billing_scope", length = 80)
+    private String billingScope;
+
     protected BillingSubscription() {}
     BillingSubscription(Long memberId) {
+        this(memberId, BillingContext.LEGACY_TEST);
+    }
+    BillingSubscription(Long memberId, String scope) {
+        this.billingScope = scope;
         this.memberId = memberId;
         this.customerKey = UUID.randomUUID().toString();
     }
+    String getBillingScope() { return billingScope; }
     public Long getMemberId() { return memberId; }
     public String getCustomerKey() { return customerKey; }
     String getBillingKey() { return billingKey; }

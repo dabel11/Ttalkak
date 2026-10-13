@@ -6,27 +6,39 @@ test.before(async () => {
   ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
 });
 
-test("unlaunched pricing is hidden in production unless explicitly enabled", async () => {
+test("agreed prices are public while production purchase actions stay blocked", async () => {
   const previousWindow = globalThis.window;
   const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
   const state = { isLoggedIn: true, billingOpen: false };
   let paymentCalls = 0;
+  let pricingVisits = 0;
   globalThis.window = { __API_BASE_URL__: "http://localhost:8080", location: { hostname: "ttalkak.example" } };
   try {
     const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
-    assert.match(page, /요금제 준비 중/);
-    assert.doesNotMatch(page, /3,900|5,900|9,900|구독 신청/);
-    assert.equal(SubscriptionSummaryView({ state }, { usage: { plan: "PRO" } }), "");
+    for (const price of ["3,900", "5,900", "9,900"]) assert.match(page, new RegExp(price));
+    assert.match(page, /유료 구독은 판매하지 않습니다/);
+    assert.doesNotMatch(page, /data-start-pro|data-open-billing|테스트 구독/);
+    assert.equal((page.match(/data-route="make">무료로 체험하기/g) || []).length, 3);
+    const summary = SubscriptionSummaryView({ state }, { usage: {
+      plan: "FREE", requests: 10, requestLimit: 10, requestRemaining: 0,
+      requestQuotaEnforced: true, requestLimitReached: true, quotaEnforced: false,
+      usageAvailable: true,
+    } });
+    assert.match(summary, /10 \/ 10회/);
+    assert.doesNotMatch(summary, /사용량 제한은 적용 전|data-open-billing|pricing-upgrade-tip/);
     const controller = createController({
       state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      navigateToPricing: () => { pricingVisits += 1; },
       api: { setupBilling: async () => { paymentCalls += 1; } },
     });
     assert.equal(controller.openBilling("PRO"), false);
     assert.equal(state.billingOpen, false);
     assert.equal(controller.renderBilling(), "");
     assert.equal(paymentCalls, 0);
+    assert.equal(pricingVisits, 1);
     globalThis.window.TTALKAK_BILLING_PREVIEW_ENABLED = true;
     assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /9,900원/);
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /data-open-billing/);
   } finally {
     globalThis.window = previousWindow;
   }
@@ -39,7 +51,8 @@ test("billing deep links are consumed without losing their route", () => {
   assert.equal(consumeOpenBillingRequest({ href: "https://web.example/#/home" }, history), false);
 });
 
-const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx });
+const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx,
+  api: { getBillingCharges: async () => [], ...ctx.api } });
 
 test("pricing summaries only read data and never create a payment session", async () => {
   const calls = [];
@@ -658,4 +671,58 @@ test("unconfigured test payments keep usage visible without a retry error", asyn
   assert.match(html, /8,478/);
   assert.match(html, /과거 요청 사용량 확인 필요/);
   assert.doesNotMatch(html, /일부 결제 정보를 불러오지 못했습니다|data-billing-reload|집계 중/);
+});
+
+test("refund requests use the owner token and encoded saved order", async () => {
+  const calls = [];
+  const api = createBillingApi({ request: async (...args) => { calls.push(args); return {}; } });
+  await api.getBillingCharges("owner");
+  await api.requestBillingRefund("owner", "order /?", "검토 요청");
+  assert.equal(calls[0][0], "/api/me/billing/charges");
+  assert.equal(calls[1][0], "/api/me/billing/charges/order%20%2F%3F/refund-request");
+  assert.equal(calls[1][1].token, "owner");
+  assert.deepEqual(JSON.parse(calls[1][1].body), { reason: "검토 요청" });
+});
+
+test("billing shows review separately from refund completion and submits only clicked orders", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { TTALKAK_RUNTIME_CONFIG: { billingPreviewEnabled: true } };
+  try {
+    let requested = false;
+    let confirmation;
+    const listeners = {};
+    const state = { isLoggedIn: true, billingOpen: true };
+    const refundButton = { dataset: { billingRefund: "order-one" }, addEventListener(_event, handler) { listeners.refund = handler; } };
+    const root = { querySelector: () => null, querySelectorAll: (selector) => selector === "[data-billing-refund]" ? [refundButton] : [] };
+    const controller = createController({ state, root, getToken: () => "owner", isDemoToken: () => false,
+      escapeHtml: String, render() {}, confirm: (action) => { confirmation = action; }, api: {
+        setupBilling: async () => ({ cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ cardRegistered: true, autoRenew: !requested, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT", totalTokens: 15 }),
+        getBillingCharges: async () => [{ orderId: "order-one", plan: "LIGHT", amount: 3900,
+          periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE", refundLabel: requested ? "환불 검토 중" : "" }],
+        requestBillingRefund: async (token, orderId, reason) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); assert.equal(reason, "이용 중단"); requested = true; },
+      } });
+    await controller.refreshBilling();
+    assert.equal(requested, false);
+    assert.match(controller.renderBilling(), /환불 검토 요청/);
+    controller.bindBilling(root);
+    listeners.refund();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(requested, false);
+    assert.equal(confirmation.reasonInput, true);
+    assert.match(confirmation.message, /3,900원.*자동 갱신이 중지/);
+    assert.match(controller.renderBilling(), /결제 완료/);
+    assert.match(controller.renderBilling(), /aria-label="LIGHT 2026-10-13 결제 환불 검토 요청"/);
+    await controller.submitRefund("order-one", " ");
+    await controller.submitRefund("order-one", "x".repeat(201));
+    assert.equal(requested, false);
+    await controller.submitRefund(confirmation.targetId, " 이용 중단 ");
+    assert.equal(requested, true);
+    assert.match(controller.renderBilling(), /환불 검토 중/);
+    assert.match(controller.renderBilling(), /환불 여부는 관리자 검토 후 결정/);
+    assert.doesNotMatch(controller.renderBilling(), /data-billing-refund=/);
+    state.isLoggedIn = false;
+    assert.equal(controller.renderBilling(), "");
+  } finally { globalThis.window = previousWindow; }
 });

@@ -12,8 +12,10 @@ public class UsagePeriodService {
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private final PaidUsagePeriodRepository periods;
     private final MemberTokenUsageService usage;
+    private final com.ttalkak.billing.BillingContext context;
 
-    public UsagePeriodService(PaidUsagePeriodRepository periods, MemberTokenUsageService usage) {
+    public UsagePeriodService(PaidUsagePeriodRepository periods, MemberTokenUsageService usage, com.ttalkak.billing.BillingContext context) {
+        this.context = context;
         this.periods = periods;
         this.usage = usage;
     }
@@ -27,8 +29,8 @@ public class UsagePeriodService {
         if (memberId == null || memberId <= 0) throw new IllegalArgumentException("memberId");
 
         var active = periods
-                .findFirstByMemberIdAndStartsAtLessThanEqualAndEndsAtGreaterThanAndRevokedAtIsNullOrderByStartsAtDesc(
-                        memberId, now, now);
+                .activeForScope(memberId, now, context.scope(), org.springframework.data.domain.PageRequest.of(0, 1))
+                .stream().findFirst();
         String plan;
         Instant start;
         Instant end;
@@ -44,9 +46,9 @@ public class UsagePeriodService {
             start = month.atDay(1).atStartOfDay(SEOUL).toInstant();
             end = month.plusMonths(1).atDay(1).atStartOfDay(SEOUL).toInstant();
             // Paid usage earlier this month does not consume the subsequent FREE allowance.
-            Instant previousPaidEnd = periods.latestEndedAt(memberId, now).orElse(start);
+            Instant previousPaidEnd = periods.latestEndedAt(memberId, now, context.scope()).orElse(start);
             if (previousPaidEnd.isAfter(start)) start = previousPaidEnd;
-            Instant nextPaidStart = periods.nextStartsAt(memberId, now).orElse(end);
+            Instant nextPaidStart = periods.nextStartsAt(memberId, now, context.scope()).orElse(end);
             if (nextPaidStart.isBefore(end)) end = nextPaidStart;
         }
         Instant sumEnd = now.isBefore(end) ? now : end;

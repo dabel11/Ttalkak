@@ -31,12 +31,27 @@ public class BillingCharge {
     @Column(name = "upgrade_request_limit")
     private Long upgradeRequestLimit;
 
+    @Column(name = "billing_scope", length = 80)
+    private String billingScope;
+    @Column(name = "refund_state", length = 16)
+    private String refundState;
+    @Column(name = "refund_reason", length = 200)
+    private String refundReason;
+    @Column(name = "refund_idempotency_key", length = 64)
+    private String refundIdempotencyKey;
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
     protected BillingCharge() {}
     BillingCharge(Long memberId, Instant start, Instant end) {
         this(memberId, start, end, BillingPlan.PRO, 4900, "RENEWAL");
     }
 
     BillingCharge(Long memberId, Instant start, Instant end, BillingPlan plan, int amount, String kind) {
+        this(memberId, start, end, plan, amount, kind, BillingContext.LEGACY_TEST);
+    }
+    BillingCharge(Long memberId, Instant start, Instant end, BillingPlan plan, int amount, String kind, String scope) {
+        this.billingScope = scope;
         if (amount < 1 || !java.util.Set.of("RENEWAL", "UPGRADE").contains(kind)) {
             throw new IllegalArgumentException("Invalid charge snapshot");
         }
@@ -55,6 +70,25 @@ public class BillingCharge {
         BillingCharge charge = new BillingCharge(memberId, start, end, plan, amount, "UPGRADE");
         charge.upgradeRequestLimit = requestLimit;
         return charge;
+    }
+    String getBillingScope() { return billingScope; }
+    void stampScope(String scope) { this.billingScope = scope; }
+    String getPaymentKey() { return paymentKey; }
+    String getRefundState() { return refundState == null ? "NONE" : refundState; }
+    String getRefundReason() { return refundReason; }
+    String getRefundIdempotencyKey() { return refundIdempotencyKey; }
+    Instant getRefundedAt() { return refundedAt; }
+    void requestRefund(String reason) {
+        this.refundState = "REQUESTED";
+        this.refundReason = reason;
+        this.refundIdempotencyKey = "refund-" + UUID.randomUUID();
+    }
+    void approveRefund() { this.refundState = "PENDING"; }
+    void rejectRefund() { this.refundState = "REJECTED"; }
+    void completeRefund(Instant now) {
+        this.refundState = "DONE";
+        this.status = "CANCELED";
+        this.refundedAt = now;
     }
     Long getUpgradeRequestLimit() { return upgradeRequestLimit; }
     Long getMemberId() { return memberId; }

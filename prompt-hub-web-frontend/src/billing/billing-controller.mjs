@@ -8,7 +8,7 @@ const BILLING_RETURN_AUTH_MESSAGE = "다시 로그인한 뒤 카드 등록을 �
 
 function BillingModalView(ctx, data) {
   if (!data) return "";
-  const { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage } = data;
+  const { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage, charges } = data;
   const { escapeHtml, formatShortDate } = ctx;
   const paymentStatus = String(billing?.paymentStatus || "").toUpperCase();
   const pending = paymentStatus === "PENDING";
@@ -17,7 +17,8 @@ function BillingModalView(ctx, data) {
     : paymentStatus === "PENDING" ? "확인 중"
       : paymentStatus === "ACTIVE" ? "완료"
         : paymentStatus === "FAILED" ? "실패"
-          : paymentStatus === "EXPIRED" ? "기간 만료" : "";
+          : paymentStatus === "REFUNDED" ? "환불 완료"
+            : paymentStatus === "EXPIRED" ? "기간 만료" : "";
   const registered = Boolean(billing?.cardRegistered || setup?.cardRegistered);
   const hasDetails = setup || billing || usage;
   const period = usage?.periodStart && usage?.periodEnd
@@ -58,6 +59,14 @@ function BillingModalView(ctx, data) {
         ${!pending && registered && billing && !billing.autoRenew ? `<button class="primary-button" type="button" data-billing-retry ${busy ? "disabled" : ""}>결제 재시도·자동 갱신 사용</button>` : ""}
         ${errorMessage && !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
       </div>` : !busy ? `<button class="secondary-button" type="button" data-billing-reload>다시 불러오기</button>` : ""}
+      ${charges.length ? `<section><h3>결제 내역</h3>
+        <p class="pricing-note">요청 시 자동 갱신 중지 · 환불 여부는 관리자 검토 후 결정</p>
+        <ul>${charges.map((charge) => `<li>
+          ${escapeHtml(charge.plan)} · ${Number(charge.amount).toLocaleString("ko-KR")}원 · ${escapeHtml(formatShortDate(charge.periodStart))} · ${escapeHtml(({ DONE: "결제 완료", PENDING: "결제 확인 중", FAILED: "결제 실패", CANCELED: "결제 취소" })[charge.status] || "상태 확인 필요")}
+          ${escapeHtml(charge.refundLabel || "")}
+          ${charge.status === "DONE" && charge.refundState === "NONE" ? `<button class="secondary-button" type="button" data-billing-refund="${escapeHtml(charge.orderId)}" aria-label="${escapeHtml(charge.plan)} ${escapeHtml(formatShortDate(charge.periodStart))} 결제 환불 검토 요청" ${busy ? "disabled" : ""}>환불 검토 요청</button>` : ""}
+        </li>`).join("")}</ul>
+      </section>` : ""}
     </article>
   </div>`;
 }
@@ -85,6 +94,7 @@ export function createBillingController(ctx) {
   let quote = null;
   let selectedPlan = null;
   let billing = null;
+  let charges = [];
   let usage = null;
   let message = "";
   let errorMessage = "";
@@ -126,7 +136,7 @@ export function createBillingController(ctx) {
   ].includes(errorCode(error));
   const isCurrent = () => state.isLoggedIn && activeToken && activeToken === getToken();
   const renderBilling = () => BillingModalView({ escapeHtml, formatShortDate }, readRuntimeConfig().billingPreviewEnabled && state.billingOpen && state.isLoggedIn
-    ? { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage }
+    ? { setup, billing, usage, quote, selectedPlan, busy, message, errorMessage, charges }
     : null);
 
   function handleAccessError(error, message = BILLING_AUTH_MESSAGE) {
@@ -154,12 +164,15 @@ export function createBillingController(ctx) {
     try {
       const results = await Promise.allSettled([
         api.setupBilling(token, selectedPlan), api.getBillingStatus(token), api.getUsageStatus(token),
+        api.getBillingCharges(token),
       ]);
       if (!isCurrent() || revision !== requestRevision) return false;
       const failures = [];
       setup = results[0].status === "fulfilled" ? results[0].value : null;
       billing = results[1].status === "fulfilled" ? results[1].value : null;
       usage = results[2].status === "fulfilled" ? normalizeUsageSnapshot(results[2].value) : null;
+      const historyResult = results[3];
+      charges = historyResult.status === "fulfilled" ? historyResult.value?.items || historyResult.value : [];
       quote = null;
       const levels = ["FREE", "LIGHT", "STANDARD", "PRO"];
       if (selectedPlan && usage && levels.indexOf(selectedPlan) > levels.indexOf(usage.plan)
@@ -209,6 +222,7 @@ export function createBillingController(ctx) {
     activeToken = token;
     summaryToken = token;
     setup = billing = usage = null;
+    charges = [];
     busy = true;
     message = errorMessage = "";
     summaryPromise = (async () => {
@@ -230,12 +244,16 @@ export function createBillingController(ctx) {
   }
 
   function open(plan = null) {
-    if (!readRuntimeConfig().billingPreviewEnabled) return false;
+    if (!readRuntimeConfig().billingPreviewEnabled) {
+      ctx.navigateToPricing?.();
+      return false;
+    }
     selectedPlan = ["LIGHT", "STANDARD", "PRO"].includes(plan) ? plan : null;
     quote = null;
     state.compactHeaderOpen = false;
     state.billingOpen = true;
     setup = billing = usage = null;
+    charges = [];
     void refresh();
   }
 
@@ -311,13 +329,13 @@ export function createBillingController(ctx) {
     }
   }
 
-  async function mutate(method, message) {
+  async function mutate(method, message, ...args) {
     if (busy || !isCurrent()) return;
     busy = true;
     errorMessage = "";
     render();
     try {
-      await api[method](activeToken);
+      await api[method](activeToken, ...args);
       if (isCurrent()) await refresh(message);
     } catch (error) {
       if (!isCurrent()) return;
@@ -399,12 +417,28 @@ export function createBillingController(ctx) {
     }
   }
 
+  async function submitRefund(orderId, reason) {
+    const text = String(reason || "").trim();
+    const charge = charges.find((item) => item.orderId === orderId);
+    if (!isCurrent() || !charge || charge.status !== "DONE" || charge.refundState !== "NONE"
+        || !text || text.length > 200) return false;
+    await mutate("requestBillingRefund", "환불 검토 요청 완료 · 자동 갱신 중지", orderId, text);
+  }
+
   function bind(root) {
     const on = (selector, listener) => root.querySelector(selector)?.addEventListener("click", listener);
     root.querySelectorAll?.("[data-open-billing]").forEach((button) => button.addEventListener("click", () => {
       focusReturnSelector = state.compactHeaderOpen ? ".topbar-mobile-toggle" : "";
       focusReturnElement = state.compactHeaderOpen ? null : button;
       open(button.dataset.selectedPlan || null);
+    }));
+    root.querySelectorAll?.("[data-billing-refund]").forEach((button) => button.addEventListener("click", () => {
+      if (busy || !isCurrent()) return;
+      const charge = charges.find((item) => item.orderId === button.dataset.billingRefund);
+      if (!charge || charge.status !== "DONE" || charge.refundState !== "NONE") return;
+      ctx.confirm?.({ type: "billing-refund", targetId: charge.orderId, reasonInput: true,
+        title: "환불 검토 요청", confirmLabel: "요청 및 자동 갱신 중지",
+        message: `${charge.plan} · ${Number(charge.amount).toLocaleString("ko-KR")}원 · ${formatShortDate(charge.periodStart)} · 주문 ${charge.orderId}. 요청하면 자동 갱신이 중지됩니다. 환불 완료 전까지 이용권은 유지되며, 취소 확인 중에는 새 AI 요청이 제한됩니다.` });
     }));
     on("[data-close-billing]", close);
     on("[data-billing-reload]", () => { void refresh(); });
@@ -417,7 +451,7 @@ export function createBillingController(ctx) {
     on("[data-subscription-refresh]", () => { void hydrateSummary({ force: true }); });
   }
 
-  return Object.freeze({ renderBilling, openBilling: open, closeBilling: close, refreshBilling: refresh, registerBilling: register, handleBillingRedirect: handleRedirect, bindBilling: bind, hydrateSummary, getSnapshot: snapshot });
+  return Object.freeze({ renderBilling, openBilling: open, closeBilling: close, refreshBilling: refresh, registerBilling: register, handleBillingRedirect: handleRedirect, bindBilling: bind, hydrateSummary, getSnapshot: snapshot, submitRefund });
 }
 
 export function consumeOpenBillingRequest(location, history) {

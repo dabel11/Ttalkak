@@ -30,6 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class MemberRequestGuardIntegrationTest {
     @Autowired MemberRequestGuard guard;
+    @Autowired com.ttalkak.billing.BillingChargeRepository billingCharges;
+    @Autowired com.ttalkak.billing.BillingContext billingContext;
     @Autowired MemberRepository members;
     @Autowired MemberRequestLeaseRepository leases;
     @Autowired MemberTokenUsageService usage;
@@ -121,7 +123,7 @@ class MemberRequestGuardIntegrationTest {
 
     private MemberRequestGuard at(Instant time) {
         return new MemberRequestGuard(members, leases, periods, new MemberQuotaPolicy(true, 100, 1000),
-                Clock.fixed(time, ZoneOffset.UTC), manager, Duration.ofSeconds(75));
+                Clock.fixed(time, ZoneOffset.UTC), manager, Duration.ofSeconds(75), billingCharges, billingContext);
     }
 
     @Test void endpointReturnsClampedRemainingAndUnknownUsageState() throws Exception {

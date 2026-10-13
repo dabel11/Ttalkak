@@ -4,9 +4,10 @@ COPY prompt-hub-web-frontend/package*.json ./prompt-hub-web-frontend/
 RUN cd prompt-hub-web-frontend && npm ci
 COPY scripts ./scripts
 COPY shared ./shared
-COPY prompt-hub-web-frontend/index.html ./prompt-hub-web-frontend/index.html
+COPY prompt-hub-web-frontend/index.html prompt-hub-web-frontend/refund-policy.html prompt-hub-web-frontend/service.html prompt-hub-web-frontend/terms.html prompt-hub-web-frontend/public-merchant.json prompt-hub-web-frontend/privacy-policy.html prompt-hub-web-frontend/merchant-review.html ./prompt-hub-web-frontend/
 COPY prompt-hub-web-frontend/assets ./prompt-hub-web-frontend/assets
 COPY prompt-hub-web-frontend/src ./prompt-hub-web-frontend/src
+ARG TTALKAK_BILLING_PREVIEW_ENABLED=false
 RUN cd prompt-hub-web-frontend && npm run build:prod
 # Set the API origin before the application module runs. This also works behind HTTPS.
 RUN node -e 'const fs = require("node:fs"); const path = "prompt-hub-web-frontend/dist/index.html"; const html = fs.readFileSync(path, "utf8"); if (!html.includes("<head>")) throw new Error("Missing HTML head"); fs.writeFileSync(path, html.replace("<head>", "<head><script>window.TTALKAK_API_BASE_URL = window.location.origin;</script>"));'

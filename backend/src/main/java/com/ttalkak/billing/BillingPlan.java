@@ -5,7 +5,7 @@ import org.springframework.http.HttpStatus;
 
 import java.util.Locale;
 
-/** Server-owned test prices; the browser can only select an identifier. */
+/** Agreed sale prices owned by the server; provider activation is gated separately. */
 public enum BillingPlan {
     LIGHT(3900, 30),
     STANDARD(5900, 70),

@@ -46,6 +46,9 @@ public class PaidUsagePeriod {
     @Column(name = "request_limit_override")
     private Long requestLimitOverride;
 
+    @Column(name = "billing_scope", length = 80)
+    private String billingScope;
+
     protected PaidUsagePeriod() {}
 
     public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
@@ -55,6 +58,11 @@ public class PaidUsagePeriod {
     /** Product identity is supplied by verified billing, never by the caller's client payload. */
     public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
                            String planCode) {
+        this(memberId, paymentReference, startsAt, endsAt, planCode, "test:legacy");
+    }
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
+                           String planCode, String billingScope) {
+        this.billingScope = billingScope;
         if (planCode == null || !java.util.Set.of("LIGHT", "STANDARD", "PRO").contains(planCode)) {
             throw new IllegalArgumentException("Unknown paid plan");
         }
@@ -71,7 +79,7 @@ public class PaidUsagePeriod {
         this.planCode = planCode;
     }
 
-    void revoke(Instant when) { this.revokedAt = Objects.requireNonNull(when); }
+    public void revoke(Instant when) { this.revokedAt = Objects.requireNonNull(when); }
 
     /** Legacy rows with no plan_code were created as PRO entitlements. */
     public String getPlanCode() { return planCode == null ? "PRO" : planCode; }
@@ -90,6 +98,8 @@ public class PaidUsagePeriod {
     }
 
 
+    public String getBillingScope() { return billingScope; }
+    public Long getMemberId() { return memberId; }
     public Instant getStartsAt() { return startsAt; }
     public Instant getEndsAt() { return endsAt; }
 }

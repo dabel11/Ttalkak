@@ -10,10 +10,12 @@ import org.springframework.web.bind.annotation.*;
 public class BillingController {
     private final AuthService auth;
     private final BillingService billing;
+    private final BillingRefundService refunds;
 
-    public BillingController(AuthService auth, BillingService billing) {
+    public BillingController(AuthService auth, BillingService billing, BillingRefundService refunds) {
         this.auth = auth;
         this.billing = billing;
+        this.refunds = refunds;
     }
 
     private Long member(String authorization) {
@@ -68,6 +70,19 @@ public class BillingController {
     public BillingService.Status cancel(@RequestHeader(value = "Authorization", required = false) String authorization) {
         return billing.cancelRenewal(member(authorization));
     }
+
+    @GetMapping("/charges")
+    public java.util.List<BillingRefundService.ChargeView> history(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        return refunds.history(member(authorization));
+    }
+    @PostMapping("/charges/{orderId}/refund-request")
+    public BillingRefundService.ChargeView requestRefund(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String orderId, @RequestBody RefundRequest request) {
+        return refunds.request(member(authorization), orderId, request.reason());
+    }
+    public record RefundRequest(String reason) {}
 
     public record CompleteRequest(String customerKey, String authKey) {}
     public record PlanSelection(String plan) {}

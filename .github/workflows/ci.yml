@@ -35,6 +35,14 @@ jobs:
             extension/package-lock.json
             prompt-hub-web-frontend/package-lock.json
 
+      - name: Validate isolated merchant review stack
+        env:
+          REVIEW_DB_PASSWORD: fixture-not-a-production-secret
+          REVIEW_JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          TOSS_TEST_CLIENT_KEY: test_ck_fixture
+          TOSS_TEST_SECRET_KEY: test_sk_fixture
+        run: docker compose -f docker/compose.merchant-review.yml config --quiet
+
       - name: Check pull request whitespace errors
         if: github.event_name == 'pull_request'
         run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"

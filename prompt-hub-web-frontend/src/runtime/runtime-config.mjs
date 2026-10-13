@@ -28,7 +28,6 @@ export function readRuntimeConfig(browserWindow = globalThis.window) {
     apiTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_API_TIMEOUT_MS, DEFAULT_API_TIMEOUT_MS, "TTALKAK_API_TIMEOUT_MS"),
     improveTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_IMPROVE_TIMEOUT_MS, DEFAULT_IMPROVE_TIMEOUT_MS, "TTALKAK_IMPROVE_TIMEOUT_MS"),
     myPageHydrationTimeoutMs: positiveTimeout(browserWindow?.TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS, DEFAULT_MY_PAGE_HYDRATION_TIMEOUT_MS, "TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS"),
-    googleCredential: String(browserWindow?.TTALKAK_GOOGLE_CREDENTIAL || ""),
     demoFallbackEnabled: browserWindow?.TTALKAK_DEMO_FALLBACK_ENABLED === true,
   });
 }

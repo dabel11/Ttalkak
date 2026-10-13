@@ -3,6 +3,14 @@ export function createBillingApi({ request }) {
       getBillingStatus(token) {
       return request("/api/me/billing", { token });
     },
+      getBillingCharges(token) {
+      return request("/api/me/billing/charges", { token });
+    },
+      requestBillingRefund(token, orderId, reason) {
+      return request(`/api/me/billing/charges/${encodeURIComponent(orderId)}/refund-request`, {
+        method: "POST", token, body: JSON.stringify({ reason }),
+      });
+    },
       getUsageStatus(token) {
       return request("/api/me/usage", { token });
     },

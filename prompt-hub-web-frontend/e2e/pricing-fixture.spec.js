@@ -143,3 +143,39 @@ test("mobile pricing fits and browser back returns to the page", async ({ page }
   await page.goBack();
   await expect(page.getByRole("heading", { name: "필요한 만큼, 더 편하게 개선하세요." })).toBeVisible();
 });
+
+test("refund review requires a reason and explicit renewal-stop confirmation", async ({ page }) => {
+  await fixture(page, true, "LIGHT");
+  let requested = false;
+  const submissions = [];
+  await page.route("**/api/me/billing/charges", (route) => route.fulfill({
+    status: 200, headers: HEADERS, body: JSON.stringify([{
+      orderId: "refund-order", plan: "LIGHT", amount: 3900, periodStart: "2026-10-13",
+      status: "DONE", refundState: requested ? "REQUESTED" : "NONE", refundLabel: requested ? "환불 검토 중" : "",
+    }]),
+  }));
+  await page.route("**/api/me/billing/charges/refund-order/refund-request", (route) => {
+    submissions.push(route.request().postDataJSON()); requested = true;
+    return route.fulfill({ status: 200, headers: HEADERS, body: "{}" });
+  });
+  await gotoApp(page, "/pricing");
+  await waitForAppHydration(page);
+  await page.locator(".subscription-card").getByRole("button", { name: "구독·결제 관리" }).click();
+  const trigger = page.getByRole("button", { name: /LIGHT .*결제 환불 검토 요청/ });
+  await trigger.click();
+  const confirmation = page.getByRole("dialog", { name: "환불 검토 요청", exact: true });
+  await expect(confirmation).toContainText("3,900원");
+  await expect(confirmation).toContainText("자동 갱신이 중지");
+  expect(submissions).toEqual([]);
+  await confirmation.getByRole("button", { name: "취소", exact: true }).click();
+  expect(submissions).toEqual([]);
+  await trigger.click();
+  await confirmation.locator("[data-confirm-reason]").fill(" ");
+  await confirmation.getByRole("button", { name: "요청 및 자동 갱신 중지" }).click();
+  await expect(confirmation).toBeVisible();
+  expect(submissions).toEqual([]);
+  await confirmation.locator("[data-confirm-reason]").fill("이용 중단");
+  await confirmation.getByRole("button", { name: "요청 및 자동 갱신 중지" }).click();
+  await expect.poll(() => submissions).toEqual([{ reason: "이용 중단" }]);
+  await expect(page.getByRole("dialog", { name: "요금제·결제", exact: true })).toContainText("환불 검토 중");
+});
