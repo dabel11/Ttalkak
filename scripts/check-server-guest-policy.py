@@ -57,6 +57,10 @@ def main():
     index_html = index_body.decode()
     assert index_status == 200
     assert index_headers.get("cache-control") == "no-cache"
+    policy_status, policy_headers, policy_body = request_headers("/refund-policy.html")
+    assert policy_status == 200
+    assert "text/html" in policy_headers.get("content-type", "")
+    assert "구독 해지·환불 정책" in policy_body.decode()
     assert "window.TTALKAK_API_BASE_URL = window.location.origin" in index_html
     app_match = re.search(r'src="\./(assets/app-[^"]+\.js)"', index_html)
     assert app_match, "Production HTML must reference a hashed application bundle"
