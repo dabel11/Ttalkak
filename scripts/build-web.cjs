@@ -202,6 +202,7 @@ async function build() {
     }
   }
   fs.writeFileSync(path.join(outputRoot, "index.html"), html, "utf8");
+  fs.copyFileSync(path.join(webRoot, "refund-policy.html"), path.join(outputRoot, "refund-policy.html"));
   if (bundleMetafile) fs.writeFileSync(path.join(outputRoot, "bundle-metafile.json"), `${JSON.stringify(bundleMetafile, null, 2)}\n`, "utf8");
   fs.writeFileSync(
     path.join(outputRoot, "build-manifest.json"),

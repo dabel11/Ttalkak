@@ -689,18 +689,19 @@ test("billing shows review separately from refund completion and submits only cl
   globalThis.window = { TTALKAK_RUNTIME_CONFIG: { billingPreviewEnabled: true } };
   try {
     let requested = false;
+    let confirmation;
     const listeners = {};
     const state = { isLoggedIn: true, billingOpen: true };
     const refundButton = { dataset: { billingRefund: "order-one" }, addEventListener(_event, handler) { listeners.refund = handler; } };
     const root = { querySelector: () => null, querySelectorAll: (selector) => selector === "[data-billing-refund]" ? [refundButton] : [] };
     const controller = createController({ state, root, getToken: () => "owner", isDemoToken: () => false,
-      escapeHtml: String, render() {}, api: {
+      escapeHtml: String, render() {}, confirm: (action) => { confirmation = action; }, api: {
         setupBilling: async () => ({ cardRegistered: true, amount: 3900 }),
         getBillingStatus: async () => ({ cardRegistered: true, autoRenew: !requested, paymentStatus: "ACTIVE" }),
         getUsageStatus: async () => ({ plan: "LIGHT", totalTokens: 15 }),
         getBillingCharges: async () => [{ orderId: "order-one", plan: "LIGHT", amount: 3900,
           periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE", refundLabel: requested ? "환불 검토 중" : "" }],
-        requestBillingRefund: async (token, orderId) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); requested = true; },
+        requestBillingRefund: async (token, orderId, reason) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); assert.equal(reason, "이용 중단"); requested = true; },
       } });
     await controller.refreshBilling();
     assert.equal(requested, false);
@@ -708,6 +709,15 @@ test("billing shows review separately from refund completion and submits only cl
     controller.bindBilling(root);
     listeners.refund();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(requested, false);
+    assert.equal(confirmation.reasonInput, true);
+    assert.match(confirmation.message, /3,900원.*자동 갱신이 중지/);
+    assert.match(controller.renderBilling(), /결제 완료/);
+    assert.match(controller.renderBilling(), /aria-label="LIGHT 2026-10-13 결제 환불 검토 요청"/);
+    await controller.submitRefund("order-one", " ");
+    await controller.submitRefund("order-one", "x".repeat(201));
+    assert.equal(requested, false);
+    await controller.submitRefund(confirmation.targetId, " 이용 중단 ");
     assert.equal(requested, true);
     assert.match(controller.renderBilling(), /환불 검토 중/);
     assert.match(controller.renderBilling(), /환불 여부는 관리자 검토 후 결정/);

@@ -3,5 +3,22 @@ test.before(async () => { ({ createModalController } = await import("../src/moda
 test("modal controller preserves Make scroll when closing execute modal", () => { const state = { executeMessageId: "m" }; const calls = []; const controller = createModalController({ state, root: {}, closeState: () => true, render: () => calls.push("render"), renderPreservingScroll: () => calls.push("preserve") }); controller.closeTop(); assert.deepEqual(calls, ["preserve"]); });
 test("modal controller owns confirm state", () => { const state = {}; let renders = 0; createModalController({ state, root: {}, closeState() {}, render: () => renders++ }).openConfirm({ type: "delete" }); assert.equal(state.confirmAction.type, "delete"); assert.equal(renders, 1); });
 test("modal controller routes confirmed actions", async () => { const state = { confirmAction: { type: "delete", targetId: "1" } }; const calls = []; const controller = createModalController({ state, root: {}, closeState() {}, render: () => calls.push("render") }); await controller.runConfirmed({ delete: (action) => calls.push(action.targetId) }); assert.deepEqual(calls, ["1", "render"]); assert.equal(state.confirmAction, null); });
+test("reason confirmation keeps the dialog until valid input and submits trimmed text", async () => {
+  const action = { type: "refund", targetId: "order", reasonInput: true };
+  const state = { confirmAction: action };
+  const input = { value: " ", setCustomValidity() {}, reportValidity() {} };
+  let submitted;
+  const controller = createModalController({ state, root: { querySelector: () => input }, render() {} });
+  const handlers = { refund: (value) => { submitted = value.reason; } };
+  assert.equal(await controller.runConfirmed(handlers), false);
+  assert.equal(state.confirmAction, action);
+  input.value = "x".repeat(201);
+  assert.equal(await controller.runConfirmed(handlers), false);
+  assert.equal(submitted, undefined);
+  input.value = " 사용 중단 ";
+  assert.equal(await controller.runConfirmed(handlers), true);
+  assert.equal(submitted, "사용 중단");
+  assert.equal(state.confirmAction, null);
+});
 test("app delegates modal focus, close, events and confirmation routing", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createModalController/); assert.match(app, /bindModalEvents/); ["closeTopModal", "focusActiveModal", "openConfirmAction", "runConfirmedAction"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`))); });
 test("app delegates modal view rendering", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createModalView/); ["PromptDetailModal", "PromptEditModal", "ReportModal", "ConfirmModal", "ExecuteModal"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`))); });

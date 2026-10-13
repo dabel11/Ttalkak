@@ -25,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @AutoConfigureMockMvc
 @SpringBootTest(properties = {
+        "BILLING_MODE=test",
         "JWT_SECRET_BASE64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
         "TOSS_TEST_CLIENT_KEY=test_ck_example",
         "TOSS_TEST_SECRET_KEY=test_sk_example",

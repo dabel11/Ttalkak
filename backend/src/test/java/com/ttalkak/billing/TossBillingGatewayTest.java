@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TossBillingGatewayTest {
     @Test
-    void timeoutKeepsPaymentUncertainAndCancelsTheProviderSubscription() {
+    void timeoutKeepsPaymentUncertainAndCancelsTheProviderSubscription() throws InterruptedException {
         AtomicInteger cancelled = new AtomicInteger();
         var gateway = new TossBillingGateway(WebClient.builder().exchangeFunction(request ->
                 Mono.<ClientResponse>never().doOnCancel(cancelled::incrementAndGet)),
@@ -24,6 +24,8 @@ class TossBillingGatewayTest {
                 gateway.charge("test-billing", "customer", "same-order", 5000, "TTALKAK LIGHT monthly")));
         assertEquals("BILLING_UNCERTAIN", error.getCode());
         assertEquals(HttpStatus.GATEWAY_TIMEOUT, error.getStatusCode());
+        long cancellationDeadline = System.nanoTime() + Duration.ofSeconds(1).toNanos();
+        while (cancelled.get() == 0 && System.nanoTime() < cancellationDeadline) Thread.sleep(5);
         assertEquals(1, cancelled.get());
     }
 

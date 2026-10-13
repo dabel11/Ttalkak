@@ -29,7 +29,7 @@
         const modals = ctx.root.querySelectorAll(".modal");
         const modal = modals[modals.length - 1];
         if (modal?.classList.contains("prompt-detail-modal")) return;
-        const preferred = modal?.querySelector("[data-confirm-action]");
+        const preferred = modal?.querySelector("[data-confirm-reason]") || modal?.querySelector("[data-confirm-action]");
         (preferred || modal?.querySelector("input, textarea, button, [href], [tabindex]:not([tabindex='-1'])"))?.focus();
       }, 0);
     }
@@ -48,6 +48,13 @@
     async function runConfirmed(handlers, useAlternative = false) {
       const action = ctx.state.confirmAction;
       if (!action) return false;
+      if (action.reasonInput && !useAlternative) {
+        const input = ctx.root.querySelector("[data-confirm-reason]");
+        const reason = String(input?.value || "").trim();
+        input?.setCustomValidity(reason.length > 0 && reason.length <= 200 ? "" : "1~200자의 사유를 입력해 주세요.");
+        if (!reason || reason.length > 200) { input?.reportValidity(); return false; }
+        action.reason = reason;
+      }
       ctx.state.confirmAction = null;
       const handler = handlers[useAlternative ? action.alternativeType : action.type];
       if (!handler) {

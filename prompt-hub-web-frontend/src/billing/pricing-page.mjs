@@ -65,6 +65,7 @@ export function PricingPageView(ctx, snapshot) {
     </div>
     <p class="pricing-note">비회원은 총 3회 체험, 저장은 로그인 후 가능합니다.</p>
     <p class="pricing-note">${preview ? "테스트 결제 화면이며 실제 청구되지 않습니다." : "판매 가격 안내입니다. 유료 결제는 준비 중이며 현재 신청할 수 없습니다."}</p>
+    <p class="pricing-note"><a href="/refund-policy.html">구독 해지·환불 정책</a></p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
       <p>원클릭·Make의 미리보기·후속 질문·재개선은 AI 호출당 1회 차감됩니다.</p>

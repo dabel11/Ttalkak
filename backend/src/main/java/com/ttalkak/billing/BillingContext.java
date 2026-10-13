@@ -12,7 +12,7 @@ public class BillingContext {
     private final String mode;
     private final String scope;
 
-    public BillingContext(@Value("${ttalkak.billing.mode:test}") String mode,
+    public BillingContext(@Value("${ttalkak.billing.mode:disabled}") String mode,
                           @Value("${ttalkak.billing.store-scope:test:legacy}") String scope) {
         if (!java.util.Set.of("test", "live", "disabled").contains(mode)) {
             throw new IllegalArgumentException("Unknown billing mode");

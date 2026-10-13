@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @AutoConfigureMockMvc
 @SpringBootTest(properties = {
+        "BILLING_MODE=test",
         "JWT_SECRET_BASE64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
         "spring.datasource.url=jdbc:h2:mem:ttalkak-refund-test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "TOSS_TEST_CLIENT_KEY=test_ck_example", "TOSS_TEST_SECRET_KEY=test_sk_example", "BILLING_POLL_MS=3600000"
