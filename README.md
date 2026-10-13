@@ -50,9 +50,19 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 
 #### 최신 개발: 결제 환경 분리·환불 검토 흐름
 
-[PR #57](https://github.com/dabel11/Ttalkak/pull/57)에서 테스트·라이브 결제 데이터의 scope 분리, 회원의 환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다. 취소 응답이 불확실한 경우 `PENDING`을 유지하고 동일 멱등키로 재시도하며, 진행 중인 AI 요청 및 취소 대기 상태와의 충돌을 방지하는 검증을 추가했습니다.
+[PR #57](https://github.com/dabel11/Ttalkak/pull/57)에서 테스트·라이브 결제 데이터의 scope 분리, 회원의 결제 내역 조회·환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다.
 
-**2026-10-13 기준 PR #57은 draft·미병합 상태이며, 해당 커밋의 CI 6개 검사는 통과했습니다.** 일반 구독의 전액 취소를 대상으로 하며, 부분·업그레이드 환불과 관리자 운영 화면은 후속 과제입니다. 실결제 활성화 및 실제 승인·취소 검증은 아직 완료하지 않았습니다.
+- **결제 데이터 경계:** 주문·구독·유료 이용권의 조회, 자동 갱신 및 권한 계산을 같은 상점 scope로 제한. 기존 NULL 데이터는 원래 테스트 환경에서만 처리하며, 실결제 호출 차단 유지
+- **환불 상태·권한:** 회원 요청은 검토 접수와 자동 갱신 중지만 수행. 관리자 검토 후 원 주문·금액·결제키·잔액을 확인하고, 전액 취소가 확인된 뒤 해당 이용권 회수
+- **실패·재시도 대응:** 불확실한 취소 결과는 `PENDING`으로 유지하고 저장된 동일 멱등키로 재시도. 취소를 다시 호출하지 않는 조회 대사를 별도로 제공하고 기존 AI 사용량 기록 보존
+- **AI 요청과의 충돌 방지:** 진행 중인 AI 요청이 있으면 환불 승인을 차단하고, 취소 확인 중에는 새 AI 요청과 결제 갱신 차단
+- **재검토·회귀 검증:** Java와 MySQL의 대소문자 비교 차이로 상점 구분이 달라질 수 있는 설정을 발견해, scope에 소문자 ASCII 영문·숫자·밑줄·하이픈만 허용하도록 보완. 대문자 별칭 거부 테스트 추가
+
+구현 근거: [상점 scope 검증](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingContext.java) · [환불 서비스](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingRefundService.java) · [환불 통합 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingRefundIntegrationTest.java) · [scope 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingContextTest.java)
+
+**2026-10-13 기준 PR #57은 draft 해제 후 리뷰 대기·미병합 상태입니다.** 최신 커밋 [`e2bfd2d4`](https://github.com/dabel11/Ttalkak/commit/e2bfd2d43f7883636b9618186c70636eadcde39d)의 CI 6개 검사(백엔드, 프론트엔드 빌드·테스트, RAG, 웹·백엔드 통합, 브라우저 E2E, MySQL 정책 검증)가 모두 통과했고, 재검토 시 로컬 결제 흐름 테스트 27개도 통과했습니다. 코드·문서 변경은 PR에 반영했으며, 이 변경의 운영 배포는 아직 진행하지 않았습니다.
+
+일반 구독의 전액 취소를 대상으로 하며, 부분·업그레이드 환불과 관리자 운영 화면은 후속 과제입니다. 실결제 활성화 및 실제 승인·취소 검증은 아직 완료하지 않았습니다.
 
 #### 담당 범위와 현재 단계
 
