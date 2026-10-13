@@ -72,3 +72,14 @@ PR #57은 팀원 재검토·승인 후 병합한다. 운영 서비스의 소스 
 - Railway/메일 공급자의 수탁·국외이전 항목, 운영 로그·백업·탈퇴 데이터 삭제 주기와 실행 담당자.
 
 공식 확인 자료: https://ai.google.dev/gemini-api/terms , https://console.groq.com/docs/your-data , https://jina.ai/legal/ , https://railway.com/legal/dpa . 운영 메일 변수에 AUTH_MAIL_TRANSPORT/RESEND_API_KEY 이름은 존재하나 실제 활성 공급자는 확인 전이다.
+
+
+## 졸업프로젝트 시연 범위와 실판매 구분 (2026-10-13)
+
+공개 사이트는 요금제 가격·제공 횟수를 안내하면서 무료 체험으로 연결한다. 유료 구독을 판매하지 않는다는 안내를 유지하며, 비활성 구매 버튼의 반복적인 '준비 중' 문구는 사용하지 않는다. 별도 테스트 환경에서는 결제·갱신·환불 흐름을 검증할 수 있다. 테스트 구현과 CI 결과는 실제 PG 입점이나 운영 결제 검증을 대신하지 않는다. 졸업 평가의 필수 범위는 지도교수·평가 기준으로 확인한다.
+
+실판매를 진행할 경우 토스 공식 가이드는 홈페이지 하단에 사업자등록증상의 사업장 주소 기재를 요구한다. 현재는 주소 비공개 결정을 유지하며, 집 주소 공개 또는 등록 주소 정정에 대한 사용자의 결정 전에는 추가하지 않는다.
+근거: https://docs.tosspayments.com/guides/v2/get-started/payment-products
+
+AI 담당자 확인은 Gemini 활성 Cloud Billing 연결 여부, Groq 조직의 ZDR 설정, Jina/Elastic의 실제 계약·처리 국가·보유기간으로 나눈다. 공개 문서만으로 운영 계정 설정을 확정하지 않는다. Gemini 유료 조건에도 보안 목적 기록과 여러 국가에서의 일시 처리가 있으며, Groq의 장애·오남용 조사 로그는 최대 30일(법적 의무 시 연장)이다. 설정·계약을 확인한 뒤 개인정보 고지를 확정한다.
+공식 문서: https://ai.google.dev/gemini-api/terms · https://console.groq.com/docs/your-data · https://jina.ai/legal/

@@ -49,7 +49,7 @@ export function PricingPageView(ctx, snapshot) {
   const paidCards = paidPlans.map(({ id, price, requests, badge }) => `
       <article class="pricing-plan pricing-${id.toLowerCase()}">${badge ? `<p class="pricing-badge">${badge}</p>` : ""}<h2>${id}</h2><p class="pricing-price">${price}원 <span>/ 월</span></p><p>월 ${requests}회 개선 요청</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>${id === "PRO" ? "더 넉넉한 AI 사용량" : "동일한 AI 개선 품질"}</li></ul>
-        ${preview ? `<button class="primary-button" type="button" ${state.isLoggedIn ? `data-open-billing data-selected-plan="${id}"` : `data-start-pro data-selected-plan="${id}"`}>${id === "PRO" ? (plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인") : "테스트 구독 신청"}</button>` : '<button class="primary-button" type="button" disabled>유료 결제 준비 중</button>'}
+        ${preview ? `<button class="primary-button" type="button" ${state.isLoggedIn ? `data-open-billing data-selected-plan="${id}"` : `data-start-pro data-selected-plan="${id}"`}>${id === "PRO" ? (plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인") : "테스트 구독 신청"}</button>` : '<button class="secondary-button" type="button" data-route="make">무료로 체험하기</button>'}
         ${plan === id ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>`).join("");
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
@@ -64,7 +64,7 @@ export function PricingPageView(ctx, snapshot) {
       ${paidCards}
     </div>
     <p class="pricing-note">비회원은 총 3회 체험, 저장은 로그인 후 가능합니다.</p>
-    <p class="pricing-note">${preview ? "테스트 결제 화면이며 실제 청구되지 않습니다." : "판매 가격 안내입니다. 유료 결제는 준비 중이며 현재 신청할 수 없습니다."}</p>
+    <p class="pricing-note">${preview ? "테스트 결제 화면이며 실제 청구되지 않습니다." : "요금제 가격·횟수 안내입니다. 현재 무료 체험만 제공하며 유료 구독은 판매하지 않습니다."}</p>
     <p class="pricing-note"><a href="/refund-policy.html">구독 해지·환불 정책</a></p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>

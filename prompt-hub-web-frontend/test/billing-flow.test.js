@@ -16,9 +16,9 @@ test("agreed prices are public while production purchase actions stay blocked", 
   try {
     const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
     for (const price of ["3,900", "5,900", "9,900"]) assert.match(page, new RegExp(price));
-    assert.match(page, /유료 결제 준비 중/);
+    assert.match(page, /유료 구독은 판매하지 않습니다/);
     assert.doesNotMatch(page, /data-start-pro|data-open-billing|테스트 구독/);
-    assert.equal((page.match(/disabled>유료 결제 준비 중/g) || []).length, 3);
+    assert.equal((page.match(/data-route="make">무료로 체험하기/g) || []).length, 3);
     const summary = SubscriptionSummaryView({ state }, { usage: {
       plan: "FREE", requests: 10, requestLimit: 10, requestRemaining: 0,
       requestQuotaEnforced: true, requestLimitReached: true, quotaEnforced: false,

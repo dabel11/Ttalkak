@@ -15,7 +15,7 @@ function merchantFooter(webRoot) {
   return `<footer aria-label="사업자 정보" style="max-width:960px;margin:32px auto 0;padding:24px 20px;border-top:1px solid #ddd;color:#444;font:14px/1.7 system-ui,sans-serif;overflow-wrap:anywhere">
 <nav aria-label="서비스 정책" style="display:flex;flex-wrap:wrap;gap:16px"><a href="/service.html">서비스·이용 안내</a><a href="/pricing">요금제</a><a href="/refund-policy.html">해지·환불 정책</a><a href="/terms.html">이용약관</a><a href="/privacy-policy.html">개인정보 처리 안내</a></nav>
 <dl style="display:grid;gap:8px;margin:16px 0">${rows}</dl>
-${complete ? "" : '<p role="status">사업자 공개 정보 등록을 준비 중입니다. 유료 결제는 제공하지 않습니다.</p>'}
+${complete ? "" : '<p role="status">현재 무료 체험만 제공합니다. 유료 결제는 제공하지 않습니다.</p>'}
 </footer>`;
 }
 
