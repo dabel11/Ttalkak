@@ -4,7 +4,7 @@ COPY prompt-hub-web-frontend/package*.json ./prompt-hub-web-frontend/
 RUN cd prompt-hub-web-frontend && npm ci
 COPY scripts ./scripts
 COPY shared ./shared
-COPY prompt-hub-web-frontend/index.html ./prompt-hub-web-frontend/index.html
+COPY prompt-hub-web-frontend/index.html prompt-hub-web-frontend/refund-policy.html ./prompt-hub-web-frontend/
 COPY prompt-hub-web-frontend/assets ./prompt-hub-web-frontend/assets
 COPY prompt-hub-web-frontend/src ./prompt-hub-web-frontend/src
 RUN cd prompt-hub-web-frontend && npm run build:prod
