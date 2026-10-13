@@ -87,29 +87,29 @@ Web과 Chrome Extension 전반의 사용자 경험 구현을 핵심 책임으로
 
 ### 지대현 | AI Engineer (RAG) · Integration & Deployment
 
-**거친 한국어 요청을 실행 가능한 프롬프트로 바꾸는 RAG 서버를 설계·구현하고, 핵심 설정을 측정 결과로 결정한 AI 담당자입니다.** 3인 팀에서 저장소·모노레포 초기 구성과 FastAPI RAG 서버(검색·생성·평가·코퍼스) 전반을 맡았으며, 세 컴포넌트의 브랜치 통합과 Docker·Railway 배포까지 연결했습니다.
+**다듬어지지 않은 한국어 요청을 실행 가능한 프롬프트로 바꾸는 RAG 서버를 설계·구현하고, 핵심 설정을 측정 결과로 결정한 AI 담당자입니다.** 3인 팀에서 저장소·모노레포 초기 구성과 FastAPI RAG 서버(검색·생성·평가·코퍼스) 전반을 맡았으며, Backend·Web·Extension 브랜치 통합, Docker Compose 전체 스택 구성, RAG 서버의 Railway 배포까지 연결했습니다.
 
 #### 주요 역할
 
-- **검색 파이프라인 설계·구현:** bge-m3 임베딩 + bge-reranker 2단계 검색 구성. 벡터 저장소를 ChromaDB에서 백엔드와 같은 MySQL(`rag_chunk`)로 옮겨 별도 벡터 DB 제거. 청크마다 검색용 축약 벡터를 추가하는 멀티표현 인덱싱, 기법 카드·개선 예시의 타입별 분리 검색 구현
-- **생성 파이프라인 설계:** 요청 분석기(1단계)와 생성기(2단계)를 분리해 판정은 결정적으로, 생성은 자연스럽게 처리. 사용자가 준 원문은 그대로 보존하고 주지 않은 사실은 `[항목 입력]` 빈칸과 선택 질문으로 남기는 하이브리드 응답, JSON 구조화 출력 설계
-- **평가 체계 구축:** 검색(Recall@k·NDCG@5·MRR), 생성(LLM judge + 라벨 기반 mode 정확도), 결과 상향(원본 vs 개선 프롬프트 A/B, 순서 교체로 위치 편향 제거), 적대적 환각(7개 카테고리), 관련성 게이트(AUC) 평가 도구 개발. 검색 대상 카드의 94%를 포함하는 커버리지 평가셋 구축
-- **코퍼스 구축·품질 관리:** 프롬프트 기법 카드 170장과 한국어 개선 예시 131건(20개 작업 유형) 수집·생성·큐레이션. 임베딩 기반 의미 중복 제거, 카드 층(layer) 분류로 검색 대상 자격 관리
-- **LLM 백엔드·운영 안정성:** Groq·Gemini 이중 백엔드 라우팅과 폴백, LLM 타임아웃, 동시 실행 게이트(503 + `Retry-After`), 요청 단위 토큰 사용량(`usage`) 집계 구현. 후보 모델을 같은 평가셋으로 품질 비교하고 요청당 비용을 실측해, 예산 안에서 가장 나은 조합(생성 Gemini 3.6 Flash · 분석 Gemini 3.5 Flash-Lite) 선정
+- **검색 파이프라인 설계·구현:** bge-m3 임베딩 + bge-reranker 2단계 검색 구성. 벡터 저장소를 ChromaDB에서 Backend와 같은 MySQL(`rag_chunk`)로 옮겨 별도 벡터 DB 제거. 청크마다 검색용 축약 벡터를 추가하는 멀티표현 인덱싱, 기법 카드·개선 예시의 타입별 분리 검색 구현
+- **생성 파이프라인 설계:** 요청 분석기(1단계)와 생성기(2단계)를 분리해 판정은 결정적으로, 생성은 자연스럽게 처리. 사용자 원문은 보존하고 입력되지 않은 사실은 `[항목 입력]` 빈칸·선택 질문으로 남기는 하이브리드 응답과 JSON 구조화 출력 설계
+- **평가 체계 구축:** 검색(Recall@k·nDCG@5·MRR), 생성(LLM judge + 응답 모드(개선/질문) 판정 정확도), 결과 상향(원본 vs 개선 프롬프트 A/B, 순서 교체로 위치 편향 제거), 적대적 환각(7개 카테고리), 관련성 게이트(AUC) 평가 도구 개발. 커버리지 평가셋(54문항)을 추가해 평가가 다루는 검색 대상 카드를 50% → 94%로 확장
+- **코퍼스 구축·품질 관리:** 프롬프트 기법 카드 170장과 한국어 개선 예시 131건(19개 작업 유형) 수집·생성·큐레이션. 임베딩 기반 의미 중복 제거, 카드 층(layer) 분류로 검색 대상 자격 관리
+- **LLM 백엔드·운영 안정성:** Groq·Gemini 이중 백엔드 라우팅과 폴백, LLM 타임아웃, 동시 실행 게이트(503 + `Retry-After`), 요청 단위 토큰 사용량(`usage`) 집계 구현. 기존 모델과의 품질 A/B와 요청당 비용 실측을 거쳐 예산 안에서 최적의 조합(생성 Gemini 3.6 Flash · 분석 Gemini 3.5 Flash-Lite) 선정
 - **시스템 통합·API 계약:** Backend·Web·Extension 브랜치를 하나로 통합한 [PR #7](https://github.com/dabel11/Ttalkak/pull/7) 주도. `/query` 응답 계약(mode·questions·fields·usage)과 계층 간 계약 문서 작성. RAG 서버의 `Retry-After`가 Backend와 CORS 설정을 거쳐 프론트까지 전달되도록 연동 지점 수정
-- **배포·인프라:** Docker Compose 전체 스택 구성. Railway 배포를 위해 모델 번들 이미지 경량화(20.9GB → 9.5GB), IPv6 사설망 바인딩, 컨테이너 vCPU 할당량 기반 스레드 설정 적용. 재임베딩 없이 코퍼스를 옮기는 DB 이전 도구, CI에 RAG 서버 테스트·정적 검사 job 추가
-- **작업 기록·문서화:** 모든 변경을 Before/After·측정값·결정 근거로 남긴 [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md)과 [파이프라인](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/RAG_PIPELINE.md)·[코퍼스 전략](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/CORPUS_STRATEGY.md) 문서 작성. 기각한 실험도 수치와 함께 기록
+- **배포·인프라:** Docker Compose 전체 스택 구성. RAG 서버 Railway 배포를 위해 모델 번들 이미지 경량화(20.9GB → 9.5GB), IPv6 사설망 바인딩, 컨테이너 vCPU 할당량 기반 스레드 설정 적용. 재임베딩 없이 코퍼스를 옮기는 DB 이전 도구, CI에 RAG 서버 테스트·정적 검사 job 추가
+- **작업 기록·문서화:** 주요 변경을 Before/After·측정값·결정 근거로 남긴 [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md)과 [파이프라인](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/RAG_PIPELINE.md)·[코퍼스 전략](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/CORPUS_STRATEGY.md) 문서 작성. 기각한 실험도 수치와 함께 기록
 
 #### 대표 문제 해결 사례
 
 | 문제·요구 | 설계·구현한 대응 | 확인 가능한 코드·문서 |
 | --- | --- | --- |
-| 정보가 부족한 요청에서 모델이 제품명·스펙을 지어냄(예: 이어폰 소개 요청에 "AirSound Pro·30시간·IPX4"). 반대로 세부가 조금만 비어도 질문만 하고 개선안을 주지 않음 | 분석기가 필요한 항목과 채움 여부를 먼저 판정하고, 생성기는 빈 사실을 `[항목 입력]` 빈칸 + 선택 질문으로 처리. mode 판정 정확도 0.78 → 1.00(18문항), 환각 유도 21케이스·29회 실행에서 사실 창작 0건 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [생성기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/generator.py), [환각 평가 도구](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/halluc_eval.py) |
-| 무의미한 입력(`https://example.com`, `ㅋㅋㅋ`)은 통과하고 정상 요청의 17%는 404로 차단됨 | 원인을 임계치가 아닌 코퍼스 문체로 규명: 영문 정의체 기법 카드는 관련·무관 입력을 구분하지 못함(AUC 0.575~0.694). 사용자 말투의 예시 코퍼스로 판정 기준을 옮겨 AUC 1.000 달성. 예시 검색 실패·빈 코퍼스는 404 대신 기법 기반 생성으로 폴백 | [관련성 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/gate.py), [게이트 평가](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/gate_eval.py), [`/query` 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_query_endpoint.py) |
+| 정보가 부족한 요청에서 모델이 제품명·스펙을 지어냄(예: 이어폰 소개 요청에 "AirSound Pro·30시간·IPX4"). 반대로 세부가 조금만 비어도 질문만 하고 개선안을 주지 않음 | 분석기가 필요한 항목과 채움 여부를 먼저 판정하고, 생성기는 빈 사실을 `[항목 입력]` 빈칸 + 선택 질문으로 처리. 18문항 평가에서 개선안 제공이 7건 → 11건으로 늘어도 환각 0건, 스펙을 지어내던 이어폰 요청은 빈칸으로 처리. 환각 유도 평가셋 7개 카테고리 18케이스·29회 실행에서 사실 창작 0건 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [생성기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/generator.py), [환각 평가 도구](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/halluc_eval.py) |
+| 무의미한 입력(`https://example.com`, `ㅋㅋㅋ`)은 통과하고 정상 요청의 17%는 404로 차단됨 | 원인이 임계치가 아니라 코퍼스 문체임을 규명(영어 정의문형 기법 카드 기준 AUC 0.575~0.694). 판정 기준을 사용자 말투의 예시 코퍼스로 옮겨 AUC 1.000(양성·음성 24건) 달성. 예시 검색 실패·빈 코퍼스 시 404 대신 기법 기반 생성으로 폴백 | [관련성 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/gate.py), [게이트 평가](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/gate_eval.py), [`/query` 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_query_endpoint.py) |
 | 검색 결과에 RAG 시스템 구축용·메타 기법 카드가 섞여 사용자 요청에 쓸 수 없는 기법이 추천됨(예: "Git 브랜치 전략 블로그 글" → Chunk Design) | 카드에 층(layer) 메타데이터를 부여하고 사용자 지시용 카드만 검색. 단일 LLM 판정이 경계 사례에서 흔들려 LLM 분류 + 사람 검토 override 2층 구조 채택. top-5 노이즈 22% → 2%, 생성 결과의 반영 불가 기법 비율 29% → 0% | [층 정의](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/layers.py), [분류 도구](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/ingestion/tag_layers.py), [사람 검토 override](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/ingestion/layer_overrides.json) |
-| CPU 리랭커가 검색 지연의 95%를 차지해 운영 `/query`가 30초 이상 걸림 | 호스티드 리랭크 API(Jina v3.5) 백엔드를 추가하고 실패 시 로컬 모델로 폴백. LLM 심판 A/B로 품질 동급을 확인한 뒤 채택. 컨테이너 CPU 할당량을 읽어 스레드 과다 할당 제거. 리랭크 17초 → 0.4초, 운영 `/query` 34초 → 12초, 기동 2분 → 12초 | [리랭크 API](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/rerank.py), [스레드 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/cpu.py), [PR #46](https://github.com/dabel11/Ttalkak/pull/46) |
-| LLM API의 분당 토큰 한도 안에서 동시 요청 2건이면 429가 나고, 폴백 백엔드 한도까지 소진되어 서비스 전체가 멈춤 | LLM 구간만 감싸는 동시 실행 게이트 도입. 대기열·대기 시간 상한을 Backend 타임아웃(75초) 안에 맞추고, 초과 시 즉시 503 + `Retry-After` 반환. Backend 예외 처리·CORS 노출 헤더까지 연결 | [동시 실행 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/concurrency.py), [게이트 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_concurrency.py), [Retry-After 전달 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/test/java/com/ttalkak/common/exception/RetryAfterPropagationTest.java) |
-| 장애 시에도 서비스가 끊기지 않게 만든 폴백이 고장을 숨김: 모델 교체 후 분석기가 약 3주간 18건 중 16건에서 조용히 실패, 평가 judge는 빈 점수를 반환 | 추론 토큰이 출력 예산을 먼저 소진하는 원인을 실측으로 규명해 추론량·예산 재조정(분석 완료 토큰 1,259 → 198). 측정 도구 11곳에 타임아웃 추가. "폴백에는 관측 장치가 함께 있어야 한다"는 원칙을 정리하고 분석기 교정 규칙의 발동 횟수 집계 도입 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md) |
+| CPU 리랭커가 검색 지연의 95%(로컬 실측)를 차지했고, 운영에서는 스레드 과다 할당·느린 분석기 경로까지 겹쳐 `/query`가 30초 이상 걸림 | LLM judge A/B로 유의한 품질 손실이 없음을 확인한 호스티드 리랭크 API(Jina v3.5) 도입, 실패 시 로컬 모델 폴백. 컨테이너 vCPU 할당량 기반 스레드 제한, 분석기를 생성 백엔드(Gemini)에 맞춰 느린 분석 경로 제거. 리랭크 17초 → 0.4초, 운영 `/query` 34초 → 12초, 기동 2분 → 12초 | [리랭크 API](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/rerank.py), [스레드 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/cpu.py), [PR #46](https://github.com/dabel11/Ttalkak/pull/46) |
+| 요청 1건이 LLM API 분당 토큰 한도(TPM)를 거의 다 써서 동시 요청 2건이면 429가 나고, 폴백 백엔드까지 한도에 걸려 서비스 전체가 멈춤 | LLM 구간만 감싸는 동시 실행 게이트 도입. 대기열·대기 시간 상한을 Backend 타임아웃(75초) 안에 맞추고, 초과 시 즉시 503 + `Retry-After` 반환. Backend 예외 처리·CORS 노출 헤더까지 연결 | [동시 실행 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/concurrency.py), [게이트 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_concurrency.py), [Retry-After 전달 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/test/java/com/ttalkak/common/exception/RetryAfterPropagationTest.java) |
+| 폴백이 장애를 가려 모델 교체 후 약 3주간 분석기 실패(평가 18건 중 16건)를 인지하지 못함. 평가 judge도 빈 점수 반환 | 추론 토큰이 출력 상한(max_tokens)을 먼저 채우는 원인을 실측으로 규명해 추론량 조정(분석 완료 토큰 1,259 → 198). 평가 도구 11곳에 타임아웃 추가, "폴백에는 관측 장치가 함께 있어야 한다"는 교훈을 작업 기록에 정리 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md) |
 
 #### 측정으로 내린 주요 기술 결정
 
@@ -117,22 +117,24 @@ Web과 Chrome Extension 전반의 사용자 경험 구현을 핵심 책임으로
 | --- | --- |
 | 벡터 저장소를 MySQL로 통합 | 수백~수천 청크 규모에서 brute-force 코사인으로 충분(100청크 기준 약 1ms). 별도 벡터 DB 운영 부담 제거, Backend와 같은 DB 공유 |
 | 리랭커 유지(제거 계획 철회) | 기존 평가셋 Recall@5 +4.0%p, 커버리지 평가셋 +12.3%p — 어려운 문항에서 효과가 3배 큼 |
-| 멀티표현 인덱싱 채택 | dense Hit@1 +6.8%p, 실사용 입력의 404 비율 17% → 6% |
+| 멀티표현 인덱싱 채택 | dense Hit@1 +6.8%p, 실사용형 입력 18건 중 404 3건 → 1건 |
 | 후보 수(fetch_k) 20 → 50 | 쉬운 구간 손실 0, 어려운 구간 Recall@5 +5.3%p |
-| HyDE·BM25 하이브리드·doc2query 기각 | HyDE는 Recall@5 0.763 → 0.441, 한국어 형태소 BM25도 −7.0%p. 생성 평가셋에서 보인 BM25 이득은 어휘 누수 아티팩트로 판명 |
+| HyDE·BM25 하이브리드·doc2query 기각 | HyDE는 Recall@5 0.763 → 0.441, 한국어 형태소 BM25도 −7.0%p. LLM으로 만든 커버리지 평가셋에서 보인 BM25 이득(+8.8%p)은 어휘 누수 아티팩트로 판명 |
 | 생성 2단계 분리 | 분석과 생성의 최적 온도가 반대. 단일 호출 판정 일관성 0.23~0.75 vs 분리 후 0.86~1.00 |
-| LLM 조합 선정: 생성 Gemini 3.6 Flash · 분석 Flash-Lite | 같은 평가셋(18문항, 중립 judge) 품질 A/B에서 mode 정확도 0.94(기존 0.85~0.92), 환각 0, JSON 18/18로 동급 이상. 요청당 비용 실측 약 $0.01 — 분석 단계는 저비용 모델로 분리해 비용의 약 10%로 억제, 예산 안에서 품질·비용 균형 |
-| 리랭크 Jina v3.5 채택 | 속도 약 43배, nDCG@5 0.609 vs 0.657(12쿼리, 유의차 없음) |
+| LLM 조합 선정: 생성 Gemini 3.6 Flash · 분석 Gemini 3.5 Flash-Lite | 18문항 품질 평가(중립 judge)에서 응답 모드 판정 정확도 0.94(기존 gpt-oss 0.85~0.92), 환각 0, JSON 18/18로 동급 이상. 요청당 비용 실측 약 $0.01(하루 300건 기준 월 약 $90), 분석은 저가 모델에 맡겨 전체 비용의 약 10% |
+| 리랭크 Jina v3.5 채택 | 속도 약 43배. nDCG@5 Jina 0.609 vs 로컬 0.657(12쿼리 LLM judge, 쿼리별 5승 6패 1무로 노이즈 수준 차이) |
 | 배포 이미지에 모델 번들 | Railway 볼륨 상한(5GB) < 모델 캐시. CPU 전용 torch·중복 가중치 제거로 20.9GB → 9.5GB |
 
-#### 최신 개발: 검색 속도·운영 안정화와 Railway 배포
+#### 최신 개발: 응답 속도·운영 안정화와 Railway 배포
 
-[PR #46](https://github.com/dabel11/Ttalkak/pull/46)(2026-10-09 develop 병합)에서 RAG 서버의 검색 속도, LLM 백엔드, 배포 설정을 정비하고 Railway 스테이징에서 실측 검증했습니다.
+[PR #46](https://github.com/dabel11/Ttalkak/pull/46)(2026-10-09 develop 병합)에서 RAG 서버의 응답 속도, LLM 백엔드, 배포 설정을 정비하고 Railway 스테이징에서 실측 검증했습니다.
 
-- **검색 속도:** 리랭크 호스티드 API 백엔드(Cohere·Jina·Voyage 지원, 실패 시 로컬 모델 폴백), 컨테이너 vCPU 할당량 기반 스레드 제한, 분석기 백엔드를 생성 백엔드와 자동으로 맞춰 느린 경로 제거
-- **관련성 게이트:** 무의미 입력 404 판정을 예시 코퍼스 기준으로 이관. 리뷰에서 지적된 "예시 검색 실패 시 정상 요청도 404" 문제를 실패와 무근거를 구분하도록 수정하고, 빈 코퍼스 배포 시 전건 404를 막는 안전장치 추가
-- **배포:** `railway.json`(헬스체크·재시작 정책), IPv6(`::`) 바인딩으로 사설망 연결, 모델 번들 이미지 경량화, 코퍼스 이전 도구
-- **검증:** CI와 같은 환경에서 ruff + pytest 289개 통과. FastAPI TestClient로 실제 HTTP `/query` 경로의 무의미 입력 404·정상 200·예시 검색 실패 폴백·생성 실패 503·동시성 503 + `Retry-After` 회귀 검사. 스테이징에서 `/health` 200, `/query` 200(약 12초), 404 게이트 동작, Jina 리랭크·Gemini 분석·생성 확인
+- **응답 속도:** 호스티드 리랭크 API(Cohere·Jina·Voyage 지원, 실패 시 로컬 폴백), vCPU 할당량 기반 스레드 제한, 분석기가 생성 백엔드(Gemini)를 자동으로 따르게 해 느린 Groq 분석 경로(15~35초) 제거
+- **관련성 게이트:** 무의미 입력 404 판정을 예시 코퍼스 기준으로 이관. 검색 오류와 무관 입력을 구분해 검색 오류 시 정상 요청이 404 되던 문제 수정, 빈 코퍼스 배포 시 전건 404 방지
+- **배포:** 모델 번들 이미지 경량화(20.9GB → 9.5GB), IPv6(`::`) 바인딩으로 Railway 사설망 연결, 헬스체크 타임아웃 조정, 코퍼스 이전 도구
+- **검증:** ruff·pytest 289개 통과(CI 동일 환경). `/query` HTTP 회귀 테스트로 404·200·폴백·생성 실패 503·동시성 503 + `Retry-After` 검증. 스테이징에서 `/health`·`/query`(약 12초)·404 게이트·Jina 리랭크·Gemini 분석·생성 동작 확인
+
+구현 근거: [리랭크 API](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/rerank.py) · [스레드 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/cpu.py) · [관련성 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/gate.py) · [`/query` 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_query_endpoint.py) · [Railway 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/railway.json)
 
 ## 목차
 
