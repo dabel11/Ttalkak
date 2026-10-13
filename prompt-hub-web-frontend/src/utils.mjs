@@ -17,18 +17,6 @@
     return /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(String(value || "").trim());
   }
 
-  function isFutureDate(value) {
-    if (!value) return false;
-
-    const date = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return false;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return date > today;
-  }
-
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -101,7 +89,6 @@
     normalizeSearchText,
     normalizeTag,
     isValidPhone,
-    isFutureDate,
     escapeHtml,
     escapeAttr,
     getFinalPromptText,

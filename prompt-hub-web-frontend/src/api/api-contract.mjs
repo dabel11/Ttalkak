@@ -1,7 +1,7 @@
   const CONTRACT_METHODS = Object.freeze({
     auth: ["login", "signup", "googleLogin"],
     record: [
-      "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
+      "googleConfig", "findId", "requestPasswordReset", "checkUserId", "checkNickname", "proposeTag", "improvePrompt",
       "getMakeThread", "createMakeThread", "createMakeFolder", "sharePrompt", "shareExistingPrompt", "updatePrompt",
       "addComment", "addReply", "updateComment", "requestPromptRevision", "getAdminUserActivitySummary",
       "getAdminUserActivity", "getAdminUserUsage", "reconcileAdminUserUsage", "blockAdminUser", "unblockAdminUser", "updateAdminReportStatus", "updateAdminTagStatus",

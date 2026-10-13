@@ -30,7 +30,6 @@ import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy
           isFindPassword,
           isWithdraw,
           isLoggedIn: state.isLoggedIn,
-          hasGoogleCredential: Boolean(ctx.runtimeConfig?.googleCredential),
           nicknameChecked,
           userIdChecked,
           authDraft: state.authDraft,

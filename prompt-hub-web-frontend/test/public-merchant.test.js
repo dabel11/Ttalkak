@@ -20,12 +20,13 @@ test("public merchant rendering escapes operator data and does not invent missin
 
 test("footer is shared across built application and public review pages", () => {
   const webRoot = path.resolve(__dirname, "..");
-  for (const name of ["index.html", "service.html", "terms.html", "refund-policy.html"]) {
+  for (const name of ["index.html", "service.html", "terms.html", "refund-policy.html", "privacy-policy.html", "merchant-review.html"]) {
     const html = renderPublicMerchant(fs.readFileSync(path.join(webRoot, name), "utf8"), webRoot);
     assert.ok(html.includes('aria-label="사업자 정보"'));
     assert.ok(html.includes("딸깍"));
     assert.ok(html.includes('href="/service.html"'));
     assert.ok(html.includes('href="/refund-policy.html"'));
+    assert.ok(html.includes('href="/privacy-policy.html"'));
     assert.ok(!html.includes("TTALKAK_PUBLIC_MERCHANT"));
   }
 });

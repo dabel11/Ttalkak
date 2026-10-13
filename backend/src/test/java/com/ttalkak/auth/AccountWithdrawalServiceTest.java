@@ -17,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -51,6 +52,7 @@ class AccountWithdrawalServiceTest {
     @Test
     void withdrawsLocalMemberWithCorrectPassword() {
         Member member = localMember();
+        ReflectionTestUtils.setField(member, "birth", java.time.LocalDate.of(2000, 1, 1));
 
         when(passwordEncoder.matches(
                 "correct-password",
@@ -64,6 +66,9 @@ class AccountWithdrawalServiceTest {
         );
 
         assertFalse(member.isActive());
+        assertNull(member.getBirth());
+        assertNull(member.getEmail());
+        assertNull(member.getPhone());
         verify(memberRepository).save(member);
     }
 

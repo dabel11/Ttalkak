@@ -1,6 +1,6 @@
 function bindAuthControlEvents(root, controller) {
   root.querySelectorAll("[data-toggle-password]").forEach((button) => button.addEventListener("click", () => controller.togglePassword(button)));
-  root.querySelectorAll("[data-google-auth]").forEach((button) => button.addEventListener("click", () => controller.googleLogin(button)));
+  root.querySelectorAll("[data-google-auth]").forEach((button) => controller.mountGoogle(button));
   root.querySelectorAll("[data-check-duplicate]").forEach((button) => button.addEventListener("click", () => { const input = button.closest(".auth-check-row")?.querySelector("input"); controller.checkDuplicate(button.dataset.checkDuplicate, input); }));
 }
 function bindAuthFormEvents(root, controller, state) {

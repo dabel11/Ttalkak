@@ -12,10 +12,11 @@ export function createAuthApi({ request }) {
           body: JSON.stringify(payload),
         });
       },
-      googleLogin(credential) {
+      googleConfig() { return request("/api/auth/google/config"); },
+      googleLogin(credential, consent = {}) {
         return request("/api/auth/google", {
           method: "POST",
-          body: JSON.stringify({ credential }),
+          body: JSON.stringify({ credential, ...consent }),
         });
       },
       findId(payload) {

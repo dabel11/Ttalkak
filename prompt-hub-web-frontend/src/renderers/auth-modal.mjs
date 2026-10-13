@@ -10,7 +10,6 @@
       isFindPassword,
       isWithdraw,
       isLoggedIn,
-      hasGoogleCredential,
       nicknameChecked,
       userIdChecked,
       authDraft,
@@ -74,8 +73,7 @@
             <h2 id="auth-title">${title}</h2>
             <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
           </div>
-          <button class="google-auth-button" type="button" data-google-auth><span>G</span>${hasGoogleCredential ? (isSignup ? "Google로 회원가입" : "Google로 로그인") : (isSignup ? "Google 회원가입 데모" : "Google 로그인 데모")}</button>
-          ${!hasGoogleCredential ? `<p class="auth-helper compact">실제 Google OAuth는 Google Client ID와 credential 설정 후 연결됩니다.</p>` : ""}
+          <div data-google-auth aria-live="polite">Google 로그인</div>
           <div class="auth-divider"><span>또는</span></div>
           ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
           ${
@@ -90,12 +88,7 @@
                   <button type="button" data-check-duplicate="userId" ${userIdChecked ? "disabled" : ""}>${userIdChecked ? "확인 완료" : "중복 확인"}</button>
                 </div>
                 <p class="auth-field-warning" data-user-id-warning>${escapeHtml(authUserIdWarning || "")}</p>
-                <input name="email" type="email" placeholder="이메일" autocomplete="email" value="${escapeAttr(authDraft.email || "")}" />
-                <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" value="${escapeAttr(authDraft.phone || "")}" />
-                <label class="date-field ${authDraft.birth ? "has-value" : ""}">
-                  <input name="birth" type="date" aria-label="생년월일 선택" value="${escapeAttr(authDraft.birth || "")}" />
-                  <span>생년월일</span>
-                </label>`
+                <input name="email" type="email" placeholder="이메일" autocomplete="email" value="${escapeAttr(authDraft.email || "")}" />`
               : `<input name="userId" placeholder="아이디" autocomplete="username" />
                  <p class="auth-field-warning" data-user-id-warning>${escapeHtml(authUserIdWarning || "")}</p>`
           }
@@ -111,8 +104,8 @@
                   <button class="password-toggle" type="button" data-toggle-password aria-label="비밀번호 보기">${icons.eye}</button>
                 </label>
                 <p class="auth-field-warning caps-warning" data-caps-warning hidden>Caps Lock이 켜져 있습니다.</p>
-                <label class="agreement-row"><input type="checkbox" name="terms" ${authDraft.terms ? "checked" : ""} /> 사이트 이용 약관에 동의합니다</label>
-                <label class="agreement-row"><input type="checkbox" name="privacy" ${authDraft.privacy ? "checked" : ""} /> 개인정보 수집 및 이용에 동의합니다</label>`
+                <label class="agreement-row"><input type="checkbox" name="terms" ${authDraft.terms ? "checked" : ""} /> <a href="/terms.html" target="_blank" rel="noopener">이용약관</a>에 동의합니다</label>
+                <label class="agreement-row"><input type="checkbox" name="privacy" ${authDraft.privacy ? "checked" : ""} /> <a href="/privacy-policy.html#collection" target="_blank" rel="noopener">개인정보 수집·이용</a>에 동의합니다</label>`
               : ""
           }
           <button class="primary-button full" type="submit">${isSignup ? "가입하기" : "로그인"}</button>

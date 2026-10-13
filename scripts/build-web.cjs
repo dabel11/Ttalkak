@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { renderPublicMerchant } = require("./render-public-merchant.cjs");
+const { renderBillingPreview } = require("./render-billing-preview.cjs");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const webRoot = path.join(repositoryRoot, "prompt-hub-web-frontend");
@@ -202,8 +203,8 @@ async function build() {
       throw new Error(`Built index.html references a missing file: ${reference}`);
     }
   }
-  fs.writeFileSync(path.join(outputRoot, "index.html"), renderPublicMerchant(html, webRoot), "utf8");
-  for (const page of ["refund-policy.html", "service.html", "terms.html"]) {
+  fs.writeFileSync(path.join(outputRoot, "index.html"), renderPublicMerchant(renderBillingPreview(html, process.env.TTALKAK_BILLING_PREVIEW_ENABLED), webRoot), "utf8");
+  for (const page of ["refund-policy.html", "service.html", "terms.html", "privacy-policy.html", "merchant-review.html"]) {
     const source = fs.readFileSync(path.join(webRoot, page), "utf8");
     fs.writeFileSync(path.join(outputRoot, page), renderPublicMerchant(source, webRoot), "utf8");
   }

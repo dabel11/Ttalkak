@@ -6,7 +6,7 @@ test.before(async () => ({ readRuntimeConfig } = await import("../src/runtime/ru
 
 test("runtime config centralizes defaults and normalizes the API URL", () => {
   const config = readRuntimeConfig({ TTALKAK_API_BASE_URL: "https://api.example.test/", location: { hostname: "web.example.test" } });
-  assert.deepEqual(config, { apiBaseUrl: "https://api.example.test", apiEnvironment: "production", billingPreviewEnabled: false, apiTimeoutMs: 60_000, improveTimeoutMs: 90_000, myPageHydrationTimeoutMs: 15_000, googleCredential: "", demoFallbackEnabled: false });
+  assert.deepEqual(config, { apiBaseUrl: "https://api.example.test", apiEnvironment: "production", billingPreviewEnabled: false, apiTimeoutMs: 60_000, improveTimeoutMs: 90_000, myPageHydrationTimeoutMs: 15_000, demoFallbackEnabled: false });
 });
 
 test("runtime config distinguishes local development APIs from production APIs", () => {
@@ -29,8 +29,7 @@ test("runtime config rejects malformed URLs and timeout values", () => {
   assert.throws(() => readRuntimeConfig({ TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS: -1 }), /positive number/);
 });
 
-test("runtime config exposes credential and demo flags without leaking them into domain modules", () => {
-  const config = readRuntimeConfig({ TTALKAK_GOOGLE_CREDENTIAL: "public-client-id", TTALKAK_DEMO_FALLBACK_ENABLED: true });
-  assert.equal(config.googleCredential, "public-client-id");
+test("runtime config exposes the explicit demo fallback flag", () => {
+  const config = readRuntimeConfig({ TTALKAK_DEMO_FALLBACK_ENABLED: true });
   assert.equal(config.demoFallbackEnabled, true);
 });

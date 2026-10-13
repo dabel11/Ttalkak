@@ -160,7 +160,7 @@ interface TtalkakModuleRegistry {
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; errorBoundary: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
-  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; myPageHydrationTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
+  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; myPageHydrationTimeoutMs: number; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
@@ -244,7 +244,8 @@ interface TtalkakApiContext {
 interface TtalkakApi {
   login(payload: TtalkakPayload): Promise<unknown>;
   signup(payload: TtalkakPayload): Promise<unknown>;
-  googleLogin(credential: string): Promise<unknown>;
+  googleConfig(): Promise<{ clientId: string }>;
+  googleLogin(credential: string, consent?: { agreeTerms: boolean; agreePrivacy: boolean }): Promise<unknown>;
   findId(payload: TtalkakPayload): Promise<unknown>;
   requestPasswordReset(payload: TtalkakPayload): Promise<unknown>;
   withdrawAccount(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
@@ -338,7 +339,6 @@ interface Window {
   TTALKAK_API_TIMEOUT_MS?: number | string;
   TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
   TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS?: number | string;
-  TTALKAK_GOOGLE_CREDENTIAL?: string;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
   TTALKAK_BILLING_PREVIEW_ENABLED?: boolean;
 }

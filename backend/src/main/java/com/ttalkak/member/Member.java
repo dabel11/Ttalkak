@@ -299,5 +299,6 @@ public class Member {
         this.name = "탈퇴한 사용자";
         this.phone = null;
         this.email = null;
+        this.birth = null;
     }
 }
