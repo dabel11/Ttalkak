@@ -20,7 +20,9 @@ ${complete ? "" : '<p role="status">사업자 공개 정보 등록을 준비 중
 }
 
 function renderPublicMerchant(html, webRoot) {
-  return html.replace("<!-- TTALKAK_PUBLIC_MERCHANT -->", merchantFooter(webRoot));
+  const marker = "<!-- TTALKAK_PUBLIC_MERCHANT -->";
+  if (html.split(marker).length !== 2) throw new Error("Public page requires exactly one merchant footer marker.");
+  return html.replace(marker, merchantFooter(webRoot));
 }
 
 module.exports = { merchantFooter, renderPublicMerchant };

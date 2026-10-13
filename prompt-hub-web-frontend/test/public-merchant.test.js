@@ -29,3 +29,10 @@ test("footer is shared across built application and public review pages", () => 
     assert.ok(!html.includes("TTALKAK_PUBLIC_MERCHANT"));
   }
 });
+
+test("missing or duplicate footer marker fails the build instead of silently losing seller information", () => {
+  const webRoot = path.resolve(__dirname, "..");
+  for (const html of ["<body></body>", "<!-- TTALKAK_PUBLIC_MERCHANT --><!-- TTALKAK_PUBLIC_MERCHANT -->"]) {
+    assert.throws(() => renderPublicMerchant(html, webRoot), /exactly one merchant footer marker/);
+  }
+});
