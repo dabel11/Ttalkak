@@ -3,8 +3,18 @@ const { gotoApp, waitForAppHydration } = require("./support/app-ready.js");
 
 const HEADERS = { "access-control-allow-origin": "*", "content-type": "application/json; charset=utf-8" };
 
-test("Google demo login persists local likes, saves, folders, and My Page", async ({ page }) => {
+test("legacy demo sessions preserve local likes, saves, folders, and My Page", async ({ page }) => {
   test.setTimeout(60_000);
+  // Existing demo data remains readable, but Google no longer creates demo sessions.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("__legacy_demo_seeded__")) return;
+    localStorage.setItem("ttalkak_access_token", "demo-token");
+    localStorage.setItem("prompt_hub_web_state_v2", JSON.stringify({ state: {
+      isLoggedIn: true, authToken: "demo-token", token: "demo-token",
+      currentUser: "Google 데모 사용자", currentUserId: "google-demo", currentUserRole: "user",
+    } }));
+    sessionStorage.setItem("__legacy_demo_seeded__", "true");
+  });
   const protectedRequests = [];
   await page.route("http://localhost:8080/**", async (route) => {
     const request = route.request();
@@ -30,8 +40,6 @@ test("Google demo login persists local likes, saves, folders, and My Page", asyn
 
   await gotoApp(page);
   await waitForAppHydration(page);
-  await page.locator('[data-open-auth="login"]').first().click();
-  await page.getByRole("button", { name: "Google 로그인 데모" }).click();
   await expect(page.locator("[data-auth-form]")).toHaveCount(0);
 
   const like = page.locator('[data-like-prompt="88"]').first();
