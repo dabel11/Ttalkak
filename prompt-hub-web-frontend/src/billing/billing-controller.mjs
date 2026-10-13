@@ -244,7 +244,10 @@ export function createBillingController(ctx) {
   }
 
   function open(plan = null) {
-    if (!readRuntimeConfig().billingPreviewEnabled) return false;
+    if (!readRuntimeConfig().billingPreviewEnabled) {
+      ctx.navigateToPricing?.();
+      return false;
+    }
     selectedPlan = ["LIGHT", "STANDARD", "PRO"].includes(plan) ? plan : null;
     quote = null;
     state.compactHeaderOpen = false;

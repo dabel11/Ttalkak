@@ -6,27 +6,39 @@ test.before(async () => {
   ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
 });
 
-test("unlaunched pricing is hidden in production unless explicitly enabled", async () => {
+test("agreed prices are public while production purchase actions stay blocked", async () => {
   const previousWindow = globalThis.window;
   const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
   const state = { isLoggedIn: true, billingOpen: false };
   let paymentCalls = 0;
+  let pricingVisits = 0;
   globalThis.window = { __API_BASE_URL__: "http://localhost:8080", location: { hostname: "ttalkak.example" } };
   try {
     const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
-    assert.match(page, /요금제 준비 중/);
-    assert.doesNotMatch(page, /3,900|5,900|9,900|구독 신청/);
-    assert.equal(SubscriptionSummaryView({ state }, { usage: { plan: "PRO" } }), "");
+    for (const price of ["3,900", "5,900", "9,900"]) assert.match(page, new RegExp(price));
+    assert.match(page, /유료 결제 준비 중/);
+    assert.doesNotMatch(page, /data-start-pro|data-open-billing|테스트 구독/);
+    assert.equal((page.match(/disabled>유료 결제 준비 중/g) || []).length, 3);
+    const summary = SubscriptionSummaryView({ state }, { usage: {
+      plan: "FREE", requests: 10, requestLimit: 10, requestRemaining: 0,
+      requestQuotaEnforced: true, requestLimitReached: true, quotaEnforced: false,
+      usageAvailable: true,
+    } });
+    assert.match(summary, /10 \/ 10회/);
+    assert.doesNotMatch(summary, /사용량 제한은 적용 전|data-open-billing|pricing-upgrade-tip/);
     const controller = createController({
       state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      navigateToPricing: () => { pricingVisits += 1; },
       api: { setupBilling: async () => { paymentCalls += 1; } },
     });
     assert.equal(controller.openBilling("PRO"), false);
     assert.equal(state.billingOpen, false);
     assert.equal(controller.renderBilling(), "");
     assert.equal(paymentCalls, 0);
+    assert.equal(pricingVisits, 1);
     globalThis.window.TTALKAK_BILLING_PREVIEW_ENABLED = true;
     assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /9,900원/);
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /data-open-billing/);
   } finally {
     globalThis.window = previousWindow;
   }

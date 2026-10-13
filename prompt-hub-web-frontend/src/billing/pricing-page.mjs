@@ -2,7 +2,8 @@ import { formatTokenCount } from "./usage-model.mjs";
 import { readRuntimeConfig } from "../runtime/runtime-config.mjs";
 
 export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, snapshot) {
-  if (!state.isLoggedIn || !readRuntimeConfig().billingPreviewEnabled) return "";
+  if (!state.isLoggedIn) return "";
+  const preview = readRuntimeConfig().billingPreviewEnabled;
   const { usage, billing, busy, message, errorMessage } = snapshot;
   const date = (value) => value ? escapeHtml(formatShortDate(value)) : "확인 중";
   const status = String(billing?.paymentStatus || "").toUpperCase();
@@ -11,10 +12,10 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
   const planIndex = tiers.indexOf(usage?.plan);
   const nextTier = planIndex >= 0 && planIndex < tiers.length - 1 ? tiers[planIndex + 1] : null;
   const ratio = usage?.requestLimit > 0 ? (usage.requests || 0) / usage.requestLimit : 0;
-  const suggestUpgrade = Boolean(nextTier && usage?.requestQuotaEnforced
+  const suggestUpgrade = Boolean(preview && nextTier && usage?.requestQuotaEnforced
     && ratio >= 0.7 && !usage.usageBlocked);
   return `<section class="subscription-card" aria-labelledby="subscription-heading">
-    <div class="subscription-head"><h2 id="subscription-heading">내 요금제·사용량</h2><button class="secondary-button" type="button" data-open-billing>구독·결제 관리</button></div>
+    <div class="subscription-head"><h2 id="subscription-heading">내 요금제·사용량</h2>${preview ? '<button class="secondary-button" type="button" data-open-billing>구독·결제 관리</button>' : ""}</div>
     ${busy ? '<p role="status">사용량을 확인하는 중입니다…</p>' : ""}
     ${errorMessage ? `<p class="billing-alert" role="alert">${escapeHtml(errorMessage)}</p><button class="secondary-button" type="button" data-subscription-refresh>다시 확인</button>` : ""}
     ${message ? `<p class="billing-success" role="status">${escapeHtml(message)}</p>` : ""}
@@ -31,13 +32,13 @@ export function SubscriptionSummaryView({ state, escapeHtml, formatShortDate }, 
       : !usage.usageAvailable ? '<p role="status">과거 요청 사용량 확인 필요</p>'
         : usage.requestLimitReached ? '<p class="billing-alert" role="status">이번 기간의 AI 요청 횟수를 모두 사용했습니다.</p>'
           : usage.limitReached && usage.quotaEnforced ? '<p class="billing-alert" role="status">이번 기간의 토큰을 모두 사용했습니다.</p>' : "") : ""}
-    ${usage && !usage.quotaEnforced ? '<p class="pricing-note">사용량 제한은 적용 전입니다.</p>' : ""}` : ""}
+    ${usage && !usage.quotaEnforced && !usage.requestQuotaEnforced ? '<p class="pricing-note">사용량 제한은 적용 전입니다.</p>' : ""}` : ""}
     ${suggestUpgrade ? `<aside class="pricing-upgrade-tip" aria-label="더 넉넉한 요금제 추천"><strong>${escapeHtml(nextTier)}로 넉넉하게 이용해 보세요.</strong><p>70% 사용. 추가 결제액을 확인하세요.</p><button type="button" class="secondary-button" data-open-billing data-selected-plan="${nextTier}">추가 결제 금액 확인</button></aside>` : ""}
   </section>`;
 }
 
 export function PricingPageView(ctx, snapshot) {
-  if (!readRuntimeConfig().billingPreviewEnabled) return '<section class="pricing-page"><h1>요금제 준비 중</h1><p>정식 출시 후 안내하겠습니다.</p></section>';
+  const preview = readRuntimeConfig().billingPreviewEnabled;
   const { state } = ctx;
   const plan = snapshot.usage?.plan;
   const paidPlans = [
@@ -48,7 +49,7 @@ export function PricingPageView(ctx, snapshot) {
   const paidCards = paidPlans.map(({ id, price, requests, badge }) => `
       <article class="pricing-plan pricing-${id.toLowerCase()}">${badge ? `<p class="pricing-badge">${badge}</p>` : ""}<h2>${id}</h2><p class="pricing-price">${price}원 <span>/ 월</span></p><p>월 ${requests}회 개선 요청</p>
         <ul><li>원클릭 개선·대화형 개선</li><li>프롬프트 저장</li><li>${id === "PRO" ? "더 넉넉한 AI 사용량" : "동일한 AI 개선 품질"}</li></ul>
-        <button class="primary-button" type="button" ${state.isLoggedIn ? `data-open-billing data-selected-plan="${id}"` : `data-start-pro data-selected-plan="${id}"`}>${id === "PRO" ? (plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인") : "테스트 구독 신청"}</button>
+        ${preview ? `<button class="primary-button" type="button" ${state.isLoggedIn ? `data-open-billing data-selected-plan="${id}"` : `data-start-pro data-selected-plan="${id}"`}>${id === "PRO" ? (plan === "PRO" ? "구독 관리하기" : "테스트 구독 확인") : "테스트 구독 신청"}</button>` : '<button class="primary-button" type="button" disabled>유료 결제 준비 중</button>'}
         ${plan === id ? '<p class="pricing-current">현재 요금제</p>' : ""}
       </article>`).join("");
   return `<section class="pricing-page" aria-labelledby="pricing-heading">
@@ -63,7 +64,7 @@ export function PricingPageView(ctx, snapshot) {
       ${paidCards}
     </div>
     <p class="pricing-note">비회원은 총 3회 체험, 저장은 로그인 후 가능합니다.</p>
-    <p class="pricing-note">유료 요금제는 테스트 결제 전용이며 실제 청구되지 않습니다.</p>
+    <p class="pricing-note">${preview ? "테스트 결제 화면이며 실제 청구되지 않습니다." : "판매 가격 안내입니다. 유료 결제는 준비 중이며 현재 신청할 수 없습니다."}</p>
     ${SubscriptionSummaryView(ctx, snapshot)}
     <section class="pricing-policy" aria-labelledby="pricing-policy-heading"><h2 id="pricing-policy-heading">사용량은 어떻게 계산되나요?</h2>
       <p>원클릭·Make의 미리보기·후속 질문·재개선은 AI 호출당 1회 차감됩니다.</p>
