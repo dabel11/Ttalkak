@@ -14,9 +14,21 @@ public interface BillingSubscriptionRepository extends JpaRepository<BillingSubs
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from BillingSubscription b where b.memberId = :memberId")
     Optional<BillingSubscription> lockByMemberId(@Param("memberId") Long memberId);
-    @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
-    List<Long> dueMemberIds(@Param("now") Instant now);
+    // A withdrawn account must never be selected for a new scheduled charge,
+    // even if old subscription data still has auto_renew=true.
     @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null "
-            + "and coalesce(b.billingScope, 'test:legacy') = :scope and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
+            + "and exists (select m.id from Member m where m.id = b.memberId and m.active = true) "
+            + "and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
+    List<Long> dueMemberIds(@Param("now") Instant now);
+
+    @Query("select b.memberId from BillingSubscription b where b.autoRenew = true and b.billingKey is not null "
+            + "and exists (select m.id from Member m where m.id = b.memberId and m.active = true) "
+            + "and coalesce(b.billingScope, 'test:legacy') = :scope "
+            + "and (b.nextChargeAt is null or b.nextChargeAt <= :now)")
     List<Long> dueMemberIds(@Param("now") Instant now, @Param("scope") String scope);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from BillingSubscription b where b.memberId = :memberId "
+            + "and exists (select m.id from Member m where m.id = b.memberId and m.active = true)")
+    Optional<BillingSubscription> lockActiveByMemberId(@Param("memberId") Long memberId);
 }
