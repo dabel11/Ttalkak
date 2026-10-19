@@ -24,10 +24,62 @@ def check_origin(value):
     return value.rstrip("/")
 
 
+def security_checks(opener, origin):
+    """Read-only anonymous authorization and rejected-origin checks (opt-in)."""
+    failed = False
+    protected_paths = (
+        '/api/me/usage',
+        '/api/me/billing',
+        '/api/admin/billing/refunds',
+    )
+    for path in protected_paths:
+        request = urllib.request.Request(origin + path, headers={'Accept': 'application/json'})
+        try:
+            with opener.open(request, timeout=15) as response:
+                status = response.status
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+        except (OSError, ValueError):
+            status = None
+        passed = status == 401
+        if not passed:
+            failed = True
+        print(json.dumps({'path': path, 'check': 'anonymous_access_denied',
+                          'result': 'PASS' if passed else 'FAIL',
+                          'httpStatus': status}))
+
+    untrusted_origin = 'https://untrusted-origin.example.invalid'
+    preflight = urllib.request.Request(
+        origin + '/api/prompts/improve',
+        method='OPTIONS',
+        headers={'Origin': untrusted_origin, 'Access-Control-Request-Method': 'POST'},
+    )
+    try:
+        with opener.open(preflight, timeout=15) as response:
+            status = response.status
+            allowed_origin = response.headers.get('Access-Control-Allow-Origin')
+    except urllib.error.HTTPError as error:
+        status = error.code
+        allowed_origin = error.headers.get('Access-Control-Allow-Origin') if error.headers else None
+        error.close()
+    except (OSError, ValueError):
+        status, allowed_origin = None, None
+    passed = status is not None and status < 500 and allowed_origin not in (
+        '*', untrusted_origin,
+    )
+    if not passed:
+        failed = True
+    print(json.dumps({'path': '/api/prompts/improve', 'check': 'untrusted_cors_origin_rejected',
+                      'result': 'PASS' if passed else 'FAIL', 'httpStatus': status}))
+    return not failed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--origin", default="https://web-production-a82d94.up.railway.app")
     parser.add_argument("--authenticated", action="store_true", help="Explicitly send TTALKAK_CHECK_TOKEN to this origin")
+    parser.add_argument("--security", action="store_true", help="Read-only anonymous authorization and CORS checks")
     args = parser.parse_args()
     try:
         origin = check_origin(args.origin)
@@ -77,6 +129,8 @@ def main():
             failed = True
             # No response body, token, account identity, or provider error is emitted.
             print(json.dumps({"path": path, "status": "FAIL", "errorType": type(error).__name__}))
+    if args.security and not security_checks(opener, origin):
+        failed = True
     if not token:
         print("SKIP: authenticated checks; set TTALKAK_CHECK_TOKEN and explicitly pass --authenticated")
     print("Read-only checks do not prove RAG generation, email delivery, Google sign-in, or payment approval.")
