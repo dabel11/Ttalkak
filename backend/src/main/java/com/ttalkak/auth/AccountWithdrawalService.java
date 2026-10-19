@@ -5,6 +5,8 @@ import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
 import com.ttalkak.community.CommentRepository;
 import com.ttalkak.prompt.PromptRepository;
+import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.make.MakeFolderRepository;
 import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,19 +24,25 @@ public class AccountWithdrawalService {
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
     private final PromptRepository promptRepository;
     private final CommentRepository commentRepository;
+    private final MakeThreadRepository makeThreadRepository;
+    private final MakeFolderRepository makeFolderRepository;
 
     public AccountWithdrawalService(
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
             GoogleIdTokenVerifier googleIdTokenVerifier,
             PromptRepository promptRepository,
-            CommentRepository commentRepository
+            CommentRepository commentRepository,
+            MakeThreadRepository makeThreadRepository,
+            MakeFolderRepository makeFolderRepository
     ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.googleIdTokenVerifier = googleIdTokenVerifier;
         this.promptRepository = promptRepository;
         this.commentRepository = commentRepository;
+        this.makeThreadRepository = makeThreadRepository;
+        this.makeFolderRepository = makeFolderRepository;
     }
 
     @Transactional
@@ -77,6 +85,15 @@ public class AccountWithdrawalService {
 
     comments.forEach(comment -> comment.anonymizeAuthor());
     commentRepository.saveAll(comments);
+
+    // Make threads store the user's full private conversation text. Unlike
+    // shared community content, they have no audience or archival purpose
+    // after withdrawal. Delete owned threads before their folders, within
+    // the same transaction as account deactivation.
+    makeThreadRepository.deleteAll(
+            makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId));
+    makeFolderRepository.deleteAll(
+            makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(memberId));
 
     member.withdraw();
     memberRepository.save(member);
