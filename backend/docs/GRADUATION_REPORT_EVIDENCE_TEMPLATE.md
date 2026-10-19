@@ -60,4 +60,4 @@
 
 백엔드/PM은 병합·배포 SHA와 사용자 흐름, AI 담당자는 실험 기록·동일 조건·평가 한계, 프론트 담당자는 실제 웹/확장 흐름·시연 안정성을 확인한다. 팀원 확인이 필요한 항목은 시험기간 이후에 **한 번에** 요청한다.
 
-관련: [시연 운영안](GRADUATION_FINAL_DEMO.md) · [최종 검수](../../docs/GRADUATION_ACCEPTANCE.md) · [프로젝트 관리 이슈](https://github.com/dabel11/Ttalkak/issues/63).
+관련: [검증 현황판](GRADUATION_EVIDENCE_STATUS.md) · [최종 검수](../../docs/GRADUATION_ACCEPTANCE.md) · [프로젝트 관리 이슈](https://github.com/dabel11/Ttalkak/issues/63).
