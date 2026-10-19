@@ -37,6 +37,14 @@ class WithdrawalAggregateOutputTest(unittest.TestCase):
                          report["reviewCounts"])
         self.assertNotIn("member_id", str(report))
 
+    def test_retained_billing_key_triggers_manual_revocation_review(self):
+        counts = audit.parse_aggregate_rows(result_rows({
+            "inactive_billing_keys_stored": 2,
+        }))
+        report = audit.classify(counts)
+        self.assertEqual("REVIEW_REQUIRED", report["status"])
+        self.assertEqual({"inactive_billing_keys_stored": 2}, report["reviewCounts"])
+
     def test_retained_history_alone_is_not_automatic_delete(self):
         counts = audit.parse_aggregate_rows(result_rows({
             "inactive_member_user_id_reserved": 2,
