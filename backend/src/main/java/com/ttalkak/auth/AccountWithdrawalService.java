@@ -7,6 +7,8 @@ import com.ttalkak.community.CommentRepository;
 import com.ttalkak.prompt.PromptRepository;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeFolderRepository;
+import com.ttalkak.billing.BillingSubscriptionRepository;
+import com.ttalkak.billing.BillingSubscription;
 import com.ttalkak.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +28,7 @@ public class AccountWithdrawalService {
     private final CommentRepository commentRepository;
     private final MakeThreadRepository makeThreadRepository;
     private final MakeFolderRepository makeFolderRepository;
+    private final BillingSubscriptionRepository billingSubscriptionRepository;
 
     public AccountWithdrawalService(
             MemberRepository memberRepository,
@@ -34,7 +37,8 @@ public class AccountWithdrawalService {
             PromptRepository promptRepository,
             CommentRepository commentRepository,
             MakeThreadRepository makeThreadRepository,
-            MakeFolderRepository makeFolderRepository
+            MakeFolderRepository makeFolderRepository,
+            BillingSubscriptionRepository billingSubscriptionRepository
     ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -43,6 +47,7 @@ public class AccountWithdrawalService {
         this.commentRepository = commentRepository;
         this.makeThreadRepository = makeThreadRepository;
         this.makeFolderRepository = makeFolderRepository;
+        this.billingSubscriptionRepository = billingSubscriptionRepository;
     }
 
     @Transactional
@@ -94,6 +99,11 @@ public class AccountWithdrawalService {
             makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId));
     makeFolderRepository.deleteAll(
             makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(memberId));
+
+    // Stop future recurring charges while preserving payment/refund history.
+    // An already in-flight provider charge still needs separate reconciliation.
+    billingSubscriptionRepository.lockByMemberId(memberId)
+            .ifPresent(BillingSubscription::stopRenewalForWithdrawal);
 
     member.withdraw();
     memberRepository.save(member);
