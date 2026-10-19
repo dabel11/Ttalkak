@@ -11,7 +11,7 @@ BASE = "http://127.0.0.1:18173"
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def request(path, payload=None, session=None, extra_headers=None):
+def request(path, payload=None, session=None, extra_headers=None, method=None):
     # Browser fetch sends Origin even though web and API share the public origin.
     headers = {"Content-Type": "application/json", "Origin": BASE}
     if session:
@@ -19,7 +19,7 @@ def request(path, payload=None, session=None, extra_headers=None):
     headers.update(extra_headers or {})
     data = None if payload is None else json.dumps(payload).encode()
     try:
-        response = HTTP.open(urllib.request.Request(BASE + path, data=data, headers=headers), timeout=10)
+        response = HTTP.open(urllib.request.Request(BASE + path, data=data, headers=headers, method=method), timeout=10)
     except urllib.error.HTTPError as error:
         response = error
     with response:
@@ -138,6 +138,29 @@ def check_member_policy():
     assert request("/api/auth/me", extra_headers=headers(second))[0] == 401
     assert login(password)[0] == 401
     token = login(changed)[1]["accessToken"]
+    # Validate community post persistence, save idempotency and ownership
+    # only inside the disposable ttalkak-ci database (never staging/production).
+    post_title = "CI-persistence-" + suffix
+    status, post = request("/api/prompts", {
+        "title": post_title, "text": "CI fixture: no real user content", "tags": ["ci"],
+    }, extra_headers=headers(token))
+    assert status == 200 and post["title"] == post_title, ("community create", status)
+    post_id = post["id"]
+    status, detail = request("/api/prompts/" + str(post_id), extra_headers=headers(token))
+    assert status == 200 and detail["isMine"] is True, ("community detail", status)
+    assert detail["text"] == "CI fixture: no real user content"
+    status, saved = request("/api/prompts/" + str(post_id) + "/save",
+                            {}, extra_headers=headers(token))
+    assert status == 200 and saved["isSaved"] is True
+    status, saved_again = request("/api/prompts/" + str(post_id) + "/save",
+                                  {}, extra_headers=headers(token))
+    assert status == 200 and saved_again["saves"] == saved["saves"], "Save must be idempotent"
+    status, mine = request("/api/prompts/my?filter=mine", extra_headers=headers(token))
+    assert status == 200 and any(item["id"] == post_id for item in mine["items"])
+    status, detail = request("/api/prompts/" + str(post_id), extra_headers=headers(token))
+    assert status == 200 and detail["isSaved"] is True
+    print("PASS: community create, detail, saved lookup, idempotent save")
+
     initial = {"prompt": "CI member request", "requestId": str(uuid.uuid4())}
     status, result = request("/api/prompts/improve", initial, extra_headers=headers(token))
     assert status == 200 and result["replayed"] is False, ("member improve", status)
@@ -177,6 +200,18 @@ def check_member_policy():
     }, extra_headers=headers(unknown_token))
     assert status == 503 and error["code"] == "MEMBER_USAGE_UNAVAILABLE", (status, error)
     assert request("/api/prompts/improve", missing, extra_headers=headers(unknown_token))[1]["replayed"] is True
+    # A different member cannot read a post that the author made private.
+    owner_token = login(changed)[1]["accessToken"]
+    status, visibility = request("/api/prompts/" + str(post_id) + "/visibility",
+                                 {"isShared": False}, extra_headers=headers(owner_token), method="PATCH")
+    assert status == 200 and visibility["isShared"] is False, ("visibility", status)
+    assert request("/api/prompts/" + str(post_id))[0] == 404, "Private prompt leaked publicly"
+    assert request("/api/prompts/" + str(post_id),
+                   extra_headers=headers(unknown_token))[0] == 404, "Private prompt leaked to another member"
+    status, owner_detail = request("/api/prompts/" + str(post_id), extra_headers=headers(owner_token))
+    assert status == 200 and owner_detail["isMine"] is True
+    print("PASS: private prompt is hidden from anonymous and other members")
+
     print("PASS: member metering, replay, quota, restart persistence, missing accounting, individual/all logout, password change")
 
 
