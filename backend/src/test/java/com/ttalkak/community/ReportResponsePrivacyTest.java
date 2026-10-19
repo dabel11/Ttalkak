@@ -2,6 +2,9 @@ package com.ttalkak.community;
 
 import com.ttalkak.member.MemberRepository;
 import com.ttalkak.prompt.PromptRepository;
+import com.ttalkak.prompt.PromptPost;
+import java.util.Optional;
+import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -43,4 +46,28 @@ class ReportResponsePrivacyTest {
         assertEquals("comment", reporterView.get("targetType"));
         assertEquals("resolved", reporterView.get("status"));
     }
+    @Test
+    void hiddenCommentReportHistoryDoesNotRevealCommentAuthor() {
+        MemberRepository members = mock(MemberRepository.class);
+        PromptRepository prompts = mock(PromptRepository.class);
+        CommentRepository comments = mock(CommentRepository.class);
+        ReportResponseMapper subject = new ReportResponseMapper(members, prompts, comments);
+
+        PromptPost post = mock(PromptPost.class);
+        when(post.isShared()).thenReturn(true);
+        when(post.isDeleted()).thenReturn(false);
+        Comment comment = new Comment(10L, null, 8L, "private nickname", "private complaint text");
+        comment.hide();
+        when(prompts.findById(10L)).thenReturn(Optional.of(post));
+        when(comments.findById(33L)).thenReturn(Optional.of(comment));
+
+        Report report = new Report("comment", 33L, 7L, "complaint");
+        Map<String, Object> history = subject.toResponseForReporter(report, 7L);
+
+        assertNull(history.get("author"));
+        assertNull(history.get("commentContent"));
+        assertNull(history.get("targetPreview"));
+        assertEquals("complaint", history.get("reason"));
+    }
+
 }
