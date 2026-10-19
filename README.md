@@ -48,9 +48,9 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 | 사용자가 개선 결과를 확인하기 전에 원본이 변경되면 통제감을 잃을 수 있음 | 미리보기 → 변경 강조 → 명시적 적용 → 원본 복원 흐름을 제안·구현하여 결과 채택을 사용자가 결정하도록 설계 | [원클릭 개선 구현](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/public/inline-improve.js), [동작 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/test/improveRequestBehavior.test.jsx) |
 | 로컬 구현만으로는 서비스 간 연결·배포 설정·장애 대응을 확인하기 어려움 | Railway 환경 구성과 서비스 연동을 점검하고 컨테이너 smoke·통합 검증 및 운영 체크리스트를 준비 | [배포 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/RAILWAY_STAGING.md), [운영 준비 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/OPERATIONS_READINESS.md) |
 
-#### 최신 개발: 결제 환경 분리·환불 검토 흐름
+#### 결제 환경 분리 및 환불 처리
 
-[PR #57](https://github.com/dabel11/Ttalkak/pull/57)에서 테스트·라이브 결제 데이터의 scope 분리, 회원의 결제 내역 조회·환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다.
+테스트·라이브 결제 데이터의 scope 분리, 회원의 결제 내역 조회·환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다.
 
 - **결제 데이터 경계:** 주문·구독·유료 이용권의 조회, 자동 갱신 및 권한 계산을 같은 상점 scope로 제한. 기존 NULL 데이터는 원래 테스트 환경에서만 처리하며, 실결제 호출 차단 유지
 - **환불 상태·권한:** 회원 요청은 검토 접수와 자동 갱신 중지만 수행. 관리자 검토 후 원 주문·금액·결제키·잔액을 확인하고, 전액 취소가 확인된 뒤 해당 이용권 회수
@@ -60,15 +60,13 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 
 구현 근거: [상점 scope 검증](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingContext.java) · [환불 서비스](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingRefundService.java) · [환불 통합 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingRefundIntegrationTest.java) · [scope 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingContextTest.java)
 
-**2026-10-13 기준 PR #57은 draft 해제 후 리뷰 대기·미병합 상태입니다.** 최신 커밋 [`e2bfd2d4`](https://github.com/dabel11/Ttalkak/commit/e2bfd2d43f7883636b9618186c70636eadcde39d)의 CI 6개 검사(백엔드, 프론트엔드 빌드·테스트, RAG, 웹·백엔드 통합, 브라우저 E2E, MySQL 정책 검증)가 모두 통과했고, 재검토 시 로컬 결제 흐름 테스트 27개도 통과했습니다. 코드·문서 변경은 PR에 반영했으며, 이 변경의 운영 배포는 아직 진행하지 않았습니다.
-
 일반 구독의 전액 취소를 대상으로 하며, 부분·업그레이드 환불과 관리자 운영 화면은 후속 과제입니다. 실결제 활성화 및 실제 승인·취소 검증은 아직 완료하지 않았습니다.
 
 #### 담당 범위와 현재 단계
 
 AI 모델·검색·리랭킹 자체 개발은 AI 담당자, Web·Extension 전반의 프론트엔드 개발은 프론트엔드 담당자와 협업했습니다. 위 내용은 남지원이 맡은 기획·정책·백엔드·핵심 UX·통합·운영 준비 범위를 설명합니다.
 
-위 사례의 코드 링크는 병합 완료된 [PR #56](https://github.com/dabel11/Ttalkak/pull/56)의 커밋을 기준으로 고정했습니다. 최신 환불 기능은 PR #57에서 별도로 확인할 수 있습니다. 테스트 가격과 사용량 한도 적용을 실제 유료 출시·수익성 검증 완료로 표현하지 않으며, 상용화 조건과 운영 구성은 협의·준비 중입니다.
+코드 및 테스트 문서 링크는 구현 근거로 제공하며, 기능 구현과 실제 상용 운영·수익성 검증은 구분합니다.
 
 ### 최재원 | Frontend Developer
 
