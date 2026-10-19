@@ -9,6 +9,8 @@ import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeFolder;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeFolderRepository;
+import com.ttalkak.billing.BillingSubscription;
+import com.ttalkak.billing.BillingSubscriptionRepository;
 import com.ttalkak.community.Comment;
 import com.ttalkak.prompt.PromptPost;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,6 +40,7 @@ class AccountWithdrawalServiceTest {
     private CommentRepository commentRepository;
     private MakeThreadRepository makeThreadRepository;
     private MakeFolderRepository makeFolderRepository;
+    private BillingSubscriptionRepository billingSubscriptionRepository;
     private AccountWithdrawalService withdrawalService;
 
     @BeforeEach
@@ -48,6 +52,7 @@ class AccountWithdrawalServiceTest {
         commentRepository = mock(CommentRepository.class);
         makeThreadRepository = mock(MakeThreadRepository.class);
         makeFolderRepository = mock(MakeFolderRepository.class);
+        billingSubscriptionRepository = mock(BillingSubscriptionRepository.class);
 
         withdrawalService = new AccountWithdrawalService(
                 memberRepository,
@@ -56,7 +61,8 @@ class AccountWithdrawalServiceTest {
                 promptRepository,
                 commentRepository,
                 makeThreadRepository,
-                makeFolderRepository
+                makeFolderRepository,
+                billingSubscriptionRepository
         );
     }
 
@@ -157,6 +163,22 @@ class AccountWithdrawalServiceTest {
         inOrder.verify(makeFolderRepository).deleteAll(List.of(folder));
         assertFalse(member.isActive());
         verify(memberRepository).save(member);
+    }
+
+    @Test
+    void withdrawalStopsSubscriptionAutoRenewalWithoutDeletingPaymentRecords() {
+        Member member = localMember();
+        ReflectionTestUtils.setField(member, "id", 7L);
+        BillingSubscription subscription = mock(BillingSubscription.class);
+        when(passwordEncoder.matches("correct-password", "encoded-password")).thenReturn(true);
+        when(billingSubscriptionRepository.lockByMemberId(7L)).thenReturn(Optional.of(subscription));
+
+        withdrawalService.withdraw(member, "correct-password", null);
+
+        verify(subscription).stopRenewalForWithdrawal();
+        verify(billingSubscriptionRepository, never()).delete(subscription);
+        verify(memberRepository).save(member);
+        assertFalse(member.isActive());
     }
 
     @Test
