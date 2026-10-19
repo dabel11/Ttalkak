@@ -219,6 +219,15 @@ def check_member_policy():
     assert unchanged["isShared"] is True
     print("PASS: shared prompt cannot be edited, deleted, or hidden by another account")
 
+    # A previous public comment also creates a member-history reference.
+    status, foreign_comment = request("/api/prompts/" + str(post_id) + "/comments",
+                                      {"text": "CI foreign comment"}, extra_headers=foreign_headers)
+    assert status == 200, ("foreign comment create", status)
+    status, before_comment_history = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200 and any(item["promptId"] == post_id
+                                 and item["prompt"]["text"] == "CI fixture: no real user content"
+                                 for item in before_comment_history["items"])
+
     # A previously public prompt can be saved/liked by another member.
     # After the author makes it private, it must disappear from that member's
     # saved, liked and aggregate lists as well as from the direct detail API.
@@ -232,6 +241,13 @@ def check_member_policy():
         status, visible_before = request("/api/prompts/my?filter=" + selected_filter,
                                           extra_headers=foreign_headers)
         assert status == 200 and any(item["id"] == post_id for item in visible_before["items"])
+
+    for selected_filter in ("all", "community", "liked"):
+        status, visible_library = request("/api/me/library?filter=" + selected_filter,
+                                           extra_headers=foreign_headers)
+        assert status == 200 and any(item["id"] == post_id for item in visible_library["items"]), (
+            "Public saved/liked prompt not in legacy library", selected_filter
+        )
 
     # A different member cannot read a post that the author made private.
     owner_token = login(changed)[1]["accessToken"]
@@ -252,6 +268,23 @@ def check_member_policy():
     status, owner_list = request("/api/prompts/my?filter=mine",
                                  extra_headers=headers(owner_token))
     assert status == 200 and any(item["id"] == post_id for item in owner_list["items"])
+    for selected_filter in ("all", "community", "liked"):
+        status, private_library = request("/api/me/library?filter=" + selected_filter,
+                                           extra_headers=foreign_headers)
+        assert status == 200 and all(item["id"] != post_id for item in private_library["items"]), (
+            "Private prompt leaked in legacy library", selected_filter
+        )
+    status, foreign_comments = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200
+    foreign_history = [item for item in foreign_comments["items"] if item["promptId"] == post_id]
+    assert foreign_history and all(item["prompt"] is None
+                                   and item["promptTitle"] is None
+                                   for item in foreign_history), "Private prompt leaked through comment history"
+    status, owner_library = request("/api/me/library?filter=mine",
+                                     extra_headers=headers(owner_token))
+    assert status == 200 and any(item["id"] == post_id for item in owner_library["items"])
+    print("PASS: legacy library and comments redact private post content")
+
     print("PASS: private prompt disappears from other members' saved/liked lists")
 
     print("PASS: private prompt is hidden from anonymous and other members")
