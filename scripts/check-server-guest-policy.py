@@ -219,6 +219,20 @@ def check_member_policy():
     assert unchanged["isShared"] is True
     print("PASS: shared prompt cannot be edited, deleted, or hidden by another account")
 
+    # A previously public prompt can be saved/liked by another member.
+    # After the author makes it private, it must disappear from that member's
+    # saved, liked and aggregate lists as well as from the direct detail API.
+    status, foreign_saved = request("/api/prompts/" + str(post_id) + "/save",
+                                    {}, extra_headers=foreign_headers)
+    assert status == 200 and foreign_saved["isSaved"] is True
+    status, foreign_liked = request("/api/prompts/" + str(post_id) + "/like",
+                                    {}, extra_headers=foreign_headers)
+    assert status == 200 and foreign_liked["isLiked"] is True
+    for selected_filter in ("all", "community", "liked"):
+        status, visible_before = request("/api/prompts/my?filter=" + selected_filter,
+                                          extra_headers=foreign_headers)
+        assert status == 200 and any(item["id"] == post_id for item in visible_before["items"])
+
     # A different member cannot read a post that the author made private.
     owner_token = login(changed)[1]["accessToken"]
     status, visibility = request("/api/prompts/" + str(post_id) + "/visibility",
@@ -229,6 +243,17 @@ def check_member_policy():
                    extra_headers=headers(unknown_token))[0] == 404, "Private prompt leaked to another member"
     status, owner_detail = request("/api/prompts/" + str(post_id), extra_headers=headers(owner_token))
     assert status == 200 and owner_detail["isMine"] is True
+    for selected_filter in ("all", "community", "liked"):
+        status, hidden_after = request("/api/prompts/my?filter=" + selected_filter,
+                                       extra_headers=foreign_headers)
+        assert status == 200 and all(item["id"] != post_id for item in hidden_after["items"]), (
+            "Private saved/liked prompt leaked through /my", selected_filter
+        )
+    status, owner_list = request("/api/prompts/my?filter=mine",
+                                 extra_headers=headers(owner_token))
+    assert status == 200 and any(item["id"] == post_id for item in owner_list["items"])
+    print("PASS: private prompt disappears from other members' saved/liked lists")
+
     print("PASS: private prompt is hidden from anonymous and other members")
 
     # Verify private Make conversation and folder ownership with two existing
