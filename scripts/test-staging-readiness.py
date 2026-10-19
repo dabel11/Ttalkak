@@ -59,6 +59,46 @@ class Checks(unittest.TestCase):
     def test_redirects_never_forward_tokens(self):
         self.assertIsNone(readiness.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.test'))
 
+    def test_security_probes_pass_when_protected_apis_and_hostile_origin_are_denied(self):
+        from urllib.error import HTTPError
+        requests = []
+        class Opener:
+            def open(self, request, timeout):
+                requests.append(request)
+                code = 403 if request.get_method() == 'OPTIONS' else 401
+                raise HTTPError(request.full_url, code, 'Blocked', {}, None)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertTrue(readiness.security_checks(Opener(), 'https://example.com'))
+        self.assertEqual(4, len(requests))
+        self.assertTrue(all(not request.has_header('Authorization') for request in requests))
+        self.assertEqual(4, output.getvalue().count('"result": "PASS"'))
+
+    def test_security_probes_fail_if_anonymous_api_is_exposed(self):
+        from urllib.error import HTTPError
+        class Opener:
+            def open(self, request, timeout):
+                if request.full_url.endswith('/api/me/usage'):
+                    return Response(b'{}')
+                code = 403 if request.get_method() == 'OPTIONS' else 401
+                raise HTTPError(request.full_url, code, 'Blocked', {}, None)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertFalse(readiness.security_checks(Opener(), 'https://example.com'))
+        self.assertIn('"result": "FAIL"', output.getvalue())
+
+    def test_security_probes_fail_if_cors_reflects_hostile_origin(self):
+        from urllib.error import HTTPError
+        class CorsResponse(Response):
+            headers = {'Access-Control-Allow-Origin': 'https://untrusted-origin.example.invalid'}
+        class Opener:
+            def open(self, request, timeout):
+                if request.get_method() == 'OPTIONS':
+                    return CorsResponse(b'')
+                raise HTTPError(request.full_url, 401, 'Blocked', {}, None)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertFalse(readiness.security_checks(Opener(), 'https://example.com'))
+        self.assertIn('"check": "untrusted_cors_origin_rejected", "result": "FAIL"', output.getvalue())
+
+
 
 if __name__ == '__main__':
     unittest.main()
