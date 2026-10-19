@@ -4,6 +4,8 @@
 > 이 문서는 **발표 리허설과 결과 증빙을 준비**하는 자료이며, 실제 시연 성공 기록이 아니다.
 > 보안/탈퇴/개인정보 패치는 [Draft PR #69](https://github.com/dabel11/Ttalkak/pull/69)에서 별도 검증한다.
 
+**발표 준비:** [5분 발표 대본·질의응답](GRADUATION_PRESENTATION_SCRIPT_AND_QA.md)과 [합성 입력 카드](GRADUATION_DEMO_CASES.md)를 함께 사용한다. 성공한 실제 화면만 동작 사례로 발표한다.
+
 ## 1. 프로젝트 메시지
 
 **문제:** AI에게 무엇을 어떻게 요청할지 모르면 원하는 답을 얻기 어렵다.
