@@ -99,6 +99,8 @@ public class ReportResponseMapper {
      */
     public Map<String, Object> toResponseForReporter(Report report, Long reporterId) {
         Map<String, Object> body = toResponse(report);
+        // Moderation notes are internal-only, including for the original reporter.
+        body.put("memo", null);
         PromptPost prompt = null;
         String kind = report.getTargetType() == null
                 ? "" : report.getTargetType().trim().toLowerCase(Locale.ROOT);
