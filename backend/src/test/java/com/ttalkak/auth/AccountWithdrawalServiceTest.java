@@ -5,6 +5,10 @@ import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
 import com.ttalkak.community.CommentRepository;
 import com.ttalkak.prompt.PromptRepository;
+import com.ttalkak.make.MakeThread;
+import com.ttalkak.make.MakeFolder;
+import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.make.MakeFolderRepository;
 import com.ttalkak.community.Comment;
 import com.ttalkak.prompt.PromptPost;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -21,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class AccountWithdrawalServiceTest {
@@ -30,6 +35,8 @@ class AccountWithdrawalServiceTest {
     private GoogleIdTokenVerifier googleVerifier;
     private PromptRepository promptRepository;
     private CommentRepository commentRepository;
+    private MakeThreadRepository makeThreadRepository;
+    private MakeFolderRepository makeFolderRepository;
     private AccountWithdrawalService withdrawalService;
 
     @BeforeEach
@@ -39,13 +46,17 @@ class AccountWithdrawalServiceTest {
         googleVerifier = mock(GoogleIdTokenVerifier.class);
         promptRepository = mock(PromptRepository.class);
         commentRepository = mock(CommentRepository.class);
+        makeThreadRepository = mock(MakeThreadRepository.class);
+        makeFolderRepository = mock(MakeFolderRepository.class);
 
         withdrawalService = new AccountWithdrawalService(
                 memberRepository,
                 passwordEncoder,
                 googleVerifier,
                 promptRepository,
-                commentRepository
+                commentRepository,
+                makeThreadRepository,
+                makeFolderRepository
         );
     }
 
@@ -123,6 +134,44 @@ class AccountWithdrawalServiceTest {
 
         verify(promptRepository).saveAll(List.of(prompt));
         verify(commentRepository).saveAll(List.of(comment));
+    }
+
+    @Test
+    void withdrawalRemovesPrivateMakeConversationsBeforeFolderRecords() {
+        Member member = localMember();
+        ReflectionTestUtils.setField(member, "id", 7L);
+        MakeThread thread = new MakeThread(7L, "private title",
+                "[{\"role\":\"user\",\"content\":\"private text\"}]", 11L);
+        MakeFolder folder = new MakeFolder(7L, "private folder");
+
+        when(passwordEncoder.matches("correct-password", "encoded-password")).thenReturn(true);
+        when(makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(7L))
+                .thenReturn(List.of(thread));
+        when(makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(7L))
+                .thenReturn(List.of(folder));
+
+        withdrawalService.withdraw(member, "correct-password", null);
+
+        var inOrder = org.mockito.Mockito.inOrder(makeThreadRepository, makeFolderRepository);
+        inOrder.verify(makeThreadRepository).deleteAll(List.of(thread));
+        inOrder.verify(makeFolderRepository).deleteAll(List.of(folder));
+        assertFalse(member.isActive());
+        verify(memberRepository).save(member);
+    }
+
+    @Test
+    void invalidWithdrawalCannotDeleteMakeHistory() {
+        Member member = localMember();
+        when(passwordEncoder.matches("incorrect-password", "encoded-password")).thenReturn(false);
+
+        assertThrows(ResponseStatusException.class,
+                () -> withdrawalService.withdraw(member, "incorrect-password", null));
+
+        verify(makeThreadRepository, never()).findByMemberIdOrderByUpdatedAtDesc(
+                org.mockito.ArgumentMatchers.anyLong());
+        verify(makeFolderRepository, never()).findByMemberIdOrderByCreatedAtDesc(
+                org.mockito.ArgumentMatchers.anyLong());
+        assertEquals(true, member.isActive());
     }
 
     @Test
