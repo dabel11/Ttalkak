@@ -228,6 +228,15 @@ def check_member_policy():
                                  and item["prompt"]["text"] == "CI fixture: no real user content"
                                  for item in before_comment_history["items"])
 
+    status, public_report = request("/api/reports/prompts/" + str(post_id),
+                                   {"reason": "CI public visibility check"},
+                                   extra_headers=foreign_headers)
+    assert status == 200 and public_report["promptContent"] == "CI fixture: no real user content"
+    status, public_comment_report = request("/api/reports/comments/" + str(foreign_comment["id"]),
+                                           {"reason": "CI public comment visibility"},
+                                           extra_headers=foreign_headers)
+    assert status == 200 and public_comment_report["promptTitle"] == post_title
+
     # A previously public prompt can be saved/liked by another member.
     # After the author makes it private, it must disappear from that member's
     # saved, liked and aggregate lists as well as from the direct detail API.
@@ -283,6 +292,23 @@ def check_member_policy():
     status, owner_library = request("/api/me/library?filter=mine",
                                      extra_headers=headers(owner_token))
     assert status == 200 and any(item["id"] == post_id for item in owner_library["items"])
+    # Reports are historical references too: they must not leak content
+    # after a post becomes private, nor accept new reports by guessed IDs.
+    status, foreign_reports = request("/api/me/reports", extra_headers=foreign_headers)
+    assert status == 200
+    old_reports = [item for item in foreign_reports["items"]
+                   if item["targetId"] in (post_id, foreign_comment["id"])]
+    assert len(old_reports) >= 2, "Expected public reports to persist as records"
+    for item in old_reports:
+        for hidden_field in ("targetPreview", "author", "promptTitle", "promptContent",
+                             "promptAuthor", "commentContent"):
+            assert item.get(hidden_field) is None, ("Report leaked private target", hidden_field)
+    assert request("/api/reports/prompts/" + str(post_id),
+                   {"reason": "Should reject private report"}, extra_headers=foreign_headers)[0] == 404
+    assert request("/api/reports/comments/" + str(foreign_comment["id"]),
+                   {"reason": "Should reject private parent"}, extra_headers=foreign_headers)[0] == 404
+    print("PASS: report creation and historical report context respect private visibility")
+
     print("PASS: legacy library and comments redact private post content")
 
     print("PASS: private prompt disappears from other members' saved/liked lists")
