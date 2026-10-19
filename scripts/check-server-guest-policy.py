@@ -200,6 +200,25 @@ def check_member_policy():
     }, extra_headers=headers(unknown_token))
     assert status == 503 and error["code"] == "MEMBER_USAGE_UNAVAILABLE", (status, error)
     assert request("/api/prompts/improve", missing, extra_headers=headers(unknown_token))[1]["replayed"] is True
+    # Security regression: another account may view a shared prompt but cannot
+    # modify, delete, or change its visibility in the disposable CI database.
+    foreign_headers = headers(unknown_token)
+    status, rejection = request("/api/prompts/" + str(post_id), {
+        "title": "attempted overwrite", "text": "unauthorized fixture", "tags": ["ci"],
+    }, extra_headers=foreign_headers, method="PATCH")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign edit", status)
+    status, rejection = request("/api/prompts/" + str(post_id),
+                                extra_headers=foreign_headers, method="DELETE")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign delete", status)
+    status, rejection = request("/api/prompts/" + str(post_id) + "/visibility", {
+        "isShared": False,
+    }, extra_headers=foreign_headers, method="PATCH")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign visibility", status)
+    status, unchanged = request("/api/prompts/" + str(post_id), extra_headers=headers(token))
+    assert status == 200 and unchanged["title"] == post_title
+    assert unchanged["isShared"] is True
+    print("PASS: shared prompt cannot be edited, deleted, or hidden by another account")
+
     # A different member cannot read a post that the author made private.
     owner_token = login(changed)[1]["accessToken"]
     status, visibility = request("/api/prompts/" + str(post_id) + "/visibility",
