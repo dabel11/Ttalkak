@@ -102,6 +102,7 @@ public class ReportResponseMapper {
         // Moderation notes are internal-only, including for the original reporter.
         body.put("memo", null);
         PromptPost prompt = null;
+        boolean unavailableComment = false;
         String kind = report.getTargetType() == null
                 ? "" : report.getTargetType().trim().toLowerCase(Locale.ROOT);
         if ("prompt".equals(kind)) {
@@ -110,11 +111,22 @@ public class ReportResponseMapper {
             Comment comment = commentRepository.findById(report.getTargetId()).orElse(null);
             if (comment != null) {
                 prompt = promptRepository.findById(comment.getPromptId()).orElse(null);
+                unavailableComment = comment.isDeleted() || comment.isHidden();
+            } else {
+                unavailableComment = true;
             }
         }
         if (!viewableBy(prompt, reporterId)) {
             for (String field : new String[]{"targetPreview", "author", "promptTitle",
                     "promptContent", "promptAuthor", "commentContent"}) {
+                body.put(field, null);
+            }
+        }
+        // A deleted or hidden comment is not readable just because its
+        // parent post remains public. Keep report status/reason but remove
+        // the former comment author's identity and content references.
+        if (unavailableComment) {
+            for (String field : new String[]{"targetPreview", "commentContent", "author", "parentId"}) {
                 body.put(field, null);
             }
         }
