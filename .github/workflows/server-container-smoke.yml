@@ -28,6 +28,10 @@ jobs:
         run: docker compose -p ttalkak-ci -f docker/compose.ci.yml up -d --build
       - name: Check guest/member quota and auth through nginx and restart
         run: python3 scripts/check-server-guest-policy.py
+      - name: Verify disposable CI MySQL backup and isolated restore
+        env:
+          TTALKAK_CI_RESTORE_DRILL: '1'
+        run: bash scripts/check-disposable-db-restore.sh
       - name: Container logs
         if: always()
         run: docker compose -p ttalkak-ci -f docker/compose.ci.yml logs --no-color --tail 150
