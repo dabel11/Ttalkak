@@ -1,0 +1,55 @@
+{
+  "_about": {
+    "purpose": "카드 층(layer) 분류의 회귀 셋. 층 어휘·분류 프롬프트를 바꿀 때 나아졌는지 흔들렸는지 판정한다.",
+    "how_built": "v1 전량 분류(LLM) 결과와 사람이 만든 '쓸 수 없는 카드' 목록이 엇갈린 34장. 두 판정이 갈린 지점만 모았으므로 난이도가 높은 구간이다.",
+    "warning": "⚠️ 작성자 1인 판단이다. gold_techniques 라벨과 같은 함정(미검증 기준선)이 있으므로 팀 검토 전까지 모든 수치는 잠정이다.",
+    "created": "2026-09-13",
+    "labeledAgainst": "LAYERS_VERSION v1 분류 결과"
+  },
+  "_criteria": {
+    "user_instruction": "이 카드를 참고해 개선 프롬프트를 만들면 사용자의 결과물이 좋아진다",
+    "meta": "딸깍이 이미 하는 일('요청을 좋은 프롬프트로 바꿔라') 자체를 말해 참고하면 동어반복",
+    "system": "프롬프트 텍스트만으로는 효과가 없다 — 도구·검색·에이전트 루프·모델 설정이 필요",
+    "degenerate": "카드에 실질 내용이 없어 무엇을 반영할지 알 수 없다"
+  },
+  "cases": [
+    {"technique": "Multi-Query Retrieval Prompting", "expected": "system", "v1": "user_instruction", "note": "검색 쿼리 생성 — 글쓰기 요청자가 원하는 산출물이 아니다"},
+    {"technique": "Tool-Use Prompting", "expected": "system", "v1": "user_instruction", "note": "도구가 연결돼 있어야 성립"},
+    {"technique": "Use of Affordances", "expected": "system", "v1": "user_instruction", "note": "외부 수단 호출 결과를 받아와야 성립"},
+    {"technique": "Space Efficiency", "expected": "system", "v1": "user_instruction", "note": "토큰 절약 — 파이프라인 관심사"},
+    {"technique": "Temperature", "expected": "system", "v1": "user_instruction", "note": "프롬프트에 써도 효과 없음. 모델 설정이다"},
+
+    {"technique": "Prompt Governance Prompting", "expected": "meta", "v1": "user_instruction", "note": "프롬프트 라이브러리 관리"},
+    {"technique": "Synthetic Data Generation Prompting", "expected": "meta", "v1": "user_instruction", "note": "학습 데이터 생성"},
+    {"technique": "AutoPrompt", "expected": "meta", "v1": "user_instruction", "note": "프롬프트 자동 생성"},
+
+    {"technique": "Standard Prompt", "expected": "degenerate", "v1": "user_instruction", "note": "Prompt Template 이 '? `'"},
+    {"technique": "Completion Prompting", "expected": "degenerate", "v1": "user_instruction", "note": "'시작 부분: {시작}' 뿐"},
+    {"technique": "Reasoning Prompt", "expected": "degenerate", "v1": "user_instruction", "note": "Prompt Template 이 '? ? ? ?'"},
+    {"technique": "Start Simple", "expected": "degenerate", "v1": "user_instruction", "note": "Prompt Template 없음"},
+    {"technique": "Self-Consistency Sampling", "expected": "degenerate", "v1": "user_instruction", "note": "Prompt Template 없음"},
+    {"technique": "Zero-Shot", "expected": "degenerate", "v1": "user_instruction", "note": "'Text: {내용}' 뿐"},
+
+    {"technique": "Delimiter Prompting", "expected": "user_instruction", "v1": "meta", "note": "개선 프롬프트를 구분자로 구조화하면 결과가 좋아진다"},
+    {"technique": "XML Tags for Structure", "expected": "user_instruction", "v1": "meta", "note": "위와 동일"},
+    {"technique": "Priority Placement", "expected": "user_instruction", "v1": "system", "note": "중요 제약을 앞에 두는 배치 — 사용자 프롬프트에 그대로 쓴다"},
+    {"technique": "Instruction Conflict Resolution", "expected": "user_instruction", "v1": "meta", "note": "지시 충돌 정리 — 개선 프롬프트 작성에 직접 반영"},
+    {"technique": "Specificity Prompting", "expected": "user_instruction", "v1": "meta", "note": "모호한 목표를 구체 기준으로 — 개선의 핵심 방법론"},
+    {"technique": "Problem Decomposition Prompting", "expected": "user_instruction", "v1": "meta", "note": "작업 분해 — 개선 프롬프트에 넣을 구조"},
+    {"technique": "Rubric Prompting", "expected": "user_instruction", "v1": "meta", "note": "평가 기준 제시 — 사용자 요청에 반영 가능"},
+    {"technique": "Abstention Prompting", "expected": "user_instruction", "v1": "system", "note": "근거 부족 시 유보 — 딸깍 ask 모드가 하는 일 그 자체"},
+    {"technique": "Diff/Patch Format Standardization", "expected": "user_instruction", "v1": "system", "note": "코드 수정 요청에 형식 지정으로 유용"},
+
+    {"technique": "Source-Bounded Answering", "expected": "user_instruction", "v1": "user_instruction", "note": "사용자가 자료를 붙여넣고 쓸 수 있다 — v1 이 맞았다"},
+    {"technique": "Add Defense in the Instruction", "expected": "user_instruction", "v1": "user_instruction", "note": "일반 제약 지시문으로 읽힌다 — v1 이 맞았다"},
+    {"technique": "ReAct Prompting", "expected": "system", "v1": "system", "note": "도구·검색 루프 필요"},
+    {"technique": "Agent Workflow Prompting", "expected": "system", "v1": "system", "note": "에이전트 워크플로우"},
+    {"technique": "Reflexion", "expected": "system", "v1": "system", "note": "이전 출력·피드백 루프가 있어야 성립"},
+    {"technique": "Search-Then-Generate Prompting", "expected": "system", "v1": "system", "note": "검색 인프라 필요"},
+    {"technique": "Retrieval Augmentation", "expected": "system", "v1": "system", "note": "검색 인프라 필요"},
+    {"technique": "Conflict Resolution Prompting", "expected": "system", "v1": "system", "note": "시스템 지시 우선순위"},
+    {"technique": "Fallback Response Handling", "expected": "system", "v1": "system", "note": "안전 필터 처리 — 시스템 계층"},
+    {"technique": "Retrieval-Augmented Few-Shot Prompting", "expected": "meta", "v1": "meta", "note": "검색 예시로 새 프롬프트 생성"},
+    {"technique": "Program-Aided Language Models", "expected": "system", "v1": "system", "note": "프로그램 실행 결과가 있어야 성립"}
+  ]
+}

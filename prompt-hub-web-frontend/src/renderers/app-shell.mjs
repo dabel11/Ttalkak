@@ -12,6 +12,7 @@
       PromptEditModal,
       AdminRevisionRequestModal,
       AuthModal,
+      BillingModal,
       ReportModal,
       ExecuteModal,
       ConfirmModal,
@@ -38,6 +39,7 @@
         ${state.editingPromptId ? PromptEditModal() : ""}
         ${state.adminRequestTargetKey ? AdminRevisionRequestModal() : ""}
         ${state.authView ? AuthModal() : ""}
+        ${state.billingOpen && state.isLoggedIn ? BillingModal() : ""}
         ${state.reportPromptId || state.reportCommentId ? ReportModal() : ""}
         ${state.executeMessageId || state.executePromptId ? ExecuteModal() : ""}
         ${state.confirmAction ? ConfirmModal() : ""}

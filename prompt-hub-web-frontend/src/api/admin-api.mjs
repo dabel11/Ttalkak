@@ -82,6 +82,12 @@ export function createAdminApi({ request, unwrapItems, normalizers }) {
           return request(`/api/admin/users/${memberId}/activities?${query.toString()}`, { token }).then(normalizeAdminUserActivity);
         }
       },
+      getAdminUserUsage(memberId, token) {
+        return request(`/api/admin/users/${memberId}/usage`, { token });
+      },
+      reconcileAdminUserUsage(memberId, payload, token) {
+        return request(`/api/admin/users/${memberId}/usage/reconcile`, { method: "POST", token, body: JSON.stringify(payload) });
+      },
       blockAdminUser(memberId, payload = {}, token) {
         return request(`/api/admin/users/${memberId}/block`, { method: "PATCH", token, body: JSON.stringify(payload) }).then(normalizeAdminUserActivity);
       },

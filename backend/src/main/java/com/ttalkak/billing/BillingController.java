@@ -1,0 +1,90 @@
+package com.ttalkak.billing;
+
+import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/me/billing")
+public class BillingController {
+    private final AuthService auth;
+    private final BillingService billing;
+    private final BillingRefundService refunds;
+
+    public BillingController(AuthService auth, BillingService billing, BillingRefundService refunds) {
+        this.auth = auth;
+        this.billing = billing;
+        this.refunds = refunds;
+    }
+
+    private Long member(String authorization) {
+        Long id = auth.currentMemberIdOrNull(authorization);
+        if (id == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다.");
+        return id;
+    }
+
+    @GetMapping
+    public BillingService.Status status(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return billing.status(member(authorization));
+    }
+
+    @PostMapping("/setup")
+    public BillingService.Setup setup(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                      @RequestBody(required = false) PlanSelection request) {
+        return billing.setup(member(authorization), request == null ? null : request.plan());
+    }
+
+    @GetMapping("/upgrade-quote")
+    public BillingService.UpgradeQuote upgradeQuote(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam String plan) {
+        return billing.upgradeQuote(member(authorization), plan);
+    }
+
+    @PostMapping("/upgrade")
+    public BillingService.Status upgrade(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody UpgradeRequest request) {
+        return billing.upgrade(member(authorization), request.plan(), request.expectedAmount());
+    }
+
+    @PostMapping("/reconcile-upgrade")
+    public BillingService.Status reconcileUpgrade(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        return billing.reconcileUpgrade(member(authorization));
+    }
+
+    @PostMapping("/complete")
+    public BillingService.Status complete(@RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody CompleteRequest request) {
+        return billing.completeRegistration(member(authorization), request.customerKey(), request.authKey());
+    }
+
+    @PostMapping("/retry")
+    public BillingService.Status retry(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return billing.retry(member(authorization));
+    }
+
+    @PostMapping("/cancel")
+    public BillingService.Status cancel(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return billing.cancelRenewal(member(authorization));
+    }
+
+    @GetMapping("/charges")
+    public java.util.List<BillingRefundService.ChargeView> history(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        return refunds.history(member(authorization));
+    }
+    @PostMapping("/charges/{orderId}/refund-request")
+    public BillingRefundService.ChargeView requestRefund(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable String orderId, @RequestBody RefundRequest request) {
+        return refunds.request(member(authorization), orderId, request.reason());
+    }
+    public record RefundRequest(String reason) {}
+
+    public record CompleteRequest(String customerKey, String authKey) {}
+    public record PlanSelection(String plan) {}
+    public record UpgradeRequest(String plan, Integer expectedAmount) {}
+}

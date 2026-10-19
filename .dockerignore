@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/dist
+**/dist-*
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/.gradle
+**/build
+**/.venv
+**/__pycache__
+**/playwright-report
+**/test-results
+rag-server/chroma_db
+rag-server/data

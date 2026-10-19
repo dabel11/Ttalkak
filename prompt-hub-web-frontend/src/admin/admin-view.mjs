@@ -300,6 +300,7 @@ export function createAdminView(ctx) {
     function AdminUserActivitySummary(activity) {
       const memberId = String(activity.memberId || getAdminKnownMemberId(activity.nickname) || "").trim();
       const isBlocked = Boolean(activity.blocked);
+      const usageReview = String(state.adminUsageReview?.memberId) === memberId ? state.adminUsageReview : null;
       const presentation = getAdminUserActivityPresentation(activity, memberId);
       const groups = [
         { id: "prompts", title: "작성한 프롬프트", items: activity.prompts, empty: "작성한 프롬프트가 없습니다." },
@@ -330,6 +331,20 @@ export function createAdminView(ctx) {
                 : `<span class="status-badge pending-unsave">${presentation.unavailableMessage}</span>`
             }
           </div>
+          ${memberId ? `<section class="admin-user-activity-card" aria-label="회원 사용량 상태">
+            <h4>회원 사용량 상태</h4>
+            <button type="button" data-admin-usage-review="${escapeHtml(memberId)}">사용량 상태 조회</button>
+            ${usageReview ? `<p>확정 토큰 ${formatNumber(usageReview.totalTokens)}개 · 기록 ${formatNumber(usageReview.requests)}건 · ${usageReview.usageUncertain ? "과거 요청 사용량 확인 필요" : "정상"}</p>
+              <details><summary>최근 확정 기록 (최대 20건)</summary>
+                ${(usageReview.recentRecords || []).map((record) => `<p>${escapeHtml(record.occurredAt)} · ${formatNumber(record.totalTokens)}개 · 요청 ${escapeHtml(record.requestKey)}</p>`).join("") || "<p>확정 기록이 없습니다.</p>"}
+              </details>
+              ${usageReview.requestInProgress ? "<p>AI 요청 처리 중에는 복구할 수 없습니다.</p>" : usageReview.usageUncertain ? `<form data-admin-usage-reconcile="${escapeHtml(memberId)}">
+                <p>과거 요청 기록을 검토한 뒤 불확실 상태만 해제합니다. 누락된 토큰은 자동으로 복원되지 않으며 기존 기록은 유지됩니다.</p>
+                <label><input type="checkbox" name="recordsReviewed" required> 과거 요청과 토큰 기록을 검토했습니다.</label>
+                <label>복구 사유 <textarea name="reason" required maxlength="1000"></textarea></label>
+                <button type="submit">검토 완료·상태 복구</button>
+              </form>` : ""}` : ""}
+          </section>` : ""}
           <div class="admin-user-activity-grid">
             ${groups
               .map(

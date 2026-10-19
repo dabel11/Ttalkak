@@ -1,0 +1,51 @@
+# Dedicated disposable billing review stack. Never attach the production DB.
+# From repository root:
+# docker compose --env-file .env.merchant-review -f docker/compose.merchant-review.yml up --build -d
+name: ttalkak-merchant-review
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: ttalkak_merchant_review
+      MYSQL_ROOT_PASSWORD: ${REVIEW_DB_PASSWORD:?Set an isolated review DB password}
+    volumes:
+      - review-db:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  backend:
+    build: ../backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ttalkak_merchant_review?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: ${REVIEW_DB_PASSWORD:?Set an isolated review DB password}
+      JWT_SECRET_BASE64: ${REVIEW_JWT_SECRET_BASE64:?Set a separate review JWT secret}
+      BILLING_MODE: test
+      BILLING_STORE_SCOPE: test:merchant-review
+      TOSS_TEST_CLIENT_KEY: ${TOSS_TEST_CLIENT_KEY:?Set a Toss test client key}
+      TOSS_TEST_SECRET_KEY: ${TOSS_TEST_SECRET_KEY:?Set a Toss test secret key}
+      MERCHANT_REVIEW_ACCOUNT_ENABLED: ${MERCHANT_REVIEW_ACCOUNT_ENABLED:-false}
+      MERCHANT_REVIEW_ACCOUNT_PASSWORD: ${MERCHANT_REVIEW_ACCOUNT_PASSWORD:-}
+      FORWARD_HEADERS_STRATEGY: framework
+      CORS_ALLOWED_ORIGIN_PATTERNS: http://localhost:4180,http://127.0.0.1:4180
+      # AI is deliberately absent from this billing-only stack. Do not point at production RAG.
+      RAG_SERVER_URL: http://127.0.0.1:1
+      ADMIN_SEED_ENABLED: "false"
+      PASSWORD_RESET_ENABLED: "false"
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+      args:
+        TTALKAK_BILLING_PREVIEW_ENABLED: "true"
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:4180:80"
+volumes:
+  review-db:

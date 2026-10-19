@@ -1,6 +1,9 @@
 "use strict";
 export function createMakeFolderWorkflows(ctx) {
-    const { state, render, showNotice, guardAdminUserAction, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, deleteMakeFolderState, getMakeMutationStateContext, getMakeApi, getMakeApiToken, isBackendNumericId, handleMakeBackendSyncError, ensureBackendMakeThreadId, reportWarning } = ctx;
+    const { state, render, showNotice, guardAdminUserAction, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, MAX_CUSTOM_MAKE_FOLDERS, canUseDemoFallback, isDemoAuthToken, deleteMakeFolderState, getMakeMutationStateContext, getMakeApi, getMakeApiToken, isBackendNumericId, handleMakeBackendSyncError, ensureBackendMakeThreadId, reportWarning } = ctx;
+
+    const isLocalOnlyAccount = () => state.isLoggedIn && typeof isDemoAuthToken === "function" && isDemoAuthToken(getMakeApiToken());
+    const canKeepLocalChanges = () => canUseDemoFallback() || isLocalOnlyAccount();
 
     function guardMakeFolderMutation(clearSelection) {
       if (guardAdminUserAction()) {
@@ -66,7 +69,7 @@ export function createMakeFolderWorkflows(ctx) {
       const backendFolderId = await createBackendMakeFolder({ name: cleanName });
       if (backendFolderId) {
         folder.serverId = backendFolderId;
-      } else if (!canUseDemoFallback()) {
+      } else if (!canKeepLocalChanges()) {
         removeLocalMakeFolder(folder.id);
         state.activeFolderId = "all";
         showNotice("서버 폴더 생성에 실패해 변경을 취소했습니다.");
@@ -112,8 +115,8 @@ export function createMakeFolderWorkflows(ctx) {
         folder.serverId = backendFolderId;
         await moveThreadToFolderOnBackend(thread, backendFolderId);
       } else {
-        reportWarning("make-folders", "missing-created-folder-id", "Created folder has no server id");
-        if (!canUseDemoFallback()) {
+        if (!isLocalOnlyAccount()) reportWarning("make-folders", "missing-created-folder-id", "Created folder has no server id");
+        if (!canKeepLocalChanges()) {
           removeLocalMakeFolder(folder.id);
           restoreThreadFolder(thread, previousFolderId);
           state.activeFolderId = thread.folderId;
@@ -139,7 +142,7 @@ export function createMakeFolderWorkflows(ctx) {
 
       state.editingFolderId = null;
       const backendUpdated = await updateBackendMakeFolderName(folderId, cleanName);
-      if (!backendUpdated && !canUseDemoFallback()) {
+      if (!backendUpdated && !canKeepLocalChanges()) {
         showNotice("폴더 이름 수정 요청에 실패했습니다.");
         render();
         return;
@@ -157,7 +160,7 @@ export function createMakeFolderWorkflows(ctx) {
       const previousThreadFolders = state.recentThreads.map((thread) => ({ id: thread.id, folderId: thread.folderId }));
       const previousActiveFolderId = state.activeFolderId;
       const backendDeleted = await deleteBackendMakeFolder(folderId);
-      if (!backendDeleted && !canUseDemoFallback()) {
+      if (!backendDeleted && !canKeepLocalChanges()) {
         state.makeFolders = previousFolders;
         previousThreadFolders.forEach((previous) => {
           const thread = state.recentThreads.find((item) => item.id === previous.id);
@@ -181,7 +184,7 @@ export function createMakeFolderWorkflows(ctx) {
       const previousFolderId = thread.folderId;
       thread.folderId = folderId || "uncategorized";
       const backendMoved = await moveThreadToFolderOnBackend(thread, getBackendFolderId(thread.folderId));
-      if (!backendMoved && !canUseDemoFallback()) {
+      if (!backendMoved && !canKeepLocalChanges()) {
         restoreThreadFolder(thread, previousFolderId);
         showNotice("대화 폴더 이동 요청에 실패해 변경을 취소했습니다.");
         render();
@@ -193,12 +196,13 @@ export function createMakeFolderWorkflows(ctx) {
 
     async function moveThreadToFolderOnBackend(thread, backendFolderId) {
       const api = getMakeApi();
-      if (!api?.moveMakeThread) return canUseDemoFallback();
+      if (isLocalOnlyAccount()) return true;
+      if (!api?.moveMakeThread) return canKeepLocalChanges();
 
       const backendThreadId = await ensureBackendMakeThreadId(thread);
       if (!backendThreadId) {
         reportWarning("make-folders", "missing-thread-id", "Thread has no server id");
-        return canUseDemoFallback();
+        return canKeepLocalChanges();
       }
 
       try {
@@ -233,6 +237,7 @@ export function createMakeFolderWorkflows(ctx) {
     }
 
     async function createBackendMakeFolder(payload) {
+      if (isLocalOnlyAccount()) return "";
       const api = getMakeApi();
       if (!api?.createMakeFolder) return "";
 
@@ -255,7 +260,7 @@ export function createMakeFolderWorkflows(ctx) {
       if (!backendFolderId) return true;
 
       const api = getMakeApi();
-      if (!api?.updateMakeFolder) return canUseDemoFallback();
+      if (!api?.updateMakeFolder) return canKeepLocalChanges();
 
       try {
         await api.updateMakeFolder(backendFolderId, { name }, getMakeApiToken());
@@ -276,7 +281,7 @@ export function createMakeFolderWorkflows(ctx) {
       if (!backendFolderId) return true;
 
       const api = getMakeApi();
-      if (!api?.deleteMakeFolder) return canUseDemoFallback();
+      if (!api?.deleteMakeFolder) return canKeepLocalChanges();
 
       try {
         await api.deleteMakeFolder(backendFolderId, getMakeApiToken());

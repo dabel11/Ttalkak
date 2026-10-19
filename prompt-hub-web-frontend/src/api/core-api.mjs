@@ -8,10 +8,10 @@ const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
     return `${API_BASE_URL}${path}`;
   }
 
-  /** @param {string} path @param {RequestInit & { token?: string, timeoutMs?: number }} [options] */
+  /** @param {string} path @param {RequestInit & { token?: string, timeoutMs?: number, useStoredToken?: boolean }} [options] */
   async function request(path, options = {}) {
     const startedAt = performance.now();
-    const { token, headers, timeoutMs = API_TIMEOUT_MS, ...fetchOptions } = options;
+    const { token, headers, timeoutMs = API_TIMEOUT_MS, useStoredToken = true, ...fetchOptions } = options;
     const requestTimeoutMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Number(timeoutMs) : API_TIMEOUT_MS;
     const storedToken = (() => {
       try {
@@ -20,7 +20,7 @@ const API_TIMEOUT_MS = runtimeConfig.apiTimeoutMs;
         return "";
       }
     })();
-    const resolvedToken = token || storedToken;
+    const resolvedToken = token || (useStoredToken ? storedToken : "");
     const defaultHeaders = fetchOptions.body ? { "Content-Type": "application/json" } : {};
     const controller = new AbortController();
     const externalSignal = fetchOptions.signal;

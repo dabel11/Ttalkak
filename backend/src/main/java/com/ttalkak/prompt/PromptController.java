@@ -8,8 +8,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
 import com.ttalkak.make.MakeApiContract;
+import com.ttalkak.usage.RagUsageRecorder;
+import com.ttalkak.usage.MemberRequestGuard;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
@@ -30,10 +33,31 @@ public class PromptController {
     private final PromptLikeRepository likeRepository;
     private final TagRepository tagRepository;
     private final AuthService authService;
+    private final GuestUsageService guestUsageService;
+    private final RagUsageRecorder ragUsageRecorder;
+    private final MemberRequestGuard memberRequestGuard;
     private final WebClient webClient;
     private final MakeThreadRepository makeThreadRepository;
     private final ObjectMapper objectMapper;
+    /** 상류가 Retry-After 를 주지 않은 한도초과에 쓰는 기본값(초). */
+    private static final String DEFAULT_RETRY_AFTER_SECONDS = "30";
+
     private final Duration ragResponseTimeout;
+
+    private boolean isRagNoEvidence(WebClientResponseException.NotFound exception) {
+        try {
+            var json = objectMapper.readTree(exception.getResponseBodyAsString());
+            if (json == null) return false;
+            var detail = json.path("detail");
+            // Forward-compatible structured RAG error, and the current RAG gate's exact
+            // legacy message. Never classify arbitrary 404s as valid metered searches.
+            return "NO_EVIDENCE".equals(json.path("code").asText())
+                    || "NO_EVIDENCE".equals(detail.path("code").asText())
+                    || (detail.isTextual() && "입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다.".equals(detail.asText()));
+        } catch (Exception malformedUpstreamResponse) {
+            return false;
+        }
+    }
 
     @Value("${rag.server-url:http://localhost:8000}")
     private String ragServerUrl;
@@ -50,12 +74,18 @@ public class PromptController {
                             // @Value 가 없으면 Spring 이 Duration 타입 빈을 찾다 실패해 기동이 막힌다
                             // (단위 테스트는 컨트롤러를 직접 생성해 이 경로를 타지 않으므로 못 잡는다).
                             @Value("${rag.response-timeout:75s}")
-                            Duration ragResponseTimeout) {
+                            Duration ragResponseTimeout,
+                            GuestUsageService guestUsageService,
+                            RagUsageRecorder ragUsageRecorder,
+                            MemberRequestGuard memberRequestGuard) {
         this.promptRepository = promptRepository;
         this.saveRepository = saveRepository;
         this.likeRepository = likeRepository;
         this.tagRepository = tagRepository;
         this.authService = authService;
+        this.guestUsageService = guestUsageService;
+        this.ragUsageRecorder = ragUsageRecorder;
+        this.memberRequestGuard = memberRequestGuard;
         this.makeThreadRepository = makeThreadRepository;
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
@@ -701,7 +731,9 @@ public class PromptController {
     public Map<String, Object> improve(
             @RequestBody ImproveRequest request,
             @RequestHeader(value = "Authorization", required = false)
-            String authorization
+            String authorization,
+            @RequestHeader(value = "X-Session-UUID", required = false)
+            String sessionUuid
     ) {
         String prompt = request.prompt() == null
                 ? ""
@@ -756,6 +788,8 @@ public class PromptController {
 	int editedMessageIndex = -1;
     String requestId =
         normalizeRequestId(request.requestId());
+    MemberRequestGuard.Permit memberPermit = memberRequestGuard.acquire(memberId);
+    try {
 
     if (requestedThreadId == null
             && memberId != null
@@ -840,7 +874,16 @@ public class PromptController {
 		ragHistory = toRagHistory(messages);
 	}
 
+        memberRequestGuard.checkQuota(memberPermit);
         Map<String, Object> body;
+        GuestUsageService.Permit guestPermit = memberId == null
+                ? guestUsageService.reserve(sessionUuid)
+                : null;
+        boolean aiSucceeded = false;
+        // Only the server-issued invocation ID is allowed to affect usage accounting.
+        // Client requestId remains scoped to a Make thread's replay semantics.
+        String ragRequestId = memberPermit != null
+                ? memberPermit.id() : UUID.randomUUID().toString();
 
         try {
             Map<String, Object> ragRequest =
@@ -853,6 +896,9 @@ public class PromptController {
             );
             ragRequest.put("top_k", 5);
             ragRequest.put("history", ragHistory);
+            // Correlate Spring's member usage row with the RAG /query invocation.
+            // A missing client id still gets a fresh server-generated invocation id.
+            ragRequest.put("request_id", ragRequestId);
 
             Map<?, ?> response = webClient.post()
                     .uri(ragServerUrl + "/query")
@@ -870,22 +916,59 @@ public class PromptController {
             }
 
             body = buildImproveResponse(response);
+            if (memberId != null) {
+                boolean recorded;
+                try {
+                    recorded = ragUsageRecorder.record(memberId, ragRequestId, response);
+                } catch (RuntimeException accountingFailure) {
+                    memberRequestGuard.usageMissing(memberPermit);
+                    throw accountingFailure;
+                }
+                if (!recorded) memberRequestGuard.usageMissing(memberPermit);
+            }
+            aiSucceeded = true;
         } catch (WebClientResponseException.NotFound e) {
+            // A proxy/path 404 is not a successful search: fail closed without charging.
+            if (!isRagNoEvidence(e)) {
+                throw ApiException.retryable(
+                        HttpStatus.SERVICE_UNAVAILABLE, "AI_SERVICE_UNAVAILABLE",
+                        "AI 서비스를 일시적으로 사용할 수 없습니다.", upstreamRetryAfter(e));
+            }
+            // Only an identified RAG no-evidence response consumes one search invocation.
+            if (memberId != null) {
+                try {
+                    ragUsageRecorder.recordNoEvidence(memberId, ragRequestId);
+                } catch (RuntimeException accountingFailure) {
+                    memberRequestGuard.usageMissing(memberPermit);
+                    throw accountingFailure;
+                }
+            }
             body = buildNoEvidenceResponse(prompt);
+            aiSucceeded = true;
         } catch (WebClientResponseException e) {
+            // rag-server 가 알려준 재시도 시점을 그대로 전달한다.
+            // 동시 실행 게이트(rag-server app/core/concurrency.py)는 줄이 찼을 때
+            // 503 + Retry-After 로 거절한다 — 이 값을 여기서 끊으면 프론트는
+            // '언제 다시 시도할지'를 알 수 없어 사용자가 직접 누를 때까지 멈춘다.
+            String retryAfter = upstreamRetryAfter(e);
+
             if (e.getStatusCode().value() == 429
                     || isRateLimitError(e)) {
-                throw new ApiException(
+                throw ApiException.retryable(
                         HttpStatus.SERVICE_UNAVAILABLE,
                         "AI_RATE_LIMIT_EXCEEDED",
-                        "AI 서비스 사용 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
+                        "AI 서비스 사용 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.",
+                        // 한도 초과는 상류가 값을 안 줘도 재시도가 의미 있으므로 기본값을 둔다
+                        retryAfter == null ? DEFAULT_RETRY_AFTER_SECONDS : retryAfter
                 );
             }
 
-            throw new ApiException(
+            throw ApiException.retryable(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "AI_SERVICE_UNAVAILABLE",
-                    "AI 서비스를 일시적으로 사용할 수 없습니다."
+                    "AI 서비스를 일시적으로 사용할 수 없습니다.",
+                    // 일반 장애는 언제 복구될지 모른다 — 상류가 준 경우에만 전달한다
+                    retryAfter
             );
         } catch (ApiException e) {
             throw e;
@@ -895,6 +978,11 @@ public class PromptController {
                     "AI_SERVICE_UNAVAILABLE",
                     "AI 서비스를 일시적으로 사용할 수 없습니다."
             );
+        } finally {
+            if (guestPermit != null) {
+                if (aiSucceeded) guestUsageService.complete(guestPermit);
+                else guestUsageService.release(guestPermit);
+            }
         }
 
         Long savedThreadId = null;
@@ -975,6 +1063,9 @@ public class PromptController {
 		}
 
         return body;
+    } finally {
+        memberRequestGuard.release(memberPermit);
+    }
     }
 
     private Map<String, Object> replayResponse(
@@ -1178,6 +1269,25 @@ public class PromptController {
         }
 
         return List.of();
+    }
+
+    /**
+     * 상류(rag-server) 응답의 Retry-After 값을 꺼낸다. 없으면 null.
+     *
+     * <p>값 검증·상한은 {@link ApiException#retryAfterHeaders(String)} 가 담당한다.
+     */
+    private String upstreamRetryAfter(
+            WebClientResponseException exception
+    ) {
+        HttpHeaders headers = exception.getHeaders();
+
+        if (headers == null) {
+            return null;
+        }
+
+        String value = headers.getFirst(HttpHeaders.RETRY_AFTER);
+
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private boolean isRateLimitError(

@@ -41,12 +41,14 @@ test("web Make completes through the real Spring backend and persists the turn",
       name: "통합 테스트",
       birth: "",
       phone: "",
-      email: "",
+      email: `smoke-${suffix}@example.com`,
       agreeTerms: true,
       agreePrivacy: true,
     },
   });
-  expect(signup.ok()).toBeTruthy();
+  if (!signup.ok()) {
+    throw new Error(`Integration fixture signup failed (${signup.status()}): ${await signup.text()}`);
+  }
   const session = await signup.json();
   const token = session.accessToken;
   const member = session.member || session.user;

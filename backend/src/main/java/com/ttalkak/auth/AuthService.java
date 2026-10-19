@@ -15,13 +15,16 @@ public class AuthService {
 
     private final MemberRepository memberRepository;
     private final JwtTokenService jwtTokenService;
+    private final RevokedAuthTokenRepository revokedTokens;
 
     public AuthService(
             MemberRepository memberRepository,
-            JwtTokenService jwtTokenService
+            JwtTokenService jwtTokenService,
+            RevokedAuthTokenRepository revokedTokens
     ) {
         this.memberRepository = memberRepository;
         this.jwtTokenService = jwtTokenService;
+        this.revokedTokens = revokedTokens;
     }
 
     public String issueAccessToken(Member member) {
@@ -33,8 +36,12 @@ public class AuthService {
             String authorizationHeader
     ) {
         return extractBearerToken(authorizationHeader)
-                .flatMap(jwtTokenService::parseMemberId)
+                .flatMap(token -> jwtTokenService.parseMemberId(token)
+                        .filter(id -> !revokedTokens.existsById(PasswordResetService.hash(token))))
                 .flatMap(memberRepository::findByIdAndActiveTrue)
+                .filter(member -> extractBearerToken(authorizationHeader)
+                        .map(token -> jwtTokenService.matchesAuthVersion(token, member.getAuthVersion()))
+                        .orElse(false))
                 .map(member -> {
                     if (member.isBlocked()) {
                         throw new ApiException(
@@ -50,6 +57,15 @@ public class AuthService {
 
                     return member;
                 });
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void revokeCurrentToken(String authorization) {
+        String token = extractBearerToken(authorization).orElseThrow(() ->
+                new ApiException(HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다."));
+        var expiresAt = jwtTokenService.expiresAt(token).orElseThrow(() ->
+                new ApiException(HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다."));
+        revokedTokens.save(new RevokedAuthToken(PasswordResetService.hash(token), expiresAt));
     }
 
     public String currentNickname(String authorizationHeader) {

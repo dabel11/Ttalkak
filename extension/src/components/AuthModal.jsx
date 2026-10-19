@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Eye, EyeOff, Plus, X } from "lucide-react";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "../constants";
 import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
+import { useModalFocus } from "../hooks/useModalFocus";
 
 const INITIAL_FORM = {
   nickname: "",
@@ -72,6 +73,7 @@ export function AuthModal({
   onCheckDuplicate,
   isLoggedIn,
 }) {
+  const dialogRef = useModalFocus(onClose);
   const isSignup = mode === "signup";
   const isFindId = mode === "findId";
   const isFindPassword = mode === "findPassword";
@@ -279,11 +281,11 @@ export function AuthModal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <section className="auth-modal" role="dialog" aria-modal="true">
-        <button className="close-button" type="button" onClick={onClose} aria-label="닫기"><X size={18} /></button>
+      <section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" ref={dialogRef} tabIndex={-1}>
+        <button className="close-button" type="button" onClick={onClose} aria-label="닫기" data-modal-initial-focus><X size={18} /></button>
         <div className="auth-heading">
           <div className="auth-icon"><Plus size={22} /></div>
-          <h2>{title}</h2>
+          <h2 id="auth-modal-title">{title}</h2>
           <p>{description}</p>
         </div>
         <form className="auth-form" onSubmit={submitAuth}>

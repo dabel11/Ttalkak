@@ -28,6 +28,11 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+# ⏱️ LLM 호출 타임아웃 — app/core/timeouts.py 가 단일 출처.
+# 2026-09-13 에 운영 경로(app/rag/*)만 고쳤더니 측정 도구 11곳이 그대로 남아 있었고,
+# 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
+# 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
+from app.core.timeouts import GEN_SECONDS
 from app.main import retriever, run_generation
 
 # ── 구체 사실 패턴 ────────────────────────────────────────────
@@ -163,12 +168,20 @@ _JUDGE_SYSTEM = """너는 프롬프트 개선 결과의 '사실 창작(환각)'�
 JSON 하나만 출력:
 {"fabricated": true/false, "items": ["창작된 사실 나열"], "reason": "한 줄"}"""
 
-_JUDGE_MODEL = "llama-3.3-70b-versatile"
+# judge 기본 모델 — generator.default_model() 이 단일 출처다.
+# 종전 하드코딩 "llama-3.3-70b-versatile" 은 2026-08-21 Groq 폐기분이라
+# 이 채점 경로가 404 로 죽어 있었다(2026-09-13 발견).
+def _judge_model_default() -> str:
+    from app.rag.generator import default_model
+    return default_model("groq" if __import__("os").environ.get("GROQ_API_KEY") else "gemini")
+
+
+_JUDGE_MODEL = _judge_model_default()
 
 
 def judge(query: str, improved: str, model: str):
     from groq import Groq
-    c = Groq(api_key=os.environ["GROQ_API_KEY"])
+    c = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
     r = c.chat.completions.create(
         model=model, temperature=0.0, max_tokens=400,
         response_format={"type": "json_object"},

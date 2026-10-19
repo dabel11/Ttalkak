@@ -40,6 +40,11 @@ public class GoogleAuthService {
 
     @Transactional
     public GoogleLoginResult login(String credential) {
+        return login(credential, false, false);
+    }
+
+    @Transactional
+    public GoogleLoginResult login(String credential, boolean agreeTerms, boolean agreePrivacy) {
         GoogleIdentity identity = tokenVerifier.verify(
                 credential
         );
@@ -85,6 +90,10 @@ public class GoogleAuthService {
             );
         }
 
+        if (!agreeTerms || !agreePrivacy) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AUTH_TERMS_REQUIRED",
+                    "Google 계정으로 처음 가입하려면 이용약관과 개인정보 수집에 동의해주세요.");
+        }
         String hash = sha256(identity.subject());
 
         String userId = findAvailableUserId(hash);

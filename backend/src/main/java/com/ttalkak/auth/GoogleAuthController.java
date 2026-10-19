@@ -3,6 +3,8 @@ package com.ttalkak.auth;
 import com.ttalkak.auth.GoogleAuthService.GoogleLoginResult;
 import com.ttalkak.member.Member;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +20,9 @@ public class GoogleAuthController {
     private final GoogleAuthService googleAuthService;
     private final AuthService authService;
 
+    @Value("${GOOGLE_CLIENT_ID:}")
+    private String googleClientId = "";
+
     public GoogleAuthController(
             GoogleAuthService googleAuthService,
             AuthService authService
@@ -26,14 +31,20 @@ public class GoogleAuthController {
         this.authService = authService;
     }
 
+    @GetMapping("/google/config")
+    public ResponseEntity<Map<String, String>> configuration() {
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+                .body(Map.of("clientId", googleClientId.trim()));
+    }
+
     @PostMapping("/google")
     public ResponseEntity<Map<String, Object>> login(
             @RequestBody GoogleLoginRequest request
     ) {
         GoogleLoginResult result = googleAuthService.login(
-                request == null
-                        ? null
-                        : request.credential()
+                request == null ? null : request.credential(),
+                request != null && Boolean.TRUE.equals(request.agreeTerms()),
+                request != null && Boolean.TRUE.equals(request.agreePrivacy())
         );
 
         Member member = result.member();
@@ -63,6 +74,6 @@ public class GoogleAuthController {
         return ResponseEntity.ok(body);
     }
 
-    public record GoogleLoginRequest(String credential) {
+    public record GoogleLoginRequest(String credential, Boolean agreeTerms, Boolean agreePrivacy) {
     }
 }

@@ -24,7 +24,7 @@ import sys
 
 from app import DATA_DIR
 from ingestion.ingest_knowledge import (
-    LLMJudge, Technique, curate, dedupe, semantic_dedupe, _normalize_name,
+    LLMJudge, Technique, curate, semantic_dedupe, _normalize_name,
     _safe_int, write_jsonl, print_summary, CURATED_DIR, DEFAULT_COLLECTION,
 )
 

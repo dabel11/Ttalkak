@@ -38,6 +38,18 @@ def serialize_history(history: list[dict[str, str]]) -> str:
     )
 
 
+def analyzer_fingerprint(model: str, source: str) -> str:
+    """분석기의 정체성 — 모델 + 코드(프롬프트·교정 규칙 포함). 캐시 키용.
+
+    분석 결과는 생성 입력에 들어가므로 분석기가 바뀌면 예전 생성 결과를 재사용하면 안 된다.
+    종전에는 캐시 키에 라벨 `"llama-3.1-8b-instant"` 가 **박혀 있어** 실제 모델(gpt-oss-20b)이
+    바뀌거나 교정 규칙이 늘어도 키가 그대로였다 — 캐시 키에 모델이 빠져 8b 캐시가 70b 측정으로
+    오인된 것과 같은 유형(2026-07-09). 주석만 바꾼 편집이 캐시를 날리지 않게 `#` 줄과 빈 줄은 뺀다."""
+    code = "\n".join(ln for ln in source.splitlines()
+                     if ln.strip() and not ln.lstrip().startswith("#"))
+    return f"{model}@{hashlib.sha256(code.encode('utf-8')).hexdigest()[:12]}"
+
+
 def build_cache_key(
     query: str,
     history: list[dict[str, str]],
@@ -457,7 +469,7 @@ def run_evaluation_item(
     temperature: str,
     system_prompt: str,
     use_analyzer: bool = True,
-    analyzer_model: str = "llama-3.1-8b-instant",
+    analyzer_model: str = "",   # 러너가 analyzer_fingerprint() 를 넘긴다
     analyzer_temperature: str = "0.2",
     use_query_transform: bool = False,
     use_hyde: bool = False,

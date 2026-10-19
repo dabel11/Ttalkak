@@ -240,6 +240,54 @@ class AuthControllerProviderIsolationTest {
         assertEquals("", body.get("maskedUserId"));
     }
 
+    @Test
+    void rejectsInvalidSignupBeforePersistence() {
+        String[][] cases = {{"Bad ID", "password", "new@example.com", ""},
+                {"new-user", "short", "new@example.com", ""},
+                {"new-user", "password", "invalid", ""},
+                {"new-user", "password", "new@example.com", "2026-02-30"},
+                {"new-user", "password", "new@example.com", "2999-01-01"},
+                {"new-user", "a".repeat(73), "new@example.com", ""},
+                {"new-user", "가".repeat(25), "new@example.com", ""}};
+        for (var v : cases) {
+            var error = assertThrows(ResponseStatusException.class,
+                    () -> controller.signup(new AuthController.SignupRequest(
+                            "nickname", "Name", v[3], null, v[2], v[0], v[1], v[1], true, true)));
+            assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        }
+        verify(memberRepository, never()).save(any(Member.class));
+        verify(authService, never()).issueAccessToken(any(Member.class));
+    }
+
+    @Test
+    void acceptsValidSignupAndReportsProvider() {
+        when(passwordEncoder.encode("password")).thenReturn("encoded-password");
+        when(authService.issueAccessToken(any(Member.class))).thenReturn("token");
+        var response = controller.signup(new AuthController.SignupRequest(
+                "nickname", "Name", "2001-01-01", null, "new@example.com", "new-user",
+                "password", "password", true, true));
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        assertEquals("local", ((Map<?, ?>) body.get("user")).get("provider"));
+        verify(memberRepository).save(any(Member.class));
+    }
+
+    @Test
+    void rejectsMissingLoginCredentials() {
+        var error = assertThrows(ResponseStatusException.class,
+                () -> controller.login(new AuthController.LoginRequest(null, null)));
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+    }
+
+    @Test
+    void publicConfigurationDoesNotEnableMissingCapabilities() {
+        var disabled = new AuthConfigurationController("", mock(PasswordResetMailer.class)).configuration();
+        assertFalse(disabled.googleLoginEnabled());
+        assertFalse(disabled.passwordResetEnabled());
+        var enabled = new AuthConfigurationController(" client.apps.googleusercontent.com ", mock(PasswordResetMailer.class)).configuration();
+        assertEquals("client.apps.googleusercontent.com", enabled.googleClientId());
+        assertEquals(true, enabled.googleLoginEnabled());
+    }
+
     private Member localMember() {
         return new Member(
                 "local-user",

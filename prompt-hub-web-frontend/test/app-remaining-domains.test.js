@@ -39,6 +39,26 @@ test("My Page hydration routes an expired session through the authentication bou
   assert.equal(handled[0][1], "로그인이 만료되었습니다. 다시 로그인해 주세요.");
 });
 
+test("My Page keeps demo-account data local without showing a backend error", async () => {
+  const { backendEffects } = await load("effects/backend-effects.mjs");
+  const state = { route: "saved", isLoggedIn: true, myBackendStatus: "idle" };
+  let apiCalls = 0;
+  let renderCount = 0;
+
+  await backendEffects.hydrateBackendMyPageDataEffect({
+    api: { getMyLibrary: () => { apiCalls += 1; } },
+    canUseDemoFallback: () => false,
+    getAuthToken: () => "demo-token",
+    isDemoAuthToken: (token) => token === "demo-token",
+    render: () => { renderCount += 1; },
+    state,
+  });
+
+  assert.equal(state.myBackendStatus, "connected");
+  assert.equal(apiCalls, 0);
+  assert.equal(renderCount, 1);
+});
+
 test("My Page hydration exits checking state when one or more requests never settle", async () => {
   const { backendEffects } = await load("effects/backend-effects.mjs");
   const originalSetTimeout = globalThis.setTimeout;

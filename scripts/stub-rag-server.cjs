@@ -1,6 +1,6 @@
 const http = require("node:http");
 
-const host = "127.0.0.1";
+const host = process.env.TTALKAK_STUB_RAG_HOST || "127.0.0.1";
 const port = Number(process.env.TTALKAK_STUB_RAG_PORT || 8000);
 
 const server = http.createServer((request, response) => {
@@ -22,8 +22,14 @@ const server = http.createServer((request, response) => {
     let payload;
     try { payload = JSON.parse(body || "{}"); } catch { payload = {}; }
     const query = String(payload.query || "").trim();
+    if (query === "__CI_RAG_FAIL__") {
+      response.writeHead(500, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "intentional_ci_failure" }));
+      return;
+    }
     response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
     response.end(JSON.stringify({
+      ...(query === "__CI_USAGE_MISSING__" ? {} : {usage: {input_tokens: 10, output_tokens: 5, total_tokens: 15}}),
       mode: "improve",
       answer: `개선된 ${query}`,
       improvedPrompt: `개선된 ${query}`,

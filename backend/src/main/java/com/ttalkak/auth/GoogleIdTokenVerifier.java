@@ -11,7 +11,6 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.net.URL;
 import java.util.List;
 import java.util.Set;
 
@@ -74,7 +73,12 @@ public class GoogleIdTokenVerifier {
             );
         }
 
-        validateIssuer(jwt.getIssuer());
+        java.time.Instant now = java.time.Instant.now();
+        if (jwt.getExpiresAt() == null || !jwt.getExpiresAt().isAfter(now)
+                || jwt.getIssuedAt() == null || jwt.getIssuedAt().isAfter(now.plusSeconds(60))) {
+            throw invalidToken("Google 토큰의 유효 시간이 올바르지 않습니다.");
+        }
+        validateIssuer(jwt.getClaimAsString("iss"));
         validateAudience(jwt);
 
         String subject = normalizeClaim(jwt.getSubject());
@@ -117,10 +121,7 @@ public class GoogleIdTokenVerifier {
         );
     }
 
-    private void validateIssuer(URL issuer) {
-        String value = issuer == null
-                ? null
-                : issuer.toString();
+    private void validateIssuer(String value) {
 
         if (value == null || !ALLOWED_ISSUERS.contains(value)) {
             throw invalidToken(
@@ -169,8 +170,12 @@ public class GoogleIdTokenVerifier {
     }
 
     private static JwtDecoder createGoogleJwtDecoder() {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(5000);
         NimbusJwtDecoder decoder = NimbusJwtDecoder
                 .withJwkSetUri(GOOGLE_JWK_SET_URI)
+                .restOperations(new org.springframework.web.client.RestTemplate(factory))
                 .build();
 
         decoder.setJwtValidator(

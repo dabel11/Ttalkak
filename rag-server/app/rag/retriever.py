@@ -18,10 +18,12 @@ sigmoid 정규화 점수를 쓴다. 응답 스키마·소비자(Spring/익스텐
 import re
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.db import SessionLocal, RagChunk, init_db
 from app.core.embeddings import get_model, get_reranker
+from app.core import rerank as rerank_api
+from app.rag.layers import is_searchable
 
 _RRF_K = 60   # Reciprocal Rank Fusion 상수 (관례값)
 _TOKEN_RE = re.compile(r"[a-zA-Z]+|[0-9]+|[가-힣]+")
@@ -68,7 +70,8 @@ class Retriever:
         model_name: str = "BAAI/bge-m3",
         use_reranker: bool = True,
         use_hybrid: bool = False,
-        fetch_k: int = 20,   # 측정 파레토 최적 (50: 전지표 열세·2.5배 느림 — WORKLOG 2026-07-05)
+        fetch_k: int = 50,   # 2026-09-13 재측정. 종전 20 은 108~134청크 시절 값이라 근거가 소멸했다
+        use_layer_filter: bool = True,
         **_ignore,
     ):
         # **_ignore: 기존 chroma_path 인자 호출과의 하위호환용 (무시)
@@ -76,10 +79,15 @@ class Retriever:
         self.use_reranker = use_reranker
         self.use_hybrid   = use_hybrid
         self.fetch_k      = fetch_k
+        # 검색 대상 자격이 없는 카드를 로드 단계에서 뺀다(app/rag/layers.py).
+        # 끄면 종전처럼 컬렉션 전체를 본다 — A/B·회귀 확인용.
+        self.use_layer_filter = use_layer_filter
         self._reranker    = None  # 지연 로드
         self._bm25_cache  = {}    # {collection: (BM25Okapi, row_count)} — 토큰화 재사용
         init_db()
-        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid})")
+        _rb = rerank_api.backend()
+        _rbdesc = f"{_rb}:{rerank_api.active_model(_rb)}" if _rb != "torch" else "torch:bge-reranker-v2-m3"
+        print(f"[Retriever] 준비 완료 (MySQL, rerank={use_reranker}, hybrid={use_hybrid}, 리랭크백엔드={_rbdesc})")
 
     def search(
         self,
@@ -192,22 +200,49 @@ class Retriever:
         return np.argsort(-rrf)
 
     def _rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        # 호스티드 리랭크 API(RAG_RERANK_BACKEND) 우선 — torch cross-encoder 는
+        # ARM64 CPU 에서 50쌍 ~14초(실측 2026-10-02). API 실패 시 torch 로 폴백.
+        be = rerank_api.backend()
+        if be != "torch":
+            try:
+                ranked = rerank_api.remote_rerank(
+                    query, [c["text"] for c in candidates], top_k, be)
+                if ranked:
+                    return self._finalize_rerank(candidates, ranked)
+                print(f"[Retriever] 원격 리랭크({be}) 빈 결과 → torch 폴백")
+            except Exception as e:
+                print(f"[Retriever] 원격 리랭크({be}) 실패 → torch 폴백: {e}")
+
         if self._reranker is None:
             self._reranker = get_reranker()
         pairs  = [(query, c["text"]) for c in candidates]
         logits = self._reranker.predict(pairs)                 # cross-encoder 점수(로짓)
         probs  = 1.0 / (1.0 + np.exp(-np.asarray(logits)))     # sigmoid → 0~1
+        ranked = sorted(enumerate(probs.tolist()), key=lambda t: -t[1])[:top_k]
+        return self._finalize_rerank(candidates, ranked)
 
-        order = np.argsort(-probs)[:top_k]
+    def _finalize_rerank(self, candidates: list[dict],
+                         idx_scores: list[tuple[int, float]]) -> list[dict]:
+        """(원본 인덱스, 리랭크 점수) 목록으로 결과 dict 를 만든다(torch·원격 공용).
+        순위는 리랭커 기준, 표시 score 는 평탄한 리랭크 확률 대신 dense 코사인 유지 —
+        min_score 필터·무근거 게이트가 dense 기준이라 그대로 보존된다."""
         out = []
-        for i in order:
+        for i, s in idx_scores:
             c = dict(candidates[i])
-            # 순위는 reranker 기준 유지, 표시 점수는 평탄한 sigmoid 대신 dense 코사인 사용.
-            # rerank_score(sigmoid 0~1)는 임계치 필터·분석용으로 병기.
-            c["rerank_score"] = round(float(probs[i]), 4)
+            c["rerank_score"] = round(float(s), 4)
             c["score"] = c.pop("dense_score", c["score"])
             out.append(c)
         return out
+
+    def collection_size(self, collection_name: str) -> int:
+        """컬렉션의 청크 수(레이어 필터 이전) — '코퍼스 자체가 비었는지' 감지용(빈-코퍼스 안전장치).
+        search 가 0건을 돌려줬을 때 '데이터가 아예 없음'과 '매칭만 없음'을 구분하는 데 쓴다.
+        실패하면 호출부(retrieve_contexts)가 예외로 받아 안전측(예시 신호 제외)으로 처리한다."""
+        with SessionLocal() as session:
+            return int(session.execute(
+                select(func.count()).select_from(RagChunk)
+                .where(RagChunk.collection_name == collection_name)
+            ).scalar_one())
 
     def _load_collection(self, collection_name: str) -> list[dict]:
         with SessionLocal() as session:
@@ -221,10 +256,24 @@ class Retriever:
                 .order_by(RagChunk.id)   # 안정적 정렬 → BM25 캐시와 rows 정렬 일치
             ).all()
 
-        return [
+        rows = [
             {"document": doc, "metadata": meta, "embedding": emb, "embedding_views": views}
             for doc, meta, emb, views in results
         ]
+
+        # ── 층 필터 (2026-09-15 배선) ──────────────────────────
+        # 회수되는 카드의 21%가 '반영할 수 없는' 것이었다(gen_set 18질의 실측:
+        # meta 14% + degenerate 3% + system 3%). 최다 회수 카드가 `Meta-Prompting`
+        # (18질의 중 7회)인데, 이건 "요청을 최적의 프롬프트로 변환하라"는 카드라
+        # 생성기가 이미 하는 일이다 — 참고 기법으로 줘도 반영할 것이 없다.
+        #
+        # ⚠️ 미분류 카드는 통과한다(layers.is_searchable). 분류 배치가 실패하거나
+        #    신규 카드가 아직 분류 전이어도 컬렉션이 통째로 비지 않는다 —
+        #    `embedding_views` 가 NULL 이면 종전 동작인 것과 같은 원칙.
+        if self.use_layer_filter:
+            rows = [r for r in rows if is_searchable(r)]
+
+        return rows
 
     @staticmethod
     def _cosine(q: np.ndarray, m: np.ndarray) -> np.ndarray:

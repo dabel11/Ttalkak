@@ -1,0 +1,105 @@
+package com.ttalkak.usage;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
+import java.time.Instant;
+import java.util.Objects;
+
+/** A confirmed paid entitlement. Only a verified provider approval may create one. */
+@Entity
+@Table(name = "paid_usage_periods",
+        uniqueConstraints = @UniqueConstraint(name = "uk_paid_usage_payment_ref",
+                columnNames = "payment_reference"),
+        indexes = @Index(name = "idx_paid_usage_member_period",
+                columnList = "member_id,starts_at,ends_at"))
+public class PaidUsagePeriod {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "member_id", nullable = false)
+    private Long memberId;
+
+    @Column(name = "payment_reference", nullable = false, length = 200)
+    private String paymentReference;
+
+    @Column(name = "starts_at", nullable = false)
+    private Instant startsAt;
+
+    @Column(name = "ends_at", nullable = false)
+    private Instant endsAt;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    // Nullable for existing paid rows. Previously all paid subscriptions were PRO.
+    @Column(name = "plan_code", length = 16)
+    private String planCode;
+
+    @Column(name = "request_limit_override")
+    private Long requestLimitOverride;
+
+    @Column(name = "billing_scope", length = 80)
+    private String billingScope;
+
+    protected PaidUsagePeriod() {}
+
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt) {
+        this(memberId, paymentReference, startsAt, endsAt, "PRO");
+    }
+
+    /** Product identity is supplied by verified billing, never by the caller's client payload. */
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
+                           String planCode) {
+        this(memberId, paymentReference, startsAt, endsAt, planCode, "test:legacy");
+    }
+    public PaidUsagePeriod(Long memberId, String paymentReference, Instant startsAt, Instant endsAt,
+                           String planCode, String billingScope) {
+        this.billingScope = billingScope;
+        if (planCode == null || !java.util.Set.of("LIGHT", "STANDARD", "PRO").contains(planCode)) {
+            throw new IllegalArgumentException("Unknown paid plan");
+        }
+        if (memberId == null || memberId <= 0) throw new IllegalArgumentException("memberId");
+        if (paymentReference == null || paymentReference.isBlank()
+                || paymentReference.length() > 200) throw new IllegalArgumentException("paymentReference");
+        if (!Objects.requireNonNull(startsAt).isBefore(Objects.requireNonNull(endsAt))) {
+            throw new IllegalArgumentException("Paid period must have positive duration");
+        }
+        this.memberId = memberId;
+        this.paymentReference = paymentReference;
+        this.startsAt = startsAt;
+        this.endsAt = endsAt;
+        this.planCode = planCode;
+    }
+
+    public void revoke(Instant when) { this.revokedAt = Objects.requireNonNull(when); }
+
+    /** Legacy rows with no plan_code were created as PRO entitlements. */
+    public String getPlanCode() { return planCode == null ? "PRO" : planCode; }
+    public Long getRequestLimitOverride() { return requestLimitOverride; }
+
+    /** Only a confirmed supplemental test payment can upgrade the current paid period. */
+    public void upgradeTo(String nextPlan, long allowance) {
+        java.util.List<String> order = java.util.List.of("LIGHT", "STANDARD", "PRO");
+        int from = order.indexOf(getPlanCode());
+        int to = order.indexOf(nextPlan);
+        if (from < 0 || to <= from || allowance < 1) {
+            throw new IllegalArgumentException("Paid tier upgrade must increase the plan");
+        }
+        this.planCode = nextPlan;
+        this.requestLimitOverride = allowance;
+    }
+
+
+    public String getBillingScope() { return billingScope; }
+    public Long getMemberId() { return memberId; }
+    public Instant getStartsAt() { return startsAt; }
+    public Instant getEndsAt() { return endsAt; }
+}

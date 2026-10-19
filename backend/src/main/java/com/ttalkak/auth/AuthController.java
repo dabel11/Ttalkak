@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,6 +21,7 @@ public class AuthController {
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String dummyPasswordHash;
     private final AuthService authService;
     private final AccountWithdrawalService accountWithdrawalService;
 
@@ -30,6 +33,7 @@ public class AuthController {
     ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.dummyPasswordHash = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
         this.authService = authService;
         this.accountWithdrawalService = accountWithdrawalService;
     }
@@ -56,6 +60,23 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름을 입력해주세요.");
         }
 
+        if (!request.userId().matches("[a-z0-9_-]{1,50}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디는 50자 이내의 영문 소문자, 숫자, _, -만 사용할 수 있습니다.");
+        }
+        if (request.password().length() < 8 || request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호는 8자 이상, UTF-8 기준 72바이트 이내로 입력해주세요.");
+        }
+        if (request.nickname().length() > 50 || request.name().length() > 50) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "닉네임과 이름은 50자 이내로 입력해주세요.");
+        }
+        if (request.email() == null || request.email().length() > 255
+                || !request.email().matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "올바른 이메일을 입력해주세요.");
+        }
+        if (request.phone() != null && request.phone().length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호가 너무 깁니다.");
+        }
+
         if (memberRepository.existsByUserId(request.userId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 사용 중인 아이디입니다.");
         }
@@ -70,7 +91,14 @@ public class AuthController {
 
         LocalDate birth = null;
         if (request.birth() != null && !request.birth().isBlank()) {
-            birth = LocalDate.parse(request.birth());
+            try {
+                birth = LocalDate.parse(request.birth());
+            } catch (DateTimeParseException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "생년월일은 YYYY-MM-DD 형식으로 입력해주세요.");
+            }
+            if (birth.isAfter(LocalDate.now())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "생년월일은 오늘 이후 날짜로 입력할 수 없습니다.");
+            }
         }
 
         Member member = new Member(
@@ -90,6 +118,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        if (request.userId() == null || request.userId().isBlank()
+                || request.password() == null || request.password().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디와 비밀번호를 입력해주세요.");
+        }
+        if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
+        }
         Member member = memberRepository
                 .findByUserIdAndAuthProviderAndActiveTrue(
                         request.userId(),
@@ -97,7 +132,9 @@ public class AuthController {
                 )
                 .orElse(null);
 
-        if (member == null || !passwordEncoder.matches(request.password(), member.getPassword())) {
+        boolean passwordMatches = passwordEncoder.matches(request.password(),
+                member == null ? dummyPasswordHash : member.getPassword());
+        if (member == null || !passwordMatches) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
@@ -177,11 +214,6 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("maskedUserId", maskUserId(member.getUserId())));
     }
 
-    @PostMapping("/password-reset/request")
-    public Map<String, Object> requestPasswordReset(@RequestBody PasswordResetRequest request) {
-        return Map.of("ok", true);
-    }
-
     private Map<String, Object> authResponse(Member member) {
         Map<String, Object> user = new LinkedHashMap<>();
         user.put("id", member.getId());
@@ -189,6 +221,7 @@ public class AuthController {
         user.put("nickname", member.getNickname());
         user.put("role", member.getRole().toLowerCase());
         user.put("active", member.isActive());
+        user.put("provider", member.getAuthProvider().toLowerCase(java.util.Locale.ROOT));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("user", user);

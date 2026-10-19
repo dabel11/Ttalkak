@@ -1,0 +1,528 @@
+{
+  "_comment": "커버리지 평가셋 — qa_set_realistic 이 한 번도 겨냥하지 않는 카드용. query=사용자가 칠 법한 작업 요청(기법명 미언급), relevant=그 카드 chunk_id. ⚠️ LLM 생성 라벨이고 single-gold 다. 사람 라벨(qa_set_realistic)과 수치를 직접 비교하지 말 것. 'leak' 은 질의↔카드 어휘 중첩(높을수록 표면 매칭 위험). 생성 후 층이 재분류돼 검색 대상에서 빠진 카드의 문항은 제거했다(7개). 'review' 가 붙은 항목은 어휘 누수 의심이다.",
+  "collection": "prompt_techniques",
+  "generatedBy": {
+    "model": "openai/gpt-oss-120b",
+    "temperature": 0.7,
+    "script": "eval/gen_qa_set.py"
+  },
+  "items": [
+    {
+      "query": "아래 긴 보고서를 먼저 요약하고, 주요 결론만 뽑아줘:",
+      "relevant": [
+        "pdf_011"
+      ],
+      "technique": "Instruction-First Prompting",
+      "leak": 0.143,
+      "why": "먼저 지시를 제시하면 모델이 목적을 바로 파악해 긴 텍스트를 효율적으로 처리한다."
+    },
+    {
+      "query": "신제품 출시 발표 자료를 5분 분량, 청중 집중 유도 형태로 정리해줘",
+      "relevant": [
+        "pdf_012"
+      ],
+      "technique": "Specificity Prompting",
+      "leak": 0.4,
+      "why": "구체적인 분량·구조·목표를 명시해 품질을 높인다",
+      "review": "leak>=0.35 — 카드 어휘가 질의에 새어 들어갔을 수 있음. 사람 확인 필요"
+    },
+    {
+      "query": "신규 프로젝트 아이디어를 마케팅·개발·운영 중 하나로 분류해줘",
+      "relevant": [
+        "pdf_020"
+      ],
+      "technique": "Label Space Prompting",
+      "leak": 0.125,
+      "why": "라벨을 미리 정해 정확한 카테고리 선택을 유도한다"
+    },
+    {
+      "query": "새로운 전자상거래 사이트의 결제 흐름을 검토하고 문제점 찾아줘",
+      "relevant": [
+        "pdf_023"
+      ],
+      "technique": "Cognitive Verifier Pattern",
+      "leak": 0.0,
+      "why": "복잡한 흐름을 단계별로 검증해 정확한 문제점을 도출할 수 있어"
+    },
+    {
+      "query": "2023년 매출과 시장 성장률을 합쳐 연간 목표를 알려줘",
+      "relevant": [
+        "pdf_024"
+      ],
+      "technique": "Self-Ask Prompting",
+      "leak": 0.0,
+      "why": "다양한 수치를 결합해 답을 도출해야 하므로 자기 질문 생성이 유용"
+    },
+    {
+      "query": "우리 회사 2024년 마케팅 전략을 5개 섹션으로 정리해줘",
+      "relevant": [
+        "pdf_034"
+      ],
+      "technique": "Skeleton-of-Thought Prompting",
+      "leak": 0.0,
+      "why": "구조화된 보고서 작성을 위해 뼈대부터 만들면 효율적이다"
+    },
+    {
+      "query": "새로 만든 파이썬 함수가 잘못된 결과를 내는 이유를 알려줘",
+      "relevant": [
+        "pdf_039"
+      ],
+      "technique": "Error Analysis Prompting",
+      "leak": 0.0,
+      "why": "오류 원인과 영향을 분석해 해결 방안을 제시한다"
+    },
+    {
+      "query": "요즘 인기 있는 파이썬 데이터 시각화 튜토리얼 알려줘",
+      "relevant": [
+        "pdf_052"
+      ],
+      "technique": "Query Rewriting Prompting",
+      "leak": 0.0,
+      "why": "구어체 요청을 검색용 키워드로 변환해 검색 정확도를 높이기 위해"
+    },
+    {
+      "query": "우리 스타트업에 맞는 DB 선택 조건과 예외를 알려줘",
+      "relevant": [
+        "pdf_071"
+      ],
+      "technique": "Boundary Condition Prompting",
+      "leak": 0.5,
+      "why": "조건과 예외를 제시하면 적합한 DB를 판단할 수 있다",
+      "review": "leak>=0.35 — 카드 어휘가 질의에 새어 들어갔을 수 있음. 사람 확인 필요"
+    },
+    {
+      "query": "우리 제품 소개 페이지를 친절하고 짧게, 표 포함해서 만들어줘",
+      "relevant": [
+        "pdf_075"
+      ],
+      "technique": "Parameter Prompting",
+      "leak": 0.125,
+      "why": "사용자가 난이도·톤·형식을 선택해 맞춤 결과를 얻을 수 있기 때문"
+    },
+    {
+      "query": "신제품 출시 발표 자료를 만들기 위해 핵심 포인트를 분석하고 작성해줘",
+      "relevant": [
+        "pdf_076"
+      ],
+      "technique": "Analyst-Then-Writer Prompting",
+      "leak": 0.1,
+      "why": "요구사항을 먼저 분석하면 목적에 맞는 발표 자료를 만들 수 있다"
+    },
+    {
+      "query": "우리 팀의 2024년 프로젝트 예산 보고서를 작성해줘",
+      "relevant": [
+        "pdf_084"
+      ],
+      "technique": "Missing Information Detection",
+      "leak": 0.0,
+      "why": "누락된 예산 항목과 기간 정보를 파악해 보완할 수 있어"
+    },
+    {
+      "query": "신제품 출시 발표 자료 초안을 만들어줘",
+      "relevant": [
+        "pdf_087"
+      ],
+      "technique": "Prompt Expansion",
+      "leak": 0.167,
+      "why": "짧은 요청을 구체화해 역할·조건·출력 형식을 포함한 프롬프트로 전환해 정확한 결과를 얻을 수 있다."
+    },
+    {
+      "query": "의료 데이터 분석 보고서에 통계 용어와 지표를 포함해서 작성해줘",
+      "relevant": [
+        "pdf_090"
+      ],
+      "technique": "Domain-Specific Prompting",
+      "leak": 0.222,
+      "why": "전문 용어와 평가 기준을 반영해 정확한 보고서를 만들기 위해"
+    },
+    {
+      "query": "신제품 출시 마케팅 보고서 최종 검토, 품질 기준 충족 여부 확인해줘",
+      "relevant": [
+        "pdf_094"
+      ],
+      "technique": "Quality Gate Prompting",
+      "leak": 0.455,
+      "why": "품질 기준을 모두 만족했는지 확인해 최종 보고서 품질을 보장하기 위해",
+      "review": "leak>=0.35 — 카드 어휘가 질의에 새어 들어갔을 수 있음. 사람 확인 필요"
+    },
+    {
+      "query": "우리 팀 프로젝트 진행 상황을 표로 정리해줘",
+      "relevant": [
+        "pe_markdown-tables_fb475eb3"
+      ],
+      "technique": "Markdown Tables",
+      "leak": 0.0,
+      "why": "많은 항목을 한눈에 보기 쉬워서"
+    },
+    {
+      "query": "신제품 A 가격표와 사양을 주면 홍보 문구 3줄 작성해줘",
+      "relevant": [
+        "pe_give-a-bot-a-fish_5ef8667c"
+      ],
+      "technique": "Give a Bot a Fish",
+      "leak": 0.0,
+      "why": "모델이 필요한 모든 정보를 직접 제공받아 정확히 작업을 수행하도록 돕는다."
+    },
+    {
+      "query": "우리 회사 매출 감소 원인을 3가지로 분석해줘",
+      "relevant": [
+        "pe_chain-of-thought_d4b0a8d1"
+      ],
+      "technique": "Chain of Thought",
+      "leak": 0.0,
+      "why": "복잡한 원인 분석에 단계별 사고 흐름이 필요하기 때문"
+    },
+    {
+      "query": "지난 달 매출 데이터와 지역별 판매량을 표로 정리해줘",
+      "relevant": [
+        "pe_embedding-data_c18035a4"
+      ],
+      "technique": "Embedding Data",
+      "leak": 0.0,
+      "why": "데이터를 직접 삽입해 모델이 표 형식을 이해하도록 돕는다"
+    },
+    {
+      "query": "새 제품 출시 안내에 제품명, 가격, 출시일을 목록으로 삽입해줘",
+      "relevant": [
+        "pe_simple-lists_03364686"
+      ],
+      "technique": "Simple Lists",
+      "leak": 0.0,
+      "why": "한 번만 쓰이는 필드들을 간단히 나열해 입력할 수 있어"
+    },
+    {
+      "query": "지난 5년간 매출 데이터로 평균 성장률을 구하고, 내년 매출을 예측해줘",
+      "relevant": [
+        "pe_self-consistency_1929fe98"
+      ],
+      "technique": "Self-Consistency",
+      "leak": 0.0,
+      "why": "다단계 계산과 추론이 필요해 일관된 답을 얻고 싶다"
+    },
+    {
+      "query": "주식 포트폴리오의 연간 수익률을 계산하는 파이썬 코드를 짜줘",
+      "relevant": [
+        "pe_program-aided-language-models-pal_ef9f3ca2"
+      ],
+      "technique": "Program-Aided Language Models (PAL)",
+      "leak": 0.0,
+      "why": "복잡한 계산을 프로그램으로 자동화하면 정확하고 빠르게 결과를 얻을 수 있다"
+    },
+    {
+      "query": "AI를 활용한 마케팅 성공 사례를 알려줘",
+      "relevant": [
+        "pe_active-prompt_d7c32cb0"
+      ],
+      "technique": "Active-Prompt",
+      "leak": 0.0,
+      "why": "사용자가 구체적인 예시를 요구하므로 모델이 직접 예시를 제시해야 함"
+    },
+    {
+      "query": "새 직원 교육을 위한 시뮬레이션 대화를 5턴 정도 만들어줘",
+      "relevant": [
+        "pe_multi-turn-conversations_d32b5ac2"
+      ],
+      "technique": "Multi-turn Conversations",
+      "leak": 0.143,
+      "why": "다중 턴 대화 흐름을 설계해 일관된 답변과 자연스러운 진행을 확보할 수 있다"
+    },
+    {
+      "query": "우리 회사의 2023년 매출 감소 원인을 분석해줘",
+      "relevant": [
+        "pe_zero-shot-reasoning_4b386a14"
+      ],
+      "technique": "Zero-Shot Reasoning",
+      "leak": 0.0,
+      "why": "다단계 추론이 필요해 정확한 원인 파악이 가능하기 때문"
+    },
+    {
+      "query": "2023년 1분기 매출 데이터로 성장 요인 3가지 뽑아줘",
+      "relevant": [
+        "pe_selection-inference-prompting_7157581a"
+      ],
+      "technique": "Selection-Inference Prompting",
+      "leak": 0.0,
+      "why": "여러 매출 지표 중 핵심을 선택해 결론을 도출하기 위해"
+    },
+    {
+      "query": "고객 데이터 분석 보고서를 만들고, 개인정보는 제외해줘",
+      "relevant": [
+        "pe_add-defense-in-the-instruction_68761ef3"
+      ],
+      "technique": "Add Defense in the Instruction",
+      "leak": 0.0,
+      "why": "민감한 개인정보 노출을 방지하기 위해 방어 조건을 추가해야 유용하다"
+    },
+    {
+      "query": "우리 회사 연말 파티 일정 안내 메일을 작성해줘",
+      "relevant": [
+        "pe_basic-prompts_d2a07abf"
+      ],
+      "technique": "Basic Prompts",
+      "leak": 0.0,
+      "why": "기본적인 문장 완성 형태를 제시해 답변을 유도하기 위해"
+    },
+    {
+      "query": "새로운 스타트업 아이디어 5가지를 제시해줘",
+      "relevant": [
+        "pe_top-p_bd39e2d3"
+      ],
+      "technique": "Top_p",
+      "leak": 0.0,
+      "why": "다양한 아이디어를 얻기 위해 출력 다양성을 높여야 함"
+    },
+    {
+      "query": "2024년 2분기 매출 보고서에서 핵심 지표만 정리해줘",
+      "relevant": [
+        "pe_instruction_81529fbd"
+      ],
+      "technique": "Instruction",
+      "leak": 0.0,
+      "why": "작업을 명확히 지정해 모델이 원하는 형태로 결과를 생성하도록 돕는다"
+    },
+    {
+      "query": "우리 스타트업 AI 서비스 이용 후기 5개를 요약해줘",
+      "relevant": [
+        "pe_context_ec2727b3"
+      ],
+      "technique": "Context",
+      "leak": 0.0,
+      "why": "추가 정보가 있어 정확한 요약이 가능해요"
+    },
+    {
+      "query": "우리 회사 제품 리뷰를 긍정/부정으로 구분하는 기준 예시 5개 만들어줘",
+      "relevant": [
+        "pe_few-shot-learning-with-examples_24c88c04"
+      ],
+      "technique": "Few-shot learning with examples",
+      "leak": 0.0,
+      "why": "모델이 구분 기준을 학습하도록 예시가 필요하기 때문"
+    },
+    {
+      "query": "고객 설문 답변에서 만족도 점수만 뽑아 정리해줘",
+      "relevant": [
+        "pe_instruction-prompting_53996939"
+      ],
+      "technique": "Instruction Prompting",
+      "leak": 0.0,
+      "why": "명확한 지시로 원하는 정보만 추출하도록 모델을 유도하기 위해"
+    },
+    {
+      "query": "우리 팀 회의록을 핵심 5가지 항목과 담당자 이름으로 정리해줘",
+      "relevant": [
+        "pe_be-more-specific_4c788850"
+      ],
+      "technique": "Be More Specific",
+      "leak": 0.0,
+      "why": "구체적인 항목과 형식 지정으로 원하는 정리 결과를 얻을 수 있다."
+    },
+    {
+      "query": "2023년 3월 매출 보고서에서 전년 대비 성장률을 계산해줘",
+      "relevant": [
+        "pe_provide-context_44118589"
+      ],
+      "technique": "Provide Context",
+      "leak": 0.0,
+      "why": "맥락을 제공하면 정확한 성장률을 산출할 수 있다"
+    },
+    {
+      "query": "우리 회사 2023년 매출을 기준으로 성장률을 계산해줘",
+      "relevant": [
+        "pe_factuality_9de646fd"
+      ],
+      "technique": "Factuality",
+      "leak": 0.0,
+      "why": "정확한 수치 기반 답변을 위해"
+    },
+    {
+      "query": "신제품 출시 계획서 초안을 작성하고, 내용별로 구분해서 정리해줘.",
+      "relevant": [
+        "pe_xml-tags-for-structure_dc658c31"
+      ],
+      "technique": "XML Tags for Structure",
+      "leak": 0.0,
+      "why": "복잡한 문서 구조를 명확히 구분해 모델이 혼동하지 않게 돕는다."
+    },
+    {
+      "query": "고객 주문 정보를 JSON 형태로 정리해줘",
+      "relevant": [
+        "pe_prefill-claude-s-response_0426ee57"
+      ],
+      "technique": "Prefill Claude's Response",
+      "leak": 0.167,
+      "why": "출력 형식을 JSON으로 고정해 일관된 데이터 구조를 얻는다"
+    },
+    {
+      "query": "신제품 출시 블로그 글을 친근한 어조와 기술 용어로 써줘.",
+      "relevant": [
+        "pe_directional-stimulus-prompting_23a2ba51"
+      ],
+      "technique": "Directional Stimulus Prompting",
+      "leak": 0.111,
+      "why": "키워드와 힌트를 제공해 원하는 어조와 내용으로 출력 방향을 제어할 수 있어."
+    },
+    {
+      "query": "우리 회사 2023년 매출 데이터를 지역별·제품별로 분석하고 요약 보고서 작성해줘",
+      "relevant": [
+        "pe_break-down-prompts_c7d252da"
+      ],
+      "technique": "Break Down Prompts",
+      "leak": 0.0,
+      "why": "복잡한 분석을 단계별로 나누어 차례로 수행하면 전체 작업을 간단히 처리할 수 있다"
+    },
+    {
+      "query": "새로운 AI 서비스 기획서에 역할·제한·목표를 구분해 정리해줘",
+      "relevant": [
+        "pe_structured-prompting-with-tags_24069c0a"
+      ],
+      "technique": "Structured Prompting with Tags",
+      "leak": 0.111,
+      "why": "복잡한 요구를 구분해 명확히 전달할 수 있어"
+    },
+    {
+      "query": "고객 주문 데이터를 (주문번호, 금액, 날짜) 튜플로 출력해줘",
+      "relevant": [
+        "pe_specify-output-structure_c1b19b9b"
+      ],
+      "technique": "Specify Output Structure",
+      "leak": 0.0,
+      "why": "특정 포맷으로 정리해 바로 활용할 수 있다"
+    },
+    {
+      "query": "2025년 전기차 충전소 현황 알려줘, 없으면 not found",
+      "relevant": [
+        "pe_give-the-model-an-out_f78aed42"
+      ],
+      "technique": "Give the Model an Out",
+      "leak": 0.375,
+      "why": "답이 없을 때 정확히 'not found'라고 답하도록 유도",
+      "review": "leak>=0.35 — 카드 어휘가 질의에 새어 들어갔을 수 있음. 사람 확인 필요"
+    },
+    {
+      "query": "우리 회사 조직도에서 마케팅과 영업의 연결 고인을 찾아줘",
+      "relevant": [
+        "pe_graph-prompting_b1265bc4"
+      ],
+      "technique": "Graph Prompting",
+      "leak": 0.0,
+      "why": "조직도라는 그래프 구조에서 부서 간 관계를 추론해야 하기 때문"
+    },
+    {
+      "query": "아래는 2023년 매출 보고서 전체다. 주요 성장 요인은?",
+      "relevant": [
+        "pe_long-context-structure_e2b93cb1"
+      ],
+      "technique": "Long Context Structure",
+      "leak": 0.0,
+      "why": "긴 보고서 전체를 제공하고 마지막에 질문해 맥락 파악을 돕는다."
+    },
+    {
+      "query": "프로젝트 보고서 각 섹션을 --- 로 구분해서 정리해줘",
+      "relevant": [
+        "pe_consistent-structure-with-delimiters_a77d8d2a"
+      ],
+      "technique": "Consistent Structure with Delimiters",
+      "leak": 0.0,
+      "why": "구분선을 넣어 구조를 명확히 하면 내용 파악과 편집이 쉬워짐"
+    },
+    {
+      "query": "500자 이내로 요약하고, ‘긴급’ 단어를 반드시 포함해 회의록 정리해줘.",
+      "relevant": [
+        "pe_priority-placement_67512c49"
+      ],
+      "technique": "Priority Placement",
+      "leak": 0.0,
+      "why": "핵심 제약을 앞에 두면 모델이 놓치지 않아 정확히 반영된다"
+    },
+    {
+      "query": "신제품 소개를 150자 이내로 요약해줘",
+      "relevant": [
+        "pe_explicit-output-length-control_dd62a340"
+      ],
+      "technique": "Explicit Output Length Control",
+      "leak": 0.0,
+      "why": "정해진 글자 수 안에 핵심을 전달해야 할 때"
+    },
+    {
+      "query": "우리 팀 회의 내용을 불릿 포인트로 정리해줘",
+      "relevant": [
+        "pe_cue-prime-the-output_83fafcfe"
+      ],
+      "technique": "Cue / Prime the Output",
+      "leak": 0.167,
+      "why": "핵심을 한눈에 파악하려면 불릿 형식이 유리하다"
+    },
+    {
+      "query": "신제품 출시 계획서 초안을 만들고, 마지막에 다시 목표 시장을 명시해줘",
+      "relevant": [
+        "pe_repeat-instructions-at-the-end_25c6856c"
+      ],
+      "technique": "Repeat Instructions at the End",
+      "leak": 0.1,
+      "why": "긴 문서 작성 시 마지막에 지시를 재확인하면 누락을 방지한다"
+    },
+    {
+      "query": "다음 프로젝트 회의록을 제목, 참석자, 요점 순으로 마크다운으로 정리해줘",
+      "relevant": [
+        "pe_add-clear-syntax_d08f5eea"
+      ],
+      "technique": "Add Clear Syntax",
+      "leak": 0.0,
+      "why": "출력 형식을 명확히 구분해 자동 파싱이 쉬워진다."
+    },
+    {
+      "query": "1M 토큰 정책 문서 전체를 검토하고, 요약과 표 출력 지시를 적용해줘",
+      "relevant": [
+        "pe_long-context-placement_522cf4da"
+      ],
+      "technique": "Long Context Placement",
+      "leak": 0.25,
+      "why": "핵심 지침을 앞뒤에 넣어 모델이 긴 문서에서도 지시를 놓치지 않게 돕는다."
+    },
+    {
+      "query": "고객 문의 답변 이메일을 3가지 다른 톤으로 작성해줘",
+      "relevant": [
+        "pe_sample-phrases-with-variation_caf5c492"
+      ],
+      "technique": "Sample Phrases with Variation",
+      "leak": 0.0,
+      "why": "다양한 톤을 제공해 중복 없이 답변을 만들 수 있다"
+    },
+    {
+      "query": "아래 문장을 영어로 번역해줘: '안녕'",
+      "relevant": [
+        "pe_primary-content_8357839a"
+      ],
+      "technique": "Primary Content",
+      "leak": 0.0,
+      "why": "원본 텍스트를 제공하고 번역 작업을 지시해 모델이 정확히 변환하도록 돕는다."
+    },
+    {
+      "query": "우리 쇼핑몰 고객 문의 답변을 일정 형식과 톤으로 정리해줘",
+      "relevant": [
+        "pe_response-rules-section_a996f49f"
+      ],
+      "technique": "Response Rules Section",
+      "leak": 0.111,
+      "why": "일관된 톤·포맷·예시를 제공해 답변 품질을 유지할 수 있다."
+    },
+    {
+      "query": "우리 회사 제품 매출 데이터와 고객 피드백을 종합해 연간 성장 전략을 제시해줘",
+      "relevant": [
+        "pe_iterative-query-analysis_07af4f3d"
+      ],
+      "technique": "Iterative Query Analysis",
+      "leak": 0.0,
+      "why": "복합적인 데이터와 문서를 통합해 답변을 구성해야 하기 때문"
+    },
+    {
+      "query": "우리 회사 매출 데이터 CSV 파일을 업로드해서 월별 성장률을 계산해줘",
+      "relevant": [
+        "pe_avoid-conflicting-tool-call-instructions_a6eee18d"
+      ],
+      "technique": "Avoid Conflicting Tool-Call Instructions",
+      "leak": 0.0,
+      "why": "정보가 부족해 도구 호출만으로는 정확히 수행할 수 없어, 추가 정보를 물어야 하기 때문"
+    }
+  ]
+}

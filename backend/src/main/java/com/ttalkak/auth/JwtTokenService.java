@@ -91,14 +91,35 @@ public class JwtTokenService {
         );
 
         return Jwts.builder()
+                .id(java.util.UUID.randomUUID().toString())
                 .issuer(issuer)
                 .subject(String.valueOf(member.getId()))
                 .claim("userId", member.getUserId())
                 .claim("role", member.getRole())
+                .claim("authVersion", member.getAuthVersion())
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
                 .signWith(signingKey)
                 .compact();
+    }
+
+    public Optional<Instant> expiresAt(String token) {
+        try {
+            var claims = Jwts.parser().verifyWith(signingKey).requireIssuer(issuer)
+                    .build().parseSignedClaims(token).getPayload();
+            return Optional.ofNullable(claims.getExpiration()).map(Date::toInstant);
+        } catch (JwtException | IllegalArgumentException exception) { return Optional.empty(); }
+    }
+
+    public boolean matchesAuthVersion(String token, int version) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(signingKey).requireIssuer(issuer)
+                    .build().parseSignedClaims(token).getPayload();
+            Number value = claims.get("authVersion", Number.class);
+            return (value == null ? 0 : value.intValue()) == version;
+        } catch (JwtException | IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     public Optional<Long> parseMemberId(String token) {
@@ -114,6 +135,7 @@ public class JwtTokenService {
                     .parseSignedClaims(token)
                     .getPayload();
 
+            if (claims.getExpiration() == null) return Optional.empty();
             String subject = claims.getSubject();
 
             if (subject == null || subject.isBlank()) {

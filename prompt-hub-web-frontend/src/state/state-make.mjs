@@ -3,6 +3,10 @@
 
 function deleteMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId) {
   state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
+  if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
+    state.pendingGuestThreadTransferId = null;
+    state.pendingGuestThreadTransferErrorCode = "";
+  }
   if (state.activeThreadId === threadId) {
     state.activeThreadId = null;
     state.messages = [];

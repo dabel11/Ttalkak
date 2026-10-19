@@ -25,16 +25,19 @@ import java.util.stream.Collectors;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final com.ttalkak.auth.AuthRateLimitFilter authRateLimitFilter;
     private final ApiErrorWriter apiErrorWriter;
     private final List<String> allowedOriginPatterns;
 
 	public SecurityConfig(
 			JwtAuthenticationFilter jwtAuthenticationFilter,
+            com.ttalkak.auth.AuthRateLimitFilter authRateLimitFilter,
 			ApiErrorWriter apiErrorWriter,
 			@Value("${ttalkak.cors.allowed-origin-patterns}")
 			String allowedOriginPatterns
 	) {
 		this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authRateLimitFilter = authRateLimitFilter;
 		this.apiErrorWriter = apiErrorWriter;
 		this.allowedOriginPatterns = Arrays.stream(
 						allowedOriginPatterns.split(",")
@@ -172,7 +175,16 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class
                 );
 
+        http.addFilterBefore(authRateLimitFilter, JwtAuthenticationFilter.class);
         return http.build();
+    }
+
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<com.ttalkak.auth.AuthRateLimitFilter>
+            authRateLimitRegistration(com.ttalkak.auth.AuthRateLimitFilter filter) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false); // Runs inside Security after CORS, rather than twice as a servlet filter.
+        return registration;
     }
 
     @Bean
@@ -208,7 +220,10 @@ public class SecurityConfig {
         ));
 
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Authorization"));
+        // Retry-After 를 노출하지 않으면 브라우저 JS 가 값을 읽지 못한다
+        // (CORS 는 기본적으로 소수의 안전 목록 헤더만 스크립트에 보여준다).
+        // rag-server 동시 실행 게이트의 재시도 안내가 프론트까지 닿으려면 필요하다.
+        config.setExposedHeaders(List.of("Authorization", "Retry-After"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source =

@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       backend_api_url:
-        description: Spring Boot production HTTPS origin
+        description: Public production API HTTPS origin
         required: true
+        default: https://web-production-a82d94.up.railway.app
+        type: string
+      web_app_url:
+        description: Public TTALKAK web HTTPS origin
+        required: true
+        default: https://web-production-a82d94.up.railway.app
         type: string
       extension_id:
         description: Chrome Web Store extension ID
@@ -14,10 +20,12 @@ on:
       privacy_policy_url:
         description: Public HTTPS privacy policy URL
         required: true
+        default: https://docs.google.com/document/d/e/2PACX-1vQtMHg_T33kpcCY1-5RApEsv3Wvg0KEnF_v5zfqBjnQMvwoLqBt2vRAhby39YGx2-2eIqlCrBhucIyK/pub
         type: string
       support_url:
         description: Public HTTPS support URL
         required: true
+        default: https://github.com/dabel11/Ttalkak/issues
         type: string
       release_owner:
         description: Person responsible for this release
@@ -34,6 +42,7 @@ jobs:
     timeout-minutes: 15
     env:
       VITE_BACKEND_API_URL: ${{ inputs.backend_api_url }}
+      VITE_WEB_APP_URL: ${{ inputs.web_app_url }}
       TTALKAK_PRODUCTION_EXTENSION_ID: ${{ inputs.extension_id }}
       TTALKAK_PRIVACY_POLICY_URL: ${{ inputs.privacy_policy_url }}
       TTALKAK_SUPPORT_URL: ${{ inputs.support_url }}

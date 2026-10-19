@@ -1,0 +1,1304 @@
+{
+  "records": {
+    "up_01|raw|0": {
+      "item": "up_01",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "임영웅 콘서트 홍보용 인스타 카드뉴스 문구 써줘. 일시 2026년 7월 15일, 티켓 45,000원(공식 사이트), 새 앨범 수록곡 위주로 흥미진진한 단문 톤.",
+      "output": "🎤 **임영웅 콘서트**  \n📅 2026년 7월 15일  \n💵 티켓 45,000원 → 공식 사이트에서 바로 구매  \n\n🎶 새 앨범 수록곡만으로 가득한 전율의 밤,  \n✨ 한 번도 없던 무대, 한 번도 없던 감동!  \n\n#임영웅 #콘서트 #새앨범 #2026콘서트 #인스타카드뉴스",
+      "exec_finish": "stop",
+      "exec_usage": 299,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "🎤 **임영웅 콘서트**"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "임영웅 콘서트"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "2026년 7월 15일"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "티켓 45,000원"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "공식 사이트에서 바로 구매"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "새 앨범 수록곡만으로"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "전율의 밤, 한 번도 없던 무대"
+          },
+          "r8": {
+            "verdict": "yes",
+            "evidence": "짧은 단문 위주"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 876
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 2.7
+    },
+    "up_01|ttalkak|0": {
+      "item": "up_01",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 4,
+      "questions": 0,
+      "prompt": "너는 인스타그램 마케팅 카피라이터다. 임영웅 콘서트 홍보용 인스타 카드뉴스 문구를 아래 조건에 맞게 작성하라.\n- 대상: 임영웅 팬 및 일반 대중\n- 톤: 흥미진진하고 단문 형태\n- 일시: 2026년 7월 15일\n- 티켓 가격: 45,000원\n- 구매 링크: 공식 사이트\n- 내용: 새 앨범 수록곡 위주",
+      "output": "🎤 **임영웅 콘서트**  \n📅 **2026년 7월 15일**  \n💸 **티켓 45,000원**  \n🔗 **공식 사이트에서 바로 구매**  \n\n✨ **새 앨범 수록곡**이 가득!  \n🎶 “어쩌면” → “다시, 사랑할게” → “비밀”  \n🔥 현장감 폭발, 감동을 실감해 보세요!  \n\n**놓치지 마세요!**  \n🎟️ 지금 바로 티켓을 확보하세요!",
+      "exec_finish": "stop",
+      "exec_usage": 359,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "🎤 **임영웅 콘서트**"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "임영웅 콘서트"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "2026년 7월 15일"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "티켓 45,000원"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "공식 사이트에서 바로 구매"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "새 앨범 수록곡"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "현장감 폭발, 감동을 실감해 보세요!"
+          },
+          "r8": {
+            "verdict": "yes",
+            "evidence": "짧은 단문 위주"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 868
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 38.6
+    },
+    "up_02|raw|0": {
+      "item": "up_02",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "신입 백엔드 개발자 채용 공고 써줘. 핀테크 스타트업, Java/Spring, 경력 무관, 재택 가능, 지원 마감 7월 말.",
+      "output": "## 📢 신입 백엔드 개발자 모집 (핀테크 스타트업)\n\n### 🚀 회사 소개  \n- **회사명**: **FinTech Innovate**  \n- **사업 영역**: 모바일 결제·대출·자산 관리 등 차세대 금융 서비스  \n- **미션**: “모두에게 공정하고 편리한 금융 경험을 제공하는 것”  \n- **핵심 가치**: **혁신**, **협업**, **고객 중심**  \n\n### 📋 직무 내용  \n- **주요 업무**  \n  - Java/Spring 기반 RESTful API 설계·개발  \n  - 데이터베이스(Oracle/MySQL) 설계 및 튜닝  \n  - 비즈니스 로직 구현 및 테스트 자동화  \n  - 클라우드 환경(아마존 AWS, Google Cloud 등)에서 서비스 배포  \n  - 신규 기능 기획 및 기존 시스템 개선  \n\n### 🎯 자격 요건  \n- **필수**  \n  - Java 프로그래밍 언어에 대한 기본 이해  \n  - Spring Framework (Spring Boot, Spring MVC 등) 사용 경험(인턴·프로젝트 포함)  \n  - RESTful API 설계 및 구현 경험  \n  - Git 기반 협업 경험  \n  - 단위/통합 테스트 작성 능력 (JUnit, Mockito 등)  \n\n- **우대**  \n  - MySQL/Oracle 등 관계형 DB 활용 경험  \n  - Docker, Kubernetes 등 컨테이너 기반 배포 경험  \n  - AWS/GCP 등 클라우드 서비스 활용 경험  \n  - 금융/핀테크 도메인에 대한 이해  \n\n### 🌱 경력 & 학력  \n- **경력**: 신입·경력 무관 (실무 경험이 없으셔도 지원 가능)  \n- **학력**: 학사 이상 (전공은 무관)  \n\n### 💻 근무 형태  \n- **재택(원격) 근무** 가능  \n- 필요 시 사무실 방문(주 1~2회)  \n\n### ⏰ 지원 마감  \n- **마감일**: 2026년 7월 31일 (신청 마감 이후 접수 불가)  \n\n### 📌 지원 방법  \n1. **이력서** (PDF)  \n2. **포트폴리오/프로젝트 링크** (GitHub 등)  \n3. **자기소개서** (1~2페이지) – “왜 핀테크에 도전하고 싶은가?”  \n4. **메일**: careers@fintechinnovate.co.kr  \n5. **제목**: “신입 백엔드 개발자 지원 – [이름]”  \n\n### 📦 채용 절차  \n1. **서류 전형** (2~3일)  \n2. **1차 온라인 코딩 테스트** (Java/Spring)  \n3. **2차 실무 인터뷰** (프로젝트 리뷰, 기술 면담)  \n4. **최종 합격자 발표**  \n\n### 🎁 혜택  \n- **유연 근무제** + 재택 지원  \n- **직무 연수 및 교육** (온라인 강의, 컨퍼런스 참가)  \n- **주식 옵션** (신규 직원 대상)  \n- **건강·복지**: 의료보험, 치과, 시력 등  \n- **팀 문화**: 주간 스탠드업, 팀 빌딩 행사  \n\n---\n\n> **FinTech Innovate**는 신입 개발자에게 성장의 기회를 제공하며, 여러분의 아이디어와 열정을 실현할 수 있는 환경을 준비했습니다.  \n> **함께 금융의 미래를 만들어가요!**  \n\n📩 **문의**: careers@fintechinnovate.co.kr | 📞 02-1234-5678\n\n---",
+      "exec_finish": "stop",
+      "exec_usage": 983,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "## 📢 신입 백엔드 개발자 모집"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "신입 백엔드 개발자 모집"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "핀테크 스타트업"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "Java/Spring 기반"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "경력 무관"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "재택(원격) 근무 가능"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "마감일: 2026년 7월 31일"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1567
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 1,
+        "fabrication": true,
+        "invented_values": [
+          "1",
+          "2회",
+          "2026년",
+          "2",
+          "3일",
+          "02",
+          "1234",
+          "5678"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 26.8
+    },
+    "up_02|ttalkak|0": {
+      "item": "up_02",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 1,
+      "prompt": "너는 IT 인사 담당 전문가다. 아래 정보를 바탕으로 신입 백엔드 개발자 채용 공고를 작성하라.\n- 회사명: [회사명 입력]\n- 직무: 백엔드 개발자\n- 기술스택: Java/Spring\n- 경력요건: 무관\n- 근무형태: 재택 가능\n- 지원마감: 7월 말\n- 산업분야: 핀테크 스타트업\n- 대상 독자: 신입 개발자 및 취업 준비생 (가정)\n- 톤: 친근하면서도 전문적인 어조 (가정)\n- 분량: 약 400~500자 (가정)\n- 형식: 직무 소개, 주요 업무, 자격 요건, 우대 사항, 복리후생, 지원 방법 순으로 포함하라 (가정)\n\n작업 절차:\n1. 요청 의도를 파악하고 '채용 공고 작성'임을 확인하라. (Intent Classification Prompting 적용)\n2. 각 섹션을 별도로 작성하고, 최종적으로 아래 JSON 스키마에 맞춰 출력하라. (Structured JSON Prompting 적용)\n   {\n     \"title\": \"\",\n     \"company\": \"\",\n     \"role\": \"\",\n     \"location\": \"\",\n     \"employment_type\": \"\",\n     \"description\": \"\",\n     \"responsibilities\": [],\n     \"qualifications\": [],\n     \"preferred\": [],\n     \"benefits\": [],\n     \"application_deadline\": \"\",\n     \"apply_method\": \"\"\n   }\n3. 작성된 텍스트를 명확성, 매력도, 일관성 측면에서 검토하라. (Code Review Prompting 적용)\n4. 전체 작업을 작은 하위 작업으로 분해하여 순차적으로 수행하라. (Problem Decomposition Prompting 적용)",
+      "output": "```json\n{\n  \"title\": \"신입 백엔드 개발자 (Java/Spring) – 재택 근무 가능\",\n  \"company\": \"[회사명 입력]\",\n  \"role\": \"백엔드 개발자\",\n  \"location\": \"재택 (원격 근무)\",\n  \"employment_type\": \"정규직\",\n  \"description\": \"핀테크 스타트업에서 금융 서비스를 혁신하고 있는 우리 팀에 신입 백엔드 개발자를 모집합니다. Java와 Spring 기반으로 안정적이고 확장 가능한 시스템을 구축하며, 초보자도 빠르게 성장할 수 있는 환경을 제공해 드립니다. 재택 근무가 가능해 일과 삶의 균형을 지키면서도 최신 기술을 습득할 수 있는 기회가 됩니다.\",\n  \"responsibilities\": [\n    \"Java/Spring 프레임워크를 활용한 RESTful API 설계·구현\",\n    \"데이터베이스 설계 및 최적화 (MySQL, PostgreSQL 등)\",\n    \"테스트 코드 작성 및 CI/CD 파이프라인 관리\",\n    \"팀과 협업하여 요구사항 분석·기술적 해결 방안 제시\",\n    \"문서화 및 코드 리뷰를 통한 품질 관리\"\n  ],\n  \"qualifications\": [\n    \"Java/Spring 기초 지식 보유 (실무 경험은 무관)\",\n    \"RESTful API 설계 원칙에 대한 이해\",\n    \"Git을 활용한 버전 관리 경험\",\n    \"자기 주도적으로 학습하고 문제를 해결하는 자세\"\n  ],\n  \"preferred\": [\n    \"Spring Boot, Spring Data JPA, Spring Security 경험\",\n    \"클라우드(예: AWS, GCP) 서비스 활용 경험\",\n    \"테스트 주도 개발(TDD) 혹은 BDD 경험\",\n    \"핀테크/금융 도메인에 대한 관심\"\n  ],\n  \"benefits\": [\n    \"재택 근무 가능 (유연 근무제)\",\n    \"주식 옵션 및 스톡 보상제\",\n    \"연간 15일 이상 유급 휴가 (법정 공휴일 포함)\",\n    \"전문 교육비 지원 (온라인 강의, 세미나 등)\",\n    \"팀 빌딩 및 스터디 회식 지원\"\n  ],\n  \"application_deadline\": \"2024-07-31\",\n  \"apply_method\": \"이메일: careers@[회사명].com 또는 링크드인 지원\"\n}\n```",
+      "exec_finish": "stop",
+      "exec_usage": 1028,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "\"title\": \"신입 백엔드 개발자"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "\"role\": \"백엔드 개발자\""
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "핀테크 스타트업에서"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "Java와 Spring 기반"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "실무 경험은 무관"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "재택 근무 가능"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "\"application_deadline\": \"2024-07-31\""
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1248
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 67.1
+    },
+    "up_04|raw|0": {
+      "item": "up_04",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "다음 회의록을 결정사항·액션아이템 위주로 핵심 3줄로 요약해줘:\n'오늘 신규 결제 모듈 일정 논의. 6월 말 QA 시작에 합의. 김대리가 API 문서를 금주 내 작성하기로 함. 외부 PG 연동은 7월로 연기. 다음 회의 6/30.'",
+      "output": "1. 6월 말 QA를 시작하기로 일정이 확정되었습니다.  \n2. 김대리는 금주 안에 API 문서를 작성하기로 하였으며, 외부 PG 연동은 7월로 연기되었습니다.  \n3. 다음 회의는 6월 30일에 진행됩니다.",
+      "exec_finish": "stop",
+      "exec_usage": 278,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 일정이 확정되었습니다."
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 일정이 확정되었습니다."
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "김대리는 금주 안에 API 문서를 작성하기로"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "1. 6월 말 QA를 시작하기로 일정이 확정되었습니다."
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA를 시작하기로 일정이 확정되었습니다."
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "김대리는 금주 안에 API 문서를 작성하기로"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "외부 PG 연동은 7월로 연기되었습니다."
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 894
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 18.3
+    },
+    "up_04|ttalkak|0": {
+      "item": "up_04",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 0,
+      "prompt": "You are a meeting minutes summarization expert. Your task is to produce a concise summary focusing on decisions and action items, limited to three bullet lines. Follow these steps:\n1) Extract evidence sentences that represent decisions or actions.\n2) Summarize each extracted piece (map step).\n3) Combine the summaries into a final three-line summary (reduce step).\nEnsure the total length does not exceed three lines.\n[본문]\n오늘 신규 결제 모듈 일정 논의. 6월 말 QA 시작에 합의. 김대리가 API 문서를 금주 내 작성하기로 함. 외부 PG 연동은 7월로 연기. 다음 회의 6/30.\nGenerate the summary.",
+      "output": "- 6월 말 QA 시작에 동의  \n- 김대리가 금주 내에 API 문서 작성  \n- 외부 PG 연동은 7월로 연기, 다음 회의는 6/30 개최",
+      "exec_finish": "stop",
+      "exec_usage": 313,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 동의"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 동의"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "김대리가 금주 내에 API 문서 작성"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "- 6월 말 QA 시작에 동의"
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "6월 말 QA 시작에 동의"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "김대리가 금주 내에 API 문서 작성"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "외부 PG 연동은 7월로 연기"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 880
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 43.8
+    },
+    "up_05|raw|0": {
+      "item": "up_05",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "초등학교 4학년도 이해할 수 있게 광합성을 설명해줘. 비유를 들고 5문장 이내로.",
+      "output": "광합성은 식물이 햇빛, 물, 그리고 공기 속의 이산화탄소를 이용해 스스로 음식을 만드는 과정이야.  \n마치 햇빛이 주는 에너지로 작은 공장에서 빵을 굽는 것처럼, 식물은 빛을 ‘가열’해 물과 이산화탄소를 ‘반죽’해요.  \n이 과정에서 식물은 ‘산소’를 공기 중에 내보내고, 우리와 동물은 그 산소를 숨 쉬어 살아가요.  \n결과적으로 식물은 ‘식물용 연료’인 포도당을 만들어 저장하고, 우리에게는 숨 쉬는 데 필요한 산소를 주죠.  \n즉, 광합성은 식물이 햇빛을 에너지로 바꾸어 음식을 만들고, 우리에게 생명을 이어주는 마법 같은 과정이에요.",
+      "exec_finish": "stop",
+      "exec_usage": 350,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "광합성은 식물이 햇빛, 물, 그리고 공기 속의 이산화탄소를 이용해"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "쉽게 이해할 수 있는 말로 설명"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "마치 햇빛이 주는 에너지로 작은 공장에서 빵을 굽는 것처럼"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "총 5문장으로 구성"
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "식물이 햇빛을 이용한다는 점"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "물과 이산화탄소를 재료로"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "산소를 공기 중에 내보낸다"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 904
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": 1.0,
+        "check_rate": {},
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": null,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 3.7
+    },
+    "up_05|ttalkak|0": {
+      "item": "up_05",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 0,
+      "prompt": "당신은 초등학교 4학년을 대상으로 하는 과학 교사입니다. 아래 조건을 모두 만족하여 광합성을 설명하라.\n1. 비유를 사용한다.\n2. 전체 설명은 5문장 이내로 한다.\n3. 같은 표현을 반복하지 않고 다양한 문구를 사용한다.\n4. 설명은 순차적으로 '필요한 요소', '광합성 과정', '왜 중요한가' 순서로 진행한다.\n5. 모든 문장은 서로 일관되게 설명한다.",
+      "output": "1. **필요한 요소**  \n   식물은 햇빛, 물, 이산화탄소라는 세 가지 ‘재료’를 모아야 해.  \n2. **광합성 과정**  \n   햇빛이 잎의 초록 색소에 닿으면, 물과 이산화탄소가 ‘화학 반응’으로 변해 포도당과 산소를 만들어 낸단다.  \n3. **왜 중요한가**  \n   이 포도당은 식물의 에너지 저장고로 쓰이고, 나오는 산소는 우리 숨쉬기에 꼭 필요해.  \n4. **비유를 더하면**  \n   마치 작은 공장처럼 햇빛을 동력으로 물과 공기를 ‘제조’해 주는 거야.  \n5. **전체 흐름**  \n   그래서 식물은 빛과 물, 공기를 모아 에너지를 만들고, 그 결과 우리에게 깨끗한 공기를 선물하는 거지.",
+      "exec_finish": "stop",
+      "exec_usage": 459,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "포도당과 산소를 만들어 낸단다"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "식물은 햇빛, 물, 이산화탄소라는 세 가지 ‘재료’를 모아야 해"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "마치 작은 공장처럼 햇빛을 동력으로 물과 공기를 ‘제조’해 주는 거야"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "5문장 이내로 구성된 5개의 항목"
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "햇빛이 잎의 초록 색소에 닿으면"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "물과 이산화탄소가 ‘화학 반응’으로 변해 포도당과 산소를 만들어"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "산소는 우리 숨쉬기에 꼭 필요해"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 946
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": 1.0,
+        "check_rate": {},
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": null,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 65.1
+    },
+    "up_06|raw|0": {
+      "item": "up_06",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "고객의 환불 요청을 정중하게 거절하는 이메일 써줘. 구매 후 7일이 지나 정책상 환불은 불가하지만 대안(교환/포인트 적립)을 제시.",
+      "output": "제목: 구매 후 환불 요청에 대한 안내 드립니다\n\n안녕하세요,  \n[회사명] 고객센터입니다.\n\n먼저, 귀하께서 저희 제품을 구매해 주시고 환불 요청을 해 주신 점 진심으로 감사드립니다. 고객님의 만족을 최우선으로 생각하며, 요청하신 사항을 검토한 결과 아래와 같이 안내드리고자 합니다.\n\n---\n\n## 1. 환불 정책 안내  \n- **구매 후 7일 이내**에만 환불이 가능하도록 정해져 있습니다.  \n- 현재 귀하의 주문은 **구매 후 7일이 경과**되어, 정책상 환불은 불가함을 양해 부탁드립니다.  \n- 이 점은 고객님께 불편을 드려 죄송하다는 말씀을 전하며, 앞으로의 정책 개선을 위해 적극 검토하고 있음을 알려드립니다.\n\n## 2. 대안 제안  \n저희는 고객님의 불편을 최소화하고 만족을 드리고자 아래와 같은 대안을 마련했습니다.\n\n| 옵션 | 내용 | 비고 |\n|------|------|------|\n| **교환** | 같은 제품의 다른 색상·모델 또는 동일 제품을 다른 품목으로 교환 가능 | 교환 절차는 1~2일 이내에 진행됩니다. |\n| **포인트 적립** | 구매 금액의 100%를 적립 포인트로 전환 | 적립 포인트는 추후 구매 시 1:1 비율로 사용 가능 |\n| **할인 쿠폰 제공** | 10% 할인 쿠폰을 발급 | 쿠폰은 30일 이내 유효하며, 재구매 시 사용 가능 |\n\n귀하께서 가장 편리하신 옵션을 선택해 주시면, 즉시 해당 절차를 진행하도록 하겠습니다.  \n- 교환을 원하실 경우, 교환하고자 하는 제품과 옵션(색상·모델)을 알려 주시면 됩니다.  \n- 포인트 적립 또는 할인 쿠폰을 원하실 경우, 별도 요청 없이 바로 적용해 드리겠습니다.\n\n## 3. 절차 안내  \n1. **선택 옵션을 회신**해 주시면,  \n2. **신속한 처리**(교환은 2~3일, 포인트/쿠폰은 즉시 적용)  \n3. **배송 및 결제 정보**를 확인 후, 최종 안내 메일을 보내드립니다.\n\n---\n\n### 고객님의 소중한 의견\n귀하의 의견은 저희에게 큰 도움이 됩니다. 서비스 개선을 위해 언제든지 피드백을 보내 주시면 감사하겠습니다.\n\n다시 한 번 불편을 끼쳐 드려 죄송합니다.  \n궁금하신 점이나 추가로 필요한 사항이 있으시면 언제든지 고객센터(☎︎ 123-456-7890 / email: support@company.com)로 연락 주시기 바랍니다.\n\n감사합니다.\n\n[회사명] 고객센터 드림\n\n---",
+      "exec_finish": "stop",
+      "exec_usage": 803,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "제목: 구매 후 환불 요청에 대한 안내 드립니다"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "안녕하세요,"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "정책상 환불은 불가함"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "구매 후 7일이 경과"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "**교환**"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "**포인트 적립**"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1384
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 2,
+        "fabrication": true,
+        "invented_values": [
+          "1",
+          "2일",
+          "100%",
+          "10%",
+          "30일",
+          "2",
+          "3일",
+          "123",
+          "456",
+          "7890"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 21.9
+    },
+    "up_06|ttalkak|0": {
+      "item": "up_06",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 3,
+      "prompt": "당신은 고객 서비스 담당자이다. 아래 정보를 사용해 환불 거절 이메일을 작성하라.\n[조건]\n- 고객명: [고객명 입력]\n- 제품명: [제품명 입력]\n- 구매일자: [구매일자 입력]\n- 환불 정책: 구매일로부터 7일 경과 시 환불 불가\n- 대안 옵션: 교환 또는 포인트 적립\n[응답 규칙]\n- 톤: 정중하고 친절한 어조\n- 포맷: 이메일 제목, 인사, 본문, 마무리 인사 포함\n- 제공된 정보 중 필수 항목이 비어 있으면 \"정보 부족\"이라고 답하라.\n[워크플로우]\n1. 고객의 문의에 감사 표명\n2. 정책 및 사유 설명\n3. 교환 또는 포인트 적립 등 대안 제시\n4. 마무리 인사와 연락처 제공",
+      "output": "**이메일 제목**  \n[고객명 입력] 님, 환불 요청에 대한 안내 말씀드립니다\n\n**인사**  \n안녕하세요, 고객님.  \n먼저, 저희 서비스를 이용해 주시고 환불 요청을 보내 주셔서 진심으로 감사드립니다.\n\n**본문**  \n1. **환불 정책 안내**  \n   저희 환불 정책에 따르면, 구매일로부터 7일이 경과한 경우에는 환불이 불가합니다.  \n   - **구매일자**: [구매일자 입력]  \n   - **구매일로부터 7일 경과 여부**: (구매일자 + 7일 이후)  \n\n   이 점 양해 부탁드립니다.\n\n2. **대안 제시**  \n   환불이 어려운 점을 감안해, 아래와 같은 대안을 마련해 두었습니다.  \n   - **교환**: 같은 제품 또는 다른 제품으로 교환이 가능합니다.  \n   - **포인트 적립**: 구매 금액에 해당하는 포인트를 적립해 드리며, 추후 구매 시 사용하실 수 있습니다.\n\n   원하시는 옵션을 선택해 주시면, 해당 절차를 진행해 드리겠습니다.\n\n**마무리 인사**  \n고객님의 만족을 위해 최선을 다하겠습니다.  \n추가로 궁금하신 점이나 원하시는 옵션이 있으시면 언제든지 아래 연락처로 문의해 주세요.\n\n감사합니다.\n\n**연락처**  \n- 고객센터: 1234‑5678  \n- 이메일: support@example.com  \n- 운영시간: 월~금 09:00~18:00 (토·일·공휴일 휴무)",
+      "exec_finish": "stop",
+      "exec_usage": 709,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "**이메일 제목**"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "안녕하세요, 고객님."
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "환불이 불가합니다."
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "구매일로부터 7일이 경과한 경우에는 환불이 불가합니다."
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "- **교환**: 같은 제품 또는 다른 제품으로 교환이 가능합니다."
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "- **포인트 적립**: 구매 금액에 해당하는 포인트를 적립해 드리며"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1113
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": 1.0,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 2,
+        "fabrication": true,
+        "invented_values": [
+          "1234",
+          "5678",
+          "09:00",
+          "18:00"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 64.7
+    },
+    "up_07|raw|0": {
+      "item": "up_07",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "2박 3일 부산 여행 일정표를 표로 정리해줘. 맛집과 관광지를 시간대별로, 이동수단 포함해서.",
+      "output": "## 2박 3일 부산 여행 일정표 (시간대별, 맛집·관광지·이동수단 포함)\n\n| 날짜 | 시간 | 일정 | 장소 | 이동수단 | 비고 |\n|------|------|------|------|----------|------|\n| **1일차** | 09:00‑10:30 | **체크인 & 숙소 주변 탐방** | 해운대 호텔(예: 호텔 해운대, 라마다, 라온호텔) | 도보 | 숙소 체크인 후 짐 정리 |\n|  | 10:30‑12:00 | **해운대 해수욕장 산책** | 해운대 해수욕장 | 도보 | 일몰 전 가장 조용한 시간 |\n|  | 12:00‑13:30 | **점심** | **해운대 마포갈비** | 도보 | 갈비 전문점, 2인분 18,000원 |\n|  | 13:30‑15:00 | **동백섬 & 감천문화마을** | 동백섬·감천문화마을 | 버스(버스 4호) | 감탄할 만한 벽화와 거리 |\n|  | 15:00‑16:30 | **광안리 해변 & 광안대교** | 광안리 해변 | 버스(버스 7호) | 밤에 조명 볼 수 있음 |\n|  | 16:30‑18:00 | **저녁** | **광안리 해물파전** | 도보 | 파전·해물탕, 1인당 12,000원 |\n|  | 18:00‑20:00 | **해운대 야경** | 해운대 해변 | 도보 | 해운대 야경 감상 |\n|  | 20:00‑22:00 | **숙소 복귀 & 휴식** | 숙소 | 도보 | |\n| **2일차** | 08:00‑09:00 | **아침** | **부산국제시장** | 버스(버스 3호) | 김밥·순대·전 등 길거리 음식 |\n|  | 09:00‑10:30 | **부산타워** | 부산타워(해운대) | 버스(버스 2호) | 전망대에서 부산 전경 |\n|  | 10:30‑12:00 | **자갈치 시장** | 자갈치 시장 | 버스(버스 8호) | 신선한 해산물 구경 |\n|  | 12:00‑13:30 | **점심** | **해물파전·김치찌개** (자갈치 시장 인근) | 도보 | 1인당 10,000원 |\n|  | 13:30‑15:00 | **국립아시아문화전당** | 국립아시아문화전당 | 버스(버스 9호) | 전시관·공원 산책 |\n|  | 15:00‑16:30 | **태종대** | 태종대 | 버스(버스 21호) | 절경과 바다 풍경 |\n|  | 16:30‑18:00 | **저녁** | **태종대 근처 해산물 식당** | 버스(버스 21호) | 회·해물탕, 2인분 25,000원 |\n|  | 18:00‑20:00 | **부산 시내 야경** | 부산시내(부산역·부산타워) | 지하철(1호선) | 야경 감상 |\n|  | 20:00‑22:00 | **숙소 복귀 & 휴식** | 숙소 | 지하철(1호선) | |\n| **3일차** | 08:00‑09:00 | **아침** | **숙소 인근 카페** | 도보 | 아침식사 및 커피 |\n|  | 09:00‑10:30 | **부산역·동래시장** | 동래시장 | 지하철(1호선) | 전통시장 탐방 |\n|  | 10:30‑12:00 | **부산국립미술관** | 부산국립미술관 | 버스(버스 10호) | 현대미술 감상 |\n|  | 12:00‑13:30 | **점심** | **부산국립미술관 인근** | 도보 | 1인당 15,000원 |\n|  | 13:30‑15:00 | **부산역 주변 쇼핑** | 부산역·부산역 부근 쇼핑몰 | 도보 | 기념품·쇼핑 |\n|  | 15:00‑16:30 | **공항/기차역 이동** | 부산역/김해공항 | 지하철(1호선) / 버스(공항버스) | 출발 전 이동 |\n|  | 16:30‑17:00 | **출발** |  |  |  |\n\n> **팁**  \n> - **교통카드**(T-money)를 사서 버스·지하철에 편리하게 탑승하세요.  \n> - **맛집**은 사전 예약이 어려운 곳이 많으니 현장에서 바로 방문하세요.  \n> - 부산은 바다와 도시가 조화로운 곳이니, 일몰 전·후에 해변을 방문하면 멋진 사진을 남길 수 있습니다.  \n\n즐거운 부산 여행 되세요!",
+      "exec_finish": "stop",
+      "exec_usage": 1411,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "2박 3일 부산 여행 일정표"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "부산 여행 일정표"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "| 날짜 | 시간 | 일정 | 장소 | 이동수단 |"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "09:00‑10:30 | **체크인 & 숙소 주변 탐방**"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "점심 | **해운대 마포갈비**"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "관광지 | 동백섬·감천문화마을"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "이동수단 | 버스(버스 4호)"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1975
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "request": 1.0,
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": null,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 26.9
+    },
+    "up_07|ttalkak|0": {
+      "item": "up_07",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 5,
+      "questions": 3,
+      "prompt": "너는 여행 일정 전문가다.\n아래 조건을 만족하는 2박 3일 부산 여행 일정표를 시간대별, 맛집, 관광지, 이동수단을 포함한 표 형태로 작성하라.\n조건:\n- 일정 기간: 2박 3일\n- 대상 지역: 부산\n- 맛집: [맛집 입력]\n- 관광지: [관광지 입력]\n- 시간대: [시간대 입력]\n- 이동수단: [이동수단 입력]\n출력 형식: 마크다운 표로, 열 순서는 날짜, 시간대, 관광지, 맛집, 이동수단이다.",
+      "output": "아래는 **부산**에서 2박 3일 동안 즐길 수 있는 여행 일정표 예시입니다.  \n각 항목에는 사용자가 지정한 **맛집, 관광지, 시간대, 이동수단**을 그대로 반영했습니다.  \n\n| 날짜 | 시간대 | 관광지 | 맛집 | 이동수단 |\n|------|--------|--------|------|----------|\n| 1일차 | 09:00 ~ 10:30 | 해운대 해변 | 해운대 해변가 **(맛집 입력)** | 버스 (지하철 2호선 → 해운대역 1번 출구) |\n|      | 11:00 ~ 12:30 | 광안리 해수욕장 | 광안리 해변가 **(맛집 입력)** | 버스 (지하철 2호선 → 광안역 1번 출구) |\n|      | 13:00 ~ 14:30 | 감천문화마을 | 감천문화마을 **(맛집 입력)** | 버스 (지하철 1호선 → 감천역 4번 출구) |\n|      | 15:00 ~ 17:00 | 태종대 | 태종대 **(맛집 입력)** | 버스 (지하철 1호선 → 태종대역 1번 출구) |\n|      | 18:00 ~ 19:30 | 자갈치 시장 | 자갈치 시장 **(맛집 입력)** | 버스 (지하철 1호선 → 자갈치역 4번 출구) |\n| 2일차 | 09:00 ~ 10:30 | 부산타워 | 부산타워 **(맛집 입력)** | 버스 (지하철 2호선 → 남포역 3번 출구) |\n|      | 11:00 ~ 12:30 | 국제시장 | 국제시장 **(맛집 입력)** | 버스 (지하철 2호선 → 국제시장역 3번 출구) |\n|      | 13:00 ~ 14:30 | 용두산공원 | 용두산공원 **(맛집 입력)** | 버스 (지하철 2호선 → 용두산역 1번 출구) |\n|      | 15:00 ~ 17:00 | 동백섬 | 동백섬 **(맛집 입력)** | 버스 (지하철 2호선 → 동백섬역 1번 출구) |\n|      | 18:00 ~ 19:30 | 서면 쇼핑거리 | 서면 **(맛집 입력)** | 버스 (지하철 2호선 → 서면역 4번 출구) |\n| 3일차 | 09:00 ~ 10:30 | 해운대 마린시티 | 해운대 마린시티 **(맛집 입력)** | 버스 (지하철 2호선 → 해운대역 1번 출구) |\n|      | 11:00 ~ 12:30 | 부산 아쿠아리움 | 부산 아쿠아리움 **(맛집 입력)** | 버스 (지하철 2호선 → 해운대역 1번 출구) |\n|      | 13:00 ~ 14:30 | 감천문화마을 재방문 | 감천문화마을 **(맛집 입력)** | 버스 (지하철 1호선 → 감천역 4번 출구) |\n|      | 15:00 ~ 16:30 | 부산역 | 부산역 **(맛집 입력)** | 버스 (지하철 1호선 → 부산역 1번 출구) |\n|      | 17:00 ~ 18:30 | 남포동 | 남포동 **(맛집 입력)** | 버스 (지하철 2호선 → 남포역 3번 출구) |\n\n> **주의**  \n> 1. “맛집 입력”, “관광지 입력”, “시간대 입력”, “이동수단 입력”은 실제 사용자가 원하는 항목으로 교체해 주시기 바랍니다.  \n> 2. 버스/지하철 노선은 예시이며, 실제 버스 번호나 지하철 역은 변동될 수 있으므로 출발 전 최신 정보를 확인해 주세요.",
+      "exec_finish": "stop",
+      "exec_usage": 1225,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "1일차 ... 3일차"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "부산에서 2박 3일"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "| 날짜 | 시간대 | 관광지 | 맛집 | 이동수단 |"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "09:00 ~ 10:30"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "맛집 | 해운대 해변가 **(맛집 입력)**"
+          },
+          "r6": {
+            "verdict": "yes",
+            "evidence": "관광지 | 해운대 해변"
+          },
+          "r7": {
+            "verdict": "yes",
+            "evidence": "이동수단 | 버스 (지하철 2호선 → 해운대역 1번 출구)"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1711
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "request": 1.0,
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": null,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 78.9
+    },
+    "up_08|raw|0": {
+      "item": "up_08",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "다음 영어 이메일을 한국어 비즈니스 격식체로 번역해줘:\n\"Hi, we received your invoice but the amount seems incorrect. Could you double-check and resend it? Thanks.\"",
+      "output": "안녕하세요.  \n귀사에서 보내주신 인보이스를 확인했으나 금액이 정확하지 않은 것 같습니다.  \n다시 한 번 확인하시고 수정된 인보이스를 재발송해 주시면 감사하겠습니다.  \n\n감사합니다.",
+      "exec_finish": "stop",
+      "exec_usage": 219,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "귀사에서 보내주신 인보이스를 확인했으나"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "귀사에서 보내주신 인보이스를 확인했으나"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "감사합니다."
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "인보이스를 확인했으나"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "금액이 정확하지 않은 것 같습니다"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "다시 한 번 확인하시고 수정된 인보이스를 재발송해 주시면"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 775
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "request": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 11.5
+    },
+    "up_08|ttalkak|0": {
+      "item": "up_08",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 7,
+      "questions": 1,
+      "prompt": "당신은 전문 비즈니스 번역가이다.\n다음 용어집을 반드시 따르라: [용어집]\n[본문]\nHi, we received your invoice but the amount seems incorrect. Could you double-check and resend it? Thanks.\n위 내용을 한국어 비즈니스 격식체로 번역하라. 번역 시 용어 일관성을 유지하고, 정중하고 공식적인 어조를 사용하라.\n추가로, 본문에서 청구서와 금액 관련 핵심 정보를 추출하여 번역에 반영하라.",
+      "output": "안녕하세요.\n\n귀사에서 송부해 주신 청구서를 확인하였으나, 금액이 부정확한 것으로 보입니다.  \n정확성을 위해 금액을 재검토하시고, 수정된 청구서를 재송부해 주시면 감사하겠습니다.\n\n감사합니다.",
+      "exec_finish": "stop",
+      "exec_usage": 321,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "귀사에서 송부해 주신 청구서를 확인하였으나"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "귀사에서 송부해 주신 청구서를 확인하였으나"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "감사합니다."
+          },
+          "g1": {
+            "verdict": "yes",
+            "evidence": "청구서를 확인하였으나"
+          },
+          "g2": {
+            "verdict": "yes",
+            "evidence": "금액이 부정확한 것으로 보입니다"
+          },
+          "g3": {
+            "verdict": "yes",
+            "evidence": "재검토하시고, 수정된 청구서를 재송부"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 812
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": 1.0,
+        "check_rate": {
+          "request": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": null,
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 58.6
+    },
+    "up_09|raw|0": {
+      "item": "up_09",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "우리 카페 신메뉴 '흑임자 라떼' 출시를 알리는 블로그 글 써줘. 가격 5,800원, 9월 20일부터 판매.",
+      "output": "## 🎉 흑임자 라떼, 드디어 출시됩니다! 🎉\n\n여러분, 9월이 와서 따뜻한 커피 한 잔이 그리워지지 않으세요? 저희 카페에서 **흑임자 라떼**를 새롭게 선보입니다!  \n\n---\n\n### 🍵 흑임자 라떼란?\n\n흑임자 라떼는 전통적인 라떼에 **흑임자**의 깊고 풍부한 맛을 더해 만든 특별한 음료입니다.  \n- **흑임자**: 항산화 물질이 풍부해 건강에도 좋고, 고소한 맛이 특징입니다.  \n- **라떼**: 부드러운 우유와 진한 에스프레소가 완벽하게 조화됩니다.  \n\n두 재료가 만나면, 부드러운 단맛과 은은한 견과향이 입안 가득 퍼지는, 한입만으로도 기분이 좋아지는 음료가 탄생합니다.\n\n---\n\n### 📅 판매 일정\n\n- **출시일**: 2023년 9월 20일  \n- **가격**: **5,800원** (세트 포함)\n\n---\n\n### 🎁 출시 기념 프로모션\n\n- **첫 100명**에게는 **무료 디저트 쿠폰** 제공!  \n- **SNS에 #흑임자라떼 태그**와 함께 사진을 올리면 **추첨을 통해 5만원 상당 커피 쿠폰** 증정!  \n\n---\n\n### 🍹 주문 방법\n\n1. **카페 내 주문**: 바리스타에게 “흑임자 라떼”라고 말씀해 주세요.  \n2. **앱/웹 주문**: 카페 모바일 앱 또는 웹사이트에서 “흑임자 라떼”를 선택하고 바로 결제하세요.  \n3. **배달**: 9월 20일 이후부터 배달 서비스도 이용 가능해요. (배달료 별도)\n\n---\n\n### 📸 사진 한 장으로도 충분한 매력\n\n- 흑임자 라떼는 색감이 예쁘고, 사진 찍으면 인스타그램에 올리기 딱 좋아요!  \n- “흑임자 라떼”를 주문하면, 바리스타가 특별히 준비한 **흑임자 시럽**이 위에 살짝 올려져 눈에 띄는 포토존이 됩니다.  \n\n---\n\n### 🎊 마무리\n\n9월의 시원한 바람과 함께 **흑임자 라떼**가 여러분의 일상에 작은 힐링을 선물합니다.  \n저희 카페에서 맛보실 수 있는 이 특별한 음료, 놓치지 마세요!  \n\n**오픈 날짜**: 9월 20일  \n**가격**: 5,800원  \n**프로모션**: 첫 100명 무료 디저트 쿠폰 & SNS 추첨 이벤트\n\n> **예약은 필수**! 9월 20일 전날까지 예약해 주시면, 바로 드실 수 있도록 준비하겠습니다.\n\n맛있는 순간, 여러분과 함께하고 싶습니다.  \n**[카페 이름]**에서 곧 만나뵙겠습니다! ☕️💛",
+      "exec_finish": "stop",
+      "exec_usage": 873,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "## 🎉 흑임자 라떼, 드디어 출시됩니다! 🎉"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "저희 카페에서 **흑임자 라떼**를 새롭게 선보입니다!"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "**흑임자 라떼**"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "가격: **5,800원**"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "출시일: 2023년 9월 20일"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1458
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 1,
+        "fabrication": true,
+        "invented_values": [
+          "2023년",
+          "100명",
+          "5만원"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 20.1
+    },
+    "up_09|ttalkak|0": {
+      "item": "up_09",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 2,
+      "questions": 0,
+      "prompt": "당신은 트렌디한 카페 브랜드의 전문 블로그 콘텐츠 작가다. 새로 출시된 '흑임자 라떼'에 대한 블로그 글을 작성하라.\n조건: 1) 제품명은 '흑임자 라떼'이며, 가격은 5,800원, 판매 시작일은 9월 20일이다. 2) 글은 출시 알림을 중심으로, 풍부한 감성 어조와 친근한 톤을 사용하고, 카페 방문 고객과 일반 블로그 독자를 대상으로 한다. 3) 본문에 제품의 특징(검은깨 풍미, 부드러운 거품 등)을 간략히 설명하고, 구매 유도 문구와 해시태그 최소 3개(#흑임자라떼, #신메뉴, #카페)를 포함한다. 4) 전체 글 길이는 300~400자 이내로 작성한다.",
+      "output": "🎉 **새로운 맛, 흑임자 라떼 출시 알림!**  \n9월 20일부터 우리 카페에서 만나볼 수 있는 ‘흑임자 라떼’가 드디어 등장합니다. 5,800원에 제공되는 이 라떼는 진한 검은깨 풍미가 은은하게 퍼지면서, 부드러운 거품이 입안 가득 퍼지는 감미로운 경험을 선사합니다.  \n\n카페에 방문하시는 분들은 물론, 집에서도 한 잔의 여유를 즐기고 싶은 분들에게 완벽한 선택이 될 거예요. 지금 바로 주문해 보세요!  \n\n✨ **맛과 분위기, 두 마리 토끼를 잡는 순간**  \n#흑임자라떼 #신메뉴 #카페",
+      "exec_finish": "stop",
+      "exec_usage": 515,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "새로운 맛, 흑임자 라떼 출시 알림!"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "우리 카페에서 만나볼 수 있는 ‘흑임자 라떼’가 드디어 등장합니다"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "‘흑임자 라떼’"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "5,800원에 제공되는 이 라떼"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "9월 20일부터 우리 카페에서"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 914
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 43.5
+    },
+    "up_11|raw|0": {
+      "item": "up_11",
+      "condition": "raw",
+      "repeat": 0,
+      "mode": "raw",
+      "prompt": "아파트 엘리베이터 점검 안내문 써줘. 10월 2일 오전 9시~12시, 101동 1·2호기 운행 중지.",
+      "output": "**아파트 소유주·이용자 여러분께**\n\n안녕하세요, 101동 관리사무소입니다.\n\n아파트 엘리베이터 정기 점검을 실시하오니, 아래 일정과 안내 사항을 꼭 확인해 주시기 바랍니다.\n\n| 일정 | 내용 |\n|------|------|\n| **10월 2일 (금) ** | **오전 9시 ~ 12시** |\n| **운행 중지** | 101동 1·2호기 엘리베이터 |\n| **대체 수단** | 101동 3호기 엘리베이터 사용(※ 3호기 운행이 정상적으로 진행됩니다.) |\n| **주의 사항** | 1. 점검 시간 동안 1·2호기 엘리베이터를 이용하실 수 없습니다.<br>2. 비상시 101동 3호기 엘리베이터를 이용해 주시고, 1·2호기로 돌아가실 경우에는 관리사무소에 연락해 주시기 바랍니다.<br>3. 점검이 완료되면 즉시 1·2호기 엘리베이터가 정상 운행됩니다. |\n\n**점검 목적**  \n- 정기 점검 및 예방 정비를 통해 안전성 확보  \n- 장기적인 유지보수 및 수리 비용 절감\n\n**문의·신고**  \n- 관리사무소: 02‑1234‑5678  \n- 이메일: 101동관리@apartment.com\n\n여러분의 양해와 협조에 감사드립니다.  \n감사합니다.\n\n---  \n**101동 관리사무소**  \n2026년 9월 22일\n\n---",
+      "exec_finish": "stop",
+      "exec_usage": 533,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "**아파트 소유주·이용자 여러분께**"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "아파트 엘리베이터 정기 점검을 실시하오니"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "| **10월 2일 (금) ** | **오전 9시 ~ 12시** |"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "101동 1·2호기 엘리베이터"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "점검 시간 동안 1·2호기 엘리베이터를 이용하실 수 없습니다"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 1097
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": true,
+        "invented_values": [
+          "3호기",
+          "3",
+          "1234",
+          "5678",
+          "2026년",
+          "9월",
+          "22일"
+        ],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 4.6
+    },
+    "up_11|ttalkak|0": {
+      "item": "up_11",
+      "condition": "ttalkak",
+      "repeat": 0,
+      "mode": "improve",
+      "n_contexts": 4,
+      "questions": 0,
+      "prompt": "당신은 아파트 관리 사무소 담당자이다. 아래 원문과 제공된 정보를 바탕으로 아파트 입주민을 대상으로 친절하고 공식적인 톤의 엘리베이터 점검 안내문을 작성하라.\n원문: 아파트 엘리베이터 점검 안내문 써줘. 10월 2일 오전 9시~12시, 101동 1·2호기 운행 중지.\n[날짜] 10월 2일\n[시간] 오전 9시~12시\n[운행 중지 대상] 101동 1·2호기 엘리베이터\n안내문은 200~300자 정도의 간결한 문단 형태로 구성한다.",
+      "output": "**아파트 입주민 여러분께**  \n안녕하세요. 관리사무소입니다. 10월 2일(수) 오전 9시부터 12시까지 101동 1·2호기의 엘리베이터가 점검을 위해 일시 운행 중지됩니다. 점검은 안전을 위해 필수적인 조치이니, 해당 시간대에는 1·2호기 엘리베이터 이용을 자제해 주시기 바랍니다. 다른 호기 엘리베이터는 정상 운행됩니다. 점검 종료 후 바로 정상 서비스가 재개됩니다. 불편을 드려 죄송하며, 이해와 협조 부탁드립니다. 감사합니다.",
+      "exec_finish": "stop",
+      "exec_usage": 442,
+      "req_judge": {
+        "answers": {
+          "r1": {
+            "verdict": "yes",
+            "evidence": "아파트 입주민 여러분께"
+          },
+          "r2": {
+            "verdict": "yes",
+            "evidence": "엘리베이터가 점검을 위해 일시 운행 중지됩니다"
+          },
+          "r3": {
+            "verdict": "yes",
+            "evidence": "10월 2일(수) 오전 9시부터 12시까지"
+          },
+          "r4": {
+            "verdict": "yes",
+            "evidence": "101동 1·2호기의 엘리베이터"
+          },
+          "r5": {
+            "verdict": "yes",
+            "evidence": "운행 중지됩니다"
+          }
+        },
+        "errors": [],
+        "version": "req-v1"
+      },
+      "defect_judge": {
+        "verdict": {
+          "fabrication": false,
+          "fabricated_items": [],
+          "refusal": false,
+          "reason": ""
+        },
+        "usage": 899
+      },
+      "score": {
+        "requirement_rate": 1.0,
+        "subjective_rate": null,
+        "gold_rate": null,
+        "check_rate": {
+          "preserve": 1.0
+        },
+        "preserve_ok": true,
+        "placeholder_defect": false,
+        "placeholder_count": 0,
+        "fabrication": false,
+        "invented_values": [],
+        "refusal": false,
+        "judge_errors": []
+      },
+      "seconds": 61.9
+    }
+  },
+  "pairs": {},
+  "runs": [
+    {
+      "git_head": "91baf80",
+      "dirty": [
+        ".github/workflows/ci.yml",
+        ".gitignore",
+        "docker-compose.yml",
+        "rag-server/.dockerignore",
+        "rag-server/RAG_PIPELINE.md",
+        "rag-server/WORKLOG.md",
+        "rag-server/app/rag/analyzer.py",
+        "rag-server/app/rag/generator.py",
+        "rag-server/ingestion/gen_examples.py",
+        "rag-server/ingestion/ingest_knowledge.py",
+        "rag-server/ingestion/ingest_web.py",
+        "rag-server/ingestion/pdf_crawler.py",
+        "rag-server/tests/test_multi_turn_eval.py",
+        "rag-server/tests/test_token_budget.py",
+        ".codex/",
+        "rag-server/.env.example",
+        "rag-server/tests/test_code_defects.py",
+        "rag-server/tests/test_uplift_score.py",
+        "rag-server/tests/test_uplift_set_v2.py"
+      ],
+      "generator_prompt_sha": "7495fae98c92",
+      "at": "2026-09-22T16:29:57",
+      "args": {
+        "set": "uplift_set_v2.json",
+        "items": "",
+        "track": "A",
+        "conditions": [
+          "raw",
+          "ttalkak"
+        ],
+        "repeats": 1,
+        "gen_model": "gemini-2.0-flash",
+        "target_model": "openai/gpt-oss-20b",
+        "judge_model": "openai/gpt-oss-120b",
+        "skip_pairwise": false,
+        "max_wait": 21600,
+        "out": "eval/results/uplift_trackA_20260922.json"
+      }
+    }
+  ]
+}

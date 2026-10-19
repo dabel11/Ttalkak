@@ -1,0 +1,728 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+let consumeBillingRedirect; let consumeOpenBillingRequest; let createBillingController; let createBillingApi;
+test.before(async () => {
+  ({ consumeBillingRedirect, consumeOpenBillingRequest, createBillingController } = await import("../src/billing/billing-controller.mjs"));
+  ({ createBillingApi } = await import("../src/api/billing-api.mjs"));
+});
+
+test("agreed prices are public while production purchase actions stay blocked", async () => {
+  const previousWindow = globalThis.window;
+  const { PricingPageView, SubscriptionSummaryView } = await import("../src/billing/pricing-page.mjs");
+  const state = { isLoggedIn: true, billingOpen: false };
+  let paymentCalls = 0;
+  let pricingVisits = 0;
+  globalThis.window = { __API_BASE_URL__: "http://localhost:8080", location: { hostname: "ttalkak.example" } };
+  try {
+    const page = PricingPageView({ state }, { usage: { plan: "PRO" } });
+    for (const price of ["3,900", "5,900", "9,900"]) assert.match(page, new RegExp(price));
+    assert.match(page, /유료 구독은 판매하지 않습니다/);
+    assert.doesNotMatch(page, /data-start-pro|data-open-billing|테스트 구독/);
+    assert.equal((page.match(/data-route="make">무료로 체험하기/g) || []).length, 3);
+    const summary = SubscriptionSummaryView({ state }, { usage: {
+      plan: "FREE", requests: 10, requestLimit: 10, requestRemaining: 0,
+      requestQuotaEnforced: true, requestLimitReached: true, quotaEnforced: false,
+      usageAvailable: true,
+    } });
+    assert.match(summary, /10 \/ 10회/);
+    assert.doesNotMatch(summary, /사용량 제한은 적용 전|data-open-billing|pricing-upgrade-tip/);
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      navigateToPricing: () => { pricingVisits += 1; },
+      api: { setupBilling: async () => { paymentCalls += 1; } },
+    });
+    assert.equal(controller.openBilling("PRO"), false);
+    assert.equal(state.billingOpen, false);
+    assert.equal(controller.renderBilling(), "");
+    assert.equal(paymentCalls, 0);
+    assert.equal(pricingVisits, 1);
+    globalThis.window.TTALKAK_BILLING_PREVIEW_ENABLED = true;
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /9,900원/);
+    assert.match(PricingPageView({ state }, { usage: { plan: "PRO" } }), /data-open-billing/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("billing deep links are consumed without losing their route", () => {
+  const history = { state: null, replaceState(_state, _title, url) { this.url = url; } };
+  assert.equal(consumeOpenBillingRequest({ href: "https://web.example/?openBilling=1#/home" }, history), true);
+  assert.equal(history.url, "/#/home");
+  assert.equal(consumeOpenBillingRequest({ href: "https://web.example/#/home" }, history), false);
+});
+
+const createController = (ctx) => createBillingController({ formatShortDate: String, ...ctx,
+  api: { getBillingCharges: async () => [], ...ctx.api } });
+
+test("pricing summaries only read data and never create a payment session", async () => {
+  const calls = [];
+  const controller = createController({
+    state: { isLoggedIn: true }, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      getUsageStatus: async () => { calls.push("usage"); return { plan: "FREE", used: 50 }; },
+      getBillingStatus: async () => { calls.push("status"); return { paymentStatus: "NOT_REGISTERED" }; },
+      setupBilling: async () => { calls.push("setup"); },
+    },
+  });
+  await controller.hydrateSummary();
+  await controller.hydrateSummary();
+  assert.deepEqual(calls, ["usage", "status"]);
+  assert.equal(controller.getSnapshot().usage.totalTokens, 50);
+});
+
+test("a delayed account summary cannot overwrite a newer payment refresh", async () => {
+  let resolveUsage;
+  let usageCalls = 0;
+  const oldUsage = new Promise((resolve) => { resolveUsage = resolve; });
+  const controller = createController({
+    state: { isLoggedIn: true }, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      getUsageStatus: () => ++usageCalls === 1 ? oldUsage : Promise.resolve({ plan: "PRO", used: 500 }),
+      getBillingStatus: async () => ({ paymentStatus: "ACTIVE" }),
+      setupBilling: async () => ({ amount: 4900 }),
+    },
+  });
+  const summary = controller.hydrateSummary();
+  await controller.refreshBilling();
+  resolveUsage({ plan: "FREE", used: 1 });
+  await summary;
+  assert.equal(controller.getSnapshot().usage.plan, "PRO");
+  assert.equal(controller.getSnapshot().usage.totalTokens, 500);
+});
+
+test("billing callback removes the one-time auth key before it can remain in browser history", () => {
+  const history = { state: { from: "home" }, replaceState(state, title, url) { this.saved = { state, title, url }; } };
+  const callback = consumeBillingRedirect({ href: "http://localhost:5500/?view=home&ttalkakBilling=success&authKey=single-use&customerKey=generated#help" }, history);
+  assert.deepEqual(callback, { result: "success", authKey: "single-use", customerKey: "generated", code: "", message: "" });
+  assert.deepEqual(history.saved, { state: { from: "home" }, title: "", url: "/?view=home#help" });
+  assert.equal(consumeBillingRedirect({ href: "http://localhost:5500/?view=home" }, history), null);
+});
+
+test("billing API sends a bearer token and one-time callback data to the intended endpoints", async () => {
+  const calls = [];
+  const api = createBillingApi({ request: async (...args) => { calls.push(args); return {}; } });
+  await api.setupBilling("member-jwt");
+  await api.completeBilling({ authKey: "one-time", customerKey: "customer" }, "member-jwt");
+  await api.cancelBilling("member-jwt");
+  await api.retryBilling("member-jwt");
+  await api.reconcileBillingUpgrade("member-jwt");
+  assert.deepEqual(calls[0], ["/api/me/billing/setup", { method: "POST", token: "member-jwt" }]);
+  assert.deepEqual(calls[1], ["/api/me/billing/complete", {
+    method: "POST", body: '{"authKey":"one-time","customerKey":"customer"}', token: "member-jwt", timeoutMs: 90000,
+  }]);
+  assert.deepEqual(calls[2], ["/api/me/billing/cancel", { method: "POST", token: "member-jwt" }]);
+  assert.deepEqual(calls[3], ["/api/me/billing/retry", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
+  assert.deepEqual(calls[4], ["/api/me/billing/reconcile-upgrade", { method: "POST", token: "member-jwt", timeoutMs: 90000 }]);
+});
+
+test("billing callback does not complete a registration for a different customer key", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "original-customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    let completed = false;
+    const state = { isLoggedIn: true, billingOpen: false };
+    const controller = createController({
+      state, getToken: () => "member-jwt", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: { completeBilling: async () => { completed = true; } },
+    });
+    await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "other-customer" });
+    assert.equal(completed, false);
+    assert.equal(entries.has("ttalkak-billing-pending-customer"), false);
+    assert.match(controller.renderBilling(), /결제 세션을 확인할 수 없습니다/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("billing status 401 uses the shared authentication boundary", async () => {
+  const unauthorized = Object.assign(new Error("expired"), { status: 401, payload: { code: "AUTHENTICATION_REQUIRED" } });
+  const state = { isLoggedIn: true, billingOpen: true, authView: null };
+  const handled = [];
+  const controller = createController({
+    state, getToken: () => "expired-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    handleBackendAccessError(error, message) {
+      handled.push([error, message]);
+      state.isLoggedIn = false;
+      state.billingOpen = false;
+      state.authView = "login";
+    },
+    api: {
+      setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: false }),
+      getBillingStatus: async () => { throw unauthorized; },
+      getUsageStatus: async () => ({ plan: "FREE" }),
+    },
+  });
+
+  await controller.refreshBilling();
+
+  assert.equal(handled.length, 1);
+  assert.equal(handled[0][0], unauthorized);
+  assert.equal(handled[0][1], "로그인이 만료되었습니다. 다시 로그인해 주세요.");
+  assert.equal(state.isLoggedIn, false);
+  assert.equal(state.authView, "login");
+});
+
+test("card registration preserves the route in Toss return URLs", async () => {
+  const previousWindow = globalThis.window;
+  const previousToss = globalThis.TossPayments;
+  const entries = new Map();
+  let requestOptions;
+  globalThis.window = {
+    location: { href: "http://localhost:4200/#/make" },
+    sessionStorage: {
+      getItem: (key) => entries.get(key) || null,
+      setItem: (key, value) => entries.set(key, value),
+      removeItem: (key) => entries.delete(key),
+    },
+  };
+  globalThis.TossPayments = () => ({ payment: () => ({ requestBillingAuth: async (options) => { requestOptions = options; } }) });
+  try {
+    const state = { isLoggedIn: true, billingOpen: true };
+    const listeners = {};
+    const controller = createController({
+      state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: false }),
+        getBillingStatus: async () => ({ cardRegistered: false, autoRenew: false }),
+        getUsageStatus: async () => ({ plan: "FREE", totalTokens: 0 }),
+      },
+    });
+    await controller.refreshBilling();
+    controller.bindBilling({
+      querySelectorAll: () => [],
+      querySelector(selector) {
+        if (selector !== "[data-billing-register]") return null;
+        return { addEventListener(_event, listener) { listeners.register = listener; } };
+      },
+    });
+    listeners.register();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(new URL(requestOptions.successUrl).hash, "#/make");
+    assert.equal(new URL(requestOptions.failUrl).hash, "#/make");
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.TossPayments = previousToss;
+  }
+});
+
+test("after reload pending upgrade is recovered by lookup without creating a new order", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const listeners = {};
+  let status = {
+    paymentStatus: "PENDING", cardRegistered: true, autoRenew: true, plan: "LIGHT",
+    pendingCharge: { kind: "UPGRADE", plan: "STANDARD", amount: 1234 },
+  };
+  let reconcileCalls = 0;
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+      getBillingStatus: async () => status,
+      getUsageStatus: async () => ({ plan: status.paymentStatus === "PENDING" ? "LIGHT" : "STANDARD" }),
+      reconcileBillingUpgrade: async () => {
+        reconcileCalls += 1;
+        status = { paymentStatus: "ACTIVE", cardRegistered: true, autoRenew: true, plan: "STANDARD", pendingCharge: null };
+        return status;
+      },
+      upgradeBilling: async () => assert.fail("reconciliation must never initiate a charge"),
+    },
+  });
+  await controller.refreshBilling();
+  assert.match(controller.renderBilling(), /확인 중인 업그레이드: STANDARD/);
+  assert.match(controller.renderBilling(), /data-billing-reconcile/);
+  assert.doesNotMatch(controller.renderBilling(), /data-billing-upgrade/);
+  controller.bindBilling({
+    querySelectorAll: () => [],
+    querySelector(selector) {
+      if (selector !== "[data-billing-reconcile]") return null;
+      return { addEventListener(_event, listener) { listeners.reconcile = listener; } };
+    },
+  });
+  listeners.reconcile();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(reconcileCalls, 1);
+  assert.equal(controller.getSnapshot().usage.plan, "STANDARD");
+  assert.match(controller.renderBilling(), /기존 결제 상태를 다시 확인했습니다/);
+});
+
+test("first LIGHT card payment confirms the actual tier rather than PRO", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const state = { isLoggedIn: true, billingOpen: true };
+    const controller = createController({
+      state, getToken: () => "member", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        completeBilling: async () => ({ plan: "LIGHT", paymentStatus: "ACTIVE" }),
+        setupBilling: async () => ({ plan: "LIGHT", cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ plan: "LIGHT", cardRegistered: true, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT" }),
+      },
+    });
+    await controller.handleBillingRedirect({ result: "success", authKey: "auth", customerKey: "customer" });
+    assert.match(controller.renderBilling(), /LIGHT 요금제가 적용됐습니다/);
+    assert.doesNotMatch(controller.renderBilling(), /PRO가 적용됐습니다/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("a partial usage failure keeps the payment status visible and retryable", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "PENDING" }),
+      getUsageStatus: async () => { throw new Error("usage unavailable"); },
+    },
+  });
+
+  assert.equal(await controller.refreshBilling(), true);
+  const html = controller.renderBilling();
+  assert.match(html, /결제 확인 중/);
+  assert.match(html, /일부 결제 정보를 불러오지 못했습니다/);
+  assert.match(html, /data-billing-refresh/);
+  assert.match(html, /data-billing-reload/);
+});
+
+test("a logged-out billing return opens login with a restart instruction", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const state = { isLoggedIn: false, billingOpen: false, authView: null, authError: "" };
+    const controller = createController({
+      state, getToken: () => "", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: { completeBilling: async () => assert.fail("completion must not run after logout") },
+    });
+    await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
+    assert.equal(state.billingOpen, false);
+    assert.equal(state.authView, "login");
+    assert.match(state.authError, /카드 등록을 처음부터 시작/);
+    assert.equal(entries.has("ttalkak-billing-pending-customer"), false);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("a logged-out failed billing return is cleared and shown as a login restart", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const state = { isLoggedIn: false, billingOpen: false, authView: null, authError: "" };
+    const controller = createController({ state, getToken: () => "", isDemoToken: () => false, render() {}, escapeHtml: String, api: {} });
+    await controller.handleBillingRedirect({ result: "fail", code: "USER_CANCEL", message: "cancelled" });
+    assert.equal(state.billingOpen, false);
+    assert.equal(state.authView, "login");
+    assert.match(state.authError, /카드 등록을 처음부터 시작/);
+    assert.equal(entries.has("ttalkak-billing-pending-customer"), false);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("a failed endpoint refresh clears its stale actions while keeping fresh sections", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  let billingFails = false;
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => {
+        if (billingFails) throw new Error("billing unavailable");
+        return { cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" };
+      },
+      getUsageStatus: async () => ({ plan: "PRO", totalTokens: 200, limitTokens: 1000 }),
+    },
+  });
+  await controller.refreshBilling();
+  assert.match(controller.renderBilling(), /data-billing-cancel/);
+  billingFails = true;
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /<dd>PRO<\/dd>/);
+  assert.match(html, /일부 결제 정보를 불러오지 못했습니다/);
+  assert.doesNotMatch(html, /data-billing-cancel/);
+  assert.doesNotMatch(html, /data-billing-retry/);
+});
+
+test("billing mutation 401 also uses the shared authentication boundary", async () => {
+  const unauthorized = Object.assign(new Error("expired"), { status: 401, payload: { code: "AUTHENTICATION_REQUIRED" } });
+  const state = { isLoggedIn: true, billingOpen: true, authView: null };
+  let handled = 0;
+  const listeners = {};
+  const controller = createController({
+    state, getToken: () => "expired-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    handleBackendAccessError() {
+      handled += 1;
+      state.isLoggedIn = false;
+      state.billingOpen = false;
+      state.authView = "login";
+    },
+    api: {
+      setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+      getUsageStatus: async () => ({ plan: "PRO" }),
+      cancelBilling: async () => { throw unauthorized; },
+    },
+  });
+  await controller.refreshBilling();
+  controller.bindBilling({
+    querySelector(selector) {
+      if (selector !== "[data-billing-cancel]") return null;
+      return { addEventListener(_event, listener) { listeners.cancel = listener; } };
+    },
+  });
+
+  listeners.cancel();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(handled, 1);
+  assert.equal(state.isLoggedIn, false);
+  assert.equal(state.authView, "login");
+});
+
+test("a pending payment is explicit and offers a direct status recheck", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  let statusCalls = 0;
+  const listeners = {};
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => { statusCalls += 1; return { cardRegistered: true, autoRenew: true, paymentStatus: "PENDING" }; },
+      getUsageStatus: async () => ({ plan: "FREE", totalTokens: 10 }),
+      retryBilling: async () => assert.fail("status recheck must not start another payment"),
+    },
+  });
+  await controller.refreshBilling();
+
+  const html = controller.renderBilling();
+  assert.match(html, /결제 확인 중/);
+  assert.match(html, /data-billing-refresh/);
+  assert.match(html, /결제 상태 다시 확인/);
+  assert.doesNotMatch(html, /data-billing-cancel/);
+
+  controller.bindBilling({
+    querySelector(selector) {
+      if (selector !== "[data-billing-refresh]") return null;
+      return { addEventListener(_event, listener) { listeners.retry = listener; } };
+    },
+  });
+  listeners.retry();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(statusCalls, 2);
+});
+
+test("an uncertain payment retry reloads status instead of offering another immediate charge", async () => {
+  const uncertain = Object.assign(new Error("provider pending"), { status: 502, payload: { code: "BILLING_UNCERTAIN" } });
+  const state = { isLoggedIn: true, billingOpen: true };
+  let status = "FAILED";
+  let retryCalls = 0;
+  const listeners = {};
+  const controller = createController({
+    state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: status !== "FAILED", paymentStatus: status }),
+      getUsageStatus: async () => ({ plan: "FREE", totalTokens: 10 }),
+      retryBilling: async () => { retryCalls += 1; status = "PENDING"; throw uncertain; },
+    },
+  });
+  await controller.refreshBilling();
+  assert.match(controller.renderBilling(), /data-billing-retry/);
+  controller.bindBilling({
+    querySelectorAll: () => [],
+    querySelector(selector) {
+      if (selector !== "[data-billing-retry]") return null;
+      return { addEventListener(_event, listener) { listeners.retry = listener; } };
+    },
+  });
+  listeners.retry();
+  await new Promise((resolve) => setImmediate(resolve));
+  const html = controller.renderBilling();
+  assert.equal(retryCalls, 1);
+  assert.match(html, /결제 확인 중/);
+  assert.match(html, /data-billing-refresh/);
+  assert.doesNotMatch(html, /data-billing-retry/);
+});
+
+test("an uncertain provider result automatically reloads billing and usage state", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const calls = [];
+    const state = { isLoggedIn: true, billingOpen: false };
+    const uncertain = Object.assign(new Error("provider result unknown"), {
+      status: 502,
+      payload: { code: "BILLING_UNCERTAIN", message: "결제 결과를 확인하지 못했습니다." },
+    });
+    const controller = createController({
+      state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        completeBilling: async () => { calls.push("complete"); throw uncertain; },
+        setupBilling: async () => { calls.push("setup"); return { clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }; },
+        getBillingStatus: async () => { calls.push("billing"); return { cardRegistered: true, autoRenew: true, paymentStatus: "PENDING" }; },
+        getUsageStatus: async () => { calls.push("usage"); return { plan: "FREE", totalTokens: 10 }; },
+      },
+    });
+
+    await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
+
+    assert.deepEqual(calls, ["complete", "setup", "billing", "usage"]);
+    assert.match(controller.renderBilling(), /결제 응답이 지연되어 서버에서 현재 상태를 다시 확인했습니다/);
+    assert.match(controller.renderBilling(), /결제 확인 중/);
+    assert.match(controller.renderBilling(), /data-billing-refresh/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("a complete 401 moves to login with instructions to restart card registration", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    const unauthorized = Object.assign(new Error("expired"), { status: 401, payload: { code: "AUTHENTICATION_REQUIRED" } });
+    const state = { isLoggedIn: true, billingOpen: false, authView: null, authError: "" };
+    const handled = [];
+    const controller = createController({
+      state, getToken: () => "expired-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+      handleBackendAccessError(error, message) {
+        handled.push([error, message]);
+        state.isLoggedIn = false;
+        state.billingOpen = false;
+        state.authView = "login";
+      },
+      api: { completeBilling: async () => { throw unauthorized; } },
+    });
+
+    await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
+
+    assert.equal(handled.length, 1);
+    assert.equal(handled[0][0], unauthorized);
+    assert.match(handled[0][1], /카드 등록을 처음부터 시작/);
+    assert.equal(state.authView, "login");
+    assert.match(state.authError, /카드 등록을 처음부터 시작/);
+    assert.equal(entries.has("ttalkak-billing-pending-customer"), false);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("a successful complete still refreshes the PRO status", async () => {
+  const previousWindow = globalThis.window;
+  const entries = new Map([["ttalkak-billing-pending-customer", "customer"]]);
+  globalThis.window = { sessionStorage: {
+    getItem: (key) => entries.get(key) || null,
+    setItem: (key, value) => entries.set(key, value),
+    removeItem: (key) => entries.delete(key),
+  } };
+  try {
+    let completed = 0;
+    const state = { isLoggedIn: true, billingOpen: false };
+    const controller = createController({
+      state, getToken: () => "member-token", isDemoToken: () => false, render() {}, escapeHtml: String,
+      api: {
+        completeBilling: async () => { completed += 1; return { plan: "PRO", paymentStatus: "ACTIVE" }; },
+        setupBilling: async () => ({ clientKey: "test_ck_fixture", customerKey: "customer", amount: 5000, cardRegistered: true }),
+        getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "PRO", totalTokens: 20 }),
+      },
+    });
+
+    await controller.handleBillingRedirect({ result: "success", authKey: "one-time", customerKey: "customer" });
+
+    assert.equal(completed, 1);
+    assert.match(controller.renderBilling(), /첫 테스트 결제가 완료되어 PRO 요금제가 적용됐습니다/);
+    assert.match(controller.renderBilling(), /<dd>PRO<\/dd>/);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("closing billing restores focus to the control that opened it", async () => {
+  const state = { isLoggedIn: true, billingOpen: false };
+  let openListener;
+  let focusCount = 0;
+  const opener = {
+    isConnected: true,
+    dataset: { selectedPlan: "PRO" },
+    addEventListener(_event, listener) { openListener = listener; },
+    closest() { return null; },
+    focus() { focusCount += 1; },
+  };
+  const root = {
+    querySelectorAll(selector) { return selector === "[data-open-billing]" ? [opener] : []; },
+    querySelector(selector) { return selector === "[data-open-billing]" ? opener : null; },
+  };
+  const controller = createController({
+    state,
+    root,
+    getToken: () => "member-token",
+    isDemoToken: () => false,
+    render() {},
+    escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+      getUsageStatus: async () => ({ plan: "PRO", used: 10, limit: 100, remaining: 90 }),
+    },
+  });
+
+  controller.bindBilling(root);
+  openListener();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.billingOpen, true);
+
+  controller.closeBilling();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(state.billingOpen, false);
+  assert.equal(focusCount, 1);
+});
+
+test("billing renders the backend used limit remaining contract without treating a preview as enforced", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const controller = createController({
+    state,
+    getToken: () => "member-token",
+    isDemoToken: () => false,
+    render() {},
+    escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+      getUsageStatus: async () => ({ plan: "PRO", used: 100, limit: 100, remaining: 0, limitReached: true, quotaEnforced: false }),
+    },
+  });
+
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /100개 \/ 100개/);
+  assert.match(html, /남음 0개/);
+  assert.match(html, /참고 한도에 도달/);
+  assert.doesNotMatch(html, /이번 이용 기간의 토큰을 모두 사용/);
+});
+
+test("billing explains when the displayed token usage is not fully aggregated", async () => {
+  const state = { isLoggedIn: true, billingOpen: true };
+  const controller = createController({
+    state,
+    getToken: () => "member-token",
+    isDemoToken: () => false,
+    render() {},
+    escapeHtml: String,
+    api: {
+      setupBilling: async () => ({ amount: 5000, cardRegistered: true }),
+      getBillingStatus: async () => ({ cardRegistered: true, autoRenew: true, paymentStatus: "ACTIVE" }),
+      getUsageStatus: async () => ({
+        plan: "FREE", used: 2400, limit: 100000, remaining: 97600, usageAvailable: false, usageBlocked: false,
+      }),
+    },
+  });
+
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /2,400개 \/ 100,000개 · 과거 요청 사용량 확인 필요/);
+  assert.doesNotMatch(html, /사용량 확인 중에는 요청할 수 없습니다/);
+});
+
+test("unconfigured test payments keep usage visible without a retry error", async () => {
+  const controller = createController({
+    state: { isLoggedIn: true, billingOpen: true }, getToken: () => "member-token",
+    isDemoToken: () => false, render() {}, escapeHtml: String,
+    api: {
+      setupBilling: async () => { throw Object.assign(new Error("keys missing"), { payload: { code: "BILLING_NOT_CONFIGURED" } }); },
+      getBillingStatus: async () => ({ cardRegistered: false, paymentStatus: "NOT_REGISTERED" }),
+      getUsageStatus: async () => ({ plan: "FREE", totalTokens: 8478, usageAvailable: false }),
+    },
+  });
+  await controller.refreshBilling();
+  const html = controller.renderBilling();
+  assert.match(html, /테스트 결제 설정 전/);
+  assert.match(html, /8,478/);
+  assert.match(html, /과거 요청 사용량 확인 필요/);
+  assert.doesNotMatch(html, /일부 결제 정보를 불러오지 못했습니다|data-billing-reload|집계 중/);
+});
+
+test("refund requests use the owner token and encoded saved order", async () => {
+  const calls = [];
+  const api = createBillingApi({ request: async (...args) => { calls.push(args); return {}; } });
+  await api.getBillingCharges("owner");
+  await api.requestBillingRefund("owner", "order /?", "검토 요청");
+  assert.equal(calls[0][0], "/api/me/billing/charges");
+  assert.equal(calls[1][0], "/api/me/billing/charges/order%20%2F%3F/refund-request");
+  assert.equal(calls[1][1].token, "owner");
+  assert.deepEqual(JSON.parse(calls[1][1].body), { reason: "검토 요청" });
+});
+
+test("billing shows review separately from refund completion and submits only clicked orders", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { TTALKAK_RUNTIME_CONFIG: { billingPreviewEnabled: true } };
+  try {
+    let requested = false;
+    let confirmation;
+    const listeners = {};
+    const state = { isLoggedIn: true, billingOpen: true };
+    const refundButton = { dataset: { billingRefund: "order-one" }, addEventListener(_event, handler) { listeners.refund = handler; } };
+    const root = { querySelector: () => null, querySelectorAll: (selector) => selector === "[data-billing-refund]" ? [refundButton] : [] };
+    const controller = createController({ state, root, getToken: () => "owner", isDemoToken: () => false,
+      escapeHtml: String, render() {}, confirm: (action) => { confirmation = action; }, api: {
+        setupBilling: async () => ({ cardRegistered: true, amount: 3900 }),
+        getBillingStatus: async () => ({ cardRegistered: true, autoRenew: !requested, paymentStatus: "ACTIVE" }),
+        getUsageStatus: async () => ({ plan: "LIGHT", totalTokens: 15 }),
+        getBillingCharges: async () => [{ orderId: "order-one", plan: "LIGHT", amount: 3900,
+          periodStart: "2026-10-13", status: "DONE", refundState: requested ? "REQUESTED" : "NONE", refundLabel: requested ? "환불 검토 중" : "" }],
+        requestBillingRefund: async (token, orderId, reason) => { assert.equal(token, "owner"); assert.equal(orderId, "order-one"); assert.equal(reason, "이용 중단"); requested = true; },
+      } });
+    await controller.refreshBilling();
+    assert.equal(requested, false);
+    assert.match(controller.renderBilling(), /환불 검토 요청/);
+    controller.bindBilling(root);
+    listeners.refund();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(requested, false);
+    assert.equal(confirmation.reasonInput, true);
+    assert.match(confirmation.message, /3,900원.*자동 갱신이 중지/);
+    assert.match(controller.renderBilling(), /결제 완료/);
+    assert.match(controller.renderBilling(), /aria-label="LIGHT 2026-10-13 결제 환불 검토 요청"/);
+    await controller.submitRefund("order-one", " ");
+    await controller.submitRefund("order-one", "x".repeat(201));
+    assert.equal(requested, false);
+    await controller.submitRefund(confirmation.targetId, " 이용 중단 ");
+    assert.equal(requested, true);
+    assert.match(controller.renderBilling(), /환불 검토 중/);
+    assert.match(controller.renderBilling(), /환불 여부는 관리자 검토 후 결정/);
+    assert.doesNotMatch(controller.renderBilling(), /data-billing-refund=/);
+    state.isLoggedIn = false;
+    assert.equal(controller.renderBilling(), "");
+  } finally { globalThis.window = previousWindow; }
+});

@@ -65,13 +65,15 @@ interface TtalkakStateEntity {
 interface TtalkakApplicationState {
   [key: string]: unknown;
   route: string; searchQuery: string; searchScope: string; popularSort: string; popularPage: number; savedSort: string; savedPage: number;
-  isLoggedIn: boolean; currentUser: string | null; currentUserId: TtalkakId | null; currentUserRole: string; authToken: string; token: string;
-  authView: string | null; authError: string; adminMode: boolean; hideReportedPrompts: boolean; guestImproveCount: number; templateCollapsed: boolean;
+  isLoggedIn: boolean; currentUser: string | null; currentUserId: TtalkakId | null; currentUserRole: string; currentUserProvider: string; authToken: string; token: string;
+  authView: string | null; authError: string; billingOpen: boolean; pendingBillingOpen: boolean; adminMode: boolean; hideReportedPrompts: boolean; templateCollapsed: boolean;
   detailPromptId: TtalkakId | null; detailHighlightCommentId: TtalkakId | null; editingPromptId: TtalkakId | null; editingCommentId: TtalkakId | null;
   replyingCommentId: TtalkakId | null; reportPromptId: TtalkakId | null; reportCommentId: TtalkakId | null; executePromptId: TtalkakId | null;
   executeMessageId: TtalkakId | null; editingMessageId: TtalkakId | null; copiedMessageId: TtalkakId | null; confirmAction: TtalkakStateEntity | null;
   creatingFolder: boolean; creatingThreadFolderId: TtalkakId | null; editingFolderId: TtalkakId | null; openFolderMenuId: TtalkakId | null;
   openPromptCardMenuId: TtalkakId | null; openThreadMenuId: TtalkakId | null; activeFolderId: TtalkakId; activeThreadId: TtalkakId | null;
+  pendingGuestThreadTransferId: TtalkakId | null;
+  pendingGuestThreadTransferErrorCode: string;
   composerDraft: string; makeBackendStatus: string; myBackendStatus: string; adminBackendStatus: string; myPageTab: string;
   shareError: string; shareDraft: TtalkakStateEntity | null; libraryDemoSeeded: boolean;
   messages: TtalkakStateEntity[]; recentThreads: TtalkakStateEntity[]; makeFolders: TtalkakStateEntity[];
@@ -84,6 +86,7 @@ interface TtalkakApplicationState {
   reportRecords: Record<string, TtalkakStateEntity>; accountScopes: Record<string, unknown>;
   adminRequestTargetKey: string | null; adminBlockTarget: TtalkakStateEntity | null; adminUserActivityNickname: string; adminUserQuery: string;
   adminPromptQuery: string; adminPromptFilter: string; adminTagQuery: string; adminTagFilter: string; adminTagSort: string; adminTagPromptKey: string;
+  adminUsageReview?: TtalkakStateEntity;
   adminReportFilter: string; adminTab: string;
 }
 interface TtalkakStateContext {
@@ -157,7 +160,7 @@ interface TtalkakModuleRegistry {
   effects: { backend: TtalkakCallableModule; admin: TtalkakCallableModule; errorBoundary: TtalkakCallableModule; makeServerSync: TtalkakCallableModule; makeFailureRecovery: TtalkakCallableModule };
   renderers: TtalkakCallableModule;
   routing: TtalkakCallableModule;
-  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; myPageHydrationTimeoutMs: number; googleCredential: string; demoFallbackEnabled: boolean };
+  runtimeConfig: { apiBaseUrl: string; apiEnvironment: "development" | "production"; apiTimeoutMs: number; improveTimeoutMs: number; myPageHydrationTimeoutMs: number; demoFallbackEnabled: boolean };
   api: TtalkakApi;
   apiContract: TtalkakApiContractModule;
   observability: { report(error: unknown, context?: Record<string, unknown>): unknown; reportOutcome(context?: Record<string, unknown>): unknown; reportWarning(area: string, action: string, error: unknown): unknown; recent(): unknown[] };
@@ -241,7 +244,8 @@ interface TtalkakApiContext {
 interface TtalkakApi {
   login(payload: TtalkakPayload): Promise<unknown>;
   signup(payload: TtalkakPayload): Promise<unknown>;
-  googleLogin(credential: string): Promise<unknown>;
+  googleConfig(): Promise<{ clientId: string }>;
+  googleLogin(credential: string, consent?: { agreeTerms: boolean; agreePrivacy: boolean }): Promise<unknown>;
   findId(payload: TtalkakPayload): Promise<unknown>;
   requestPasswordReset(payload: TtalkakPayload): Promise<unknown>;
   withdrawAccount(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
@@ -288,6 +292,17 @@ interface TtalkakApi {
   getMyReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getMyRevisionRequests(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   requestPromptRevision(promptId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getBillingStatus(token: TtalkakToken): Promise<unknown>;
+  getBillingCharges(token: TtalkakToken): Promise<unknown>;
+  requestBillingRefund(token: TtalkakToken, orderId: string, reason: string): Promise<unknown>;
+  getUsageStatus(token: TtalkakToken): Promise<unknown>;
+  setupBilling(token: TtalkakToken, plan?: string): Promise<unknown>;
+  quoteBillingUpgrade(token: TtalkakToken, plan: string): Promise<unknown>;
+  upgradeBilling(token: TtalkakToken, plan: string, expectedAmount: number): Promise<unknown>;
+  reconcileBillingUpgrade(token: TtalkakToken): Promise<unknown>;
+  completeBilling(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  cancelBilling(token: TtalkakToken): Promise<unknown>;
+  retryBilling(token: TtalkakToken): Promise<unknown>;
   getAdminReports(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   updateAdminReportStatus(reportId: TtalkakId, status: string, token: TtalkakToken, memo?: string): Promise<unknown>;
   getAdminPrompts(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
@@ -301,6 +316,8 @@ interface TtalkakApi {
   getAdminUserSubmittedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminUserReceivedReports(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   getAdminUserActivity(memberId: TtalkakId, options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
+  getAdminUserUsage(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
+  reconcileAdminUserUsage(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   blockAdminUser(memberId: TtalkakId, payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   unblockAdminUser(memberId: TtalkakId, token: TtalkakToken): Promise<unknown>;
   getAdminAuditLogs(options: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
@@ -322,8 +339,8 @@ interface Window {
   TTALKAK_API_TIMEOUT_MS?: number | string;
   TTALKAK_IMPROVE_TIMEOUT_MS?: number | string;
   TTALKAK_MY_PAGE_HYDRATION_TIMEOUT_MS?: number | string;
-  TTALKAK_GOOGLE_CREDENTIAL?: string;
   TTALKAK_DEMO_FALLBACK_ENABLED?: boolean;
+  TTALKAK_BILLING_PREVIEW_ENABLED?: boolean;
 }
 
 interface EventTarget {

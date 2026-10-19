@@ -62,46 +62,47 @@ function persistAppState(/** @type {TtalkakStateContext} */ ctx) {
       }),
     "commentsByPrompt": commentsByPrompt,
     "state": {
-      isLoggedIn: state.isLoggedIn,
-      currentUser: state.currentUser,
-      currentUserId: state.currentUserId,
-      currentUserRole: state.currentUserRole,
-      authToken: state.authToken,
-      token: state.token,
-      accountScopes: state.accountScopes,
-      libraryDemoSeeded: state.libraryDemoSeeded,
-      userLibraryPromptIds: [...state.userLibraryPromptIds],
-      likedPromptIds: [...state.likedPromptIds],
-      likedCommentIds: [...state.likedCommentIds],
-      reportedPromptIds: [...state.reportedPromptIds],
-      reportedCommentIds: [...state.reportedCommentIds],
-      hideReportedPrompts: state.hideReportedPrompts,
-      adminMode: state.adminMode,
-      adminHiddenPromptIds: [...state.adminHiddenPromptIds],
-      adminTagDecisions: state.adminTagDecisions,
-      adminTab: state.adminTab,
-      adminPromptQuery: state.adminPromptQuery,
-      adminPromptFilter: state.adminPromptFilter,
-      adminTagQuery: state.adminTagQuery,
-      adminTagFilter: state.adminTagFilter,
-      adminTagSort: state.adminTagSort,
-      adminTagPromptKey: state.adminTagPromptKey,
-      adminUserQuery: state.adminUserQuery,
-      adminUserActivityNickname: state.adminUserActivityNickname,
-      adminPromptRevisionRequests: state.adminPromptRevisionRequests,
-      adminReportFilter: state.adminReportFilter,
-      reportRecords: state.reportRecords,
-      searchScope: state.searchScope,
-      popularSort: state.popularSort,
-      savedSort: state.savedSort,
-      guestImproveCount: state.guestImproveCount,
-      recentThreads: state.recentThreads,
-      makeFolders: state.makeFolders,
-      activeFolderId: state.activeFolderId,
-      activeThreadId: state.activeThreadId,
-      messages: state.messages,
-      composerDraft: state.composerDraft,
-      templateCollapsed: state.templateCollapsed,
+      "isLoggedIn": state.isLoggedIn,
+      "currentUser": state.currentUser,
+      "currentUserId": state.currentUserId,
+      "currentUserRole": state.currentUserRole,
+      "authToken": state.authToken,
+      "token": state.token,
+      "accountScopes": state.accountScopes,
+      "libraryDemoSeeded": state.libraryDemoSeeded,
+      "userLibraryPromptIds": [...state.userLibraryPromptIds],
+      "likedPromptIds": [...state.likedPromptIds],
+      "likedCommentIds": [...state.likedCommentIds],
+      "reportedPromptIds": [...state.reportedPromptIds],
+      "reportedCommentIds": [...state.reportedCommentIds],
+      "hideReportedPrompts": state.hideReportedPrompts,
+      "adminMode": state.adminMode,
+      "adminHiddenPromptIds": [...state.adminHiddenPromptIds],
+      "adminTagDecisions": state.adminTagDecisions,
+      "adminTab": state.adminTab,
+      "adminPromptQuery": state.adminPromptQuery,
+      "adminPromptFilter": state.adminPromptFilter,
+      "adminTagQuery": state.adminTagQuery,
+      "adminTagFilter": state.adminTagFilter,
+      "adminTagSort": state.adminTagSort,
+      "adminTagPromptKey": state.adminTagPromptKey,
+      "adminUserQuery": state.adminUserQuery,
+      "adminUserActivityNickname": state.adminUserActivityNickname,
+      "adminPromptRevisionRequests": state.adminPromptRevisionRequests,
+      "adminReportFilter": state.adminReportFilter,
+      "reportRecords": state.reportRecords,
+      "searchScope": state.searchScope,
+      "popularSort": state.popularSort,
+      "savedSort": state.savedSort,
+      "recentThreads": state.recentThreads,
+      "makeFolders": state.makeFolders,
+      "activeFolderId": state.activeFolderId,
+      "activeThreadId": state.activeThreadId,
+      "pendingGuestThreadTransferId": state.pendingGuestThreadTransferId,
+      "pendingGuestThreadTransferErrorCode": state.pendingGuestThreadTransferErrorCode,
+      "messages": state.messages,
+      "composerDraft": state.composerDraft,
+      "templateCollapsed": state.templateCollapsed,
     },
   });
 }
@@ -136,68 +137,77 @@ function loadPersistedAppState(/** @type {TtalkakStateContext} */ ctx) {
   }
 
   const savedState = parsed["state"] || {};
+  const stored = (/** @type {string} */ key) => savedState[key];
   const storedToken = readStorageItem(AUTH_TOKEN_KEY);
-  const restoredToken = storedToken || savedState.authToken || savedState.token || "";
-  state.isLoggedIn = Boolean(savedState.isLoggedIn && restoredToken);
-  state.currentUser = state.isLoggedIn ? savedState.currentUser || null : null;
-  state.currentUserId = state.isLoggedIn ? savedState.currentUserId || null : null;
-  state.currentUserRole = state.isLoggedIn ? savedState.currentUserRole || "user" : "user";
+  const restoredToken = storedToken || stored("authToken") || stored("token") || "";
+  state.isLoggedIn = Boolean(stored("isLoggedIn") && restoredToken);
+  state.currentUser = state.isLoggedIn ? stored("currentUser") || null : null;
+  state.currentUserId = state.isLoggedIn ? stored("currentUserId") || null : null;
+  state.currentUserRole = state.isLoggedIn ? stored("currentUserRole") || "user" : "user";
   state.authToken = state.isLoggedIn ? restoredToken : "";
   state.token = state.isLoggedIn ? restoredToken : "";
-  state.accountScopes = savedState.accountScopes && typeof savedState.accountScopes === "object" ? savedState.accountScopes : {};
-  state.libraryDemoSeeded = Boolean(savedState.libraryDemoSeeded);
-  state.userLibraryPromptIds = new Set(Array.isArray(savedState.userLibraryPromptIds) ? savedState.userLibraryPromptIds : []);
-  state.likedPromptIds = new Set(Array.isArray(savedState.likedPromptIds) ? savedState.likedPromptIds : []);
-  state.likedCommentIds = new Set(Array.isArray(savedState.likedCommentIds) ? savedState.likedCommentIds : []);
-  state.reportedPromptIds = new Set(Array.isArray(savedState.reportedPromptIds) ? savedState.reportedPromptIds : []);
-  state.reportedCommentIds = new Set(Array.isArray(savedState.reportedCommentIds) ? savedState.reportedCommentIds : []);
-  state.hideReportedPrompts = Boolean(savedState.hideReportedPrompts);
+  state.accountScopes = stored("accountScopes") && typeof stored("accountScopes") === "object" ? stored("accountScopes") : {};
+  state.libraryDemoSeeded = Boolean(stored("libraryDemoSeeded"));
+  state.userLibraryPromptIds = new Set(Array.isArray(stored("userLibraryPromptIds")) ? stored("userLibraryPromptIds") : []);
+  state.likedPromptIds = new Set(Array.isArray(stored("likedPromptIds")) ? stored("likedPromptIds") : []);
+  state.likedCommentIds = new Set(Array.isArray(stored("likedCommentIds")) ? stored("likedCommentIds") : []);
+  state.reportedPromptIds = new Set(Array.isArray(stored("reportedPromptIds")) ? stored("reportedPromptIds") : []);
+  state.reportedCommentIds = new Set(Array.isArray(stored("reportedCommentIds")) ? stored("reportedCommentIds") : []);
+  state.hideReportedPrompts = Boolean(stored("hideReportedPrompts"));
   if (state.accountScopes[getCurrentAccountScopeKey()]) {
     restoreCurrentAccountScope();
   }
-  state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && savedState.adminMode);
+  state.adminMode = Boolean(state.isLoggedIn && state.currentUserRole === "admin" && stored("adminMode"));
   if (state.adminMode) state.route = "admin";
-  state.adminHiddenPromptIds = new Set(Array.isArray(savedState.adminHiddenPromptIds) ? savedState.adminHiddenPromptIds : []);
-  state.adminTagDecisions = savedState.adminTagDecisions && typeof savedState.adminTagDecisions === "object" ? savedState.adminTagDecisions : {};
-  state.adminTab = ["reports", "prompts", "tags", "users", "audit"].includes(savedState.adminTab) ? savedState.adminTab : "reports";
-  state.adminPromptQuery = savedState.adminPromptQuery || "";
-  state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(savedState.adminPromptFilter)
-    ? savedState.adminPromptFilter
+  state.adminHiddenPromptIds = new Set(Array.isArray(stored("adminHiddenPromptIds")) ? stored("adminHiddenPromptIds") : []);
+  state.adminTagDecisions = stored("adminTagDecisions") && typeof stored("adminTagDecisions") === "object" ? stored("adminTagDecisions") : {};
+  state.adminTab = ["reports", "prompts", "tags", "users", "audit"].includes(stored("adminTab")) ? stored("adminTab") : "reports";
+  state.adminPromptQuery = stored("adminPromptQuery") || "";
+  state.adminPromptFilter = ["all", "shared", "private", "hidden", "reported"].includes(stored("adminPromptFilter"))
+    ? stored("adminPromptFilter")
     : "all";
-  state.adminTagQuery = savedState.adminTagQuery || "";
-  state.adminTagFilter = ["all", "pending", "approved", "rejected", "disabled"].includes(savedState.adminTagFilter)
-    ? savedState.adminTagFilter
+  state.adminTagQuery = stored("adminTagQuery") || "";
+  state.adminTagFilter = ["all", "pending", "approved", "rejected", "disabled"].includes(stored("adminTagFilter"))
+    ? stored("adminTagFilter")
     : "all";
-  state.adminTagSort = ["usage", "recent"].includes(savedState.adminTagSort) ? savedState.adminTagSort : "usage";
-  state.adminTagPromptKey = savedState.adminTagPromptKey || "";
-  state.adminUserQuery = savedState.adminUserQuery || "";
-  state.adminUserActivityNickname = savedState.adminUserActivityNickname || "";
+  state.adminTagSort = ["usage", "recent"].includes(stored("adminTagSort")) ? stored("adminTagSort") : "usage";
+  state.adminTagPromptKey = stored("adminTagPromptKey") || "";
+  state.adminUserQuery = stored("adminUserQuery") || "";
+  state.adminUserActivityNickname = stored("adminUserActivityNickname") || "";
   state.adminPromptRevisionRequests =
-    savedState.adminPromptRevisionRequests && typeof savedState.adminPromptRevisionRequests === "object"
-      ? savedState.adminPromptRevisionRequests
+    stored("adminPromptRevisionRequests") && typeof stored("adminPromptRevisionRequests") === "object"
+      ? stored("adminPromptRevisionRequests")
       : {};
-  state.adminReportFilter = ["all", "prompt", "comment"].includes(savedState.adminReportFilter)
-    ? savedState.adminReportFilter
+  state.adminReportFilter = ["all", "prompt", "comment"].includes(stored("adminReportFilter"))
+    ? stored("adminReportFilter")
     : "all";
-  state.reportRecords = savedState.reportRecords && typeof savedState.reportRecords === "object" ? savedState.reportRecords : {};
-  state.searchScope = getValidSearchScope(savedState.searchScope);
-  state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(savedState.popularSort)
-    ? savedState.popularSort
+  state.reportRecords = stored("reportRecords") && typeof stored("reportRecords") === "object" ? stored("reportRecords") : {};
+  state.searchScope = getValidSearchScope(stored("searchScope"));
+  state.popularSort = ["popular", "saves", "comments", "likes", "latest"].includes(stored("popularSort"))
+    ? stored("popularSort")
     : "popular";
-  state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(savedState.savedSort)
-    ? savedState.savedSort
+  state.savedSort = ["recent", "saves", "comments", "likes", "views"].includes(stored("savedSort"))
+    ? stored("savedSort")
     : "recent";
-  state.guestImproveCount = Number(savedState.guestImproveCount || 0);
-  state.recentThreads = Array.isArray(savedState.recentThreads) ? savedState.recentThreads : [];
-  state.makeFolders = normalizeMakeFolders(savedState.makeFolders);
+  state.recentThreads = Array.isArray(stored("recentThreads")) ? stored("recentThreads") : [];
+  state.makeFolders = normalizeMakeFolders(stored("makeFolders"));
   state.activeFolderId =
-    state.makeFolders.some((folder) => folder.id === savedState.activeFolderId) || savedState.activeFolderId === "all"
-      ? savedState.activeFolderId
+    state.makeFolders.some((folder) => folder.id === stored("activeFolderId")) || stored("activeFolderId") === "all"
+      ? stored("activeFolderId")
       : "all";
-  state.activeThreadId = savedState.activeThreadId || null;
-  state.messages = Array.isArray(savedState.messages) ? savedState.messages : [];
-  state.composerDraft = savedState.composerDraft || "";
-  state.templateCollapsed = Boolean(savedState.templateCollapsed);
+  state.activeThreadId = stored("activeThreadId") || null;
+  state.pendingGuestThreadTransferId = stored("pendingGuestThreadTransferId") != null
+    && state.recentThreads.some((thread) => String(thread?.id || "") === String(stored("pendingGuestThreadTransferId")))
+    ? stored("pendingGuestThreadTransferId")
+    : null;
+  state.pendingGuestThreadTransferErrorCode = state.pendingGuestThreadTransferId
+    ? ["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED", "SESSION_UUID_REQUIRED", "AUTHENTICATION_REQUIRED"].includes(String(stored("pendingGuestThreadTransferErrorCode") || "").toUpperCase())
+      ? String(stored("pendingGuestThreadTransferErrorCode")).toUpperCase()
+      : "FREE_TRIAL_LIMIT_EXCEEDED"
+    : "";
+  state.messages = Array.isArray(stored("messages")) ? stored("messages") : [];
+  state.composerDraft = stored("composerDraft") || "";
+  state.templateCollapsed = Boolean(stored("templateCollapsed"));
   normalizePersistedLikeCounts();
 }
 

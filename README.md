@@ -22,6 +22,118 @@ Spring Boot Backend (:8080)  ──(프록시)──▶  FastAPI RAG Server (:80
 | Chrome Extension | `extension/` | React · Vite · Manifest V3 |
 | RAG Server | `rag-server/` | FastAPI · bge-m3 · MySQL |
 
+## 팀원별 역할 및 담당 업무
+
+### 남지원 | Product Manager · Backend Developer
+
+**서비스 아이디어 제안부터 제품 기획·요구사항 정의, 백엔드 개발, 시스템 통합과 운영 준비까지 주도한 PM·백엔드 개발자입니다.** 사용자 의도에 맞는 프롬프트 개선 경험과 선택적 보완 질문 흐름을 설계하고, 인증·커뮤니티·대화·구독·결제·환불·AI 사용량 관리 API를 구현했습니다. 결제·환불 결과가 불확실하거나 요청이 중복되는 상황을 고려해 멱등성·사용량 기록·권한 일관성을 보완했으며, Web·Extension·AI 서버 연동 및 Railway 배포·검증을 조율했습니다.
+
+#### 주요 역할
+
+- **제품 기획·요구사항 정의:** 사용자의 프롬프트 작성 부담을 줄이는 서비스 아이디어 제안. 개선안과 추가 질문을 배타적으로 제공하는 대신, 주제가 특정되면 개선안을 즉시 실행할 수 있도록 제공하고 보완 질문은 선택적으로 답하도록 AI 응답 정책·UX 설계. 비회원 체험·회원 저장·요금제·사용량 정책을 화면·API 요구사항으로 구체화
+- **프로젝트 총괄·협업:** 초기 협업 체계와 개발 진행 방식 정리, 역할 배분·일정 관리·정기 회의 주도. 프론트엔드·AI 담당자와 API 필드, 요청 식별자, 오류 안내 및 완료 기준을 조율하고 지도교수 피드백을 후속 작업에 반영
+- **백엔드 설계·개발:** Java 17·Spring Boot·Spring Security·JPA·MySQL 기반 REST API 개발. JWT 인증·인가, 회원·커뮤니티·대화·관리자 기능과 구독·결제·AI 사용량 관리 구현
+- **시스템 통합:** Web·Chrome Extension → Spring Boot → FastAPI/RAG 연동 구조 조율. 응답 계약과 대화 이력, 재요청의 중복 저장 방지, 비회원·회원의 권한 및 오류 처리 기준 정리
+- **핵심 UX 구현·검토:** Chrome Extension 원클릭 개선의 미리보기·변경 강조·적용·원본 복원·설정 기능 구현. 웹 요금제와 마이페이지 구독·사용량 안내 구현 및 연동. 화면 탐색·작업 흐름의 요구사항 제시와 구현 결과 검토
+- **품질·배포·운영 준비:** PR 리뷰, CI·통합 검증, 장애 재현과 원인 분석. Railway 배포 환경·환경변수·서비스 연결 설정 및 운영 점검, 점검·복구 절차 문서화
+- **발표·출시 준비:** 지도교수 미팅·피드백 관리, 학기별 발표와 Figma 발표 자료 기획·제작. Chrome Web Store 개발자 등록 및 출시·운영 정책 준비
+
+#### 대표 문제 해결 사례
+
+| 문제·요구 | 설계·구현한 대응 | 확인 가능한 코드·문서 |
+| --- | --- | --- |
+| 결제 응답이 늦거나 유실됐을 때 실패로 단정하면 중복 결제·권한 불일치가 발생할 수 있음 | 미확정 주문을 `PENDING`으로 유지하고 조회·재확인 흐름과 결제 멱등성을 구성. 결제 결과와 유료 이용 기간을 연결 | [결제 서비스](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/billing/BillingService.java), [결제 통합 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/test/java/com/ttalkak/billing/BillingServiceIntegrationTest.java) |
+| AI 요청의 동시 실행·중복 집계·사용량 누락이 요금제 판단을 왜곡할 수 있음 | 회원별 DB 요청 lease와 요청 식별자를 활용해 실행·기록을 조정. 사용량 불확실성을 별도 상태로 관리하고 한도 적용 및 복구 기준을 문서화 | [요청 lease](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/usage/MemberRequestLease.java), [사용량 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/main/java/com/ttalkak/usage/RagUsageRecorder.java), [회원 사용량 정책](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/MEMBER_QUOTA.md) |
+| 웹·확장·AI 서버 사이 응답 형식과 오류 처리 기준이 달라 연동 오류가 발생함 | API 응답 계약, 요청 식별자, 비회원 체험 제한 및 401·429 등 상태별 안내 기준을 조율하고 통합 검증에 연결 | [응답 스키마](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/docs/prompt-improve-contract.schema.json), [CI 구성](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/.github/workflows/ci.yml) |
+| 사용자가 개선 결과를 확인하기 전에 원본이 변경되면 통제감을 잃을 수 있음 | 미리보기 → 변경 강조 → 명시적 적용 → 원본 복원 흐름을 제안·구현하여 결과 채택을 사용자가 결정하도록 설계 | [원클릭 개선 구현](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/public/inline-improve.js), [동작 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/extension/test/improveRequestBehavior.test.jsx) |
+| 로컬 구현만으로는 서비스 간 연결·배포 설정·장애 대응을 확인하기 어려움 | Railway 환경 구성과 서비스 연동을 점검하고 컨테이너 smoke·통합 검증 및 운영 체크리스트를 준비 | [배포 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/RAILWAY_STAGING.md), [운영 준비 문서](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/docs/OPERATIONS_READINESS.md) |
+
+#### 결제 환경 분리 및 환불 처리
+
+테스트·라이브 결제 데이터의 scope 분리, 회원의 결제 내역 조회·환불 검토 요청, 관리자 승인·거절·조회 대사, 취소 결과에 따른 이용권 처리를 구현했습니다.
+
+- **결제 데이터 경계:** 주문·구독·유료 이용권의 조회, 자동 갱신 및 권한 계산을 같은 상점 scope로 제한. 기존 NULL 데이터는 원래 테스트 환경에서만 처리하며, 실결제 호출 차단 유지
+- **환불 상태·권한:** 회원 요청은 검토 접수와 자동 갱신 중지만 수행. 관리자 검토 후 원 주문·금액·결제키·잔액을 확인하고, 전액 취소가 확인된 뒤 해당 이용권 회수
+- **실패·재시도 대응:** 불확실한 취소 결과는 `PENDING`으로 유지하고 저장된 동일 멱등키로 재시도. 취소를 다시 호출하지 않는 조회 대사를 별도로 제공하고 기존 AI 사용량 기록 보존
+- **AI 요청과의 충돌 방지:** 진행 중인 AI 요청이 있으면 환불 승인을 차단하고, 취소 확인 중에는 새 AI 요청과 결제 갱신 차단
+- **재검토·회귀 검증:** Java와 MySQL의 대소문자 비교 차이로 상점 구분이 달라질 수 있는 설정을 발견해, scope에 소문자 ASCII 영문·숫자·밑줄·하이픈만 허용하도록 보완. 대문자 별칭 거부 테스트 추가
+
+구현 근거: [상점 scope 검증](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingContext.java) · [환불 서비스](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/main/java/com/ttalkak/billing/BillingRefundService.java) · [환불 통합 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingRefundIntegrationTest.java) · [scope 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/e2bfd2d43f7883636b9618186c70636eadcde39d/backend/src/test/java/com/ttalkak/billing/BillingContextTest.java)
+
+일반 구독의 전액 취소를 대상으로 하며, 부분·업그레이드 환불과 관리자 운영 화면은 후속 과제입니다. 실결제 활성화 및 실제 승인·취소 검증은 아직 완료하지 않았습니다.
+
+#### 담당 범위와 현재 단계
+
+AI 모델·검색·리랭킹 자체 개발은 AI 담당자, Web·Extension 전반의 프론트엔드 개발은 프론트엔드 담당자와 협업했습니다. 위 내용은 남지원이 맡은 기획·정책·백엔드·핵심 UX·통합·운영 준비 범위를 설명합니다.
+
+코드 및 테스트 문서 링크는 구현 근거로 제공하며, 기능 구현과 실제 상용 운영·수익성 검증은 구분합니다.
+
+### 최재원 | Frontend Developer
+
+Web과 Chrome Extension 전반의 사용자 경험 구현을 핵심 책임으로, 초기 화면 설계와 기능 구현부터 Backend API 연동, UI 고도화, 접근성·반응형 개선 및 배포 품질 검증까지 프론트엔드 개발 전반을 담당했습니다.
+
+주요 담당 업무는 다음과 같습니다.
+
+- **Web Frontend 설계·개발:** Vanilla JavaScript 기반 Home·Make·My Page·Share·인증·관리자 화면 구현, 해시 라우팅과 페이지별 상태·이벤트·렌더링 구조 설계, 기능 중심의 초기 화면을 API 연동·오류 복구·반응형 흐름을 갖춘 프리뷰로 개선
+- **Chrome Extension 설계·개발:** React·Vite·Manifest V3 기반 사이드 패널 구현, 프롬프트 개선·보관함·최근 대화·폴더·로그인·계정 기능 개발, 좁은 화면에서 검색→선택→입력·실행으로 이어지는 핵심 흐름 최적화
+- **UX/UI 시스템 구축:** Notion 계열의 담백한 디자인을 TTALKAK에 맞게 재해석하고, 색상·타이포그래피·모서리 등 기본 스타일 토큰과 주요 컴포넌트 상태를 정리해 Web과 Extension의 시각적 일관성 확보
+- **Backend API 연동:** Spring Boot REST API와 JWT 인증 흐름 연결, 비회원 UUID 및 `X-Session-UUID` 처리, 프롬프트 조회·검색·공유·좋아요·저장·댓글, Make 대화·폴더, 회원 사용량·요금제·결제 상태 연동
+- **사용 상태·오류 처리:** 로딩·빈 화면·오류·재시도·로그인 필요·사용량 초과 상태 설계, 401·429와 결제 `PENDING` 등 서버 응답별 복구 흐름 구현, 비동기 응답과 세션 만료 상황의 상태 일관성 개선
+- **접근성·반응형 개선:** 키보드 탐색, 모달 포커스 제한·복귀, ARIA 상태, 검색 도움말의 hover·focus·touch·Escape 동작과 움직임 축소 설정 적용, 모바일·태블릿·데스크톱 및 Chrome 사이드 패널 너비별 사용성 검증
+- **품질·성능·배포 준비:** 단위 테스트와 Playwright E2E 작성·보강, Web·Extension lint·프로덕션 빌드·번들 예산 검증, nginx 정적 파일 압축·캐시·API 전달 정책 및 Extension manifest·아이콘·한국어 현지화 점검
+- **협업·통합 검증:** Backend의 비회원 체험·회원 토큰 사용량·구독·결제 정책과 API 계약 리뷰, PR 충돌 해결과 회귀 검증, 실제 브라우저 조작을 통한 Web·Extension·Backend 통합 오류 재현 및 수정
+
+### 지대현 | AI Engineer (RAG) · Integration & Deployment
+
+**다듬어지지 않은 한국어 요청을 실행 가능한 프롬프트로 바꾸는 RAG 서버를 설계·구현하고, 핵심 설정을 측정 결과로 결정한 AI 담당자입니다.** 3인 팀에서 저장소·모노레포 초기 구성과 FastAPI RAG 서버(검색·생성·평가·코퍼스) 전반을 맡았으며, Backend·Web·Extension 브랜치 통합, Docker Compose 전체 스택 구성, RAG 서버의 Railway 배포까지 연결했습니다.
+
+#### 주요 역할
+
+- **검색 파이프라인 설계·구현:** bge-m3 임베딩 + bge-reranker 2단계 검색 구성. 벡터 저장소를 ChromaDB에서 Backend와 같은 MySQL(`rag_chunk`)로 옮겨 별도 벡터 DB 제거. 청크마다 검색용 축약 벡터를 추가하는 멀티표현 인덱싱, 기법 카드·개선 예시의 타입별 분리 검색 구현
+- **생성 파이프라인 설계:** 요청 분석기(1단계)와 생성기(2단계)를 분리해 판정은 결정적으로, 생성은 자연스럽게 처리. 사용자 원문은 보존하고 입력되지 않은 사실은 `[항목 입력]` 빈칸·선택 질문으로 남기는 하이브리드 응답과 JSON 구조화 출력 설계
+- **평가 체계 구축:** 검색(Recall@k·nDCG@5·MRR), 생성(LLM judge + 응답 모드(개선/질문) 판정 정확도), 결과 상향(원본 vs 개선 프롬프트 A/B, 순서 교체로 위치 편향 제거), 적대적 환각(7개 카테고리), 관련성 게이트(AUC) 평가 도구 개발. 커버리지 평가셋(54문항)을 추가해 평가가 다루는 검색 대상 카드를 50% → 94%로 확장
+- **코퍼스 구축·품질 관리:** 프롬프트 기법 카드 170장과 한국어 개선 예시 131건(19개 작업 유형) 수집·생성·큐레이션. 임베딩 기반 의미 중복 제거, 카드 층(layer) 분류로 검색 대상 자격 관리
+- **LLM 백엔드·운영 안정성:** Groq·Gemini 이중 백엔드 라우팅과 폴백, LLM 타임아웃, 동시 실행 게이트(503 + `Retry-After`), 요청 단위 토큰 사용량(`usage`) 집계 구현. 기존 모델과의 품질 A/B와 요청당 비용 실측을 거쳐 예산 안에서 최적의 조합(생성 Gemini 3.6 Flash · 분석 Gemini 3.5 Flash-Lite) 선정
+- **시스템 통합·API 계약:** Backend·Web·Extension 브랜치를 하나로 통합한 [PR #7](https://github.com/dabel11/Ttalkak/pull/7) 주도. `/query` 응답 계약(mode·questions·fields·usage)과 계층 간 계약 문서 작성. RAG 서버의 `Retry-After`가 Backend와 CORS 설정을 거쳐 프론트까지 전달되도록 연동 지점 수정
+- **배포·인프라:** Docker Compose 전체 스택 구성. RAG 서버 Railway 배포를 위해 모델 번들 이미지 경량화(20.9GB → 9.5GB), IPv6 사설망 바인딩, 컨테이너 vCPU 할당량 기반 스레드 설정 적용. 재임베딩 없이 코퍼스를 옮기는 DB 이전 도구, CI에 RAG 서버 테스트·정적 검사 job 추가
+- **작업 기록·문서화:** 주요 변경을 Before/After·측정값·결정 근거로 남긴 [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md)과 [파이프라인](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/RAG_PIPELINE.md)·[코퍼스 전략](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/CORPUS_STRATEGY.md) 문서 작성. 기각한 실험도 수치와 함께 기록
+
+#### 대표 문제 해결 사례
+
+| 문제·요구 | 설계·구현한 대응 | 확인 가능한 코드·문서 |
+| --- | --- | --- |
+| 정보가 부족한 요청에서 모델이 제품명·스펙을 지어냄(예: 이어폰 소개 요청에 "AirSound Pro·30시간·IPX4"). 반대로 세부가 조금만 비어도 질문만 하고 개선안을 주지 않음 | 분석기가 필요한 항목과 채움 여부를 먼저 판정하고, 생성기는 빈 사실을 `[항목 입력]` 빈칸 + 선택 질문으로 처리. 18문항 평가에서 개선안 제공이 7건 → 11건으로 늘어도 환각 0건, 스펙을 지어내던 이어폰 요청은 빈칸으로 처리. 환각 유도 평가셋 7개 카테고리 18케이스·29회 실행에서 사실 창작 0건 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [생성기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/generator.py), [환각 평가 도구](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/halluc_eval.py) |
+| 무의미한 입력(`https://example.com`, `ㅋㅋㅋ`)은 통과하고 정상 요청의 17%는 404로 차단됨 | 원인이 임계치가 아니라 코퍼스 문체임을 규명(영어 정의문형 기법 카드 기준 AUC 0.575~0.694). 판정 기준을 사용자 말투의 예시 코퍼스로 옮겨 AUC 1.000(양성·음성 24건) 달성. 예시 검색 실패·빈 코퍼스 시 404 대신 기법 기반 생성으로 폴백 | [관련성 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/gate.py), [게이트 평가](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/eval/gate_eval.py), [`/query` 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_query_endpoint.py) |
+| 검색 결과에 RAG 시스템 구축용·메타 기법 카드가 섞여 사용자 요청에 쓸 수 없는 기법이 추천됨(예: "Git 브랜치 전략 블로그 글" → Chunk Design) | 카드에 층(layer) 메타데이터를 부여하고 사용자 지시용 카드만 검색. 단일 LLM 판정이 경계 사례에서 흔들려 LLM 분류 + 사람 검토 override 2층 구조 채택. top-5 노이즈 22% → 2%, 생성 결과의 반영 불가 기법 비율 29% → 0% | [층 정의](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/layers.py), [분류 도구](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/ingestion/tag_layers.py), [사람 검토 override](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/ingestion/layer_overrides.json) |
+| CPU 리랭커가 검색 지연의 95%(로컬 실측)를 차지했고, 운영에서는 스레드 과다 할당·느린 분석기 경로까지 겹쳐 `/query`가 30초 이상 걸림 | LLM judge A/B로 유의한 품질 손실이 없음을 확인한 호스티드 리랭크 API(Jina v3.5) 도입, 실패 시 로컬 모델 폴백. 컨테이너 vCPU 할당량 기반 스레드 제한, 분석기를 생성 백엔드(Gemini)에 맞춰 느린 분석 경로 제거. 리랭크 17초 → 0.4초, 운영 `/query` 34초 → 12초, 기동 2분 → 12초 | [리랭크 API](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/rerank.py), [스레드 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/cpu.py), [PR #46](https://github.com/dabel11/Ttalkak/pull/46) |
+| 요청 1건이 LLM API 분당 토큰 한도(TPM)를 거의 다 써서 동시 요청 2건이면 429가 나고, 폴백 백엔드까지 한도에 걸려 서비스 전체가 멈춤 | LLM 구간만 감싸는 동시 실행 게이트 도입. 대기열·대기 시간 상한을 Backend 타임아웃(75초) 안에 맞추고, 초과 시 즉시 503 + `Retry-After` 반환. Backend 예외 처리·CORS 노출 헤더까지 연결 | [동시 실행 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/concurrency.py), [게이트 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_concurrency.py), [Retry-After 전달 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/backend/src/test/java/com/ttalkak/common/exception/RetryAfterPropagationTest.java) |
+| 폴백이 장애를 가려 모델 교체 후 약 3주간 분석기 실패(평가 18건 중 16건)를 인지하지 못함. 평가 judge도 빈 점수 반환 | 추론 토큰이 출력 상한(max_tokens)을 먼저 채우는 원인을 실측으로 규명해 추론량 조정(분석 완료 토큰 1,259 → 198). 평가 도구 11곳에 타임아웃 추가, "폴백에는 관측 장치가 함께 있어야 한다"는 교훈을 작업 기록에 정리 | [요청 분석기](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/rag/analyzer.py), [작업 기록](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/WORKLOG.md) |
+
+#### 측정으로 내린 주요 기술 결정
+
+| 결정 | 근거 |
+| --- | --- |
+| 벡터 저장소를 MySQL로 통합 | 수백~수천 청크 규모에서 brute-force 코사인으로 충분(100청크 기준 약 1ms). 별도 벡터 DB 운영 부담 제거, Backend와 같은 DB 공유 |
+| 리랭커 유지(제거 계획 철회) | 기존 평가셋 Recall@5 +4.0%p, 커버리지 평가셋 +12.3%p — 어려운 문항에서 효과가 3배 큼 |
+| 멀티표현 인덱싱 채택 | dense Hit@1 +6.8%p, 실사용형 입력 18건 중 404 3건 → 1건 |
+| 후보 수(fetch_k) 20 → 50 | 쉬운 구간 손실 0, 어려운 구간 Recall@5 +5.3%p |
+| HyDE·BM25 하이브리드·doc2query 기각 | HyDE는 Recall@5 0.763 → 0.441, 한국어 형태소 BM25도 −7.0%p. LLM으로 만든 커버리지 평가셋에서 보인 BM25 이득(+8.8%p)은 어휘 누수 아티팩트로 판명 |
+| 생성 2단계 분리 | 분석과 생성의 최적 온도가 반대. 단일 호출 판정 일관성 0.23~0.75 vs 분리 후 0.86~1.00 |
+| LLM 조합 선정: 생성 Gemini 3.6 Flash · 분석 Gemini 3.5 Flash-Lite | 18문항 품질 평가(중립 judge)에서 응답 모드 판정 정확도 0.94(기존 gpt-oss 0.85~0.92), 환각 0, JSON 18/18로 동급 이상. 요청당 비용 실측 약 $0.01(하루 300건 기준 월 약 $90), 분석은 저가 모델에 맡겨 전체 비용의 약 10% |
+| 리랭크 Jina v3.5 채택 | 속도 약 43배. nDCG@5 Jina 0.609 vs 로컬 0.657(12쿼리 LLM judge, 쿼리별 5승 6패 1무로 노이즈 수준 차이) |
+| 배포 이미지에 모델 번들 | Railway 볼륨 상한(5GB) < 모델 캐시. CPU 전용 torch·중복 가중치 제거로 20.9GB → 9.5GB |
+
+#### 최신 개발: 응답 속도·운영 안정화와 Railway 배포
+
+[PR #46](https://github.com/dabel11/Ttalkak/pull/46)(2026-10-09 develop 병합)에서 RAG 서버의 응답 속도, LLM 백엔드, 배포 설정을 정비하고 Railway 스테이징에서 실측 검증했습니다.
+
+- **응답 속도:** 호스티드 리랭크 API(Cohere·Jina·Voyage 지원, 실패 시 로컬 폴백), vCPU 할당량 기반 스레드 제한, 분석기가 생성 백엔드(Gemini)를 자동으로 따르게 해 느린 Groq 분석 경로(15~35초) 제거
+- **관련성 게이트:** 무의미 입력 404 판정을 예시 코퍼스 기준으로 이관. 검색 오류와 무관 입력을 구분해 검색 오류 시 정상 요청이 404 되던 문제 수정, 빈 코퍼스 배포 시 전건 404 방지
+- **배포:** 모델 번들 이미지 경량화(20.9GB → 9.5GB), IPv6(`::`) 바인딩으로 Railway 사설망 연결, 헬스체크 타임아웃 조정, 코퍼스 이전 도구
+- **검증:** ruff·pytest 289개 통과(CI 동일 환경). `/query` HTTP 회귀 테스트로 404·200·폴백·생성 실패 503·동시성 503 + `Retry-After` 검증. 스테이징에서 `/health`·`/query`(약 12초)·404 게이트·Jina 리랭크·Gemini 분석·생성 동작 확인
+
+구현 근거: [리랭크 API](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/rerank.py) · [스레드 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/cpu.py) · [관련성 게이트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/app/core/gate.py) · [`/query` 회귀 테스트](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/tests/test_query_endpoint.py) · [Railway 설정](https://github.com/dabel11/Ttalkak/blob/21bf03ed111d5d3cd8d5da0db6bf2959d9c149b9/rag-server/railway.json)
+
 ## 목차
 
 - [Backend](#backend)
@@ -525,7 +637,7 @@ Because Chrome isolates extension storage by Extension ID, conversations and set
 
 #### Backend Setting
 
-Backend API URL is managed in one place through `VITE_BACKEND_API_URL`.
+Backend API and web account URLs are managed through `VITE_BACKEND_API_URL` and `VITE_WEB_APP_URL`.
 
 Development:
 
@@ -536,7 +648,8 @@ http://localhost:8080
 Production:
 
 ```text
-Set VITE_BACKEND_API_URL to the Spring Boot HTTPS production URL.
+VITE_BACKEND_API_URL=https://web-production-a82d94.up.railway.app
+VITE_WEB_APP_URL=https://web-production-a82d94.up.railway.app
 ```
 
 The extension calls:
@@ -556,14 +669,14 @@ Frontend-wide deployment configuration, API change, response fixture, user copy,
 
 For production packaging:
 
-1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL.
+1. Set `VITE_BACKEND_API_URL` to the Spring Boot HTTPS production URL and `VITE_WEB_APP_URL` to the public TTALKAK web HTTPS URL.
 2. The build replaces `https://SPRING_BOOT_PRODUCTION_HOST/*` in the production manifest template with the same production host.
 3. Package the generated `extension/dist-prod` directory.
 4. Do not include `http://localhost:8080/*` or `http://127.0.0.1:8080/*` in the production manifest.
 5. Keep ChatGPT, Gemini, and Claude host permissions while Execute is supported.
-6. Build the production package with `VITE_BACKEND_API_URL` set, then run `npm run build:prod`.
+6. Build the production package with both URL variables set, then run `npm run build:prod`.
 
-Production builds fail fast when `VITE_BACKEND_API_URL` is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development always targets `http://localhost:8080` in `dist-dev` even if a production URL remains in the shell environment.
+Production builds fail fast when either URL is missing, is not HTTPS, or uses a reserved example domain. CI verification uses the non-installable `dist-verify` directory, while local development targets `http://localhost:8080` and `http://localhost:4200` in `dist-dev`.
 
 #### Production Extension ID
 

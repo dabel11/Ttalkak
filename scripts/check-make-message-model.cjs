@@ -9,8 +9,14 @@ const expectedRequestIdEsm = `// GENERATED FILE. Edit shared/make-request-id.js 
 const actualRequestIdEsm = fs.existsSync(requestIdEsmOutputPath) ? fs.readFileSync(requestIdEsmOutputPath, "utf8") : "";
 const expectedApiContractEsm = fs.readFileSync(apiContractSourcePath, "utf8");
 const actualApiContractEsm = fs.existsSync(apiContractEsmOutputPath) ? fs.readFileSync(apiContractEsmOutputPath, "utf8") : "";
+const normalizeLines = (value) => value.replace(/\r\n/g, "\n");
 
-if (actual !== expected || actualEsm !== expectedEsm || actualRequestIdEsm !== expectedRequestIdEsm || actualApiContractEsm !== expectedApiContractEsm) {
+if ([
+  [actual, expected],
+  [actualEsm, expectedEsm],
+  [actualRequestIdEsm, expectedRequestIdEsm],
+  [actualApiContractEsm, expectedApiContractEsm],
+].some(([current, generated]) => normalizeLines(current) !== normalizeLines(generated))) {
   console.error("Generated Make message model is out of date.");
   console.error("Run: npm run build:shared");
   process.exitCode = 1;

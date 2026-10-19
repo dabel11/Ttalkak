@@ -66,3 +66,28 @@ test("the internal deadline is classified as a retryable request timeout", async
   runTimeout();
   await assert.rejects(pending, (error) => error.code === "REQUEST_TIMEOUT");
 });
+
+test("an explicitly anonymous Make request does not reuse a stored login token", async () => {
+  let capturedOptions;
+  global.window = {
+    localStorage: { getItem: () => "demo-token" },
+    setTimeout: () => 1,
+    clearTimeout() {},
+  };
+  global.fetch = async (_url, options) => {
+    capturedOptions = options;
+    return { ok: true, status: 204 };
+  };
+  const { request } = await import(`../src/api/core-api.mjs?anonymous=${Date.now()}-${Math.random()}`);
+
+  await request("/api/prompts/improve", {
+    method: "POST",
+    token: undefined,
+    useStoredToken: false,
+    headers: { "X-Session-UUID": "00000000-0000-4000-8000-000000000001" },
+    body: JSON.stringify({ prompt: "Guest request" }),
+  });
+
+  assert.equal(capturedOptions.headers.Authorization, undefined);
+  assert.equal(capturedOptions.headers["X-Session-UUID"], "00000000-0000-4000-8000-000000000001");
+});

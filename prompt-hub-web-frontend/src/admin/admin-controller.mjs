@@ -98,6 +98,8 @@ const adminReportController = createAdminReportController({ state, getRecord: ge
 const adminUserController = createAdminUserController({ state, api: apiClient, canUseDemoFallback, getAuthToken, hasBackendAuthToken, handleBackendAccessError, render, showNotice, normalizeAdminSearchText, getAdminUserActivity, getUniquePrompts, popularPrompts, savedPrompts, getDisplayPromptAuthor, getPromptAuthorId, getSortedPromptComments, getAdminReportRecords, applyAdminUserActivityRefreshState, applyAdminUserBlockActivityState, runAdminApiMutation, getAdminApiAction, reportWarning });
 const searchAdminUserCandidates = (nickname) => adminUserController.search(nickname);
 const openAdminUserActivity = (nickname, options = {}) => adminUserController.openActivity(nickname, options);
+const reviewAdminUserUsage = (memberId) => adminUserController.reviewUsage(memberId);
+const reconcileAdminUserUsage = (memberId, reason, reviewed) => adminUserController.reconcileUsage(memberId, reason, reviewed);
 const getAdminKnownMemberId = (nickname) => adminUserController.getKnownMemberId(nickname);
 const updateAdminUserBlockState = (memberId, shouldBlock, nickname = "", blockReason = "") => adminUserController.updateBlockState(memberId, shouldBlock, nickname, blockReason);
 
@@ -291,5 +293,5 @@ async function refreshAdminAfterMutation({ auditReason = "", shouldRender = true
   return refreshAdminAfterMutationEffect(getAdminHydrationEffectContext(), { auditReason, shouldRender });
 }
 
-    return Object.freeze({ searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs, refreshAdminAfterMutation });
+    return Object.freeze({ reviewAdminUserUsage, reconcileAdminUserUsage, searchAdminUserCandidates, openAdminUserActivity, getAdminKnownMemberId, updateAdminUserBlockState, updateAdminTagDecision, updateReportRecordStatus, requestPromptRevision, updateAuthorRevisionRequest, updateAdminCommentHiddenState, toggleAdminPromptHidden, refreshAdminAuditLogs, refreshAdminAfterMutation });
   }

@@ -8,7 +8,14 @@ import java.util.Optional;
 public interface MemberRepository
         extends JpaRepository<Member, Long> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select m from Member m where m.id = :id")
+    Optional<Member> lockById(@org.springframework.data.repository.query.Param("id") Long id);
+
     Optional<Member> findByUserId(String userId);
+
+    List<Member> findAllByNameAndEmailAndAuthProviderAndActiveTrue(
+            String name, String email, String authProvider);
 
     Optional<Member> findByUserIdAndActiveTrue(String userId);
 

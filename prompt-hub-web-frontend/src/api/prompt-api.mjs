@@ -1,5 +1,6 @@
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
 import { MAKE_API_PATHS } from "../utils/make-api-contract.mjs";
+import { getOrCreateGuestSessionUuid } from "../usage/guest-session.mjs";
 const IMPROVE_TIMEOUT_MS = runtimeConfig.improveTimeoutMs;
 export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normalizers }) {
     const {
@@ -49,7 +50,10 @@ export function createPromptApi({ request, unwrapItems, unwrapPageMeta, normaliz
       },
       /** @param {*} payload @param {*} token @param {{ signal?: AbortSignal }} [options] */
       improvePrompt(payload, token, { signal } = {}) {
-        return request(MAKE_API_PATHS.improve, { method: "POST", token, signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
+        // A rejected member token must trigger login recovery rather than silently
+        // consuming a Guest use and returning an unsaved member conversation.
+        const headers = token ? {} : { "X-Session-UUID": getOrCreateGuestSessionUuid() };
+        return request(MAKE_API_PATHS.improve, { method: "POST", token, headers, useStoredToken: Boolean(token), signal, timeoutMs: IMPROVE_TIMEOUT_MS, body: JSON.stringify(payload) }).then((result) =>
           normalizeImproveResult(result, payload?.prompt || ""),
         );
       },

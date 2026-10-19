@@ -27,7 +27,7 @@ import { Composer } from "../src/components/Composer";
 import { useAskAnswers } from "../src/hooks/useAskAnswers";
 import { ChatFeed, orderConversationMessages } from "../src/components/ChatFeed";
 import { showTransientNotice } from "../src/utils/transientNotice";
-import { RecentList } from "../src/components/SavedList";
+import { PromptList, RecentList } from "../src/components/SavedList";
 import { createDelayedImproveFixture } from "./fixtures/delayedImprove";
 import { createAssistantMessage } from "../src/conversation/conversationState";
 
@@ -71,6 +71,22 @@ afterEach(() => {
 });
 
 describe("Extension improve request behavior", () => {
+  test("unfilled placeholders use the product confirmation dialog before execution", () => {
+    const setConfirmAction = vi.fn();
+    const { result } = renderHook(() => useConversation(createProps()));
+    const message = { id: "placeholder-result", executablePrompt: "[주제]에 관한 글을 작성해줘" };
+
+    act(() => result.current.executeMessage(message, setConfirmAction));
+
+    expect(setConfirmAction).toHaveBeenCalledOnce();
+    expect(setConfirmAction.mock.calls[0][0]).toMatchObject({
+      title: "입력할 정보가 남아 있습니다",
+      confirmLabel: "그대로 실행",
+      danger: false,
+      onConfirm: expect.any(Function),
+    });
+  });
+
   test("a logged-in first request receives an id before the server thread exists", async () => {
     api.getThreads.mockResolvedValue([]);
     api.improve.mockResolvedValue({ ...improveResponse("first stored response"), threadId: "42" });
@@ -515,6 +531,24 @@ describe("Extension improve request behavior", () => {
 });
 
 describe("Extension clarification UI", () => {
+  test("prompt library exposes opening and saving as separate controls", () => {
+    const item = { id: "prompt-1", title: "테스트 프롬프트", preview: "미리보기", tags: ["테스트"] };
+    const onOpenPrompt = vi.fn();
+    const onSavePrompt = vi.fn();
+    render(createElement(PromptList, { items: [item], emptyText: "없음", mode: "search", onOpenPrompt, onSavePrompt }));
+
+    const openButton = screen.getByRole("button", { name: /테스트 프롬프트/ });
+    const saveButton = screen.getByRole("button", { name: "보관" });
+    expect(openButton.contains(saveButton)).toBe(false);
+
+    fireEvent.click(saveButton);
+    expect(onSavePrompt).toHaveBeenCalledWith(item);
+    expect(onOpenPrompt).not.toHaveBeenCalled();
+
+    fireEvent.click(openButton);
+    expect(onOpenPrompt).toHaveBeenCalledWith(item);
+  });
+
   test("edited concurrency recovery stays adjacent to its target and exposes the server comparison", () => {
     const target = { id: "user-1", role: "user", content: "서버 최신 내용" };
     const unrelated = { id: "assistant-1", role: "assistant", content: "다른 응답" };

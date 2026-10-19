@@ -33,8 +33,8 @@ import { utils } from "./utils.mjs";
     `;
   }
 
-  /** @param {{ title?: unknown, message?: unknown, confirmLabel?: string, alternativeLabel?: string, danger?: boolean }} [options] */
-  function ConfirmDialog({ title, message, confirmLabel = "확인", alternativeLabel = "", danger = false } = {}) {
+  /** @param {{ title?: unknown, message?: unknown, confirmLabel?: string, alternativeLabel?: string, danger?: boolean, reasonInput?: boolean }} [options] */
+  function ConfirmDialog({ title, message, confirmLabel = "확인", alternativeLabel = "", danger = false, reasonInput = false } = {}) {
     return `
       <div class="modal-backdrop visible confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
         <article class="modal confirm-modal">
@@ -42,6 +42,7 @@ import { utils } from "./utils.mjs";
             <h2 id="confirm-title">${escapeHtml(title)}</h2>
           </div>
           <p class="confirm-message">${escapeHtml(message)}</p>
+          ${reasonInput ? '<label>환불 요청 사유 (1~200자)<textarea data-confirm-reason required minlength="1" maxlength="200" rows="3"></textarea></label>' : ""}
           <div class="modal-actions">
             <button class="secondary-button" type="button" data-cancel-confirm>취소</button>
             ${alternativeLabel ? `<button class="secondary-button" type="button" data-confirm-alternative>${escapeHtml(alternativeLabel)}</button>` : ""}

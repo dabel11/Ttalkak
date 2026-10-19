@@ -3,6 +3,8 @@ package com.ttalkak.prompt;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.usage.RagUsageRecorder;
+import com.ttalkak.usage.MemberRequestGuard;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.make.MakeThread;
 import com.ttalkak.make.MakeThreadRepository;
@@ -33,6 +35,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PromptImproveConversationTest {
@@ -44,6 +47,9 @@ class PromptImproveConversationTest {
 	private PromptLikeRepository likeRepository;
 	private TagRepository tagRepository;
 	private AuthService authService;
+	private GuestUsageService guestUsageService;
+	private RagUsageRecorder ragUsageRecorder;
+    private MemberRequestGuard memberRequestGuard;
 	private MakeThreadRepository makeThreadRepository;
 
 	private ObjectMapper objectMapper;
@@ -56,6 +62,9 @@ class PromptImproveConversationTest {
 		likeRepository = mock(PromptLikeRepository.class);
 		tagRepository = mock(TagRepository.class);
 		authService = mock(AuthService.class);
+		guestUsageService = mock(GuestUsageService.class);
+		ragUsageRecorder = mock(RagUsageRecorder.class);
+        memberRequestGuard = mock(MemberRequestGuard.class);
 		makeThreadRepository = mock(MakeThreadRepository.class);
 
 		objectMapper = new ObjectMapper();
@@ -69,7 +78,10 @@ class PromptImproveConversationTest {
 				makeThreadRepository,
 				objectMapper,
 				successfulRagWebClientBuilder(),
-				Duration.ofSeconds(75)
+				Duration.ofSeconds(75),
+				guestUsageService,
+                ragUsageRecorder,
+                memberRequestGuard
 		);
 
 		ReflectionTestUtils.setField(
@@ -94,18 +106,47 @@ class PromptImproveConversationTest {
 				});
 	}
 
+    @Test
+    void memberQuotaRejectionDoesNotInvokeOrRecordAiAndReleasesPermit() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "quota-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        org.mockito.Mockito.doThrow(new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                "MEMBER_TOKEN_LIMIT_EXCEEDED", "quota")).when(memberRequestGuard).checkQuota(permit);
+        assertEquals("MEMBER_TOKEN_LIMIT_EXCEEDED", assertThrows(ApiException.class,
+                () -> improve(request("quota request", null, null), AUTHORIZATION)).getCode());
+        verifyNoInteractions(ragUsageRecorder);
+        verify(makeThreadRepository, never()).save(any(MakeThread.class));
+        verify(memberRequestGuard).release(permit);
+    }
+
+    @Test
+    void missingUsageKeepsSuccessfulAnswerButFlagsAccountingForNextRequest() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "missing-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        Map<String, Object> response = improve(request("usage missing", null, null), AUTHORIZATION);
+        assertEquals(false, response.get("replayed"));
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("missing-permit"), any(Map.class));
+        verify(memberRequestGuard).usageMissing(permit);
+        verify(memberRequestGuard).release(permit);
+        verify(makeThreadRepository).save(any(MakeThread.class));
+    }
+
 	@Test
 	void anonymousImproveDoesNotSaveThread() {
 		when(
 				authService.currentMemberIdOrNull(null)).thenReturn(null);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"운동 계획을 만들어줘",
 						null,
 						null),
 				null);
 
+		verifyNoInteractions(ragUsageRecorder);
 		assertNull(response.get("conversationId"));
 		assertNull(response.get("threadId"));
 		assertEquals(
@@ -118,6 +159,35 @@ class PromptImproveConversationTest {
 	}
 
 	@Test
+	void anonymousImproveCompletesReservedGuestUse() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		String session = "00000000-0000-4000-8000-000000000002";
+		GuestUsageService.Permit permit = new GuestUsageService.Permit("hash", "reservation-1");
+		when(guestUsageService.reserve(session)).thenReturn(permit);
+
+		controller.improve(request("운동 계획을 만들어줘", null, null), null, session);
+
+		verify(guestUsageService).reserve(session);
+		verify(guestUsageService).complete(permit);
+		verify(guestUsageService, never()).release(permit);
+	}
+
+	@Test
+	void aiFailureReleasesReservedGuestUse() {
+		when(authService.currentMemberIdOrNull(null)).thenReturn(null);
+		String session = "00000000-0000-4000-8000-000000000003";
+		GuestUsageService.Permit permit = new GuestUsageService.Permit("hash", "reservation-2");
+		when(guestUsageService.reserve(session)).thenReturn(permit);
+		useRagResponse(HttpStatus.SERVICE_UNAVAILABLE, "{}");
+
+		assertThrows(ApiException.class,
+				() -> controller.improve(request("운동 계획을 만들어줘", null, null), null, session));
+
+		verify(guestUsageService).release(permit);
+		verify(guestUsageService, never()).complete(permit);
+	}
+
+	@Test
 	void loggedInFirstImproveCreatesThread()
 			throws Exception {
 		when(
@@ -125,7 +195,7 @@ class PromptImproveConversationTest {
 						AUTHORIZATION))
 				.thenReturn(7L);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"운동 계획을 만들어줘",
 						null,
@@ -202,7 +272,7 @@ class PromptImproveConversationTest {
 								7L))
 				.thenReturn(Optional.of(existingThread));
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"두 번째 요청",
 						null,
@@ -275,7 +345,7 @@ class PromptImproveConversationTest {
 		when(makeThreadRepository.findByIdAndMemberId(42L, 7L))
 				.thenReturn(Optional.of(existingThread));
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				new PromptController.ImproveRequest(
 						"운동 계획을 만들어줘",
 						"prompt_techniques",
@@ -288,6 +358,7 @@ class PromptImproveConversationTest {
 				AUTHORIZATION
 		);
 
+		verifyNoInteractions(ragUsageRecorder);
 		assertEquals(true, response.get("replayed"));
 		assertEquals(
 				"저장된 개선 프롬프트",
@@ -305,7 +376,7 @@ class PromptImproveConversationTest {
 		when(authService.currentMemberIdOrNull(AUTHORIZATION))
 				.thenReturn(7L);
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				new PromptController.ImproveRequest(
 						"운동 계획을 만들어줘",
 						"prompt_techniques",
@@ -336,12 +407,41 @@ class PromptImproveConversationTest {
 				"request-new-123",
 				response.get("requestId")
 		);
+		verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.argThat(id -> id != null && !id.equals("request-new-123")), any(Map.class));
 		assertEquals(false, response.get("replayed"));
 		assertEquals(
 				"request-new-123",
 				captor.getValue().getInitialRequestId()
 		);
 	}
+
+    @Test
+    void sameClientRequestIdInDifferentThreadsGetsTwoDistinctServerUsageKeys() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var firstPermit = new MemberRequestGuard.Permit(7L, "server-invocation-a");
+        var secondPermit = new MemberRequestGuard.Permit(7L, "server-invocation-b");
+        when(memberRequestGuard.acquire(7L)).thenReturn(firstPermit, secondPermit);
+
+        MakeThread firstThread = new MakeThread(7L, "one", "[]", null);
+        MakeThread secondThread = new MakeThread(7L, "two", "[]", null);
+        ReflectionTestUtils.setField(firstThread, "id", 111L);
+        ReflectionTestUtils.setField(secondThread, "id", 222L);
+        when(makeThreadRepository.findByIdAndMemberId(111L, 7L)).thenReturn(Optional.of(firstThread));
+        when(makeThreadRepository.findByIdAndMemberId(222L, 7L)).thenReturn(Optional.of(secondThread));
+
+        improve(new PromptController.ImproveRequest(
+                "different question one", "prompt_techniques", null, 111L, null, "same-client-id", List.of()), AUTHORIZATION);
+        improve(new PromptController.ImproveRequest(
+                "different question two", "prompt_techniques", null, 222L, null, "same-client-id", List.of()), AUTHORIZATION);
+
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("server-invocation-a"), any(Map.class));
+        verify(ragUsageRecorder).record(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq("server-invocation-b"), any(Map.class));
+        verify(memberRequestGuard).release(firstPermit);
+        verify(memberRequestGuard).release(secondPermit);
+    }
 
 	@Test
 	void repeatedInitialRequestIdReplaysTheCreatedThreadWithoutThreadId()
@@ -360,7 +460,7 @@ class PromptImproveConversationTest {
 						List.of()
 				);
 
-		Map<String, Object> first = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> first = improve(request, AUTHORIZATION);
 		ArgumentCaptor<MakeThread> captor = ArgumentCaptor.forClass(MakeThread.class);
 		verify(makeThreadRepository).save(captor.capture());
 		MakeThread created = captor.getValue();
@@ -370,7 +470,7 @@ class PromptImproveConversationTest {
 				"initial-request-123"
 		)).thenReturn(Optional.of(created));
 
-		Map<String, Object> replay = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> replay = improve(request, AUTHORIZATION);
 
 		assertEquals(first.get("threadId"), replay.get("threadId"));
 		assertEquals(true, replay.get("replayed"));
@@ -418,7 +518,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						new PromptController.ImproveRequest(
 								"다른 요청",
 								"prompt_techniques",
@@ -452,7 +552,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						new PromptController.ImproveRequest(
 								"운동 계획을 만들어줘",
 								"prompt_techniques",
@@ -486,7 +586,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"이어서 개선해줘",
 								null,
@@ -518,7 +618,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"이어서 개선해줘",
 								null,
@@ -569,7 +669,7 @@ class PromptImproveConversationTest {
 						List.of()
 				);
 
-		Map<String, Object> response = controller.improve(request, AUTHORIZATION);
+		Map<String, Object> response = improve(request, AUTHORIZATION);
 
 		assertEquals(42L, response.get("conversationId"));
 		assertEquals(42L, response.get("threadId"));
@@ -600,7 +700,10 @@ class PromptImproveConversationTest {
 				makeThreadRepository,
 				objectMapper,
 				webClientBuilder,
-				Duration.ofSeconds(75)
+				Duration.ofSeconds(75),
+				guestUsageService,
+                ragUsageRecorder,
+                memberRequestGuard
 		);
 
 		ReflectionTestUtils.setField(
@@ -622,7 +725,10 @@ class PromptImproveConversationTest {
 					makeThreadRepository,
 					objectMapper,
 					webClientBuilder,
-					timeout
+					timeout,
+					guestUsageService,
+                ragUsageRecorder,
+                memberRequestGuard
 			);
 
 			ReflectionTestUtils.setField(
@@ -679,7 +785,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(request, AUTHORIZATION));
+				() -> improve(request, AUTHORIZATION));
 
 		assertEquals(400, exception.getStatusCode().value());
 		assertEquals("THREAD_ID_MISMATCH", exception.getCode());
@@ -712,7 +818,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request("이어서 개선해줘", null, 42L),
 						AUTHORIZATION));
 
@@ -731,7 +837,7 @@ class PromptImproveConversationTest {
 	void rejectsBlankPrompt() {
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"   ",
 								null,
@@ -751,6 +857,37 @@ class PromptImproveConversationTest {
 				never()).save(any(MakeThread.class));
 	}
 
+    @Test
+    void memberRagNotFoundCountsActualInvocationAndUsesProvidedRequestId() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "not-found-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":{\"code\":\"NO_EVIDENCE\"}}");
+
+        Map<String, Object> response = improve(new PromptController.ImproveRequest(
+                "관련 기법 찾기", "prompt_techniques", null, null, null,
+                "no-evidence-request", List.of()), AUTHORIZATION);
+
+        assertEquals("no_evidence", response.get("ragStatus"));
+        verify(ragUsageRecorder).recordNoEvidence(7L, "not-found-permit");
+        verify(memberRequestGuard).release(permit);
+    }
+
+    @Test
+    void genericRag404IsNotChargedOrSaved() {
+        when(authService.currentMemberIdOrNull(AUTHORIZATION)).thenReturn(7L);
+        var permit = new MemberRequestGuard.Permit(7L, "generic-404-permit");
+        when(memberRequestGuard.acquire(7L)).thenReturn(permit);
+        useRagResponse(HttpStatus.NOT_FOUND, "{\"detail\":\"Not Found\"}");
+
+        ApiException error = assertThrows(ApiException.class,
+                () -> improve(request("valid prompt", null, null), AUTHORIZATION));
+        assertEquals("AI_SERVICE_UNAVAILABLE", error.getCode());
+        verifyNoInteractions(ragUsageRecorder);
+        verify(makeThreadRepository, never()).save(any(MakeThread.class));
+        verify(memberRequestGuard).release(permit);
+    }
+
 	@Test
 	void ragNotFoundReturnsNoEvidence() {
 		when(
@@ -760,11 +897,11 @@ class PromptImproveConversationTest {
 				HttpStatus.NOT_FOUND,
 				"""
 						{
-						  "detail": "관련 근거를 찾지 못했습니다."
+						  "detail": "입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
 						}
 						""");
 
-		Map response = controller.improve(
+		Map response = improve(
 				request(
 						"자기소개서 프롬프트를 만들어줘",
 						null,
@@ -810,7 +947,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"글 써줘",
 						null,
@@ -847,7 +984,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request(
 						"좋은 글 써줘",
 						null,
@@ -875,7 +1012,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request("글을 써줘", null, null),
 				null);
 
@@ -902,7 +1039,7 @@ class PromptImproveConversationTest {
 						}
 						""");
 
-		Map<String, Object> response = controller.improve(
+		Map<String, Object> response = improve(
 				request("온보딩 글을 써줘", null, null),
 				AUTHORIZATION);
 
@@ -937,7 +1074,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"프롬프트를 개선해줘",
 								null,
@@ -966,7 +1103,7 @@ class PromptImproveConversationTest {
 
 			ApiException exception = assertThrows(
 					ApiException.class,
-					() -> controller.improve(
+					() -> improve(
 							request(
 									"프롬프트를 개선해줘",
 									null,
@@ -1002,7 +1139,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						request(
 								"프롬프트를 개선해줘",
 								null,
@@ -1088,7 +1225,7 @@ class PromptImproveConversationTest {
 		).thenReturn(Optional.of(thread));
 
 		Map<String, Object> response =
-				controller.improve(
+				improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1204,7 +1341,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"답변을 수정",
 								42L,
@@ -1264,7 +1401,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1295,7 +1432,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								null,
@@ -1324,7 +1461,7 @@ class PromptImproveConversationTest {
 
 		ApiException exception = assertThrows(
 				ApiException.class,
-				() -> controller.improve(
+				() -> improve(
 						editRequest(
 								"수정된 질문",
 								42L,
@@ -1359,6 +1496,11 @@ class PromptImproveConversationTest {
 				messageId,
 				List.of()
 		);
+	}
+
+	private Map<String, Object> improve(PromptController.ImproveRequest request, String authorization) {
+		return controller.improve(request, authorization,
+				"00000000-0000-4000-8000-000000000001");
 	}
 
 	private PromptController.ImproveRequest request(

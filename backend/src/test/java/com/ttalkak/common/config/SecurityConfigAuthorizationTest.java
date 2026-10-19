@@ -1,5 +1,6 @@
 package com.ttalkak.common.config;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -13,7 +14,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.stream.Stream;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -43,6 +46,25 @@ class SecurityConfigAuthorizationTest {
                 )
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void publishedChromeWebStoreExtensionCanCallImproveApiWithCorsPreflight() throws Exception {
+        String origin = "chrome-extension://dgbmmjembonnhfkknohmbhlepagicnpc";
+        mockMvc.perform(options("/api/prompts/improve")
+                        .header("Origin", origin)
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "authorization,content-type,x-session-uuid"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", origin));
+    }
+
+    @Test
+    void unknownChromeExtensionIsNotAllowedByDefaultCorsPolicy() throws Exception {
+        mockMvc.perform(options("/api/prompts/improve")
+                        .header("Origin", "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
     }
 
     private static Stream<Arguments> generalUserWriteEndpoints() {

@@ -2,16 +2,17 @@
 
 Use this checklist for the production Extension only. The unpacked `dist-dev` Extension and its fixed development ID are not production release evidence.
 
-The release is blocked while any production value is `TBD`. Set `VITE_BACKEND_API_URL`, `TTALKAK_PRODUCTION_EXTENSION_ID`, `TTALKAK_PRIVACY_POLICY_URL`, `TTALKAK_SUPPORT_URL`, and `TTALKAK_RELEASE_OWNER`, then run `npm run release:prepare` in `extension`. The command builds the production artifact and fails unless its manifest, live CORS preflight, privacy policy, and support page match the supplied values.
+The release is blocked while any production value is `TBD`. Set `VITE_BACKEND_API_URL`, `VITE_WEB_APP_URL`, `TTALKAK_PRODUCTION_EXTENSION_ID`, `TTALKAK_PRIVACY_POLICY_URL`, `TTALKAK_SUPPORT_URL`, and `TTALKAK_RELEASE_OWNER`, then run `npm run release:prepare` in `extension`. The command builds the production artifact and fails unless its manifest, live CORS preflight, privacy policy, support page, and web account destination match the supplied values.
 
-The same mandatory gate is available in GitHub Actions as **Extension production release smoke**. Run it manually with the five confirmed production values. A successful run uploads the exact `dist-prod` artifact that passed configuration, live CORS, privacy-policy, and support-page checks; do not publish artifacts from a failed or skipped run.
+The same mandatory gate is available in GitHub Actions as **Extension production release smoke**. Run it manually with the six confirmed production values. A successful run uploads the exact `dist-prod` artifact that passed configuration, live CORS, privacy-policy, and support-page checks; do not publish artifacts from a failed or skipped run.
 
 ## Configuration
 
-- [ ] Production HTTPS Spring Boot API URL is confirmed.
+- [ ] Public production API HTTPS URL is confirmed (direct Backend origin or reviewed web proxy).
+- [ ] Public TTALKAK web HTTPS URL is confirmed for 요금제·사용량 links.
 - [ ] Chrome Web Store Extension ID is recorded in `FRONTEND_OPERATING_POLICIES.md`.
 - [ ] Backend CORS allows the exact production `chrome-extension://...` origin.
-- [ ] CORS preflight permits required methods, `content-type`, `authorization`, and credentials.
+- [ ] CORS preflight permits required methods, `content-type`, `authorization`, `x-session-uuid`, and credentials.
 - [ ] Public privacy policy URL works without authentication.
 - [ ] Public support URL and monitored contact channel are available.
 - [ ] No credential, private key, token, or local `.env` file is packaged.
@@ -20,7 +21,7 @@ The same mandatory gate is available in GitHub Actions as **Extension production
 
 - [ ] Run `npm ci` in `extension`.
 - [ ] Run `npm run verify`.
-- [ ] Build with the confirmed production URL: PowerShell: `$env:VITE_BACKEND_API_URL='https://...'; npm run build:prod`; POSIX: `VITE_BACKEND_API_URL=https://... npm run build:prod`.
+- [ ] Build with the confirmed production URLs: PowerShell: set `$env:VITE_BACKEND_API_URL` and `$env:VITE_WEB_APP_URL`, then run `npm run build:prod`; POSIX: set `VITE_BACKEND_API_URL` and `VITE_WEB_APP_URL`, then run `npm run build:prod`.
 - [ ] Package only `extension/dist-prod`.
 - [ ] Confirm `dist-prod/manifest.json` contains no development public key.
 - [ ] Confirm production host permissions contain no localhost, loopback, example, `.test`, or `.invalid` host.
@@ -51,6 +52,9 @@ Current permissions and their release rationale:
 - [ ] Side panel opens and reports backend connection correctly.
 - [ ] Guest improve and ask-follow-up flows work.
 - [ ] Login, session restore, logout, and authentication expiry work.
+- [ ] Logged-in FREE and PRO plans show the authoritative token usage and remaining allowance.
+- [ ] Usage-loading failure offers a working retry, and the token-limit state opens the web billing destination.
+- [ ] The 요금제·사용량 action opens the public web app with the billing panel requested.
 - [ ] Improve timeout is distinct from user cancellation.
 - [ ] Cancellation restores input and ignores late responses.
 - [ ] Edited resend works for guest and logged-in threads.

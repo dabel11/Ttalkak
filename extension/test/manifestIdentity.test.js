@@ -27,3 +27,25 @@ test("production manifest does not reuse the development extension key", () => {
   );
   assert.equal(manifest.key, undefined);
 });
+
+test("manifests expose localized identity and correctly sized icons", () => {
+  const extensionRoot = new URL("../", import.meta.url);
+  const manifests = ["public/manifest.json", "manifest.production.example.json"].map((file) =>
+    JSON.parse(fs.readFileSync(new URL(file, extensionRoot), "utf8"))
+  );
+  for (const manifest of manifests) {
+    assert.equal(manifest.default_locale, "ko");
+    assert.equal(manifest.name, "__MSG_extensionName__");
+    assert.equal(manifest.description, "__MSG_extensionDescription__");
+    for (const [size, relativePath] of Object.entries(manifest.icons)) {
+      const png = fs.readFileSync(new URL(`public/${relativePath}`, extensionRoot));
+      assert.equal(png.readUInt32BE(16), Number(size));
+      assert.equal(png.readUInt32BE(20), Number(size));
+    }
+  }
+  for (const locale of ["ko", "en"]) {
+    const messages = JSON.parse(fs.readFileSync(new URL(`public/_locales/${locale}/messages.json`, extensionRoot), "utf8"));
+    assert.ok(messages.extensionName.message);
+    assert.ok(messages.extensionDescription.message);
+  }
+});

@@ -2,6 +2,11 @@ const { expect } = require("@playwright/test");
 
 async function gotoApp(page, path = "/") {
   const diagnostics = { consoleErrors: [], pageErrors: [], failedRequests: [] };
+  await page.addInitScript(() => {
+    if (typeof window.TTALKAK_DEMO_FALLBACK_ENABLED !== "boolean") {
+      window.TTALKAK_DEMO_FALLBACK_ENABLED = false;
+    }
+  });
   page.on("console", (message) => {
     if (message.type() === "error") diagnostics.consoleErrors.push(message.text());
   });

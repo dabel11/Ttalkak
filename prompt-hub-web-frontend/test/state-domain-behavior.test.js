@@ -69,6 +69,9 @@ test("persistence state domain safely reads writes and clears payloads", () => {
   const state = stateApi.createInitialState();
   state.isLoggedIn = true;
   state.authToken = "token";
+  state.recentThreads = [{ id: "guest-transfer", messages: [] }];
+  state.pendingGuestThreadTransferId = "guest-transfer";
+  state.pendingGuestThreadTransferErrorCode = "FREE_TRIAL_LIMIT_EXCEEDED";
   const popularPrompts = [{ id: 1 }];
   const savedPrompts = [{ id: 2, savedByMe: true, saves: 1 }];
   stateApi.persistAppState({ state, popularPrompts, savedPrompts, commentsByPrompt: {}, saveCurrentAccountScope: () => {} });
@@ -80,6 +83,39 @@ test("persistence state domain safely reads writes and clears payloads", () => {
     normalizeSavedPromptOwnership: () => {}, restoreCurrentAccountScope: () => {},
   });
   assert.equal(restored.isLoggedIn, true);
+  assert.equal(restored.pendingGuestThreadTransferId, "guest-transfer");
+  assert.equal(restored.pendingGuestThreadTransferErrorCode, "FREE_TRIAL_LIMIT_EXCEEDED");
+});
+
+test("session cleanup removes account-bound Make conversations and folders", () => {
+  const state = stateApi.createInitialState();
+  Object.assign(state, {
+    isLoggedIn: true,
+    currentUser: "Member",
+    currentUserId: "7",
+    activeThreadId: "42",
+    recentThreads: [
+      { id: "42", serverId: "42", messages: [{ role: "user", content: "private prompt" }] },
+      { id: "local-thread", messages: [{ role: "user", content: "device-only prompt" }] },
+    ],
+    messages: [{ role: "user", content: "private prompt" }],
+    makeFolders: [
+      { id: "uncategorized", name: "미분류" },
+      { id: "9", name: "Private folder" },
+      { id: "folder-local", name: "Device folder" },
+    ],
+    activeFolderId: "9",
+    composerDraft: "private draft",
+  });
+
+  stateApi.clearAuthenticatedSessionState(state);
+
+  assert.deepEqual(state.recentThreads.map(({ id }) => id), ["local-thread"]);
+  assert.deepEqual(state.messages, []);
+  assert.equal(state.activeThreadId, null);
+  assert.deepEqual(state.makeFolders.map(({ id }) => id), ["uncategorized", "folder-local"]);
+  assert.equal(state.activeFolderId, "all");
+  assert.equal(state.composerDraft, "");
 });
 
 test("prompt interaction admin and Make state domains apply representative mutations", () => {
@@ -128,6 +164,22 @@ test("prompt interaction admin and Make state domains apply representative mutat
   stateApi.appendMakeUserMessageState(state, "thread", { id: "u1", role: "user", content: "hello" });
   stateApi.appendMakeAssistantMessageState(state, { id: "a1", role: "assistant", content: "answer" });
   assert.equal(state.messages.length, 2);
+});
+
+test("deleting the pending Guest thread also clears its recovery marker", () => {
+  const state = stateApi.createInitialState();
+  state.recentThreads = [{ id: "pending-guest", messages: [{ role: "user", content: "retry me" }] }];
+  state.activeThreadId = "pending-guest";
+  state.messages = state.recentThreads[0].messages;
+  state.pendingGuestThreadTransferId = "pending-guest";
+  state.pendingGuestThreadTransferErrorCode = "FREE_TRIAL_LIMIT_EXCEEDED";
+
+  stateApi.deleteMakeThreadState(state, "pending-guest");
+
+  assert.equal(state.pendingGuestThreadTransferId, null);
+  assert.equal(state.pendingGuestThreadTransferErrorCode, "");
+  assert.deepEqual(state.recentThreads, []);
+  assert.deepEqual(state.messages, []);
 });
 
 test("prompt state domain handles pending, edited, shared and deleted transitions", () => {

@@ -1,0 +1,45 @@
+{
+  "_about": {
+    "purpose": "카드 층 분류의 사람 판정. LLM 분류 결과를 덮어쓴다.",
+    "why": "층 경계는 단일 LLM 판정으로 안정적으로 안 잡힌다 — 세 번의 프롬프트 개정이 세 번 모두 다른 표면 속성에 달라붙었다(v1 '붙는가'→문법 / v1-2 meta 과흡인 / v2 '구체적인가'→형식). temp=0 인데도 경계 카드는 실행마다 흔들린다. 그래서 쉬운 다수는 LLM 이, 경계 소수는 사람이 정한다.",
+    "scope": "여기 없는 카드는 LLM 분류를 그대로 쓴다. 최소한으로 유지할 것 — 이 파일이 커지면 분류기가 제 역할을 못 한다는 뜻이다.",
+    "separation": "⚠️ `eval/layer_set.json`(회귀 셋)과 **파일을 분리**한다. 합치면 회귀 점수가 구조적으로 100% 가 돼 분류기 품질을 측정할 수 없다. `eval/layer_eval.py --from <배치출력>` 은 override 이전의 **원본 LLM 출력**을 채점한다.",
+    "updated": "2026-09-13",
+    "against": "LAYERS_VERSION v2 분류 결과"
+  },
+  "overrides": {
+    "Chunk Design Prompting":              {"layer": "system",     "why": "RAG 청크 설계 — 검색 인덱스를 만드는 쪽 관심사다"},
+    "Instruction Hierarchy Prompting":     {"layer": "system",     "why": "시스템>개발자>사용자 우선순위 — 시스템 계층 규칙"},
+    "Retrieval Failure Handling":          {"layer": "system",     "why": "검색 인프라가 있어야 성립"},
+    "Retrieval Augmentation":              {"layer": "system",     "why": "검색 인프라가 있어야 성립"},
+    "Conflict Resolution Prompting":       {"layer": "system",     "why": "시스템 지시 우선순위"},
+    "Fallback Response Handling":          {"layer": "system",     "why": "안전 필터 처리 — 시스템 계층"},
+    "Reflexion":                           {"layer": "system",     "why": "이전 출력·피드백 루프가 있어야 성립"},
+    "Program-Aided Language Models":       {"layer": "system",     "why": "프로그램 실행 결과가 있어야 성립"},
+    "Space Efficiency":                    {"layer": "system",     "why": "토큰 절약 — 파이프라인 관심사"},
+
+    "Prompt Governance Prompting":         {"layer": "meta",       "why": "프롬프트 라이브러리 관리"},
+    "Synthetic Data Generation Prompting": {"layer": "meta",       "why": "학습 데이터 생성"},
+    "AutoPrompt":                          {"layer": "meta",       "why": "프롬프트 자동 생성 — 딸깍이 이미 하는 일"},
+    "Retrieval-Augmented Few-Shot Prompting": {"layer": "meta",    "why": "검색 예시로 새 프롬프트 생성"},
+
+    "Prompt Generator Pattern":            {"layer": "meta",       "why": "'바로 복붙 가능한 최종 프롬프트를 생성하라' — 딸깍 그 자체"},
+    "Request Normalization Prompting":     {"layer": "meta",       "why": "사용자 요청을 표준 스키마로 정규화 — 딸깍의 전처리"},
+    "Data Provenance Prompting":           {"layer": "system",     "why": "source_id·source_url — 검색 파이프라인 관심사"},
+    "Adversarial Prompt Detector":         {"layer": "system",     "why": "주입 공격 탐지 — 시스템 계층"},
+    "Few-shot learning":                   {"layer": "degenerate", "why": "Prompt Template 없음"},
+    "Knowledge generation":                {"layer": "degenerate", "why": "Prompt Template 없음"},
+    "Prompt leaking":                      {"layer": "degenerate", "why": "Prompt Template 없음"},
+
+    "Zero-Shot":                           {"layer": "degenerate", "why": "Prompt Template 이 'Text: {내용}' 뿐"},
+    "Completion Prompting":                {"layer": "degenerate", "why": "'시작 부분: {시작}' 뿐"},
+    "Start Simple":                        {"layer": "degenerate", "why": "Prompt Template 없음"},
+    "Self-Consistency Sampling":           {"layer": "degenerate", "why": "Prompt Template 없음"}
+  },
+  "_decided": {
+    "Prompt Compression": "user_instruction 유지 — 생성기에 유용한 지침으로 판단(2026-09-13 팀 결정). override 하지 않는다",
+    "Prompt Expansion": "user_instruction 유지 — 동일",
+    "Source-Bounded Answering": "user_instruction 유지 — 사용자가 자료를 붙여넣고 쓸 수 있다",
+    "Add Defense in the Instruction": "user_instruction 유지 — 일반 제약 지시문으로 읽힌다"
+  }
+}

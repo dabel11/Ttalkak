@@ -10,7 +10,8 @@
 # ── Secrets ─────────────────────────────────────────────────
 **/.env
 **/.env.local
-**/.env.example
+.env.merchant-review
+**/.env.bak*
 *.pem
 *.key
 

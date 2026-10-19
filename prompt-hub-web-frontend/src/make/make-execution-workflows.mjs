@@ -1,6 +1,6 @@
 "use strict";
 export function createMakeExecutionWorkflows(ctx) {
-    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState, persistState } = ctx;
+    const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, navigateTo, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState, persistState } = ctx;
     async function copyMakeMessage(messageId) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
@@ -51,33 +51,42 @@ export function createMakeExecutionWorkflows(ctx) {
         tags: [],
       };
       state.shareError = "";
-      state.route = "share";
-      render();
+      if (typeof navigateTo === "function") navigateTo("share");
+      else {
+        state.route = "share";
+        render();
+      }
     }
 
-    function openExecuteModal(messageId) {
+    function openExecuteModal(messageId, skipPlaceholderConfirmation = false) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
-      if (!confirmPlaceholderExecution(getFinalPromptText(message))) return;
+      if (!skipPlaceholderConfirmation && requestPlaceholderConfirmation("execute-placeholder-message", messageId, getFinalPromptText(message))) return;
       state.executeMessageId = messageId;
       state.executePromptId = null;
       renderPreservingMakeScroll();
     }
 
-    function openPromptExecuteModal(promptId) {
+    function openPromptExecuteModal(promptId, skipPlaceholderConfirmation = false) {
       const prompt = findPromptById(promptId);
       if (!prompt) return;
-      if (!confirmPlaceholderExecution(String(prompt.text || ""))) return;
+      if (!skipPlaceholderConfirmation && requestPlaceholderConfirmation("execute-placeholder-prompt", promptId, String(prompt.text || ""))) return;
       state.executePromptId = promptId;
       state.executeMessageId = null;
       renderPreservingMakeScroll();
     }
 
-    function confirmPlaceholderExecution(text) {
-      if (!hasPromptPlaceholders(text)) return true;
-      return window.confirm(
-        "아직 채워지지 않은 정보가 있습니다.\n\n그대로 실행하거나, 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
-      );
+    function requestPlaceholderConfirmation(type, targetId, text) {
+      if (!hasPromptPlaceholders(text)) return false;
+      openConfirmAction?.({
+        type,
+        targetId,
+        title: "입력할 정보가 남아 있습니다",
+        message: "채워지지 않은 정보가 있습니다. 그대로 실행하거나 취소한 뒤 질문에 답해 더 정확하게 만들 수 있습니다.",
+        confirmLabel: "그대로 실행",
+        danger: false,
+      });
+      return true;
     }
 
     function hasPromptPlaceholders(text) {
@@ -101,7 +110,7 @@ export function createMakeExecutionWorkflows(ctx) {
       } else if (copied) {
         showNotice(`${target.name}로 이동합니다. 복사된 프롬프트를 입력란에 붙여넣어 실행하세요.`);
       } else {
-        showNotice(`${target.name}로 이동합니다. 복사가 제한되면 Make의 Copy 버튼으로 다시 복사해주세요.`);
+        showNotice(`${target.name}로 이동합니다. 복사가 제한되면 복사 버튼으로 다시 복사해주세요.`);
       }
       renderPreservingMakeScroll();
     }
@@ -181,5 +190,5 @@ export function createMakeExecutionWorkflows(ctx) {
       persistState?.();
     }
 
-    return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, confirmPlaceholderExecution, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
+    return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, requestPlaceholderConfirmation, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
   }

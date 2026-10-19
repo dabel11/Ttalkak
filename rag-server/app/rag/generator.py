@@ -1,10 +1,14 @@
 import os
+import re
 import time
+
 from google import genai
 from google.genai import types
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 
-import re
+from app.core import usage
+from app.core.timeouts import GEN_MILLIS, GEN_SECONDS
+from app.rag.analyzer import is_source_field
 
 # 한글 단어에 '직접 붙어' 끼어든 한자(Han) 노이즈만 제거한다.
 # (Groq 70b가 한글 출력에 간혹 한자를 글자에 붙여 토해내는 현상 대응)
@@ -23,25 +27,74 @@ def _strip_cjk_noise(text: str) -> str:
     return _CJK_NOISE_RE.sub("", text)
 
 
-# ── 토큰 추정 (llama 토크나이저 실측 기반) ───────────────────
-# 2026-07-23 usage.prompt_tokens 실측: 한국어 0.9~1.7 chars/tok(문체 편차 큼 — 고유명사
-# 많은 구어체가 최악), 영어 5.4 chars/tok. 종전의 일괄 chars/3 은 한국어를 최대 2.3배
-# 과소추정 → 413 방어가 뚫릴 수 있었다. 계수는 '과소추정 금지' 우선으로 최악 케이스에
-# 맞춤(한글 /1.0, 영문·숫자·공백 /4, 기호·기타 /1.5) — 실측 4샘플에서 과소추정 ≤5%,
-# 과대추정 +21~36%. 과대추정은 출력 예약만 줄이고(want=4096 여유로 평시 무영향) 413은
-# 못 내므로 안전한 방향이다.
+# ── 토큰 추정 (gpt-oss 토크나이저 실측 기반) ─────────────────
+# 과소추정하면 입력+출력예약이 TPM 을 넘어 413, 과대추정하면 출력 예약이 괜히 깎여
+# gpt-oss 가 추론 토큰에 예산을 다 쓰고 JSON 을 못 끝내 400 — **둘 다 실패**다.
+#
+# 2026-09-20 재보정(usage.prompt_tokens, gpt-oss-20b — 120b 와 같은 o200k 토크나이저):
+#   종전 계수(한글 /1.0 · 영숫자 /4 · 기타 /1.5)는 2026-07-23 **llama** 실측 기준이라
+#   gpt-oss 에서 운영 요청(한국어 위주)을 **17~18% 과대추정**했다(8건 비율 0.823~0.832).
+#   요청당 출력 예약 ~1,000~1,240 토큰이 헛되이 깎여, 예산 777~1,515 로 추론만으로도 모자랐다.
+#   그렇다고 일괄 ×0.83 은 위험하다 — 문자 유형별로 비율이 크게 다르다:
+#     한국어 0.73 · 영어 0.76 · 코드 0.82 · JSON/기호 0.97 · **일본어 1.07(종전도 과소추정)**
+#   게다가 **한국어 자체가 문체에 따라 0.62~1.0 토큰/글자**로 갈린다(격식체 회의록 0.62,
+#   고유명사 많은 구어체 1.0). 한 계수로는 둘 다 안전하게 못 맞춘다.
+#
+# → 텍스트를 출처로 나눈다.
+#   · 사용자 입력(질의·대화·분석값) — 문체를 모른다 → **보수 계수**(한글 1.0). `_est_tokens`
+#   · 고정 입력(SYSTEM_PROMPT·코퍼스 기법 카드) — 우리가 쓴 텍스트라 **전량을 실측 검증**할 수
+#     있다(eval/token_calib.py --corpus) → **보정 계수**(한글 0.75). `_est_known_tokens`
+#     단 **예시 카드는 따로** — 사용자의 거친 요청을 말투째 인용하므로 계수가 더 높다(`_est_example_tokens`).
+#   요청 입력의 ~85% 가 고정 입력이라 이것만으로 예산이 요청당 ~+1,000 돌아온다.
+#   기타 문자는 둘 다 0.8(일본어 0.71·JSON 기호 0.68 — 종전 1/1.5=0.67 은 일본어를 과소추정했다).
 _HANGUL_RE = re.compile(r"[가-힣]")
 _ASCII_RE  = re.compile(r"[a-zA-Z0-9 \n]")
+_USER_HANGUL  = 1.0    # 구어체·고유명사 최악 0.999 (tests/test_token_budget.py)
+_KNOWN_HANGUL = 0.75   # 고정 입력 — 코퍼스 기법 카드 34묶음 실측 필요값 최대 0.678(여유 10%)
+# 예시 카드는 사용자 말투를 인용하지만 **코퍼스라 전량 실측할 수 있다** — 보수 계수(1.0)로 재면
+# 실제보다 23~36% 크게 잡혀 출력 예산을 그만큼 깎는다. 33묶음 실측 필요값 최대 0.774 → 0.85(여유 10%).
+# 예시를 다시 생성하면(ingestion/gen_examples.py) `token_calib --corpus` 로 재검증할 것.
+_EXAMPLE_HANGUL = 0.85
 
 
-def _est_tokens(text: str) -> int:
-    """텍스트의 llama 토큰 수 추정 — 한글/영숫자·공백/기타를 분리해 계산."""
+def _est_by_class(text: str, hangul_rate: float) -> int:
     if not text:
         return 0
     hangul = len(_HANGUL_RE.findall(text))
     ascii_ = len(_ASCII_RE.findall(text))
     other  = len(text) - hangul - ascii_
-    return int(hangul / 1.0 + ascii_ / 4 + other / 1.5)
+    return int(hangul * hangul_rate + ascii_ * 0.25 + other * 0.8)
+
+
+def _est_tokens(text: str) -> int:
+    """문체를 모르는 텍스트(사용자 입력)의 gpt-oss 토큰 수 — 보수 추정(과소추정 금지)."""
+    return _est_by_class(text, _USER_HANGUL)
+
+
+def _est_example_tokens(text: str) -> int:
+    """예시 카드 블록의 gpt-oss 토큰 수 — 사용자 말투 인용이라 고정 입력보다 높게, 실측 보정."""
+    return _est_by_class(text, _EXAMPLE_HANGUL)
+
+
+def _est_known_tokens(text: str) -> int:
+    """우리가 쓴 고정 텍스트(SYSTEM_PROMPT·기법 카드)의 gpt-oss 토큰 수 — 실측 보정 계수.
+    예시 카드는 사용자 말투를 인용하므로 여기에 쓰지 않는다(`estimate_input` 참조)."""
+    return _est_by_class(text, _KNOWN_HANGUL)
+
+
+def _gen_reasoning_effort() -> str | None:
+    """생성기 추론량. GEN_REASONING_EFFORT 환경변수로 지정(미설정=모델 기본값).
+
+    gpt-oss 계열은 최종 출력 앞에 추론 토큰을 먼저 쓴다. analyzer·query_transform 에서는
+    그 때문에 예산이 소진돼 아예 실패했고(2026-09-13), 'low' 로 완료 토큰이 1/6 로 줄었다.
+    생성기는 `_fit_max_tokens` 동적 산정 덕에 즉사하지는 않았지만, 추론 토큰이 출력 예약을
+    갉아먹으므로 TPM 여유·긴 원문 verbatim 여력에 영향이 있다.
+
+    ⚠️ 다만 생성은 analyzer 와 달리 **추론량이 품질에 직결될 수 있다**(모드 판정·기법 반영·
+    원문 보존). 그래서 기본값을 바꾸지 않고 A/B 용 토글로만 둔다 — 측정 없이 켜지 말 것.
+    """
+    value = os.environ.get("GEN_REASONING_EFFORT", "").strip().lower()
+    return value if value in ("low", "medium", "high") else None
 
 
 def _gen_temperature() -> float:
@@ -323,14 +376,23 @@ def build_analysis_block(analysis: dict | None) -> str:
     if not analysis or not analysis.get("fields"):
         return ""
     lines = [f"작업유형: {analysis.get('taskType') or '(미상)'}"]
+    template = bool(analysis.get("templateRequest"))
     for f in analysis["fields"]:
         role, status = f.get("role"), f.get("status")
         if status == "filled":
             lines.append(f"- {f['name']} [{role}] = {f.get('value')}")
+        elif template and is_source_field(f["name"]):
+            # 템플릿 요청("~하는 프롬프트 만들어줘")의 빈 원문은 되물을 대상이 아니다.
+            # 종전 렌더("[fact] = 없음 → 빈칸 + 질문")로는 생성기가 "원문이 제공되지 않아"라며
+            # ask 로 갔다(2026-09-19 gen_set #8 — 분석기 교정 후에도 2/2 ask).
+            # SYSTEM_PROMPT 의 템플릿 예외 규칙과 같은 말을 이 요청에 붙여서 준다.
+            lines.append(f"- {f['name']} [template] = (템플릿 요청 — 원문은 사용자가 나중에 붙여넣는다. "
+                         f"되묻지 말고 [{f['name']} 붙여넣기] 빈칸을 둔 채 개선 모드)")
         elif role == "fact":
             lines.append(f"- {f['name']} [fact] = (없음 → 지어내지 말고 [{f['name']} 입력] 빈칸 + 질문)")
         elif role == "required":
-            # 분석기(8b)가 요청에 있는 값을 놓치는 경우가 있다(실측: "임영웅 콘서트 …"에서
+            # 분석기가 요청에 있는 값을 놓치는 경우가 있다(실측: llama-3.1-8b-instant 시절,
+            # 현 모델 openai/gpt-oss-20b 에서 재측정 안 됨 — "임영웅 콘서트 …"에서
             # 홍보 대상을 empty 로 판정 → 잘못된 ask). 단정 대신 '확인 요청'으로 렌더해
             # 원문을 함께 보는 생성기가 교정할 수 있게 한다.
             lines.append(f"- {f['name']} [required] = (분석기가 못 찾음 — 원문을 다시 확인해 "
@@ -354,6 +416,29 @@ def _build_context_blocks(contexts: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _compose_user_message(query: str, contexts: list[dict] | None,
+                          analysis: dict | None, has_history: bool) -> str:
+    """이번 턴의 user 메시지 — Groq·Gemini 가 **같은 본문**을 받게 하는 단일 출처.
+
+    두 백엔드가 이 조립을 각자 복제해 들고 있었다. 한쪽만 고치면 폴백·장문 라우팅으로
+    Gemini 를 탄 요청만 다른 입력을 받는다(`_build_context_blocks` 가 분리된 뒤에도 남은 중복)."""
+    blocks = [b for b in (build_analysis_block(analysis),
+                          _build_context_blocks(contexts) if contexts else "") if b]
+    if not blocks:
+        # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
+        return query
+    label = "이번 요청" if has_history else "원본 프롬프트"
+    return "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
+
+
+class _BudgetShort(Exception):
+    """출력 예산 부족 — 400(JSON 시작 전 소진) 또는 finish_reason='length'(중간 잘림)."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 # ── Groq 백엔드 ───────────────────────────────────────────────
 class GroqGenerator:
     """Groq API 사용 (무료 14,400회/일, 매우 빠름)"""
@@ -369,13 +454,30 @@ class GroqGenerator:
     }
 
     @classmethod
-    def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int) -> int:
-        """입력 길이를 추정(_est_tokens — 한글/비한글 분리 실측 계수)해 TPM 예산 안에
-        들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을 포함한 요청이 413(Request
-        too large)으로 즉사하는 것을 방지하고, 짧은 입력이면 want(기본 4096)를 그대로
-        쓴다. 하한 512. (종전 chars//3 일괄 추정은 한국어 과소추정 — 2026-07-23 보정)"""
-        est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
-        tpm = cls.TPM_LIMIT.get(groq_model, 12000)
+    def _tpm(cls, groq_model: str) -> int:
+        """이 모델의 TPM 예산. GROQ_TPM_LIMIT 가 있으면 그 값(유료 티어용), 없으면 무료 표.
+
+        ⚠️ 2026-09-20: 상수가 무료 8,000 에 고정돼 있어 **결제만 해서는 출력 예산이 안 늘었다.**
+        실측(120b 8건): 자연 출력 980~2,200+(추론 594~1,719)인데 이 예산이 준 max_tokens 는
+        782~1,510 → 5/8 가 추론에 예산을 다 쓰고 400 json_validate_failed 로 떨어질 크기.
+        Developer 티어(gpt-oss TPM 250K)로 올리면 .env 에 GROQ_TPM_LIMIT=250000."""
+        raw = os.environ.get("GROQ_TPM_LIMIT", "").strip()
+        if raw.isdigit() and int(raw) > 0:
+            return int(raw)
+        return cls.TPM_LIMIT.get(groq_model, 12000)
+
+    @classmethod
+    def _fit_max_tokens(cls, groq_model: str, messages: list[dict], want: int,
+                        est_input: int | None = None) -> int:
+        """입력 길이를 추정해 TPM 예산 안에 들어가는 max_tokens 를 계산. 긴 원문(회의록·코드)을
+        포함한 요청이 413(Request too large)으로 즉사하는 것을 방지하고, 짧은 입력이면
+        want(기본 4096)를 그대로 쓴다. 하한 512.
+
+        est_input 을 주면 그 값을 쓴다 — generate() 는 출처별 추정(`estimate_input`)을 넘긴다.
+        없으면 messages 전체를 사용자 입력으로 보고 보수 추정한다(출처를 모를 때의 안전한 기본)."""
+        if est_input is None:
+            est_input = sum(_est_tokens(m.get("content") or "") for m in messages) + 100
+        tpm = cls._tpm(groq_model)
         return max(512, min(want, tpm - est_input - 200))
 
     def __init__(self):
@@ -383,45 +485,74 @@ class GroqGenerator:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             raise EnvironmentError("GROQ_API_KEY 환경변수를 설정해주세요.")
-        self.client = Groq(api_key=api_key)
+        self.client = Groq(api_key=api_key, timeout=GEN_SECONDS)
         print("[Generator] Groq 백엔드 초기화 완료")
+
+    @staticmethod
+    def estimate_input(query: str, contexts: list[dict],
+                       history: list[dict] | None = None,
+                       analysis: dict | None = None) -> int:
+        """build_messages 가 만드는 입력의 토큰 추정 — **출처별로** 계수를 달리한다.
+
+        고정 입력(SYSTEM_PROMPT·기법/예시 블록)은 실측 보정 계수, 사용자에게서 온 것(질의·
+        대화 이력·분석 블록 — 분석값은 질의를 옮겨 적은 것)은 보수 계수. +100 은 대화 템플릿
+        오버헤드(실측 1메시지 71토큰)와 블록 라벨·구분자 몫이다."""
+        # ⚠️ 예시 카드는 '거친 요청'을 사용자 말투 그대로 인용한다 → 고정 입력이 아니라 사용자 문체다.
+        # 코퍼스 전량 실측(2026-09-20): 기법 카드 34묶음은 보정 계수로 1.053~1.196(과소 0)인데
+        # 예시 33묶음은 0.976~1.074 로 **3묶음이 과소추정**이었다. 예시는 보수 계수로 잰다.
+        techs = [c for c in (contexts or []) if not _is_example(c)]
+        exs   = [c for c in (contexts or []) if _is_example(c)]
+        known = _est_known_tokens(SYSTEM_PROMPT)
+        if techs:
+            known += _est_known_tokens(_build_context_blocks(techs))
+        user = _est_tokens(query) + _est_tokens(build_analysis_block(analysis))
+        if exs:
+            user += _est_example_tokens(_build_context_blocks(exs))
+        user += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
+        return known + user + 100
+
+    @staticmethod
+    def build_messages(query: str, contexts: list[dict],
+                       history: list[dict] | None = None,
+                       analysis: dict | None = None) -> list[dict]:
+        """Groq 에 보내는 messages 조립. 예산 보정 측정(eval)도 이 함수를 써서 운영과 같은 입력을 잰다."""
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages.extend(_sanitize_history(history))
+        messages.append({"role": "user", "content": _compose_user_message(
+            query, contexts, analysis, has_history=bool(messages[1:]))})
+        return messages
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
                  analysis: dict | None = None) -> str:
         groq_model = self.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
+        messages = self.build_messages(query, contexts, history, analysis)
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        messages.extend(_sanitize_history(history))
-
-        blocks = [b for b in (build_analysis_block(analysis),
-                              _build_context_blocks(contexts) if contexts else "") if b]
-        if blocks:
-            label = "원본 프롬프트" if not messages[1:] else "이번 요청"
-            user_msg = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
-        else:
-            # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달
-            user_msg = query
-        messages.append({"role": "user", "content": user_msg})
-
-        # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력·8b TPM 6k에서 413 방지)
-        max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens)
+        # TPM 예산 내로 출력 예약 동적 조정 (긴 원문 입력에서 413 방지 · 과대추정 시 400)
+        est_input = self.estimate_input(query, contexts, history, analysis)
+        max_tokens = self._fit_max_tokens(groq_model, messages, max_tokens, est_input=est_input)
 
         # 429는 대기시간이 짧으면 1회 재시도, 그 외 API 에러는 RuntimeError 로 변환
         # → main.run_generation 이 503 으로 매핑 (기존엔 groq 예외가 그대로 500).
         from groq import APIConnectionError, APIStatusError, RateLimitError
 
+        # 🔴 출력 예산 부족의 두 얼굴 — 둘 다 gpt-oss 가 JSON 앞에 쓰는 **추론 토큰** 탓이다.
+        #   ① 400 json_validate_failed : 추론이 예산을 다 먹어 JSON 이 시작도 못 함
+        #   ② finish_reason="length"   : JSON 이 중간에 잘림 → 정규식 폴백으로 **조용히** 깨진 개선안
+        # 실측(2026-09-20 #6): 예산 1,817·1,845 를 완료가 전부 소진하고 length 로 끝났다.
+        # 무료 티어에선 입력 5.6k 라 여유가 2.4k 뿐이라 예산을 더 늘릴 수 없다 →
+        # **그 요청만** 추론량을 낮춰 1회 재시도한다(기본 경로의 추론량은 그대로 — 품질 미검증 영역).
         for attempt in range(2):
             try:
-                response = self.client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=_gen_temperature(),
-                    response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
-                )
-                return _strip_cjk_noise(response.choices[0].message.content)
+                return self._complete(groq_model, messages, max_tokens, est_input,
+                                      _gen_reasoning_effort())
+            except _BudgetShort as e:
+                print(f"[Generator] 출력 예산 부족({e.reason}) → reasoning_effort=low 로 1회 재시도")
+                try:
+                    return self._complete(groq_model, messages, max_tokens, est_input, "low")
+                except _BudgetShort as e2:
+                    raise RuntimeError(f"Groq 요청 실패({e2.reason} — 출력 예산 부족)") from e2
             except RateLimitError as e:
                 wait = _retry_after_seconds(e)
                 if attempt == 0 and wait <= _RETRY_WAIT_CAP:
@@ -434,7 +565,47 @@ class GroqGenerator:
             except APIConnectionError as e:
                 raise RuntimeError(f"Groq 연결 실패: {e}") from e
             except APIStatusError as e:   # 413(Request too large)·5xx 등
+                print(f"[Generator] Groq HTTP {e.status_code} — 예산 max_tokens={max_tokens} · "
+                      f"입력 추정 {est_input}")
                 raise RuntimeError(f"Groq 요청 실패(HTTP {e.status_code})") from e
+
+    def _complete(self, groq_model: str, messages: list[dict], max_tokens: int,
+                  est_input: int, effort: str | None) -> str:
+        """Groq 1회 호출. 출력 예산이 모자라면 `_BudgetShort` 를 올린다(호출자가 재시도 판단).
+
+        배정 예산·입력 추정/실제·완료 토큰·종료 사유를 매 호출 남긴다 — 종전엔 400 이 나도
+        배정 예산을 알 길이 없어 원인 규명에 재현 스크립트가 필요했다(2026-09-16·09-20)."""
+        from groq import APIStatusError
+
+        try:
+            response = self.client.chat.completions.create(
+                model=groq_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=_gen_temperature(),
+                response_format={"type": "json_object"},  # 구조화 출력 강제 (스키마는 SYSTEM_PROMPT)
+                **({"reasoning_effort": effort} if effort else {}),
+            )
+        except APIStatusError as e:
+            if e.status_code == 400 and effort != "low":
+                raise _BudgetShort("HTTP 400") from e
+            raise
+
+        u = getattr(response, "usage", None)
+        finish = response.choices[0].finish_reason
+        if u is not None:
+            det = getattr(u, "prompt_tokens_details", None)
+            usage.record("generate", "groq", groq_model,
+                         prompt=u.prompt_tokens, completion=u.completion_tokens,
+                         cached=getattr(det, "cached_tokens", None) if det else None)
+            print(f"[Generator] 예산 max_tokens={max_tokens} · 입력 추정 {est_input}/실제 "
+                  f"{u.prompt_tokens} · 완료 {u.completion_tokens} ({finish}"
+                  f"{', effort=' + effort if effort else ''})")
+        if finish == "length" and effort != "low":
+            raise _BudgetShort("출력 잘림(length)")
+        if finish == "length":
+            print("[Generator] ⚠️ reasoning_effort=low 로도 출력이 잘렸다 — 개선안이 불완전할 수 있다")
+        return _strip_cjk_noise(response.choices[0].message.content)
 
 
 # ── Gemini 백엔드 ─────────────────────────────────────────────
@@ -462,6 +633,26 @@ def _resolve_gemini_model(model: str) -> str:
     return model
 
 
+def default_model(backend: str) -> str:
+    """백엔드별 '지금 실제로 호출 가능한' 기본 모델. 평가 스크립트의 단일 출처다.
+
+    왜 여기 있나: 이 값이 generator·uplift_eval·run_multi_turn_eval 세 곳에
+    **중복**돼 있었다. 2026-08-21 Groq 가 llama-3.x 를 폐기했을 때 generator 만
+    고쳐졌고 나머지 둘은 폐기 모델을 참조한 채 남아 **uplift 측정 축이 통째로
+    죽어 있었다**(404). 모델 교체는 앞으로도 반복되므로 출처를 하나로 둔다.
+
+    ⚠️ 평가 스크립트의 '중립 호출'(딸깍 시스템프롬프트 없이 결과물을 직접 만드는
+    호출)과 judge 호출은 Generator 를 거치지 않아 `_resolve_gemini_model` 의
+    보정을 못 받는다. 그 경로들이 이 함수를 써야 한다.
+    """
+    if backend == "gemini":
+        return _resolve_gemini_model("")
+    if backend == "groq":
+        # GROQ_MODEL_MAP 의 대표 별칭이 가리키는 실제 모델(= 생성용 대형)
+        return GroqGenerator.GROQ_MODEL_MAP.get("gemini-2.0-flash", "openai/gpt-oss-120b")
+    raise ValueError(f"알 수 없는 백엔드: {backend}")
+
+
 class GeminiGenerator:
     """Gemini API 사용 (무료 티어 모델·쿼터는 _resolve_gemini_model 참고)"""
 
@@ -469,7 +660,11 @@ class GeminiGenerator:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY 환경변수를 설정해주세요.")
-        self.client = genai.Client(api_key=api_key)
+        # google-genai 는 밀리초 단위를 받는다
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=GEN_MILLIS),
+        )
         print("[Generator] Gemini 백엔드 초기화 완료")
 
     def generate(self, query: str, contexts: list[dict],
@@ -487,14 +682,7 @@ class GeminiGenerator:
                 role=role, parts=[types.Part.from_text(text=h["content"])],
             ))
 
-        blocks = [b for b in (build_analysis_block(analysis),
-                              _build_context_blocks(contexts) if contexts else "") if b]
-        if blocks:
-            label = "원본 프롬프트" if not contents else "이번 요청"
-            current = "\n\n".join(blocks) + f"\n\n[{label}]\n{query}"
-        else:
-            # 후속 피드백 턴 — 검색 결과가 없으면 피드백만 전달 (Groq 경로와 동일)
-            current = query
+        current = _compose_user_message(query, contexts, analysis, has_history=bool(contents))
         contents.append(types.Content(
             role="user", parts=[types.Part.from_text(text=current)],
         ))
@@ -512,6 +700,13 @@ class GeminiGenerator:
                         response_mime_type="application/json",  # 구조화 출력 강제
                     ),
                 )
+                um = getattr(response, "usage_metadata", None)
+                if um is not None:
+                    usage.record("generate", "gemini", model,
+                                 prompt=getattr(um, "prompt_token_count", None),
+                                 completion=getattr(um, "candidates_token_count", None),
+                                 thoughts=getattr(um, "thoughts_token_count", None),
+                                 cached=getattr(um, "cached_content_token_count", None))
                 return _strip_cjk_noise(response.text)
             except ClientError as e:
                 last_err = e
@@ -539,8 +734,17 @@ class GeminiGenerator:
                     pass
                 print(f"[Generator] Gemini 429 — {retry_delay}초 대기 ({attempt+1}/3)...")
                 time.sleep(retry_delay)
+            except ServerError as e:
+                # 503 UNAVAILABLE·500 등 일시적 과부하 — 짧게 백오프 후 재시도.
+                # 실측(2026-09-29): gemini-3.6-flash 가 피크에 503 을 자주 낸다. 종전엔 이 예외가
+                # 그대로 올라가 Generator 의 `except RuntimeError` 를 못 타서 **폴백도 안 됐다**.
+                last_err = e
+                delay = 4 * (attempt + 1)   # 4, 8, 12초
+                print(f"[Generator] Gemini {getattr(e,'code','5xx')} 과부하 — {delay}초 대기 ({attempt+1}/3)...")
+                time.sleep(delay)
 
-        raise RuntimeError("⛔ Gemini API 재시도 3회 초과") from last_err
+        # 재시도 소진 → RuntimeError 로 변환해야 Generator 가 Groq 로 폴백한다.
+        raise RuntimeError(f"⛔ Gemini API 재시도 3회 초과: {str(last_err)[:120]}") from last_err
 
 
 # ── 장문 라우팅 판정 ─────────────────────────────────────────
@@ -550,10 +754,15 @@ def _needs_long_context(query: str, contexts: list[dict] | None,
     개선 프롬프트는 사용자가 준 원문을 그대로 재인용해야 하므로, 필요 출력은
     최소한 원문 길이만큼이다 — 예산이 그에 못 미치면 잘림이 '보장'되는 구조.
     이 경우 컨텍스트가 큰 Gemini 로 보내는 것이 분할/요약 선처리보다 싸고 확실하다."""
-    est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100   # _fit_max_tokens 와 동일 추정기
+    # ⚠️ 전부 보수 추정기(`_est_tokens`, 한글 1.0)로 잰다. `_fit_max_tokens` 는 2026-09-20 재보정부터
+    #    출처별 `estimate_input`(고정 입력 0.75) 을 쓰므로 **둘은 더 이상 같은 추정기가 아니다** —
+    #    같은 입력을 이 판정이 ~20% 크게 본다(카드 5장·무료 8k: 5,645 vs 4,611 tok →
+    #    Gemini 라우팅 경계 800자 vs 1,300자). 맞출지는 Gemini 쿼터(무료 RPD 20)와 Groq 잘림
+    #    위험을 맞바꾸는 결정이라 코드는 그대로 둔다(WORKLOG 2026-09-20 전수조사).
+    est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100
     est_in += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
     est_in += sum(_est_tokens(c.get("text") or "") + 60 for c in (contexts or []))
-    avail_out  = GroqGenerator.TPM_LIMIT.get(groq_model, 12000) - est_in - 200
+    avail_out  = GroqGenerator._tpm(groq_model) - est_in - 200
     needed_out = _est_tokens(query) + 600               # 원문 재인용 + 지시문·JSON 오버헤드
     return avail_out < needed_out
 
@@ -562,10 +771,14 @@ def _needs_long_context(query: str, contexts: list[dict] | None,
 class Generator:
     """
     백엔드 자동 선택 + 요청 단위 라우팅.
-    - 기본: GROQ_API_KEY 있으면 Groq(빠름), 없으면 Gemini
-    - 장문 라우팅: Groq TPM 예산으로 verbatim 출력이 불가능한 긴 원문은 Gemini 로
-      (GEMINI_API_KEY 가 함께 설정된 경우에만 작동)
-    - 폴백: Groq 실패(429 재시도 포함) 시 Gemini 가용하면 1회 폴백
+    - 메인 백엔드: GEN_PRIMARY 환경변수("groq"|"gemini", 기본 groq)로 선택. 지정 백엔드의
+      키가 없으면 가용한 쪽으로 폴백(무회귀 — 미설정+GROQ_API_KEY 면 종전과 동일).
+    - 장문 라우팅: 메인이 Groq(TPM 제한)일 때만. verbatim 출력이 불가능한 긴 원문은
+      컨텍스트가 큰 Gemini 로(양쪽 키가 다 있을 때).
+    - 폴백: 메인 실패(429 재시도 포함) 시 반대편 백엔드가 가용하면 1회 폴백.
+
+    ⚠️ 제미나이를 메인으로 쓰려면(GEN_PRIMARY=gemini) 결제 등급(Tier 1)이 필요하고,
+       모델은 GEMINI_MODEL 로 고정한다(예: gemini-3.6-flash). 무료 티어는 RPD 20 이라 폴백용.
     """
 
     def __init__(self):
@@ -575,21 +788,32 @@ class Generator:
             raise EnvironmentError(
                 "GROQ_API_KEY 또는 GEMINI_API_KEY 중 하나를 .env에 설정해주세요."
             )
-        self._using = "groq" if self._groq else "gemini"
-        extra = " (+gemini 장문 라우팅·폴백)" if (self._groq and self._gemini) else ""
+        pref = os.environ.get("GEN_PRIMARY", "groq").strip().lower()
+        if pref == "gemini" and self._gemini:
+            self._primary, self._using = self._gemini, "gemini"
+        elif self._groq:
+            self._primary, self._using = self._groq, "groq"
+        else:                                   # groq 키 없음 → 제미나이 단독
+            self._primary, self._using = self._gemini, "gemini"
+        other = " (+반대편 백엔드 폴백"
+        other += "·gemini 장문 라우팅)" if self._primary is self._groq and self._gemini else ")"
+        extra = other if (self._groq and self._gemini) else ""
         print(f"[Generator] 백엔드: {self._using}{extra}")
 
     def generate(self, query: str, contexts: list[dict],
                  model: str = "gemini-2.0-flash", max_tokens: int = 4096,
                  history: list[dict] | None = None,
                  analysis: dict | None = None) -> str:
-        backend = self._groq or self._gemini
+        backend = self._primary
 
-        if self._groq and self._gemini:
+        # 장문 라우팅은 메인이 Groq 일 때만 의미가 있다(Gemini 는 컨텍스트가 커서 잘림 걱정 없음).
+        if backend is self._groq and self._gemini:
             groq_model = GroqGenerator.GROQ_MODEL_MAP.get(model, "openai/gpt-oss-120b")
             if _needs_long_context(query, contexts, history, groq_model):
                 print("[Generator] 장문 입력 → Gemini 라우팅 (Groq TPM 예산 부족)")
                 backend = self._gemini
+
+        fallback = self._gemini if backend is self._groq else self._groq
 
         try:
             return backend.generate(
@@ -597,10 +821,13 @@ class Generator:
                 model=model, max_tokens=max_tokens,
                 history=history, analysis=analysis,
             )
-        except RuntimeError:
-            if backend is self._groq and self._gemini:
-                print("[Generator] Groq 실패 → Gemini 폴백")
-                return self._gemini.generate(
+        except RuntimeError as e:
+            if fallback is not None:
+                # 원인을 반드시 남긴다 — 종전엔 사유 없이 "실패"만 찍혀서 폴백 쪽 에러만 보이고
+                # 진짜 원인(대개 메인 429)이 가려졌다(2026-09-16).
+                who = "Groq" if backend is self._groq else "Gemini"
+                print(f"[Generator] {who} 실패 → 폴백 — 원인: {str(e)[:160]}")
+                return fallback.generate(
                     query=query, contexts=contexts,
                     model=model, max_tokens=max_tokens,
                     history=history, analysis=analysis,

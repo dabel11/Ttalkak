@@ -15,3 +15,53 @@ test("withdrawn user ids remain unavailable while released nicknames can pass du
 test("successful withdrawal clears sensitive auth drafts and requests account-scope disposal", async () => { const state = { authDuplicateChecks: { userId: "member" }, authDraft: { password: "secret" }, authUserIdWarning: "warning" }; let clearOptions; const controller = createAuthController({ state, root: { querySelector: () => null }, document: {}, render() {}, getToken: () => "token", api: { withdrawAccount: async () => ({ ok: true }) }, clearSession(options) { clearOptions = options; }, notice() {}, handleError() {} }); await controller.withdraw({ password: "secret" }); assert.deepEqual(clearOptions, { discardCurrentScope: true }); assert.deepEqual(state.authDraft, {}); assert.deepEqual(state.authDuplicateChecks, {}); assert.equal(state.authUserIdWarning, ""); });
 test("app delegates all authentication UI and event workflows", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createAuthController/); assert.match(app, /bindAuthControls/); assert.match(app, /bindAuthForm/); ["openAuth", "saveAuthDraftFromForm", "setAuthFormError", "bindAuthControlEvents", "bindAuthFormEvents", "togglePasswordVisibility", "withdrawConfirmedAccount"].forEach((name) => assert.doesNotMatch(app, new RegExp(`function ${name}\\s*\\(`))); });
 test("app delegates authentication view rendering", () => { const app = fs.readFileSync(path.resolve(__dirname, "../src/app.js"), "utf8"); assert.match(app, /createAuthView/); assert.doesNotMatch(app, /function AuthModal\s*\(/); });
+
+test("auth normalization preserves the authoritative account provider", () => {
+  assert.equal(normalizeAuthResult({ accessToken: "t", user: { provider: "GOOGLE" } }).user.provider, "google");
+  assert.equal(normalizeAuthResult({ accessToken: "t", user: { provider: "local" } }).user.provider, "local");
+  assert.equal(normalizeAuthResult({ accessToken: "t", user: {} }).user.provider, "");
+});
+
+test("successful login resumes a deferred post-authentication action", async () => {
+  const PreviousFormData = global.FormData;
+  global.FormData = class {
+    get(name) { return name === "userId" ? "member" : name === "password" ? "password123" : ""; }
+  };
+  try {
+    let resumed = 0;
+    const state = { authView: "login", authDraft: {}, authDuplicateChecks: {}, authUserIdWarning: "", authError: "" };
+    const controller = createAuthController({
+      state,
+      root: { querySelector: () => null },
+      document: {},
+      render() {},
+      normalizeText: String,
+      existingNicknames: [],
+      existingUserIds: [],
+      userIdError: () => "",
+      emailValid: () => true,
+      phoneValid: () => true,
+      futureDate: () => false,
+      api: { login: async () => ({ accessToken: "token", member: { memberId: 1, nickname: "member" } }) },
+      normalizeResult: () => ({ token: "token", user: { id: 1, nickname: "member" } }),
+      applyUser() {},
+      notice() {},
+      hydrateMake: async () => {},
+      onAuthenticated() { resumed += 1; },
+    });
+
+    await controller.submit({});
+    assert.equal(resumed, 1);
+  } finally {
+    global.FormData = PreviousFormData;
+  }
+});
+
+test("identity state preserves provider and clears it on logout", async () => {
+  const { api } = await import("../src/state/state-core.mjs");
+  const state = {};
+  api.applyAuthenticatedIdentityState(state, { token: "t", user: { id: 7, nickname: "member", provider: "google" } });
+  assert.equal(state.currentUserProvider, "google");
+  api.clearAuthenticatedIdentityState(state);
+  assert.equal(state.currentUserProvider, "");
+});

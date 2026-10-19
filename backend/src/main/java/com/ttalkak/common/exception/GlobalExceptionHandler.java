@@ -5,6 +5,7 @@ import com.ttalkak.make.MakeApiContract;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -30,14 +31,17 @@ public class GlobalExceptionHandler {
     ) {
         HttpStatusCode status = exception.getStatusCode();
 
+        // ApiException 이 실어 온 헤더(예: Retry-After)를 응답에 그대로 내보낸다.
+        // 이게 빠지면 rag-server 가 알려준 재시도 시점이 백엔드에서 끊긴다.
         return build(
-            status,
+                status,
                 exception.getCode(),
                 messageOrDefault(
                         exception.getReason(),
                         defaultMessage(status)
                 ),
-                request
+                request,
+                exception.getHeaders()
         );
     }
 
@@ -146,6 +150,10 @@ public class GlobalExceptionHandler {
             ObjectOptimisticLockingFailureException exception,
             HttpServletRequest request
     ) {
+        if (com.ttalkak.member.Member.class.equals(exception.getPersistentClass())) {
+            return build(HttpStatus.CONFLICT, "AUTH_CONCURRENT_UPDATE",
+                    "계정 상태가 다른 요청에서 변경되었습니다. 다시 확인해주세요.", request);
+        }
         return build(
                 HttpStatus.CONFLICT,
                 MakeApiContract.THREAD_CONCURRENTLY_UPDATED,
@@ -168,6 +176,14 @@ public class GlobalExceptionHandler {
                 ),
                 request
         );
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataConflict(
+            org.springframework.dao.DataIntegrityViolationException exception,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, "DATA_CONFLICT",
+                "동일한 정보가 이미 등록되어 있거나 다른 요청과 충돌했습니다. 다시 확인해주세요.", request);
     }
 
     @ExceptionHandler(Exception.class)
@@ -195,8 +211,19 @@ public class GlobalExceptionHandler {
             String message,
             HttpServletRequest request
     ) {
+        return build(status, code, message, request, HttpHeaders.EMPTY);
+    }
+
+    private ResponseEntity<ApiErrorResponse> build(
+            HttpStatusCode status,
+            String code,
+            String message,
+            HttpServletRequest request,
+            HttpHeaders headers
+    ) {
         return ResponseEntity
                 .status(status)
+                .headers(headers == null ? HttpHeaders.EMPTY : headers)
                 .body(
                         ApiErrorResponse.of(
                                 status,

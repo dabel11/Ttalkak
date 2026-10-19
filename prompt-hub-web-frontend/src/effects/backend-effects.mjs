@@ -76,9 +76,14 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
   }
 
   function applyBackendHomePromptsResult(ctx, result, page) {
-    const { popularPrompts, state, updateBackendHomePageMeta, normalizePersistedLikeCounts } = ctx;
+    const { normalizePersistedLikeCounts, popularPrompts, state, updateBackendHomePageMeta } = ctx;
     if (!Array.isArray(result?.items)) return false;
 
+    if (page === 1) {
+      result.items.unshift(...ctx.savedPrompts.filter(({ id, source, isShared }) =>
+        source === "mine" && isShared && !ctx.isBackendNumericId(id),
+      ));
+    }
     popularPrompts.splice(
       0,
       popularPrompts.length,
@@ -116,13 +121,29 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const { isBackendNumericId, makePreview, makeState, normalizeRecentThreads, state } = ctx;
     if (!Array.isArray(threads)) return false;
 
+    const activeThreadId = String(state.activeThreadId || "");
+    const activeThread = activeThreadId
+      ? state.recentThreads.find((thread) => {
+        return String(thread?.id || "") === activeThreadId || String(thread?.serverId || "") === activeThreadId;
+      })
+      : null;
+    const activeLookupId = String(activeThread?.serverId || activeThreadId);
+    const pendingThreadId = String(state.pendingGuestThreadTransferId || "");
+    const pendingThread = pendingThreadId
+      ? state.recentThreads.find((thread) => {
+        const backendId = thread?.serverId || thread?.id;
+        return String(thread?.id || "") === pendingThreadId && !isBackendNumericId(backendId);
+      })
+      : null;
+    const preservedThreads = pendingThread ? [pendingThread] : [];
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
-      makeState.setMakeRecentThreads(state, []);
+      makeState.setMakeRecentThreads(state, preservedThreads);
+      reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
       return true;
     }
 
-    makeState.setMakeRecentThreads(state, validThreads.map((thread) => ({
+    const backendThreads = validThreads.map((thread) => ({
       id: thread.id,
       dedupeKey: thread.id,
       serverId: thread.serverId || (isBackendNumericId(thread.id) ? String(thread.id) : ""),
@@ -131,9 +152,26 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
       messages: Array.isArray(thread.messages) ? thread.messages : [],
-    })));
+    }));
+    const nextThreads = [...preservedThreads, ...backendThreads];
+    makeState.setMakeRecentThreads(state, nextThreads);
+    reconcileActiveMakeThread(state, nextThreads, pendingThread, activeLookupId);
     normalizeRecentThreads();
     return true;
+  }
+
+  function reconcileActiveMakeThread(state, threads, pendingThread, activeLookupId) {
+    if (!activeLookupId) return;
+    const nextActiveThread = threads.find((thread) => {
+      const id = String(thread?.id || "");
+      const serverId = String(thread?.serverId || "");
+      return id === activeLookupId || serverId === activeLookupId;
+    }) || pendingThread || null;
+
+    state.activeThreadId = nextActiveThread?.id || null;
+    state.messages = Array.isArray(nextActiveThread?.messages)
+      ? nextActiveThread.messages.map((message) => ({ ...message }))
+      : [];
   }
 
   function applyMyLibraryResult(ctx, result) {
@@ -237,7 +275,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       const wasLoggedIn = Boolean(state.isLoggedIn);
       const hasAnyToken = Boolean(String(typeof getAuthToken === "function" ? getAuthToken() || "" : "").trim());
       if (wasLoggedIn && !hasAnyToken && typeof clearAuthenticatedSession === "function") {
+        const pendingGuestThreadTransferId = state.pendingGuestThreadTransferId || null;
+        const pendingGuestThreadTransferErrorCode = String(state.pendingGuestThreadTransferErrorCode || "");
         clearAuthenticatedSession({ keepRoute: true });
+        state.pendingGuestThreadTransferId = pendingGuestThreadTransferId;
+        state.pendingGuestThreadTransferErrorCode = pendingGuestThreadTransferId
+          ? pendingGuestThreadTransferErrorCode || "FREE_TRIAL_LIMIT_EXCEEDED"
+          : "";
         state.authView = "login";
       }
       makeState.setMakeBackendState(state, "fallback", wasLoggedIn && hasAnyToken
@@ -293,12 +337,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     });
 
     if (!anyConnected && unauthorizedReason && typeof handleBackendAccessError === "function") {
-      if (state.isLoggedIn && typeof clearAuthenticatedSession === "function") {
-        clearAuthenticatedSession({ keepRoute: true });
-        state.authView = "login";
-      }
-      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       handleBackendAccessError(unauthorizedReason, "로그인이 필요하거나 만료되었습니다. 다시 로그인해주세요.");
+      makeState.setMakeBackendState(state, "fallback", "로그인이 필요하거나 만료되어 Make 대화를 불러오지 못했습니다.");
       render();
       return;
     }
@@ -313,8 +353,15 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
   }
 
   async function hydrateBackendMyPageDataEffect(ctx, { force = false } = {}) {
-    const { api, applyContext, canUseDemoFallback, getAuthToken, render, state } = ctx;
+    const { api, applyContext, canUseDemoFallback, getAuthToken, isDemoAuthToken, render, state } = ctx;
     if (state.route !== "saved" || !state.isLoggedIn || (!force && state.myBackendStatus !== "idle")) return;
+
+    const token = getAuthToken() || undefined;
+    if (typeof isDemoAuthToken === "function" && isDemoAuthToken(token)) {
+      state.myBackendStatus = "connected";
+      render?.();
+      return;
+    }
 
     if (!api?.getMyLibrary) {
       state.myBackendStatus = canUseDemoFallback() ? "idle" : "fallback";
@@ -323,7 +370,6 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     }
 
     state.myBackendStatus = "checking";
-    const token = getAuthToken() || undefined;
     const hydrationController = new AbortController();
     let hydrationTimeoutId;
     try {
@@ -440,7 +486,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
     if (promptsResult.status === "fulfilled" && applyBackendHomePromptsResult(backendDataContext, promptsResult.value, state.popularPage)) {
       state.backendStatus = "connected";
-      state.backendStatusMessage = "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+      state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
       shouldRender = true;
     } else if (promptsResult.status === "rejected") {
       state.backendStatus = "fallback";
@@ -452,7 +498,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
     if (tagsResult.status === "fulfilled" && applyBackendHomeTagsResult(backendDataContext, tagsResult.value)) {
       if (state.backendStatus === "connected") {
-        state.backendStatusMessage = "GET /api/prompts와 GET /api/tags/popular 응답을 Home에 반영 중입니다.";
+        state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
       }
       shouldRender = true;
     } else if (tagsResult.status === "rejected") {
@@ -470,7 +516,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const scope = getValidSearchScope(state.searchScope);
     const page = Math.max(1, Number(state.popularPage) || 1);
     const requestSignature = JSON.stringify({ query, scope, sort: state.popularSort, page });
-    state.backendStatusMessage = "GET /api/prompts 검색 조건을 백엔드에 전달 중입니다.";
+    state.backendStatusMessage = "Home 목록을 불러오는 중입니다.";
 
     try {
       const result = await api.searchCommunityPosts({
@@ -493,15 +539,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       }
       if (applyBackendHomePromptsResult(applyContext(), result, page)) {
         state.backendStatus = "connected";
-        state.backendStatusMessage = query
-          ? "GET /api/prompts?scope=" + scope + "&query=... 검색 결과를 Home에 반영 중입니다."
-          : "GET /api/prompts 응답으로 Home 목록을 렌더링 중입니다.";
+        state.backendStatusMessage = "Home 목록을 새로 고쳤습니다.";
         render();
       }
     } catch (error) {
       state.backendStatus = "fallback";
       state.backendStatusMessage = canUseDemoFallback()
-        ? "검색 API 호출 실패로 현재 화면의 로컬 목록을 유지합니다."
+        ? "검색 결과를 불러오지 못했습니다."
         : getApiFailureMessage("Home 검색 API");
       ctx.reportWarning("backend-hydration", "refresh-home-prompts", error);
       render();
