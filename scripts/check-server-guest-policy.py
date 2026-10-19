@@ -237,6 +237,32 @@ def check_member_policy():
                                            extra_headers=foreign_headers)
     assert status == 200 and public_comment_report["promptTitle"] == post_title
 
+    # Large user-supplied page numbers must never overflow a subList index
+    # (previously 500) or request an unbounded number of responses.
+    extreme_list_paths = [
+        ("/api/prompts?page=2147483647&size=2147483647", None),
+        ("/api/prompts/my?filter=mine&page=2147483647&size=2147483647", headers(token)),
+        ("/api/me/library?filter=all&page=2147483647&pageSize=2147483647", foreign_headers),
+        ("/api/me/prompts?page=2147483647&size=2147483647", headers(token)),
+        ("/api/me/comments?page=2147483647&size=2147483647", foreign_headers),
+        ("/api/me/reports?page=2147483647&size=2147483647", foreign_headers),
+    ]
+    for path, auth_headers in extreme_list_paths:
+        status, paged = request(path, extra_headers=auth_headers)
+        assert status == 200 and paged["items"] == [], ("pagination overflow", path, status)
+        assert paged["page"] == 2147483647 and paged["size"] == 100, (
+            "pagination bounds", path, paged.get("page"), paged.get("size")
+        )
+    for path, auth_headers in (
+        ("/api/prompts?page=-5&size=-10", None),
+        ("/api/me/library?page=-5&pageSize=-10", foreign_headers),
+    ):
+        status, paged = request(path, extra_headers=auth_headers)
+        assert status == 200 and paged["page"] == 1 and paged["size"] == 1, (
+            "negative pagination normalization", path, status
+        )
+    print("PASS: huge and negative pagination input never overflows or escapes page bounds")
+
     # A previously public prompt can be saved/liked by another member.
     # After the author makes it private, it must disappear from that member's
     # saved, liked and aggregate lists as well as from the direct detail API.
