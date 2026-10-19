@@ -12,6 +12,7 @@
 | API 연결 | Web HTTP 요청 기록에 `/api/tags/popular` 200, `/api/prompts/improve` 200·429 관측 | Railway HTTP 로그의 일부 샘플. 응답 본문·로그인·품질 미검증 |
 | RAG 기동 | 2026-10-19 RAG 컨테이너 시작 및 FastAPI ready 메시지 관측 | 2026-10-18 과거 `/health` 502 (connection refused) 기록도 존재. 현재 지속 장애로 단정 금지 |
 | 읽기 전용 보안 검사 | [PR #64](https://github.com/dabel11/Ttalkak/pull/64) 컨테이너 smoke 및 전체 CI 통과 | 실제 배포 도메인의 401/CORS 최종 검사와는 구분 |
+| 실제 스테이징 읽기 전용 검사 (2026-10-19) | [GitHub Actions 실행 #39216747175](https://github.com/dabel11/Ttalkak/actions/runs/39216747175): `/healthz`, `/api/tags/popular`, `/api/auth/config` 200; 비로그인 `/api/me/usage`, `/api/me/billing`, `/api/admin/billing/refunds` 401; 비허용 Origin preflight 403 | GET/OPTIONS로만 확인. `googleLoginEnabled`와 `passwordResetEnabled`는 true이나 실제 로그인/메일 도착 E2E는 미검증 |
 | GitHub 배포 실패 기록 | `faithful-compassion - Ttalkak`의 `main` 배포 실패 기록 존재 | 별도 Railway 프로젝트 접근 불가. `ttalkak-staging`의 정상 상태와 별개 |
 
 ## 2. P0 합격 기준 — 실제 기능 통합
@@ -21,19 +22,19 @@
 
 | ID | 시나리오 | 합격 기준 | 상태 |
 | --- | --- | --- | --- |
-| INT-01 | Web 정적 파일, `/healthz`, `/api/tags/popular`, `/api/auth/config` | HTTP/본문 규약 충족, 오류나 비밀값 노출 없음 | 부분 확인 |
+| INT-01 | Web 정적 파일, `/healthz`, `/api/tags/popular`, `/api/auth/config` | HTTP/본문 규약 충족, 오류나 비밀값 노출 없음 | 공개 API 3개 실제 스테이징 200 확인; 전체 정적·브라우저 흐름은 미검증 |
 | INT-02 | 비회원 프롬프트 개선 3회·4회·실패 재시도 | 성공 3회만 집계, 4회는 429, 공급자 실패는 미차감 | CI fixture 검증, 실배포 미검증 |
 | INT-03 | 가입/로그인 → 개선 → 대화 이력 → 저장 → 재조회 | 사용자 의도·requestId·저장 결과 일치, 중복 요청 안전 | CI 일부 검증, 실배포 미검증 |
 | INT-04 | 사용량·등급·기간 전환 | `/api/me/usage` 결과와 실제 기록 일치, 누락/중복 집계 차단 | 코드·CI 일부 검증, 실배포 미검증 |
 | INT-05 | Google 로그인/메일 복구/세션 만료·해지 | 사용자 계정·인증 수단·오류 안내 일치 | 실제 공급자 E2E 미검증 |
 | INT-06 | AI 서버 장애, 장시간 응답, 404/429/503 | 재시도·오류 메시지·요청 차감 정책 일치 | 실환경 최종 확인 필요 |
-| INT-07 | 관리자·일반 사용자 권한 경계 | 비인가 401/403, 관리자 API 권한 외 접근 차단 | CI 테스트, 실배포 확인 필요 |
+| INT-07 | 관리자·일반 사용자 권한 경계 | 비인가 401/403, 관리자 API 권한 외 접근 차단 | 실배포 비로그인 회원·관리자 GET 401 및 미허용 CORS 403 확인; 타 회원 간 권한/실제 관리자 로그인 검증 필요 |
 
 자동 검증 예시(읽기 전용):
 ```bash
 python3 scripts/check-staging-readiness.py --origin https://web-production-a82d94.up.railway.app
 ```
-[PR #64](https://github.com/dabel11/Ttalkak/pull/64)가 `develop`에 병합된 후에는 동일 검사기에 `--security`를 추가할 수 있다. 인증된 점검에는 **명시적으로 승인된 테스트 계정**과 로컬 환경변수만 사용하고, 토큰·사용자 원문·복구 코드는 저장소나 이슈에 기록하지 않는다.
+현재 `develop`에 병합된 검사기는 `--security`로 익명 접근 및 CORS 경계를 추가 검증한다. [PR #68](https://github.com/dabel11/Ttalkak/pull/68)의 수동 실행 가능한 Actions 워크플로로 실제 배포 사이트 점검을 반복할 수 있다. 인증된 점검에는 **명시적으로 승인된 테스트 계정**과 로컬 환경변수만 사용하고, 토큰·사용자 원문·복구 코드는 저장소나 이슈에 기록하지 않는다.
 
 실제 LLM 요청은 금액을 발생시킬 수 있으며 읽기 전용 검사로 분류하지 않는다. 테스트 요청의 입력·예상 결과·실패 처리 기준을 사전 확정한다.
 
