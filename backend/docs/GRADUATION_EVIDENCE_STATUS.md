@@ -4,8 +4,6 @@
 > 작업 기준은 `develop`. 실제 배포·데이터·외부 공급자의 결과를 새로 만들어 냈다는 뜻이 아니다.
 > 보안 수정은 아직 [Draft PR #69](https://github.com/dabel11/Ttalkak/pull/69)에 있으며 운영 서버에 반영되지 않았다.
 
-**질의응답 및 발표 연계:** [5분 발표 대본·질의응답](GRADUATION_PRESENTATION_SCRIPT_AND_QA.md)에 아래 증거의 확인 범위와 미완료 항목을 반영했다.
-
 ## 1. 현재 확인 가능한 증거
 
 | ID | 구분 | 확인된 사실 | 증거 | 입증하지 못하는 것 |
@@ -44,4 +42,4 @@
 
 지금까지는 이 현황표·합성 시연 입력·기술 아키텍처·검수 시나리오를 PM 측에서 준비한다. 시험기간 이후 **한 번**의 확인에서 프론트 담당자의 실제 웹/확장 데모, AI 담당자의 평가모델·판정기·실험 결과, 백엔드/PM의 서버 배포·보안 수정 반영 상태만 각각 받는다.
 
-정리 자료: [5분 시연안](GRADUATION_FINAL_DEMO.md) · [보고서 증빙 템플릿](GRADUATION_REPORT_EVIDENCE_TEMPLATE.md) · [졸프 검수 기준](../../docs/GRADUATION_ACCEPTANCE.md).
+관련: [검증 증빙 템플릿](GRADUATION_REPORT_EVIDENCE_TEMPLATE.md) · [졸프 검수 기준](../../docs/GRADUATION_ACCEPTANCE.md).
