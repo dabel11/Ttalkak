@@ -31,6 +31,9 @@ def security_checks(opener, origin):
         '/api/me/usage',
         '/api/me/billing',
         '/api/admin/billing/refunds',
+        '/api/make/threads',
+        '/api/make/folders',
+        '/api/prompts/my',
     )
     for path in protected_paths:
         request = urllib.request.Request(origin + path, headers={'Accept': 'application/json'})
@@ -49,29 +52,37 @@ def security_checks(opener, origin):
                           'result': 'PASS' if passed else 'FAIL',
                           'httpStatus': status}))
 
-    untrusted_origin = 'https://untrusted-origin.example.invalid'
-    preflight = urllib.request.Request(
-        origin + '/api/prompts/improve',
-        method='OPTIONS',
-        headers={'Origin': untrusted_origin, 'Access-Control-Request-Method': 'POST'},
+    # Exercise both ordinary sites and unrecognized Chrome extensions.
+    # Neither request contains credentials, user content, or write methods.
+    untrusted_origins = (
+        'https://untrusted-origin.example.invalid',
+        'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     )
-    try:
-        with opener.open(preflight, timeout=15) as response:
-            status = response.status
-            allowed_origin = response.headers.get('Access-Control-Allow-Origin')
-    except urllib.error.HTTPError as error:
-        status = error.code
-        allowed_origin = error.headers.get('Access-Control-Allow-Origin') if error.headers else None
-        error.close()
-    except (OSError, ValueError):
-        status, allowed_origin = None, None
-    passed = status is not None and status < 500 and allowed_origin not in (
-        '*', untrusted_origin,
-    )
-    if not passed:
-        failed = True
-    print(json.dumps({'path': '/api/prompts/improve', 'check': 'untrusted_cors_origin_rejected',
-                      'result': 'PASS' if passed else 'FAIL', 'httpStatus': status}))
+    for untrusted_origin in untrusted_origins:
+        preflight = urllib.request.Request(
+            origin + '/api/prompts/improve',
+            method='OPTIONS',
+            headers={'Origin': untrusted_origin, 'Access-Control-Request-Method': 'POST'},
+        )
+        try:
+            with opener.open(preflight, timeout=15) as response:
+                status = response.status
+                allowed_origin = response.headers.get('Access-Control-Allow-Origin')
+        except urllib.error.HTTPError as error:
+            status = error.code
+            allowed_origin = error.headers.get('Access-Control-Allow-Origin') if error.headers else None
+            error.close()
+        except (OSError, ValueError):
+            status, allowed_origin = None, None
+        passed = status is not None and status < 500 and allowed_origin not in (
+            '*', untrusted_origin,
+        )
+        if not passed:
+            failed = True
+        print(json.dumps({'path': '/api/prompts/improve',
+                          'check': 'untrusted_cors_origin_rejected',
+                          'originType': 'chrome_extension' if untrusted_origin.startswith('chrome-extension:') else 'web',
+                          'result': 'PASS' if passed else 'FAIL', 'httpStatus': status}))
     return not failed
 
 
