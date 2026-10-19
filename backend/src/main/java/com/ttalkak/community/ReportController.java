@@ -33,10 +33,11 @@ public class ReportController {
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         Long reporterId = requireMemberId(authorization);
+        reportResponseMapper.requireReportablePrompt(promptId, reporterId);
 
         Report report = reportRepository.save(new Report("prompt", promptId, reporterId, request.reason()));
 
-        return toResponse(report);
+        return toResponseForReporter(report, reporterId);
     }
 
     @PostMapping("/comments/{commentId}")
@@ -46,10 +47,11 @@ public class ReportController {
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         Long reporterId = requireMemberId(authorization);
+        reportResponseMapper.requireReportableComment(commentId, reporterId);
 
         Report report = reportRepository.save(new Report("comment", commentId, reporterId, request.reason()));
 
-        return toResponse(report);
+        return toResponseForReporter(report, reporterId);
     }
 
     private Long requireMemberId(String authorization) {
@@ -68,6 +70,10 @@ public class ReportController {
 
     public Map<String, Object> toResponse(Report report) {
         return reportResponseMapper.toResponse(report);
+    }
+
+    public Map<String, Object> toResponseForReporter(Report report, Long reporterId) {
+        return reportResponseMapper.toResponseForReporter(report, reporterId);
     }
 
     public record ReportRequest(String reason) {
