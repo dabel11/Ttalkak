@@ -225,7 +225,7 @@ public class MeController {
         int to = Math.min(from + safeSize, reports.size());
 
         List<Map<String, Object>> items = reports.subList(from, to).stream()
-                .map(reportController::toResponse)
+                .map(report -> reportController.toResponseForReporter(report, memberId))
                 .toList();
 
         Map<String, Object> body = new LinkedHashMap<>();
