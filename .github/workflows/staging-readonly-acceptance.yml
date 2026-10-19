@@ -1,0 +1,31 @@
+name: Staging read-only acceptance
+on:
+  pull_request:
+    paths:
+      - 'scripts/check-staging-readiness.py'
+      - 'scripts/test-staging-readiness.py'
+      - '.github/workflows/staging-readonly-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-api-readonly:
+    name: Remote public API, authorization and CORS read-only checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Unit test the checker
+        run: python3 scripts/test-staging-readiness.py
+      - name: Inspect public staging without tokens or writes
+        run: >
+          python3 scripts/check-staging-readiness.py
+          --origin https://web-production-a82d94.up.railway.app
+          --security
