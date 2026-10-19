@@ -283,6 +283,10 @@ public class PromptController {
         List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
         List<PromptPost> prompts = promptRepository.findAll().stream()
                 .filter(prompt -> !prompt.isDeleted())
+                // A post saved/liked while public must stop appearing in other
+                // members' lists as soon as its author makes it private.
+                .filter(prompt -> prompt.isShared()
+                        || Objects.equals(prompt.getAuthorId(), memberId))
                 .filter(prompt -> switch (filter) {
                     case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
                     case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
