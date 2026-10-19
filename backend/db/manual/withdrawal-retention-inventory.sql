@@ -48,6 +48,10 @@ UNION ALL
 SELECT 'inactive_billing_charge_records', COUNT(*)
 FROM billing_charges c JOIN members m ON m.id = c.member_id WHERE m.active = 0
 UNION ALL
+SELECT 'inactive_pending_charges', COUNT(*)
+FROM billing_charges c JOIN members m ON m.id = c.member_id
+WHERE m.active = 0 AND c.status = 'PENDING'
+UNION ALL
 SELECT 'inactive_member_token_usage', COUNT(*)
 FROM member_token_usage u JOIN members m ON m.id = u.member_id WHERE m.active = 0;
 
@@ -55,5 +59,7 @@ FROM member_token_usage u JOIN members m ON m.id = u.member_id WHERE m.active = 
 -- - Nonzero private Make rows on withdrawn accounts may reflect PRE-PATCH
 --   records. Do not delete them in production without a separate approved plan.
 -- - Nonzero auto-renew on inactive accounts needs urgent owner/PG reconciliation.
+-- - Nonzero pending charges on inactive accounts need READ-ONLY payment-provider
+--   order-status reconciliation; never retry or create a new charge blindly.
 -- - Reserved user ID, Google provider subject, billing and community retention
 --   require a documented business/legal policy; never perform indiscriminate DELETE.
