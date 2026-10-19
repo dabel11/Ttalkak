@@ -29,6 +29,7 @@ ACTION_REQUIRED = (
     "inactive_private_make_threads",
     "inactive_private_make_folders",
     "inactive_auto_renew_enabled",
+    "inactive_billing_keys_stored",
     "inactive_pending_charges",
 )
 
