@@ -231,6 +231,60 @@ def check_member_policy():
     assert status == 200 and owner_detail["isMine"] is True
     print("PASS: private prompt is hidden from anonymous and other members")
 
+    # Verify private Make conversation and folder ownership with two existing
+    # disposable CI members; no real user account or production DB is touched.
+    status, owner_folder = request("/api/make/folders",
+                                   {"name": "CI-private-folder-" + suffix},
+                                   extra_headers=headers(owner_token))
+    assert status == 200, ("owner folder create", status, owner_folder)
+    folder_id = owner_folder["id"]
+    private_message = "CI confidential fixture " + suffix
+    status, owner_thread = request("/api/make/threads", {
+        "title": "CI private conversation",
+        "messages": [{"role": "user", "content": private_message}],
+        "folderId": folder_id,
+    }, extra_headers=headers(owner_token))
+    assert status == 200, ("owner thread create", status, owner_thread)
+    thread_id = owner_thread["id"]
+    assert owner_thread["folderId"] == folder_id
+    status, owned_detail = request("/api/make/threads/" + str(thread_id),
+                                   extra_headers=headers(owner_token))
+    assert status == 200 and owned_detail["messages"][0]["content"] == private_message
+
+    status, stranger_threads = request("/api/make/threads", extra_headers=foreign_headers)
+    assert status == 200 and all(item["id"] != thread_id for item in stranger_threads["items"])
+    status, stranger_folders = request("/api/make/folders", extra_headers=foreign_headers)
+    assert status == 200 and all(item["id"] != folder_id for item in stranger_folders["items"])
+    assert request("/api/make/threads/" + str(thread_id),
+                   extra_headers=foreign_headers)[0] == 404, "Cross-member thread read"
+    assert request("/api/make/threads/" + str(thread_id),
+                   {"title": "foreign overwrite"}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member thread update"
+    assert request("/api/make/threads/" + str(thread_id),
+                   extra_headers=foreign_headers, method="DELETE")[0] == 404, "Cross-member thread delete"
+    assert request("/api/make/threads/" + str(thread_id) + "/folder",
+                   {"folderId": None}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member thread move"
+    assert request("/api/make/folders/" + str(folder_id),
+                   {"name": "foreign rename"}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member folder update"
+    assert request("/api/make/folders/" + str(folder_id),
+                   extra_headers=foreign_headers, method="DELETE")[0] == 404, "Cross-member folder delete"
+    # Even the legitimate owner cannot assign another member's folder to a thread.
+    status, other_folder = request("/api/make/folders",
+                                   {"name": "CI-stranger-folder-" + suffix},
+                                   extra_headers=foreign_headers)
+    assert status == 200
+    assert request("/api/make/threads/" + str(thread_id) + "/folder",
+                   {"folderId": other_folder["id"]}, extra_headers=headers(owner_token),
+                   method="PATCH")[0] == 400, "Cross-member folder assignment"
+    status, still_owned = request("/api/make/threads/" + str(thread_id),
+                                  extra_headers=headers(owner_token))
+    assert status == 200 and still_owned["folderId"] == folder_id
+    assert still_owned["messages"][0]["content"] == private_message
+    print("PASS: Make thread and folder ownership across read/list/write/delete/move")
+
+
     print("PASS: member metering, replay, quota, restart persistence, missing accounting, individual/all logout, password change")
 
 
