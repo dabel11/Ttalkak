@@ -11,6 +11,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class ReportResponseMapper {
@@ -66,6 +69,53 @@ public class ReportResponseMapper {
             putCommentContext(body, report.getTargetId(), revealHiddenCommentText);
         }
 
+        return body;
+    }
+
+    private boolean viewableBy(PromptPost prompt, Long viewerId) {
+        return prompt != null && !prompt.isDeleted()
+                && (prompt.isShared() || Objects.equals(prompt.getAuthorId(), viewerId));
+    }
+
+    public void requireReportablePrompt(Long promptId, Long reporterId) {
+        PromptPost prompt = promptRepository.findById(promptId).orElse(null);
+        if (!viewableBy(prompt, reporterId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "신고할 게시글을 찾을 수 없습니다.");
+        }
+    }
+
+    public void requireReportableComment(Long commentId, Long reporterId) {
+        Comment comment = commentRepository.findById(commentId).orElse(null);
+        if (comment == null || comment.isDeleted() || comment.isHidden()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "신고할 댓글을 찾을 수 없습니다.");
+        }
+        requireReportablePrompt(comment.getPromptId(), reporterId);
+    }
+
+    /**
+     * Report history can outlive public visibility. Redact target text, title,
+     * author and comment context when a different author makes it private.
+     * Admin reports still use the existing toResponse() method.
+     */
+    public Map<String, Object> toResponseForReporter(Report report, Long reporterId) {
+        Map<String, Object> body = toResponse(report);
+        PromptPost prompt = null;
+        String kind = report.getTargetType() == null
+                ? "" : report.getTargetType().trim().toLowerCase(Locale.ROOT);
+        if ("prompt".equals(kind)) {
+            prompt = promptRepository.findById(report.getTargetId()).orElse(null);
+        } else if ("comment".equals(kind)) {
+            Comment comment = commentRepository.findById(report.getTargetId()).orElse(null);
+            if (comment != null) {
+                prompt = promptRepository.findById(comment.getPromptId()).orElse(null);
+            }
+        }
+        if (!viewableBy(prompt, reporterId)) {
+            for (String field : new String[]{"targetPreview", "author", "promptTitle",
+                    "promptContent", "promptAuthor", "commentContent"}) {
+                body.put(field, null);
+            }
+        }
         return body;
     }
 
