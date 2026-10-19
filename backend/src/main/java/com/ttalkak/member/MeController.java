@@ -51,6 +51,10 @@ public class MeController {
         List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
         List<PromptPost> prompts = promptRepository.findAll().stream()
                 .filter(prompt -> !prompt.isDeleted())
+                // Saved/liked links must not keep revealing a different author's
+                // post after they change its visibility to private.
+                .filter(prompt -> prompt.isShared()
+                        || Objects.equals(prompt.getAuthorId(), memberId))
                 .filter(prompt -> switch (filter) {
                     case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
                     case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
@@ -158,7 +162,11 @@ public class MeController {
                     map.put("isMine", true);
                     map.put("createdAt", comment.getCreatedAt().toString());
 
-                    promptRepository.findById(comment.getPromptId()).ifPresentOrElse(prompt -> {
+                    promptRepository.findById(comment.getPromptId())
+                            .filter(prompt -> !prompt.isDeleted()
+                                    && (prompt.isShared()
+                                        || Objects.equals(prompt.getAuthorId(), memberId)))
+                            .ifPresentOrElse(prompt -> {
                         Map<String, Object> author = new LinkedHashMap<>();
                         author.put("id", prompt.getAuthorId());
                         author.put("nickname", prompt.getAuthorNickname());
