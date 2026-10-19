@@ -8,7 +8,7 @@
 
 | ID | 구분 | 확인된 사실 | 증거 | 입증하지 못하는 것 |
 | --- | --- | --- | --- | --- |
-| E-01 | 백엔드/프론트/AI/브라우저 CI | [#69 커밋 `028322aa`](https://github.com/dabel11/Ttalkak/pull/69) 대상으로 전체 CI 성공 | [전체 CI #39245848345](https://github.com/dabel11/Ttalkak/actions/runs/39245848345) | 운영 서버에 #69의 보안 수정이 배포됐다는 사실 |
+| E-01 | 백엔드/프론트/AI/브라우저 CI | [#69 커밋 `08b2899`](https://github.com/dabel11/Ttalkak/pull/69) 대상으로 전체 CI 5개 작업 성공 | [전체 CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110) | 운영 서버에 #69의 보안 수정이 배포됐다는 사실 |
 | E-02 | 웹·Spring·MySQL·fixture RAG 통합 | guest 한도, 회원 인증/소유권, 저장·재조회, 백업→별도 DB 복원 등 CI 테스트 성공 | [컨테이너 검사 #39245848578](https://github.com/dabel11/Ttalkak/actions/runs/39245848578) | 실제 Gemini/Groq/Jina 공급자의 AI 생성 성공과 원가 |
 | E-03 | 실배포 읽기 전용 검증 | 스테이징의 공개 HTTP 상태 및 무인증 API·CORS 경계 검사가 통과 | [Staging read-only #39245849067](https://github.com/dabel11/Ttalkak/actions/runs/39245849067) | 로그인·저장·Google 메일·최종 개선 품질의 실환경 E2E |
 | E-04 | #69 개인정보 패치 | 비공개 전환 뒤 저장/좋아요/라이브러리·댓글·신고 참조, 관리자 메모 비노출, 탈퇴 Make 데이터 정리, 자동갱신 차단의 **코드 및 CI 검증** | [Draft PR #69](https://github.com/dabel11/Ttalkak/pull/69) / E-01 / E-02 | `develop`에 병합되어 실제 서비스에 적용됐다는 사실 |
@@ -17,6 +17,13 @@
 | E-07 | 사람 평가 준비 | `sheet_A.csv` 및 `sheet_B.csv` 각각 95질문이 마련돼 있으나 **답변 칸 공란** | [사람 평가 가이드](https://github.com/dabel11/Ttalkak/blob/develop/rag-server/eval/HUMAN_REVIEW.md) | 사람 평가자 간 κ 또는 LLM Judge 신뢰도 |
 
 **해석 원칙:** CI의 `PASS`는 해당 테스트가 검증한 경로에만 적용한다. 스테이징 GET 200은 실제 RAG 생성 성공이 아니다. 개선 전후 결과물의 우월성은 조건이 고정된 A/B 평가 및 사람 검증 전에는 결론으로 쓰지 않는다.
+
+### 2026-10-19 최신 CI 재확인
+
+- 확인 대상: Draft PR #69의 `08b2899cfe3ab4885c41a26b2d2f94b0b7331c60`.
+- [CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110): `Frontend tests and production build`, `Backend tests`, `RAG server unit tests`, `Web and Spring backend integration smoke`, `Web fixture browser E2E` 총 5개 작업이 성공 상태.
+- Web/Spring 통합 검사는 **결정적인 RAG stub**을 사용하므로 실제 외부 LLM의 품질·요금·응답률 검증으로 해석하지 않는다.
+- 이 실행 결과는 CI 환경의 검증이며, #69의 실제 Railway 운영 배포·실결제·운영 MySQL 9 격리 복원을 증명하지 않는다.
 
 ## 2. 졸업프로젝트 제출 전에 확보할 최종 증거
 
