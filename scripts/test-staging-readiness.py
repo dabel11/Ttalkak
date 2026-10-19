@@ -69,9 +69,11 @@ class Checks(unittest.TestCase):
                 raise HTTPError(request.full_url, code, 'Blocked', {}, None)
         with contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertTrue(readiness.security_checks(Opener(), 'https://example.com'))
-        self.assertEqual(4, len(requests))
+        self.assertEqual(8, len(requests))
         self.assertTrue(all(not request.has_header('Authorization') for request in requests))
-        self.assertEqual(4, output.getvalue().count('"result": "PASS"'))
+        self.assertEqual(8, output.getvalue().count('"result": "PASS"'))
+        self.assertEqual(2, sum(req.get_method() == 'OPTIONS' for req in requests))
+        self.assertEqual(2, output.getvalue().count('"check": "untrusted_cors_origin_rejected"'))
 
     def test_security_probes_fail_if_anonymous_api_is_exposed(self):
         from urllib.error import HTTPError
