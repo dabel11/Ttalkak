@@ -313,6 +313,31 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawnMemberCannotBeChargedBySchedulerOrStaleCandidate() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Member member = newMember();
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        transactions.executeWithoutResult(tx -> subscriptions.lockByMemberId(memberId)
+                .orElseThrow().register("fixture-no-provider-key"));
+
+        // Simulate legacy subscription data that was never automatically disabled
+        // before the withdrawal fix: the scheduler must still exclude the account.
+        member.withdraw();
+        members.saveAndFlush(member);
+        assertTrue(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertFalse(subscriptions.dueMemberIds(now, "test:legacy").contains(memberId));
+
+        billing.chargeDue();
+        // Even a pre-withdrawal scheduled candidate cannot start a new charge.
+        billing.charge(memberId);
+        assertEquals(0, charges.countByMemberId(memberId));
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
         Long id = newMember().getId();
         var setup = billing.setup(id, "STANDARD");
