@@ -239,11 +239,14 @@ def check_member_policy():
 
     # Large user-supplied page numbers must never overflow a subList index
     # (previously 500) or request an unbounded number of responses.
+    # Earlier security tests revoked the original account token.
+    # Reauthenticate so an auth failure cannot mask the pagination behavior.
+    pagination_owner_token = login(changed)[1]["accessToken"]
     extreme_list_paths = [
         ("/api/prompts?page=2147483647&size=2147483647", None),
-        ("/api/prompts/my?filter=mine&page=2147483647&size=2147483647", headers(token)),
+        ("/api/prompts/my?filter=mine&page=2147483647&size=2147483647", headers(pagination_owner_token)),
         ("/api/me/library?filter=all&page=2147483647&pageSize=2147483647", foreign_headers),
-        ("/api/me/prompts?page=2147483647&size=2147483647", headers(token)),
+        ("/api/me/prompts?page=2147483647&size=2147483647", headers(pagination_owner_token)),
         ("/api/me/comments?page=2147483647&size=2147483647", foreign_headers),
         ("/api/me/reports?page=2147483647&size=2147483647", foreign_headers),
     ]
