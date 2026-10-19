@@ -57,7 +57,30 @@
 - 자동갱신이 켜진 비활성 회원이 있다면 결제 중복/진행 중 청구 여부를 확인하고 우선 대응한다.
 - CI 복원 리허설은 MySQL 8.4 폐기 가능한 데이터 대상이며 실제 Railway MySQL 9의 복구 보장을 의미하지 않는다.
 
-## 5. 완료 판정
+## 5. 집계 결과 검증 및 대응 절차 (Draft CI)
+
+기존 `backend/db/manual/withdrawal-retention-inventory.sql`은 실제 운영 DB에서는 **별도로 승인된 읽기 전용 계정**으로만 실행한다. 새 CI 절차에서는 다음과 같이 외부 연결 없는 폐기 가능한 `ttalkak-ci` MySQL에서 먼저 검증한다.
+
+```bash
+python3 scripts/test-withdrawal-inventory-output.py
+# CI workflow가 disposable MySQL 기동/통합 테스트 이후 실행:
+# TTALKAK_CI_WITHDRAWAL_AUDIT=1 bash scripts/check-disposable-withdrawal-inventory.sh
+```
+
+`scripts/check-disposable-withdrawal-inventory.sh`는 GitHub Actions 환경과 명시적인 CI 전용 플래그가 없으면 실행을 거부한다. SQL은 읽기 전용 트랜잭션에서 실행하며, 결과는 `scripts/check-withdrawal-inventory-output.py`가 미리 정해진 항목명과 **0 이상의 정수 건수**만 수락한다. 사용자 ID, 이메일, 주문 ID, 개인 대화 본문 및 결제 키가 결과에 포함되면 실패하고 값을 출력하지 않는다.
+
+`PASS`는 **검사된 위험 집계 항목이 0건**이라는 뜻이지, 전체 개인정보 파기가 완료되었다는 뜻이 아니다. 다음 중 하나라도 발견되면 `REVIEW_REQUIRED`로 처리한다.
+
+| 검토 항목 | 대응 담당자가 확인할 사항 | 자동 조치 |
+| --- | --- | --- |
+| 탈퇴 회원 Make 대화·폴더 잔존 | 과거 버전에서 생성된 행인지, 보존 의무·복구 백업·FK 영향 확인 | 삭제 금지 |
+| 탈퇴 회원 구독 자동갱신 켜짐 | 결제사 상태·이미 처리 중인 청구·스케줄러 상태 확인 후 갱신 차단 승인 | 변경 금지 |
+| 탈퇴 회원에 연결된 결제수단 billing key 잔존 | 계약상/환불상 보존 필요성과 안전한 폐기·공급자 연동 확인 | 키 공개·폐기 금지 |
+| 탈퇴 회원 미확정 PENDING 청구 | 기존 주문 ID로 결제사 상태 **조회**·대사. 조회에 사용한 ID는 권한 통제된 운영 시스템에만 기록 | 새 청구·자동 환불 금지 |
+
+운영 DB에서 인가된 조사를 실행하더라도 GitHub Actions/PR/일반 이슈에는 **집계 건수 및 재현 가능한 비민감 오류 코드만** 공유한다. 결제 상태 조회·갱신 차단·삭제·환불은 거래 중복 방지 및 오프사이트 백업/격리 복구 가능성을 확인하고 승인된 운영 절차로 분리한다.
+
+## 6. 완료 판정
 
 | 항목 | 완료 기준 |
 | --- | --- |
