@@ -98,7 +98,7 @@ class Checks(unittest.TestCase):
                 raise HTTPError(request.full_url, 401, 'Blocked', {}, None)
         with contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertFalse(readiness.security_checks(Opener(), 'https://example.com'))
-        self.assertIn('"check": "untrusted_cors_origin_rejected", "result": "FAIL"', output.getvalue())
+        self.assertIn('"check": "untrusted_cors_origin_rejected", "originType": "web", "result": "FAIL"', output.getvalue())
 
 
 
