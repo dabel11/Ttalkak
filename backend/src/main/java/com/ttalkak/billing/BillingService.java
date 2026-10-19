@@ -188,7 +188,10 @@ public class BillingService {
     void charge(Long memberId) {
         configured();
         Prepared prepared = transactions.execute(tx -> {
-            BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            // The scheduler's due-member list may be stale by the time this
+            // lock is acquired. Reject withdrawn accounts here as well.
+            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
+            if (subscription == null) return null;
             context.requireScope(subscription.getBillingScope());
             if (charges.openRefunds(memberId, context.scope()) > 0) return null;
             if (!subscription.isAutoRenew() || subscription.getBillingKey() == null) return null;
