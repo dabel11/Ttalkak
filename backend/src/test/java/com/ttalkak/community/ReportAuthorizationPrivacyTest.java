@@ -38,7 +38,10 @@ class ReportAuthorizationPrivacyTest {
     void inaccessiblePromptAndParentNeverPersistReports(String state) {
         setUpTarget();
         if (state.equals("private")) post.changeVisibility(false);
-        if (state.equals("deleted")) when(prompts.findById(10L)).thenReturn(Optional.of(deletedPost()));
+        if (state.equals("deleted")) {
+            PromptPost deleted = deletedPost();
+            when(prompts.findById(10L)).thenReturn(Optional.of(deleted));
+        }
         if (state.equals("missing")) when(prompts.findById(10L)).thenReturn(Optional.empty());
         assertNotFound(() -> controller.reportPrompt(10L, request, "member"));
         assertNotFound(() -> controller.reportComment(33L, request, "member"));
@@ -75,6 +78,7 @@ class ReportAuthorizationPrivacyTest {
 
     @Test
     void unauthenticatedRequestsNeverReachAccessLookupOrStorage() {
+        when(auth.currentMemberIdOrNull(null)).thenReturn(null);
         assertEquals(401, assertThrows(ResponseStatusException.class,
                 () -> controller.reportPrompt(10L, request, null)).getStatusCode().value());
         assertEquals(401, assertThrows(ResponseStatusException.class,
