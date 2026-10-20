@@ -70,4 +70,47 @@ class ReportResponsePrivacyTest {
         assertEquals("complaint", history.get("reason"));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"private", "deleted", "missing"})
+    void inaccessibleTargetHistoryRedactsBothPromptAndCommentContext(String state) {
+        PromptRepository prompts = mock(PromptRepository.class);
+        CommentRepository comments = mock(CommentRepository.class);
+        ReportResponseMapper subject = new ReportResponseMapper(mock(MemberRepository.class), prompts, comments);
+        PromptPost post = mock(PromptPost.class);
+        when(post.getAuthorId()).thenReturn(8L);
+        when(post.getAuthorNickname()).thenReturn("sensitive owner");
+        when(post.getTitle()).thenReturn("sensitive title");
+        when(post.getText()).thenReturn("sensitive body");
+        when(post.isShared()).thenReturn(!state.equals("private"));
+        when(post.isDeleted()).thenReturn(state.equals("deleted"));
+        when(prompts.findById(10L)).thenReturn(state.equals("missing")
+                ? Optional.empty() : Optional.of(post));
+        when(comments.findById(33L)).thenReturn(Optional.of(
+                new Comment(10L, 32L, 9L, "sensitive commenter", "sensitive comment")));
+        for (Report report : new Report[]{new Report("prompt", 10L, 7L, "complaint"),
+                new Report("comment", 33L, 7L, "complaint")}) {
+            Map<String, Object> history = subject.toResponseForReporter(report, 7L);
+            for (String field : new String[]{"targetPreview", "author", "promptTitle",
+                    "promptContent", "promptAuthor", "commentContent", "memo"}) {
+                assertTrue(history.containsKey(field), field);
+                assertNull(history.get(field), state + ": " + field);
+            }
+            assertEquals("complaint", history.get("reason"));
+            assertEquals(report.getTargetId(), history.get("targetId"));
+        }
+    }
+
+    @Test
+    void privateOwnerRetainsTargetContextWhileOtherReporterIsRedacted() {
+        PromptRepository prompts = mock(PromptRepository.class);
+        ReportResponseMapper subject = new ReportResponseMapper(mock(MemberRepository.class),
+                prompts, mock(CommentRepository.class));
+        PromptPost post = new PromptPost(8L, "owner", "owner title", "owner body", "", false);
+        when(prompts.findById(10L)).thenReturn(Optional.of(post));
+        Report report = new Report("prompt", 10L, 8L, "complaint");
+        assertEquals("owner body", subject.toResponseForReporter(report, 8L).get("promptContent"));
+        assertNull(subject.toResponseForReporter(report, 7L).get("promptContent"));
+        assertEquals("owner body", subject.toResponse(report).get("promptContent"));
+    }
+
 }

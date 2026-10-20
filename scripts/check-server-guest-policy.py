@@ -326,7 +326,8 @@ def check_member_policy():
     status, foreign_reports = request("/api/me/reports", extra_headers=foreign_headers)
     assert status == 200
     old_reports = [item for item in foreign_reports["items"]
-                   if item["targetId"] in (post_id, foreign_comment["id"])]
+                   if (item["targetType"], item["targetId"]) in (
+                       ("prompt", post_id), ("comment", foreign_comment["id"]))]
     assert len(old_reports) >= 2, "Expected public reports to persist as records"
     for item in old_reports:
         for hidden_field in ("targetPreview", "author", "promptTitle", "promptContent",
@@ -336,6 +337,49 @@ def check_member_policy():
                    {"reason": "Should reject private report"}, extra_headers=foreign_headers)[0] == 404
     assert request("/api/reports/comments/" + str(foreign_comment["id"]),
                    {"reason": "Should reject private parent"}, extra_headers=foreign_headers)[0] == 404
+    # A 404 alone cannot prove that a rejected mutation did not write first.
+    # Compare complete history IDs/counts and owner-visible aggregate counters.
+    status, reports_after_rejection = request("/api/me/reports", extra_headers=foreign_headers)
+    assert status == 200 and reports_after_rejection["total"] == foreign_reports["total"]
+    assert [item["id"] for item in reports_after_rejection["items"]] == [
+        item["id"] for item in foreign_reports["items"]
+    ], "Rejected private reports were persisted"
+    comment_id = str(foreign_comment["id"])
+    for path, method, payload in (
+        ("/api/prompts/" + str(post_id) + "/comments", "GET", None),
+        ("/api/prompts/" + str(post_id) + "/comments", "POST", {"text": "must not persist"}),
+        ("/api/comments/" + comment_id + "/replies", "POST", {"text": "must not persist"}),
+        ("/api/comments/" + comment_id, "PATCH", {"text": "must not overwrite"}),
+        ("/api/comments/" + comment_id, "DELETE", None),
+        ("/api/comments/" + comment_id + "/like", "POST", {}),
+        ("/api/comments/" + comment_id + "/like", "DELETE", None),
+        ("/api/prompts/" + str(post_id) + "/save", "POST", {}),
+        ("/api/prompts/" + str(post_id) + "/save", "DELETE", None),
+        ("/api/prompts/" + str(post_id) + "/like", "POST", {}),
+        ("/api/prompts/" + str(post_id) + "/like", "DELETE", None),
+    ):
+        status, _ = request(path, payload, extra_headers=foreign_headers, method=method)
+        assert status == 404, ("Private target operation permitted", path, method, status)
+    status, comments_after_rejection = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200 and comments_after_rejection == foreign_comments, (
+        "Rejected private comment operation changed personal history"
+    )
+    status, owner_after_rejection = request("/api/prompts/" + str(post_id),
+                                           extra_headers=headers(owner_token))
+    assert status == 200
+    for counter in ("saves", "likes", "comments"):
+        assert owner_after_rejection[counter] == owner_detail[counter], (
+            "Rejected private operation changed aggregate", counter
+        )
+    status, owner_comments = request("/api/prompts/" + str(post_id) + "/comments",
+                                     extra_headers=headers(owner_token))
+    assert status == 200
+    original_comment = next(item for item in owner_comments if item["id"] == foreign_comment["id"])
+    assert original_comment["text"] == "CI foreign comment" and original_comment["replies"] == []
+    assert original_comment["likes"] == foreign_comment["likes"]
+    assert original_comment["deleted"] is False
+    print("PASS: private target mutations rejected without report/comment/counter changes")
+
     print("PASS: report creation and historical report context respect private visibility")
 
     print("PASS: legacy library and comments redact private post content")
