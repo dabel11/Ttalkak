@@ -28,7 +28,7 @@ def load(path):
         raise ValueError('snapshot exceeds size limit')
     obj = json.loads(p.read_text(encoding='utf-8'))
     if not isinstance(obj, dict) or set(obj) != set(KINDS):
-        raise ValueError('snapshot must have exactly the four metadata sections')
+        raise ValueError('snapshot must have exactly the five metadata sections')
     if not obj['tables'] or not obj['columns']:
         raise ValueError('tables and columns must be nonempty')
     output = {}
