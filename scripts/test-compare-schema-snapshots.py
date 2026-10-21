@@ -20,6 +20,7 @@ class SchemaSnapshotTests(unittest.TestCase):
 
     def empty(self):
         sample = {kind: [] for kind in module.KINDS}
+        sample['tables'] = [{'name':'members','engine':'InnoDB'}]
         sample['columns'] = [{'table':'members','name':'id','type':'bigint','nullable':False}]
         return sample
 
@@ -69,10 +70,25 @@ class SchemaSnapshotTests(unittest.TestCase):
 
     def test_missing_foreign_key_detected(self):
         a, b = self.empty(), self.empty()
+        a['tables'].append({'name':'comments','engine':'InnoDB'})
+        b['tables'].append({'name':'comments','engine':'InnoDB'})
         a['foreign_keys'] = [{'table':'comments','name':'fk_comment_member','column':'member_id','referenced_table':'members','referenced_column':'id'}]
         result = module.compare(self.snapshot(a), self.snapshot(b))
         self.assertEqual('foreign_keys', result[0]['section'])
         self.assertEqual('missing', result[0]['status'])
+
+    def test_missing_empty_table_detected(self):
+        a, b = self.empty(), self.empty()
+        a['tables'].append({'name':'empty_audit','engine':'InnoDB'})
+        diff = module.compare(self.snapshot(a), self.snapshot(b))
+        self.assertEqual('tables', diff[0]['section'])
+        self.assertEqual('missing', diff[0]['status'])
+
+    def test_column_unknown_table_rejected(self):
+        a = self.empty()
+        a['columns'].append({'table':'not_listed','name':'id','type':'bigint','nullable':False})
+        with self.assertRaises(ValueError):
+            self.snapshot(a)
 
 
 if __name__ == '__main__':
