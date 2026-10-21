@@ -46,6 +46,9 @@ jobs:
           python3 scripts/test-graduation-eval-readiness.py
           python3 scripts/check-graduation-eval-readiness.py
 
+      - name: Test offline MySQL schema snapshot comparator
+        run: python3 scripts/test-compare-schema-snapshots.py
+
       - name: Validate isolated merchant review stack
         env:
           REVIEW_DB_PASSWORD: fixture-not-a-production-secret
