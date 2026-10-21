@@ -31,7 +31,7 @@ for mode in update validate; do
   done
   if [[ "$passed" != "1" ]]; then
     echo "FAIL: disposable backend did not start with ddl-auto=$mode"
-    docker logs --tail 35 "$cid" 2>&1 | sed -E 's#(password|token|key|secret)([=: ]+)[^ ,;]+#\\1\\2[REDACTED]#Ig' >&2 || true
+    # Avoid uploading raw application logs; they may include configuration or PII.
   fi
   docker stop "$cid" >/dev/null 2>&1 || true
   docker rm "$cid" >/dev/null 2>&1 || true
