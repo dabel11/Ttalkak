@@ -4,14 +4,16 @@ import argparse
 import json
 from pathlib import Path
 
-KINDS = ('columns', 'indexes', 'constraints', 'foreign_keys')
+KINDS = ('tables', 'columns', 'indexes', 'constraints', 'foreign_keys')
 FIELDS = {
+    'tables': ('name', 'engine'),
     'columns': ('table', 'name', 'type', 'nullable'),
     'indexes': ('table', 'name', 'position', 'column', 'unique'),
     'constraints': ('table', 'name', 'type'),
     'foreign_keys': ('table', 'name', 'column', 'referenced_table', 'referenced_column'),
 }
 KEYS = {
+    'tables': ('name',),
     'columns': ('table', 'name'),
     'indexes': ('table', 'name', 'position'),
     'constraints': ('table', 'name'),
@@ -27,8 +29,8 @@ def load(path):
     obj = json.loads(p.read_text(encoding='utf-8'))
     if not isinstance(obj, dict) or set(obj) != set(KINDS):
         raise ValueError('snapshot must have exactly the four metadata sections')
-    if not obj['columns']:
-        raise ValueError('columns must be nonempty; empty schema is not a verified match')
+    if not obj['tables'] or not obj['columns']:
+        raise ValueError('tables and columns must be nonempty')
     output = {}
     for kind in KINDS:
         rows = obj[kind]
@@ -51,6 +53,10 @@ def load(path):
                 raise ValueError(f'duplicate {kind} key')
             indexed[key] = row
         output[kind] = indexed
+    known_tables = {row['name'] for row in output['tables'].values()}
+    for kind in ('columns', 'indexes', 'constraints', 'foreign_keys'):
+        if any(row['table'] not in known_tables for row in output[kind].values()):
+            raise ValueError(f'{kind} references a table absent from snapshot')
     return output
 
 
