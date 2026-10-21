@@ -12,14 +12,16 @@ compose=(docker compose -p ttalkak-mysql9-validate-ci -f docker/compose.mysql9-v
 cleanup() { JPA_DDL_AUTO=none "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
-JPA_DDL_AUTO=update "${compose[@]}" up --build -d --wait mysql
+JPA_DDL_AUTO=update "${compose[@]}" up -d --wait mysql
+# The mysql-only up command does not build the backend image.
+JPA_DDL_AUTO=update "${compose[@]}" build backend
 # Start the app twice against the SAME disposable database. First it creates
 # the disposable schema; then validate must accept it without doing DDL.
 for mode in update validate; do
-  cid="$(JPA_DDL_AUTO="$mode" "${compose[@]}" run -d --no-deps backend)"
+  cid="$(JPA_DDL_AUTO="$mode" "${compose[@]}" run -d --no-deps --name "ttalkak-mysql9-validate-${mode}" backend)"
   passed=0
   for attempt in $(seq 1 120); do
-    if docker logs "$cid" 2>&1 | grep -q 'Started .* in .* seconds'; then
+    if docker logs "$cid" 2>&1 | grep -Eq 'Started [[:alnum:]_.]+ in [0-9.]+ seconds'; then
       passed=1
       break
     fi
@@ -27,12 +29,13 @@ for mode in update validate; do
     if [[ "$state" != "true" ]]; then break; fi
     sleep 2
   done
-  docker stop "$cid" >/dev/null 2>&1 || true
-  docker rm "$cid" >/dev/null 2>&1 || true
   if [[ "$passed" != "1" ]]; then
     echo "FAIL: disposable backend did not start with ddl-auto=$mode"
-    exit 1
+    docker logs --tail 35 "$cid" 2>&1 | sed -E 's#(password|token|key|secret)([=: ]+)[^ ,;]+#\\1\\2[REDACTED]#Ig' >&2 || true
   fi
+  docker stop "$cid" >/dev/null 2>&1 || true
+  docker rm "$cid" >/dev/null 2>&1 || true
+  if [[ "$passed" != "1" ]]; then exit 1; fi
   echo "PASS: disposable MySQL 9 backend boot with ddl-auto=$mode"
 done
 echo "IMPORTANT: This does not validate or restore Railway's existing schema."
