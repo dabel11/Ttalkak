@@ -34,8 +34,14 @@
 
 - `scripts/check-disposable-db-restore.sh`는 기존 MySQL 8.4 CI 환경의 별도 복원 DB에 대해서만 실행하며, 소스 DB를 덮어쓰지 않는다.
 - 복원 전후 테이블 이름, 컬럼 정의, 인덱스, 테이블 제약조건, **외래 키 관계**, **모든 테이블의 정확한 행 수**를 비교한다. 테이블별 행 수가 같더라도 실제 데이터 내용의 동일성까지 증명하는 것은 아니다.
-- 해당 변경의 신규 CI 실행 결과는 아직 확인되지 않았다. 기존 MySQL 9 빈 DB 부팅 검사 성공과 이 복원 검사 통과를 혼동하지 않는다.
+- 복원 검사는 [GitHub Actions #39608224919](https://github.com/dabel11/Ttalkak/actions/runs/39608224919)에서 성공했다. MySQL 9 빈 DB JPA 검사는 [CI #39612280419](https://github.com/dabel11/Ttalkak/actions/runs/39612280419)에서 성공했다. 두 결과 모두 폐기 가능한 CI 환경에서만 유효하다.
 - Railway MySQL 9 운영 데이터의 백업·격리 복원 및 애플리케이션 `validate` 호환성은 여전히 별도 검증이 필요하다.
+
+## 개인정보·탈퇴·결제 회귀 검사 근거
+
+- [CI #39608884094](https://github.com/dabel11/Ttalkak/actions/runs/39608884094): 탈퇴 전에 발급된 JWT로 결제 조회·등록·재시도를 거부하는 검사를 포함한 백엔드 테스트 통과.
+- [CI #39612280419](https://github.com/dabel11/Ttalkak/actions/runs/39612280419): 비공개·삭제된 신고 대상의 관련 참조 정보 비노출 검사를 포함한 백엔드 테스트 통과.
+- 위 CI 성공은 운영 반영의 증거가 아니며, 실제 외부 결제사와 사용 중 DB에서 발생할 수 있는 동시성 문제는 별도 검증해야 한다.
 
 ## 중단 조건
 
