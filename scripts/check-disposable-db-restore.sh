@@ -82,11 +82,11 @@ compare_table_data() {
   local table="$1"
   local source_digest restored_digest
   source_digest="$("${dbexec[@]}" mysqldump --user=root --no-create-info \
-    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks \
+    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks --order-by-primary \
     --skip-disable-keys --skip-set-charset --skip-tz-utc \
     "$original_db" "$table" | sha256sum | awk '{print $1}')"
   restored_digest="$("${dbexec[@]}" mysqldump --user=root --no-create-info \
-    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks \
+    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks --order-by-primary \
     --skip-disable-keys --skip-set-charset --skip-tz-utc \
     "$restore_db" "$table" | sha256sum | awk '{print $1}')"
   [[ "$source_digest" == "$restored_digest" ]] || {
