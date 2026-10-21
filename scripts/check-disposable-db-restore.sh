@@ -58,7 +58,12 @@ get_schema_constraints() {
     "SELECT TABLE_NAME, CONSTRAINT_NAME, CONSTRAINT_TYPE FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='$1' ORDER BY TABLE_NAME, CONSTRAINT_NAME;" |
     tr -d '\r'
 }
-for metadata in columns indexes constraints; do
+get_schema_foreign_keys() {
+  "${dbexec[@]}" mysql --user=root -N -B -e \
+    "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, ORDINAL_POSITION, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='$1' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION;" |
+    tr -d '\\r'
+}
+for metadata in columns indexes constraints foreign_keys; do
   getter="get_schema_$metadata"
   original="$("$getter" "$original_db")"
   restored="$("$getter" "$restore_db")"
@@ -76,6 +81,14 @@ for table in "${required_tables[@]}"; do
     echo "FAIL: missing expected CI table: $table"
     exit 1
   fi
+done
+# Compare every table's exact row count, including tables added in future.
+# Names originate from information_schema, not user input.
+while IFS= read -r table; do
+  [[ "$table" =~ ^[A-Za-z0-9_]+$ ]] || {
+    echo "FAIL: unexpected CI table identifier"
+    exit 1
+  }
   source_count="$("${dbexec[@]}" mysql --user=root -N -B -e \
     "SELECT COUNT(*) FROM $original_db.$table;" | tr -d '\r')"
   restored_count="$("${dbexec[@]}" mysql --user=root -N -B -e \
@@ -85,6 +98,6 @@ for table in "${required_tables[@]}"; do
     exit 1
   }
   echo "PASS: restored $table row count matches ($source_count)"
-done
+done <<< "$source_tables"
 
 echo "PASS: disposable MySQL backup and isolated restore; source database unmodified"
