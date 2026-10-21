@@ -27,6 +27,8 @@ def load(path):
     obj = json.loads(p.read_text(encoding='utf-8'))
     if not isinstance(obj, dict) or set(obj) != set(KINDS):
         raise ValueError('snapshot must have exactly the four metadata sections')
+    if not obj['columns']:
+        raise ValueError('columns must be nonempty; empty schema is not a verified match')
     output = {}
     for kind in KINDS:
         rows = obj[kind]
@@ -36,8 +38,14 @@ def load(path):
         for row in rows:
             if not isinstance(row, dict) or set(row) != set(FIELDS[kind]):
                 raise ValueError(f'invalid {kind} row fields')
-            if any(type(v) not in (str, int, bool) or len(str(v)) > 255 for v in row.values()):
-                raise ValueError(f'invalid {kind} row value')
+            for field, value in row.items():
+                expected = bool if field in ('nullable', 'unique') else int if field == 'position' else str
+                if type(value) is not expected:
+                    raise ValueError(f'invalid {kind} field type')
+                if isinstance(value, str) and (not value or len(value) > 255):
+                    raise ValueError(f'invalid {kind} string value')
+                if field == 'position' and value < 1:
+                    raise ValueError('index position must be positive')
             key = tuple(row[k] for k in KEYS[kind])
             if key in indexed:
                 raise ValueError(f'duplicate {kind} key')
