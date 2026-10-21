@@ -91,7 +91,8 @@ class ReportResponsePrivacyTest {
                 new Report("comment", 33L, 7L, "complaint")}) {
             Map<String, Object> history = subject.toResponseForReporter(report, 7L);
             for (String field : new String[]{"targetPreview", "author", "promptTitle",
-                    "promptContent", "promptAuthor", "commentContent", "memo"}) {
+                    "promptContent", "promptAuthor", "commentContent", "memo",
+                    "promptId", "parentId", "targetExists", "targetDeleted", "targetHidden"}) {
                 assertTrue(history.containsKey(field), field);
                 assertNull(history.get(field), state + ": " + field);
             }
