@@ -4,12 +4,15 @@ The tool `scripts/compare-schema-snapshots.py` compares two **manually prepared,
 
 ## Input contract
 
-Each UTF-8 JSON snapshot must be an object containing exactly four arrays: `columns`, `indexes`, `constraints`, and `foreign_keys`.
+Each UTF-8 JSON snapshot must be an object containing exactly five arrays: `tables`, `columns`, `indexes`, `constraints`, and `foreign_keys`.
 
 Each array contains objects with **exactly** the keys shown below (no extra keys). Names and type labels are nonempty strings (up to 255 characters), `position` is a positive integer, and `nullable`/`unique` are booleans.
 
 ```json
 {
+  "tables": [
+    {"name": "members", "engine": "InnoDB"}
+  ],
   "columns": [
     {"table": "members", "name": "id", "type": "bigint", "nullable": false}
   ],
@@ -23,9 +26,9 @@ Each array contains objects with **exactly** the keys shown below (no extra keys
 }
 ```
 
-The `columns` list must be nonempty; the other three lists may be empty. An empty database metadata export is not treated as a verified match. Incomplete snapshots can still lead to misleading differences. Capture the same scope in both snapshots.
+The `tables` and `columns` lists must be nonempty; the other three lists may be empty. Every column, index, constraint and foreign key must reference a table listed in `tables`. An empty database metadata export is not treated as a verified match. Incomplete snapshots can still lead to misleading differences. Capture the same scope in both snapshots.
 
-The columns and index ordering, types, constraint names, nullability and referenced columns must use the same normalization rules in both files. Do not manually infer missing metadata.
+The table inventory (including tables without rows), columns and index ordering, types, constraint names, nullability and referenced columns must use the same normalization rules in both files. Do not manually infer missing metadata.
 
 ## Comparison
 
