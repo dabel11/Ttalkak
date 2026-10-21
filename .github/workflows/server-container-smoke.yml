@@ -10,9 +10,6 @@ on:
       - '.dockerignore'
       - '.github/workflows/server-container-smoke.yml'
   workflow_dispatch:
-  push:
-    branches:
-      - chore/db-deployment-safety-gates
 permissions:
   contents: read
 concurrency:
