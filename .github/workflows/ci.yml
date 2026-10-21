@@ -35,6 +35,17 @@ jobs:
             extension/package-lock.json
             prompt-hub-web-frontend/package-lock.json
 
+      - name: Check tracked sensitive filenames
+        run: python3 scripts/check-tracked-sensitive-files.py
+
+      - name: Test tracked sensitive filename policy
+        run: python3 scripts/test-tracked-sensitive-files.py
+
+      - name: Audit graduation AI evaluation readiness (offline)
+        run: |
+          python3 scripts/test-graduation-eval-readiness.py
+          python3 scripts/check-graduation-eval-readiness.py
+
       - name: Validate isolated merchant review stack
         env:
           REVIEW_DB_PASSWORD: fixture-not-a-production-secret

@@ -3,6 +3,7 @@ package com.ttalkak.prompt;
 import com.ttalkak.auth.AuthService;
 import com.ttalkak.member.Member;
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.common.pagination.PageWindow;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.make.MakeThread;
@@ -283,6 +284,10 @@ public class PromptController {
         List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
         List<PromptPost> prompts = promptRepository.findAll().stream()
                 .filter(prompt -> !prompt.isDeleted())
+                // A post saved/liked while public must stop appearing in other
+                // members' lists as soon as its author makes it private.
+                .filter(prompt -> prompt.isShared()
+                        || Objects.equals(prompt.getAuthorId(), memberId))
                 .filter(prompt -> switch (filter) {
                     case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
                     case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
@@ -1315,10 +1320,11 @@ public class PromptController {
     }
 
     private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(size, 1);
-        int from = Math.min((safePage - 1) * safeSize, prompts.size());
-        int to = Math.min(from + safeSize, prompts.size());
+        PageWindow bounds = PageWindow.of(page, size, prompts.size());
+        int safePage = bounds.page();
+        int safeSize = bounds.size();
+        int from = bounds.from();
+        int to = bounds.to();
         List<Map<String, Object>> items = prompts.subList(from, to).stream()
                 .map(prompt -> PromptMapper.toPromptResponse(prompt, memberId, isSaved(prompt.getId(), memberId), isLiked(prompt.getId(), memberId)))
                 .toList();

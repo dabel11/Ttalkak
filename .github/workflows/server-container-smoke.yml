@@ -28,6 +28,12 @@ jobs:
         run: docker compose -p ttalkak-ci -f docker/compose.ci.yml up -d --build
       - name: Check guest/member quota and auth through nginx and restart
         run: python3 scripts/check-server-guest-policy.py
+      - name: Test privacy-preserving withdrawal inventory parser
+        run: python3 scripts/test-withdrawal-inventory-output.py
+      - name: Check disposable CI withdrawn-account inventory (read-only)
+        env:
+          TTALKAK_CI_WITHDRAWAL_AUDIT: '1'
+        run: bash scripts/check-disposable-withdrawal-inventory.sh
       - name: Verify disposable CI MySQL backup and isolated restore
         env:
           TTALKAK_CI_RESTORE_DRILL: '1'

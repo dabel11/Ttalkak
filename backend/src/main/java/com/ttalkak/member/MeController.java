@@ -1,6 +1,7 @@
 package com.ttalkak.member;
 
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.common.pagination.PageWindow;
 import com.ttalkak.community.CommentController;
 import com.ttalkak.community.CommentRepository;
 import com.ttalkak.community.ReportController;
@@ -51,6 +52,10 @@ public class MeController {
         List<Long> likedIds = likeRepository.findByMemberId(memberId).stream().map(PromptLike::getPromptId).toList();
         List<PromptPost> prompts = promptRepository.findAll().stream()
                 .filter(prompt -> !prompt.isDeleted())
+                // Saved/liked links must not keep revealing a different author's
+                // post after they change its visibility to private.
+                .filter(prompt -> prompt.isShared()
+                        || Objects.equals(prompt.getAuthorId(), memberId))
                 .filter(prompt -> switch (filter) {
                     case "community" -> savedIds.contains(prompt.getId()) && !Objects.equals(prompt.getAuthorId(), memberId);
                     case "mine" -> Objects.equals(prompt.getAuthorId(), memberId);
@@ -69,8 +74,8 @@ public class MeController {
             @RequestParam(required = false) Integer pageSize
     ) {
         int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(resolvedSize, 1);
+        int safePage = PageWindow.normalizePage(page);
+        int safeSize = PageWindow.normalizeSize(resolvedSize);
         Long memberId = authService.currentMemberIdOrNull(authorization);
 
         if (memberId == null) {
@@ -90,8 +95,9 @@ public class MeController {
                 .sorted(java.util.Comparator.comparing(PromptPost::getCreatedAt).reversed())
                 .toList();
 
-        int from = Math.min((safePage - 1) * safeSize, prompts.size());
-        int to = Math.min(from + safeSize, prompts.size());
+        PageWindow bounds = PageWindow.of(safePage, safeSize, prompts.size());
+        int from = bounds.from();
+        int to = bounds.to();
 
         List<Map<String, Object>> items = prompts.subList(from, to).stream()
                 .map(prompt -> PromptMapper.toPromptResponse(
@@ -119,8 +125,8 @@ public class MeController {
             @RequestParam(required = false) Integer pageSize
     ) {
         int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(resolvedSize, 1);
+        int safePage = PageWindow.normalizePage(page);
+        int safeSize = PageWindow.normalizeSize(resolvedSize);
         Long memberId = authService.currentMemberIdOrNull(authorization);
 
         if (memberId == null) {
@@ -135,8 +141,9 @@ public class MeController {
         }
 
         var comments = commentRepository.findByAuthorIdOrderByCreatedAtDesc(memberId);
-        int from = Math.min((safePage - 1) * safeSize, comments.size());
-        int to = Math.min(from + safeSize, comments.size());
+        PageWindow bounds = PageWindow.of(safePage, safeSize, comments.size());
+        int from = bounds.from();
+        int to = bounds.to();
 
         List<Map<String, Object>> items = comments.subList(from, to).stream()
                 .map(comment -> {
@@ -158,7 +165,11 @@ public class MeController {
                     map.put("isMine", true);
                     map.put("createdAt", comment.getCreatedAt().toString());
 
-                    promptRepository.findById(comment.getPromptId()).ifPresentOrElse(prompt -> {
+                    promptRepository.findById(comment.getPromptId())
+                            .filter(prompt -> !prompt.isDeleted()
+                                    && (prompt.isShared()
+                                        || Objects.equals(prompt.getAuthorId(), memberId)))
+                            .ifPresentOrElse(prompt -> {
                         Map<String, Object> author = new LinkedHashMap<>();
                         author.put("id", prompt.getAuthorId());
                         author.put("nickname", prompt.getAuthorNickname());
@@ -197,8 +208,8 @@ public class MeController {
             @RequestParam(required = false) Integer pageSize
     ) {
         int resolvedSize = size != null ? size : (pageSize != null ? pageSize : 16);
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(resolvedSize, 1);
+        int safePage = PageWindow.normalizePage(page);
+        int safeSize = PageWindow.normalizeSize(resolvedSize);
         Long memberId = authService.currentMemberIdOrNull(authorization);
 
         if (memberId == null) {
@@ -213,11 +224,12 @@ public class MeController {
         }
 
         var reports = reportRepository.findByReporterIdOrderByCreatedAtDesc(memberId);
-        int from = Math.min((safePage - 1) * safeSize, reports.size());
-        int to = Math.min(from + safeSize, reports.size());
+        PageWindow bounds = PageWindow.of(safePage, safeSize, reports.size());
+        int from = bounds.from();
+        int to = bounds.to();
 
         List<Map<String, Object>> items = reports.subList(from, to).stream()
-                .map(reportController::toResponse)
+                .map(report -> reportController.toResponseForReporter(report, memberId))
                 .toList();
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -230,10 +242,11 @@ public class MeController {
         return body;
     }
     private Map<String, Object> pageResponse(List<PromptPost> prompts, int page, int size, Long memberId) {
-        int safePage = Math.max(page, 1);
-        int safeSize = Math.max(size, 1);
-        int from = Math.min((safePage - 1) * safeSize, prompts.size());
-        int to = Math.min(from + safeSize, prompts.size());
+        int safePage = PageWindow.normalizePage(page);
+        int safeSize = PageWindow.normalizeSize(size);
+        PageWindow bounds = PageWindow.of(safePage, safeSize, prompts.size());
+        int from = bounds.from();
+        int to = bounds.to();
         List<Map<String, Object>> items = prompts.subList(from, to).stream()
                 .map(prompt -> PromptMapper.toPromptResponse(prompt, memberId,
                         memberId != null && saveRepository.existsByPromptIdAndMemberId(prompt.getId(), memberId),

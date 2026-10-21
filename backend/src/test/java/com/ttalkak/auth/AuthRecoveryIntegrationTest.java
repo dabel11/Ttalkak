@@ -134,6 +134,42 @@ class AuthRecoveryIntegrationTest {
         assertTrue(auth.getMemberFromAuthorization("Bearer " + expired).isEmpty());
         assertTrue(auth.getMemberFromAuthorization("Bearer invalid-jwt").isEmpty());
     }
+    @Test void signedTokenCannotEscalateUsingAdminRoleClaim() throws Exception {
+        // Signed fixture token: check that the server gets authorities from the
+        // current member record, not untrusted role/userId claims inside the JWT.
+        var key = io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64
+                .decode("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="));
+        Instant now = Instant.now();
+        String forgedAdminClaim = io.jsonwebtoken.Jwts.builder()
+                .issuer("ttalkak")
+                .subject(member.getId().toString())
+                .claim("userId", "admin")
+                .claim("role", "ADMIN")
+                .claim("authVersion", member.getAuthVersion())
+                .issuedAt(java.util.Date.from(now))
+                .expiration(java.util.Date.from(now.plusSeconds(3600)))
+                .signWith(key).compact();
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + forgedAdminClaim))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/members").header("Authorization", "Bearer " + forgedAdminClaim))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADMIN_ONLY"));
+    }
+
+    @Test void signedTokenWithWrongIssuerCannotAuthenticate() throws Exception {
+        var key = io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64
+                .decode("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="));
+        String wrongIssuer = io.jsonwebtoken.Jwts.builder()
+                .issuer("not-ttalkak")
+                .subject(member.getId().toString())
+                .claim("authVersion", member.getAuthVersion())
+                .expiration(java.util.Date.from(Instant.now().plusSeconds(3600)))
+                .signWith(key).compact();
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + wrongIssuer))
+                .andExpect(status().isUnauthorized());
+        assertTrue(auth.getMemberFromAuthorization("Bearer " + wrongIssuer).isEmpty());
+    }
+
     @Test void unconfiguredRecoveryDoesNotClaimDelivery() throws Exception {
         doThrow(new ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
                 "PASSWORD_RESET_UNAVAILABLE", "not configured")).when(mailer).requireEnabled();

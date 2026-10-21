@@ -27,4 +27,23 @@ class AuthRateLimitFilterTest {
         assertEquals("60", response.getHeader("Retry-After"));
         assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
     }
+    @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
+        // This tests only the filter's direct request handling. It does not
+        // prove that Railway / Spring proxy configuration provides true client IPs.
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var reached = new java.util.concurrent.atomic.AtomicInteger();
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/password-reset/request");
+            request.setRemoteAddr("198.51.100.10");
+            request.addHeader("X-Forwarded-For", "203.0.113." + i);
+            var response = new MockHttpServletResponse();
+            filter.doFilter(request, response, (req, resp) -> reached.incrementAndGet());
+            if (i == 10) {
+                assertEquals(429, response.getStatus());
+                assertEquals("60", response.getHeader("Retry-After"));
+            }
+        }
+        assertEquals(10, reached.get(), "Untrusted X-Forwarded-For must not bypass a direct filter instance");
+    }
+
 }

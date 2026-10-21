@@ -53,6 +53,8 @@ public class BillingSubscription {
     }
     void paidUntil(Instant end) { this.nextChargeAt = end; }
     void cancelRenewal() { this.autoRenew = false; }
+    /** Account withdrawal stops future renewal without deleting charge/refund records. */
+    public void stopRenewalForWithdrawal() { this.autoRenew = false; }
     void resume() {
         if (billingKey == null) throw new ApiException(
                 HttpStatus.CONFLICT, "BILLING_CARD_REQUIRED", "등록된 카드가 없습니다.");

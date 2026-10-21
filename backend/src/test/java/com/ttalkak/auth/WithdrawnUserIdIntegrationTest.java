@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
+import com.ttalkak.make.MakeThread;
+import com.ttalkak.make.MakeFolder;
+import com.ttalkak.make.MakeThreadRepository;
+import com.ttalkak.make.MakeFolderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -20,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,6 +52,12 @@ class WithdrawnUserIdIntegrationTest {
 
     @Autowired
     private MemberRepository memberRepository;
+
+    @Autowired
+    private MakeThreadRepository makeThreadRepository;
+
+    @Autowired
+    private MakeFolderRepository makeFolderRepository;
 
     @Test
     void rejectsSignupWithSameUserIdAfterWithdrawal()
@@ -217,6 +228,53 @@ class WithdrawnUserIdIntegrationTest {
                                         PASSWORD
                                 )))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void withdrawalClearsServerSidePrivateMakeThreadsAndFolders() throws Exception {
+        String userId = "withdrawal-make-fixture";
+        String signup = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "%s",
+                                  "nickname": "withdrawal-make-fixture",
+                                  "name": "CI Example",
+                                  "email": "make-fixture@example.test",
+                                  "password": "%s",
+                                  "passwordConfirm": "%s",
+                                  "agreeTerms": true,
+                                  "agreePrivacy": true
+                                }
+                                """.formatted(userId, PASSWORD, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readTree(signup).get("accessToken").asText();
+        Long memberId = memberRepository.findByUserId(userId).orElseThrow().getId();
+
+        MakeFolder folder = makeFolderRepository.saveAndFlush(
+                new MakeFolder(memberId, "CI private folder"));
+        makeThreadRepository.saveAndFlush(new MakeThread(
+                memberId, "CI private dialogue",
+                "[{\"role\":\"user\",\"content\":\"CI private message\"}]",
+                folder.getId()));
+        assertEquals(1, makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId).size());
+        assertEquals(1, makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).size());
+
+        mockMvc.perform(delete("/api/auth/withdraw")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+
+        makeThreadRepository.flush();
+        makeFolderRepository.flush();
+        assertTrue(makeThreadRepository.findByMemberIdOrderByUpdatedAtDesc(memberId).isEmpty());
+        assertTrue(makeFolderRepository.findByMemberIdOrderByCreatedAtDesc(memberId).isEmpty());
+        assertFalse(memberRepository.findByUserId(userId).orElseThrow().isActive());
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

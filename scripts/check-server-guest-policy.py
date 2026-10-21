@@ -200,6 +200,93 @@ def check_member_policy():
     }, extra_headers=headers(unknown_token))
     assert status == 503 and error["code"] == "MEMBER_USAGE_UNAVAILABLE", (status, error)
     assert request("/api/prompts/improve", missing, extra_headers=headers(unknown_token))[1]["replayed"] is True
+    # Security regression: another account may view a shared prompt but cannot
+    # modify, delete, or change its visibility in the disposable CI database.
+    foreign_headers = headers(unknown_token)
+    status, rejection = request("/api/prompts/" + str(post_id), {
+        "title": "attempted overwrite", "text": "unauthorized fixture", "tags": ["ci"],
+    }, extra_headers=foreign_headers, method="PATCH")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign edit", status)
+    status, rejection = request("/api/prompts/" + str(post_id),
+                                extra_headers=foreign_headers, method="DELETE")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign delete", status)
+    status, rejection = request("/api/prompts/" + str(post_id) + "/visibility", {
+        "isShared": False,
+    }, extra_headers=foreign_headers, method="PATCH")
+    assert status == 403 and rejection["code"] == "OWNER_ONLY", ("foreign visibility", status)
+    status, unchanged = request("/api/prompts/" + str(post_id), extra_headers=headers(token))
+    assert status == 200 and unchanged["title"] == post_title
+    assert unchanged["isShared"] is True
+    print("PASS: shared prompt cannot be edited, deleted, or hidden by another account")
+
+    # A previous public comment also creates a member-history reference.
+    status, foreign_comment = request("/api/prompts/" + str(post_id) + "/comments",
+                                      {"text": "CI foreign comment"}, extra_headers=foreign_headers)
+    assert status == 200, ("foreign comment create", status)
+    status, before_comment_history = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200 and any(item["promptId"] == post_id
+                                 and item["prompt"]["text"] == "CI fixture: no real user content"
+                                 for item in before_comment_history["items"])
+
+    status, public_report = request("/api/reports/prompts/" + str(post_id),
+                                   {"reason": "CI public visibility check"},
+                                   extra_headers=foreign_headers)
+    assert status == 200 and public_report["promptContent"] == "CI fixture: no real user content"
+    status, public_comment_report = request("/api/reports/comments/" + str(foreign_comment["id"]),
+                                           {"reason": "CI public comment visibility"},
+                                           extra_headers=foreign_headers)
+    assert status == 200 and public_comment_report["promptTitle"] == post_title
+
+    # Large user-supplied page numbers must never overflow a subList index
+    # (previously 500) or request an unbounded number of responses.
+    # Earlier security tests revoked the original account token.
+    # Reauthenticate so an auth failure cannot mask the pagination behavior.
+    pagination_owner_token = login(changed)[1]["accessToken"]
+    extreme_list_paths = [
+        ("/api/prompts?page=2147483647&size=2147483647", None),
+        ("/api/prompts/my?filter=mine&page=2147483647&size=2147483647", headers(pagination_owner_token)),
+        ("/api/me/library?filter=all&page=2147483647&pageSize=2147483647", foreign_headers),
+        ("/api/me/prompts?page=2147483647&size=2147483647", headers(pagination_owner_token)),
+        ("/api/me/comments?page=2147483647&size=2147483647", foreign_headers),
+        ("/api/me/reports?page=2147483647&size=2147483647", foreign_headers),
+    ]
+    for path, auth_headers in extreme_list_paths:
+        status, paged = request(path, extra_headers=auth_headers)
+        assert status == 200 and paged["items"] == [], ("pagination overflow", path, status)
+        assert paged["page"] == 2147483647 and paged["size"] == 100, (
+            "pagination bounds", path, paged.get("page"), paged.get("size")
+        )
+    for path, auth_headers in (
+        ("/api/prompts?page=-5&size=-10", None),
+        ("/api/me/library?page=-5&pageSize=-10", foreign_headers),
+    ):
+        status, paged = request(path, extra_headers=auth_headers)
+        assert status == 200 and paged["page"] == 1 and paged["size"] == 1, (
+            "negative pagination normalization", path, status
+        )
+    print("PASS: huge and negative pagination input never overflows or escapes page bounds")
+
+    # A previously public prompt can be saved/liked by another member.
+    # After the author makes it private, it must disappear from that member's
+    # saved, liked and aggregate lists as well as from the direct detail API.
+    status, foreign_saved = request("/api/prompts/" + str(post_id) + "/save",
+                                    {}, extra_headers=foreign_headers)
+    assert status == 200 and foreign_saved["isSaved"] is True
+    status, foreign_liked = request("/api/prompts/" + str(post_id) + "/like",
+                                    {}, extra_headers=foreign_headers)
+    assert status == 200 and foreign_liked["isLiked"] is True
+    for selected_filter in ("all", "community", "liked"):
+        status, visible_before = request("/api/prompts/my?filter=" + selected_filter,
+                                          extra_headers=foreign_headers)
+        assert status == 200 and any(item["id"] == post_id for item in visible_before["items"])
+
+    for selected_filter in ("all", "community", "liked"):
+        status, visible_library = request("/api/me/library?filter=" + selected_filter,
+                                           extra_headers=foreign_headers)
+        assert status == 200 and any(item["id"] == post_id for item in visible_library["items"]), (
+            "Public saved/liked prompt not in legacy library", selected_filter
+        )
+
     # A different member cannot read a post that the author made private.
     owner_token = login(changed)[1]["accessToken"]
     status, visibility = request("/api/prompts/" + str(post_id) + "/visibility",
@@ -210,7 +297,150 @@ def check_member_policy():
                    extra_headers=headers(unknown_token))[0] == 404, "Private prompt leaked to another member"
     status, owner_detail = request("/api/prompts/" + str(post_id), extra_headers=headers(owner_token))
     assert status == 200 and owner_detail["isMine"] is True
+    for selected_filter in ("all", "community", "liked"):
+        status, hidden_after = request("/api/prompts/my?filter=" + selected_filter,
+                                       extra_headers=foreign_headers)
+        assert status == 200 and all(item["id"] != post_id for item in hidden_after["items"]), (
+            "Private saved/liked prompt leaked through /my", selected_filter
+        )
+    status, owner_list = request("/api/prompts/my?filter=mine",
+                                 extra_headers=headers(owner_token))
+    assert status == 200 and any(item["id"] == post_id for item in owner_list["items"])
+    for selected_filter in ("all", "community", "liked"):
+        status, private_library = request("/api/me/library?filter=" + selected_filter,
+                                           extra_headers=foreign_headers)
+        assert status == 200 and all(item["id"] != post_id for item in private_library["items"]), (
+            "Private prompt leaked in legacy library", selected_filter
+        )
+    status, foreign_comments = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200
+    foreign_history = [item for item in foreign_comments["items"] if item["promptId"] == post_id]
+    assert foreign_history and all(item["prompt"] is None
+                                   and item["promptTitle"] is None
+                                   for item in foreign_history), "Private prompt leaked through comment history"
+    status, owner_library = request("/api/me/library?filter=mine",
+                                     extra_headers=headers(owner_token))
+    assert status == 200 and any(item["id"] == post_id for item in owner_library["items"])
+    # Reports are historical references too: they must not leak content
+    # after a post becomes private, nor accept new reports by guessed IDs.
+    status, foreign_reports = request("/api/me/reports", extra_headers=foreign_headers)
+    assert status == 200
+    old_reports = [item for item in foreign_reports["items"]
+                   if (item["targetType"], item["targetId"]) in (
+                       ("prompt", post_id), ("comment", foreign_comment["id"]))]
+    assert len(old_reports) >= 2, "Expected public reports to persist as records"
+    for item in old_reports:
+        for hidden_field in ("targetPreview", "author", "promptTitle", "promptContent",
+                             "promptAuthor", "commentContent"):
+            assert item.get(hidden_field) is None, ("Report leaked private target", hidden_field)
+    assert request("/api/reports/prompts/" + str(post_id),
+                   {"reason": "Should reject private report"}, extra_headers=foreign_headers)[0] == 404
+    assert request("/api/reports/comments/" + str(foreign_comment["id"]),
+                   {"reason": "Should reject private parent"}, extra_headers=foreign_headers)[0] == 404
+    # A 404 alone cannot prove that a rejected mutation did not write first.
+    # Compare complete history IDs/counts and owner-visible aggregate counters.
+    status, reports_after_rejection = request("/api/me/reports", extra_headers=foreign_headers)
+    assert status == 200 and reports_after_rejection["total"] == foreign_reports["total"]
+    assert [item["id"] for item in reports_after_rejection["items"]] == [
+        item["id"] for item in foreign_reports["items"]
+    ], "Rejected private reports were persisted"
+    comment_id = str(foreign_comment["id"])
+    for path, method, payload in (
+        ("/api/prompts/" + str(post_id) + "/comments", "GET", None),
+        ("/api/prompts/" + str(post_id) + "/comments", "POST", {"text": "must not persist"}),
+        ("/api/comments/" + comment_id + "/replies", "POST", {"text": "must not persist"}),
+        ("/api/comments/" + comment_id, "PATCH", {"text": "must not overwrite"}),
+        ("/api/comments/" + comment_id, "DELETE", None),
+        ("/api/comments/" + comment_id + "/like", "POST", {}),
+        ("/api/comments/" + comment_id + "/like", "DELETE", None),
+        ("/api/prompts/" + str(post_id) + "/save", "POST", {}),
+        ("/api/prompts/" + str(post_id) + "/save", "DELETE", None),
+        ("/api/prompts/" + str(post_id) + "/like", "POST", {}),
+        ("/api/prompts/" + str(post_id) + "/like", "DELETE", None),
+    ):
+        status, _ = request(path, payload, extra_headers=foreign_headers, method=method)
+        assert status == 404, ("Private target operation permitted", path, method, status)
+    status, comments_after_rejection = request("/api/me/comments", extra_headers=foreign_headers)
+    assert status == 200 and comments_after_rejection == foreign_comments, (
+        "Rejected private comment operation changed personal history"
+    )
+    status, owner_after_rejection = request("/api/prompts/" + str(post_id),
+                                           extra_headers=headers(owner_token))
+    assert status == 200
+    for counter in ("saves", "likes", "comments"):
+        assert owner_after_rejection[counter] == owner_detail[counter], (
+            "Rejected private operation changed aggregate", counter
+        )
+    status, owner_comments = request("/api/prompts/" + str(post_id) + "/comments",
+                                     extra_headers=headers(owner_token))
+    assert status == 200
+    original_comment = next(item for item in owner_comments if item["id"] == foreign_comment["id"])
+    assert original_comment["text"] == "CI foreign comment" and original_comment["replies"] == []
+    assert original_comment["likes"] == foreign_comment["likes"]
+    assert original_comment["deleted"] is False
+    print("PASS: private target mutations rejected without report/comment/counter changes")
+
+    print("PASS: report creation and historical report context respect private visibility")
+
+    print("PASS: legacy library and comments redact private post content")
+
+    print("PASS: private prompt disappears from other members' saved/liked lists")
+
     print("PASS: private prompt is hidden from anonymous and other members")
+
+    # Verify private Make conversation and folder ownership with two existing
+    # disposable CI members; no real user account or production DB is touched.
+    status, owner_folder = request("/api/make/folders",
+                                   {"name": "CI-private-folder-" + suffix},
+                                   extra_headers=headers(owner_token))
+    assert status == 200, ("owner folder create", status, owner_folder)
+    folder_id = owner_folder["id"]
+    private_message = "CI confidential fixture " + suffix
+    status, owner_thread = request("/api/make/threads", {
+        "title": "CI private conversation",
+        "messages": [{"role": "user", "content": private_message}],
+        "folderId": folder_id,
+    }, extra_headers=headers(owner_token))
+    assert status == 200, ("owner thread create", status, owner_thread)
+    thread_id = owner_thread["id"]
+    assert owner_thread["folderId"] == folder_id
+    status, owned_detail = request("/api/make/threads/" + str(thread_id),
+                                   extra_headers=headers(owner_token))
+    assert status == 200 and owned_detail["messages"][0]["content"] == private_message
+
+    status, stranger_threads = request("/api/make/threads", extra_headers=foreign_headers)
+    assert status == 200 and all(item["id"] != thread_id for item in stranger_threads["items"])
+    status, stranger_folders = request("/api/make/folders", extra_headers=foreign_headers)
+    assert status == 200 and all(item["id"] != folder_id for item in stranger_folders["items"])
+    assert request("/api/make/threads/" + str(thread_id),
+                   extra_headers=foreign_headers)[0] == 404, "Cross-member thread read"
+    assert request("/api/make/threads/" + str(thread_id),
+                   {"title": "foreign overwrite"}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member thread update"
+    assert request("/api/make/threads/" + str(thread_id),
+                   extra_headers=foreign_headers, method="DELETE")[0] == 404, "Cross-member thread delete"
+    assert request("/api/make/threads/" + str(thread_id) + "/folder",
+                   {"folderId": None}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member thread move"
+    assert request("/api/make/folders/" + str(folder_id),
+                   {"name": "foreign rename"}, extra_headers=foreign_headers,
+                   method="PATCH")[0] == 404, "Cross-member folder update"
+    assert request("/api/make/folders/" + str(folder_id),
+                   extra_headers=foreign_headers, method="DELETE")[0] == 404, "Cross-member folder delete"
+    # Even the legitimate owner cannot assign another member's folder to a thread.
+    status, other_folder = request("/api/make/folders",
+                                   {"name": "CI-stranger-folder-" + suffix},
+                                   extra_headers=foreign_headers)
+    assert status == 200
+    assert request("/api/make/threads/" + str(thread_id) + "/folder",
+                   {"folderId": other_folder["id"]}, extra_headers=headers(owner_token),
+                   method="PATCH")[0] == 400, "Cross-member folder assignment"
+    status, still_owned = request("/api/make/threads/" + str(thread_id),
+                                  extra_headers=headers(owner_token))
+    assert status == 200 and still_owned["folderId"] == folder_id
+    assert still_owned["messages"][0]["content"] == private_message
+    print("PASS: Make thread and folder ownership across read/list/write/delete/move")
+
 
     print("PASS: member metering, replay, quota, restart persistence, missing accounting, individual/all logout, password change")
 

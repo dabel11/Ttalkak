@@ -35,6 +35,8 @@ Inspect only the disposable test record and avoid copying raw database rows into
 - The original ID remains reserved.
 - The nickname is replaced internally so the original nickname can be reused.
 - Email and phone fields are cleared.
+- After the Draft PR #69 fix is deployed, server-side Make threads and folders owned by the withdrawn account have been deleted. This does not cover local-only client storage or historical backups.
+- After the Draft PR #69 fix is deployed, an existing billing subscription has automatic renewal disabled. Current/past charge and refund records are retained; an already in-flight provider charge must be reconciled separately.
 - The display boundary presents the member as `탈퇴한 사용자` without exposing the internal anonymized value.
 
 ## Result record
