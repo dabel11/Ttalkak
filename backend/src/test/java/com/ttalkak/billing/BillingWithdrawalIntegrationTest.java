@@ -73,7 +73,7 @@ class BillingWithdrawalIntegrationTest {
         mvc.perform(post("/api/me/billing/setup")
                         .header("Authorization", "Bearer " + jwt)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\\"plan\\":\\"LIGHT\\"}"))
+                        .content("{\"plan\":\"LIGHT\"}"))
                 .andExpect(status().isUnauthorized());
         mvc.perform(post("/api/me/billing/retry").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isUnauthorized());
