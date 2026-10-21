@@ -74,6 +74,27 @@ for metadata in columns indexes constraints foreign_keys; do
   echo "PASS: restored MySQL $metadata metadata matches"
 done
 
+# Compare deterministic table contents as well as counts. A restored table
+# with altered values can have identical row counts. Use disposable CI fixture
+# data only and never print row values or SQL dumps.
+# SQL table names are validated before interpolation.
+compare_table_data() {
+  local table="$1"
+  local source_digest restored_digest
+  source_digest="$("${dbexec[@]}" mysqldump --user=root --no-create-info \
+    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks \
+    --skip-disable-keys --skip-set-charset --skip-tz-utc \
+    "$original_db" "$table" | sha256sum | awk '{print $1}')"
+  restored_digest="$("${dbexec[@]}" mysqldump --user=root --no-create-info \
+    --skip-comments --skip-dump-date --skip-extended-insert --skip-add-locks \
+    --skip-disable-keys --skip-set-charset --skip-tz-utc \
+    "$restore_db" "$table" | sha256sum | awk '{print $1}')"
+  [[ "$source_digest" == "$restored_digest" ]] || {
+    echo "FAIL: restored table content differs: $table"
+    exit 1
+  }
+}
+
 # Compare real counts, not estimates from information_schema.TABLE_ROWS.
 required_tables=(members guest_usage member_token_usage prompt_posts prompt_saves)
 for table in "${required_tables[@]}"; do
@@ -97,7 +118,8 @@ while IFS= read -r table; do
     echo "FAIL: restored row count mismatch: $table"
     exit 1
   }
-  echo "PASS: restored $table row count matches ($source_count)"
+  compare_table_data "$table"
+  echo "PASS: restored $table row count and content digest match"
 done <<< "$source_tables"
 
 echo "PASS: disposable MySQL backup and isolated restore; source database unmodified"
