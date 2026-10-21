@@ -6,7 +6,7 @@ The tool `scripts/compare-schema-snapshots.py` compares two **manually prepared,
 
 Each UTF-8 JSON snapshot must be an object containing exactly four arrays: `columns`, `indexes`, `constraints`, and `foreign_keys`.
 
-Each array contains objects with **exactly** the keys shown below (no extra keys). Names and type labels are strings (up to 255 characters), `position` is an integer, and `nullable`/`unique` are booleans.
+Each array contains objects with **exactly** the keys shown below (no extra keys). Names and type labels are nonempty strings (up to 255 characters), `position` is a positive integer, and `nullable`/`unique` are booleans.
 
 ```json
 {
@@ -23,7 +23,7 @@ Each array contains objects with **exactly** the keys shown below (no extra keys
 }
 ```
 
-A snapshot can contain empty lists. Do not confuse an empty list with a verified absence of objects; incomplete snapshots can lead to misleading differences. Capture the same scope in both snapshots.
+The `columns` list must be nonempty; the other three lists may be empty. An empty database metadata export is not treated as a verified match. Incomplete snapshots can still lead to misleading differences. Capture the same scope in both snapshots.
 
 The columns and index ordering, types, constraint names, nullability and referenced columns must use the same normalization rules in both files. Do not manually infer missing metadata.
 
