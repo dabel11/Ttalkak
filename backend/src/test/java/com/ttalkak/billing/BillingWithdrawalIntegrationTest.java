@@ -17,6 +17,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -62,5 +63,22 @@ class BillingWithdrawalIntegrationTest {
         assertFalse(members.findById(member.getId()).orElseThrow().isActive());
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isUnauthorized());
+        // A JWT minted before withdrawal must not be usable for any billing
+        // read/write entry point. In particular, retries must not resurrect
+        // renewal after account closure.
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/me/billing/charges").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/setup")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\\"plan\\":\\"LIGHT\\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/retry").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/cancel").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isUnauthorized());
+        assertFalse(subscriptions.findByMemberId(member.getId()).orElseThrow().isAutoRenew());
     }
 }
