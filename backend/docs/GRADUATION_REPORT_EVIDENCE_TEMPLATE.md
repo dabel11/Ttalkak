@@ -14,9 +14,9 @@
 
 | 증빙 ID | 확인 환경/커밋 | 실행 시각 | 기대 동작 | 확인 결과 | 증빙 출처 | 상태 |
 | --- | --- | --- | --- | --- | --- | --- |
-| SYS-01 | GitHub CI / 확인 대상 SHA 기입 | 기입 | Java·RAG·웹·브라우저 빌드 테스트 통과 | 최신 run 결과 링크 기입 | GitHub Actions | 미확인 |
-| SYS-02 | 폐기 가능한 CI MySQL / 기입 | 기입 | 인증/3회 게스트 사용량/DB 저장·복원 테스트 | 컨테이너 run 결과 링크 기입 | GitHub Actions | 미확인 |
-| SYS-03 | Railway 스테이징 / 기입 | 기입 | 공개 GET 200 및 비인가 요청 401/CORS 거부 | 공개 API·무인증 검사만 | GitHub Actions Staging read-only | 별도 운영 확인 필요 |
+| SYS-01 | Ubuntu Actions / #69 head `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936`（시험 merge SHA는 아래 참조） | 2026-10-20T23:24:02Z 시작 | 웹/확장·Java·RAG·통합·브라우저 검사 | 5개 job SUCCESS; 외부 AI는 stub/fixture 범위 | [CI #39514756104](https://github.com/dabel11/Ttalkak/actions/runs/39514756104) | 확인 완료 (CI 범위) |
+| SYS-02 | 폐기 가능한 CI MySQL 8.4 / 동일 #69 head | 2026-10-20T23:24:02Z 시작 | 인증/게스트 3회/합성 데이터 저장·조회/격리 DB 복원 | SUCCESS; 재시작 지속성·복원 메타데이터/건수 일치; 운영 DB 아님 | [Container #39514756085](https://github.com/dabel11/Ttalkak/actions/runs/39514756085) | 확인 완료 (격리 CI 범위) |
+| SYS-03 | Railway 공개 URL / 검사 코드: 동일 #69 head; 배포 SHA 미확인 | 2026-10-20T23:24:02Z 시작 | 공개 GET 200·무인증 401·CORS 403 | SUCCESS; 인증 검사는 SKIP, 로그인·저장 검증 아님 | [Staging #39514756089](https://github.com/dabel11/Ttalkak/actions/runs/39514756089) | 확인 완료 (읽기 전용 범위); 배포/사용자 흐름 미확인 |
 | E2E-01 | 승인된 2개 테스트 계정 / 기입 | 미실행 | 개선→저장→재로그인→재조회 | 토큰/개인정보 제외한 PASS/FAIL 기입 | 승인된 시험 기록 | 미실행 |
 | E2E-02 | 실제 AI 공급자 / 기입 | 미실행 | 요청 의도 보존, 실패 미차감, 제한 동작 | 실제 AI 사용 비용/실패율과 함께 기록 | 승인된 시험 기록 | 미실행 |
 | DATA-01 | 격리된 **운영 MySQL 버전** / 기입 | 미실행 | 운영 백업 복구·테이블/건수/제약조건 검증 | CI 8.4와 MySQL 9 결과를 별개로 기록 | 복구 리허설 보고 | 미실행 |
@@ -24,6 +24,24 @@
 | QUAL-02 | 평가자 A/B 독립 판정 | 미실행 | 95개 질문×2 평가 및 κ 검증 | 합의도, 채점 기준 변경 이력 기입 | 사람 평가표 | 미완료 |
 
 `SYS-01~03`은 실제 CI 또는 공개 응답이 정상인 근거다. **서비스의 모든 사용자 동작이나 AI 품질 향상을 증명하지 않는다.**
+
+### SYS-01~03 실행 이력 대조 (2026-10-21 재확인)
+
+| 증빙 | 실행 / 결론 | run 시작 → 최종 갱신 (UTC) | Actions `head_sha` |
+| --- | --- | --- | --- |
+| SYS-01 (과거) | [CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110) / SUCCESS | 2026-10-19T12:25:12Z → 2026-10-19T12:28:31Z | `08b2899cfe3ab4885c41a26b2d2f94b0b7331c60` |
+| SYS-02 (과거) | [Server container smoke #39245848578](https://github.com/dabel11/Ttalkak/actions/runs/39245848578) / SUCCESS | 2026-10-19T11:36:23Z → 2026-10-19T11:39:13Z | `028322aa47c7b869af5840ee687770d1c7b1d221` |
+| SYS-03 (과거) | [Staging read-only acceptance #39245849067](https://github.com/dabel11/Ttalkak/actions/runs/39245849067) / SUCCESS | 2026-10-19T11:36:23Z → 2026-10-19T11:36:34Z | `028322aa47c7b869af5840ee687770d1c7b1d221` |
+| SYS-01 (최신 #69) | [CI #39514756104](https://github.com/dabel11/Ttalkak/actions/runs/39514756104) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:27:16Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+| SYS-02 (최신 #69) | [Server container smoke #39514756085](https://github.com/dabel11/Ttalkak/actions/runs/39514756085) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:26:21Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+| SYS-03 (최신 #69) | [Staging read-only acceptance #39514756089](https://github.com/dabel11/Ttalkak/actions/runs/39514756089) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:24:15Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+
+- 시각은 GitHub API의 `run_started_at`과 `updated_at`이다. 최종 갱신 시각을 개별 테스트 완료 시각으로 간주하지 않는다. 최신 세 실행의 시작은 한국시간 **2026-10-21 08:24:02 KST**이다.
+- 위 SHA는 실행 메타데이터의 **PR head SHA**이다. checkout 로그에서 실제 시험한 `refs/pull/69/merge` SHA는 과거 SYS-01이 `43c8d3f22307fb9de9bcde6f6375bb758bdae068`, 과거 SYS-02/03이 `3c054bd7989e7be7c724fef5fb94eb3636bee730`, 최신 세 실행이 `97c371a71b36a678f50ddd20d20380e469e0d3f1`이다. 최신 merge는 `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936`와 base `667dd331ecf25b2130b500568d9cc70d9f1be8eb`의 시험용 병합이며 **PR의 실제 병합을 뜻하지 않는다**.
+- 10월 19일의 서로 다른 SHA 결과를 최신 변경의 근거로 재사용하지 않는다. 현재 #69 HEAD의 성공 근거는 **최신 세 실행 자체**이다. PR #70 문서 브랜치와 #69 검증 브랜치도 구분한다.
+- SYS-01: Ubuntu Actions에서 웹/확장 검증·빌드, Backend tests(MySQL 8.4), RAG 단위 테스트, Web/Spring 통합 smoke, fixture 브라우저 E2E의 **5개 job 성공**. 통합 검사는 결정적인 RAG stub을 사용한다.
+- SYS-02: Ubuntu Actions의 폐기 가능한 `ttalkak-ci` 웹/nginx·Spring·MySQL 8.4·RAG stub 환경. 로그에서 게스트 3/4회 제한, 인증·소유권, 합성 데이터 저장·조회 및 재시작 후 지속성, 비공개 참조 차단, 별도 DB 복원 후 컬럼·인덱스·제약조건 및 지정 테이블 건수 일치를 확인했다. 최신 로그에는 페이지 경계와 비공개 대상 변경 거부도 PASS다. **실사용자 데이터나 운영 DB 복구 근거가 아니다.**
+- SYS-03: `https://web-production-a82d94.up.railway.app`에 토큰 없이 GET/OPTIONS 수행. `/healthz`, `/api/tags/popular`, `/api/auth/config` 200, 개인/관리 API 6개 401, 신뢰하지 않는 웹·확장 origin의 CORS 403을 확인했다. 인증 검사는 로그상 **SKIP**이다. 위 SHA는 **검사 코드의 SHA이며 배포 서버의 SHA는 미확인**이다. Google 로그인/메일 성공, AI 생성, 사용자 저장·재로그인·재조회, 결제 승인 및 #69 배포 완료는 입증하지 않는다.
 
 ## 3. AI 평가 결과 서식 (실제 수치만)
 
@@ -45,7 +63,7 @@
 | --- | --- | --- | --- |
 | 공급자 429/5xx, 응답 지연 | 실제 실행 필요 | 명확한 오류·중복 차감 방지·재시도 제한 | 실 공급자 성공률 측정 |
 | 잘못된 정보 추가(환각) | 사람 평가 필요 | 정보 부족시 추가 질문, 요구사항 보존 | 라벨 검수 |
-| 사용자 간 개인정보/권한 | 자동 CI 및 PR 검토 필요 | 객체 소유권·비공개 게시글 참조 차단 | Draft PR #69 검토/배포 |
+| 사용자 간 개인정보/권한 | 자동 CI 및 PR 검토 필요 | 객체 소유권·비공개 게시글 참조 차단 | 미병합 PR #69 검토/배포 |
 | 데이터 복구 | CI 폐기 DB만 검증됨 | 운영 외부 백업 및 격리 복원 | MySQL 9 실제 검증 |
 | 실제 결제/환불 | 라이브 비활성 | 구매 경로 차단·테스트 범위 분리 | 졸프 이후 사업화 |
 

@@ -1,29 +1,40 @@
-# TTALKAK 졸업프로젝트 증거 현황판 — 2026-10-19
+# TTALKAK 졸업프로젝트 증거 현황판 — 2026-10-21
 
 > 이 표는 **GitHub CI 실행 사실과 실제 사용자/AI 성능 검증을 구분**하기 위한 보고서 작성용 스냅샷이다.
 > 작업 기준은 `develop`. 실제 배포·데이터·외부 공급자의 결과를 새로 만들어 냈다는 뜻이 아니다.
-> 보안 수정은 아직 [Draft PR #69](https://github.com/dabel11/Ttalkak/pull/69)에 있으며 운영 서버에 반영되지 않았다.
+> 보안 수정은 아직 [미병합 PR #69](https://github.com/dabel11/Ttalkak/pull/69)에 있으며 운영 서버에 반영되지 않았다.
 
 ## 1. 현재 확인 가능한 증거
 
 | ID | 구분 | 확인된 사실 | 증거 | 입증하지 못하는 것 |
 | --- | --- | --- | --- | --- |
-| E-01 | 백엔드/프론트/AI/브라우저 CI | [#69 커밋 `08b2899`](https://github.com/dabel11/Ttalkak/pull/69) 대상으로 전체 CI 5개 작업 성공 | [전체 CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110) | 운영 서버에 #69의 보안 수정이 배포됐다는 사실 |
-| E-02 | 웹·Spring·MySQL·fixture RAG 통합 | guest 한도, 회원 인증/소유권, 저장·재조회, 백업→별도 DB 복원 등 CI 테스트 성공 | [컨테이너 검사 #39245848578](https://github.com/dabel11/Ttalkak/actions/runs/39245848578) | 실제 Gemini/Groq/Jina 공급자의 AI 생성 성공과 원가 |
-| E-03 | 실배포 읽기 전용 검증 | 스테이징의 공개 HTTP 상태 및 무인증 API·CORS 경계 검사가 통과 | [Staging read-only #39245849067](https://github.com/dabel11/Ttalkak/actions/runs/39245849067) | 로그인·저장·Google 메일·최종 개선 품질의 실환경 E2E |
-| E-04 | #69 개인정보 패치 | 비공개 전환 뒤 저장/좋아요/라이브러리·댓글·신고 참조, 관리자 메모 비노출, 탈퇴 Make 데이터 정리, 자동갱신 차단의 **코드 및 CI 검증** | [Draft PR #69](https://github.com/dabel11/Ttalkak/pull/69) / E-01 / E-02 | `develop`에 병합되어 실제 서비스에 적용됐다는 사실 |
+| E-01 | 백엔드/프론트/AI/브라우저 CI | #69 HEAD `d9b0b8a`의 전체 CI 5개 작업 성공 | [CI #39514756104](https://github.com/dabel11/Ttalkak/actions/runs/39514756104), SYS-01 이력 참조 | 운영 배포 및 실제 외부 AI 품질 |
+| E-02 | 웹·Spring·MySQL·fixture RAG 통합 | #69 HEAD `d9b0b8a`의 인증·사용량·합성 데이터 저장/조회·격리 복원 검사 성공 | [컨테이너 #39514756085](https://github.com/dabel11/Ttalkak/actions/runs/39514756085), SYS-02 이력 참조 | 실제 AI 생성·실사용자 저장 흐름·운영 DB 복원 |
+| E-03 | 실배포 읽기 전용 검증 | 공개 HTTP 200, 무인증 401 및 CORS 403 확인 | [Staging #39514756089](https://github.com/dabel11/Ttalkak/actions/runs/39514756089), SYS-03 이력 참조 | 배포 SHA, 로그인·저장·재조회·실제 AI 품질 |
+| E-04 | #69 개인정보 패치 | 비공개 전환 뒤 저장/좋아요/라이브러리·댓글·신고 참조, 관리자 메모 비노출, 탈퇴 Make 데이터 정리, 자동갱신 차단의 **코드 및 CI 검증** | [미병합 PR #69](https://github.com/dabel11/Ttalkak/pull/69) / E-01 / E-02 | `develop`에 병합되어 실제 서비스에 적용됐다는 사실 |
 | E-05 | AI 평가 설계 | AI 담당자가 고정 평가셋 `uplift_set_v2.json` 48항목(Track A 31 / B 17), 다중 턴 10항목과 기존 비교기 구현 | [평가셋](https://github.com/dabel11/Ttalkak/blob/develop/rag-server/eval/uplift_set_v2.json), [기존 평가 도구](https://github.com/dabel11/Ttalkak/blob/develop/rag-server/eval/uplift_eval.py) | 결과물 향상률/검색 개선을 **완전하게** 입증한 통계 |
 | E-06 | 과거 AI 실험 | `uplift_trackA_20260922.json`에는 Track A의 raw/TTALKAK 짝이 있는 9항목 기록이 확인됨 | [과거 기록](https://github.com/dabel11/Ttalkak/blob/develop/rag-server/eval/results/uplift_trackA_20260922.json) | Track A 31개 전체 완료, 통계적 유의성, 현재 배포 모델과의 동일성 |
 | E-07 | 사람 평가 준비 | `sheet_A.csv` 및 `sheet_B.csv` 각각 95질문이 마련돼 있으나 **답변 칸 공란** | [사람 평가 가이드](https://github.com/dabel11/Ttalkak/blob/develop/rag-server/eval/HUMAN_REVIEW.md) | 사람 평가자 간 κ 또는 LLM Judge 신뢰도 |
 
 **해석 원칙:** CI의 `PASS`는 해당 테스트가 검증한 경로에만 적용한다. 스테이징 GET 200은 실제 RAG 생성 성공이 아니다. 개선 전후 결과물의 우월성은 조건이 고정된 A/B 평가 및 사람 검증 전에는 결론으로 쓰지 않는다.
 
-### 2026-10-19 최신 CI 재확인
+### SYS-01~03 실행 이력 대조 (2026-10-21 재확인)
 
-- 확인 대상: Draft PR #69의 `08b2899cfe3ab4885c41a26b2d2f94b0b7331c60`.
-- [CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110): `Frontend tests and production build`, `Backend tests`, `RAG server unit tests`, `Web and Spring backend integration smoke`, `Web fixture browser E2E` 총 5개 작업이 성공 상태.
-- Web/Spring 통합 검사는 **결정적인 RAG stub**을 사용하므로 실제 외부 LLM의 품질·요금·응답률 검증으로 해석하지 않는다.
-- 이 실행 결과는 CI 환경의 검증이며, #69의 실제 Railway 운영 배포·실결제·운영 MySQL 9 격리 복원을 증명하지 않는다.
+| 증빙 | 실행 / 결론 | run 시작 → 최종 갱신 (UTC) | Actions `head_sha` |
+| --- | --- | --- | --- |
+| SYS-01 (과거) | [CI #39251906110](https://github.com/dabel11/Ttalkak/actions/runs/39251906110) / SUCCESS | 2026-10-19T12:25:12Z → 2026-10-19T12:28:31Z | `08b2899cfe3ab4885c41a26b2d2f94b0b7331c60` |
+| SYS-02 (과거) | [Server container smoke #39245848578](https://github.com/dabel11/Ttalkak/actions/runs/39245848578) / SUCCESS | 2026-10-19T11:36:23Z → 2026-10-19T11:39:13Z | `028322aa47c7b869af5840ee687770d1c7b1d221` |
+| SYS-03 (과거) | [Staging read-only acceptance #39245849067](https://github.com/dabel11/Ttalkak/actions/runs/39245849067) / SUCCESS | 2026-10-19T11:36:23Z → 2026-10-19T11:36:34Z | `028322aa47c7b869af5840ee687770d1c7b1d221` |
+| SYS-01 (최신 #69) | [CI #39514756104](https://github.com/dabel11/Ttalkak/actions/runs/39514756104) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:27:16Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+| SYS-02 (최신 #69) | [Server container smoke #39514756085](https://github.com/dabel11/Ttalkak/actions/runs/39514756085) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:26:21Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+| SYS-03 (최신 #69) | [Staging read-only acceptance #39514756089](https://github.com/dabel11/Ttalkak/actions/runs/39514756089) / SUCCESS | 2026-10-20T23:24:02Z → 2026-10-20T23:24:15Z | `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936` |
+
+- 시각은 GitHub API의 `run_started_at`과 `updated_at`이다. 최종 갱신 시각을 개별 테스트 완료 시각으로 간주하지 않는다. 최신 세 실행의 시작은 한국시간 **2026-10-21 08:24:02 KST**이다.
+- 위 SHA는 실행 메타데이터의 **PR head SHA**이다. checkout 로그에서 실제 시험한 `refs/pull/69/merge` SHA는 과거 SYS-01이 `43c8d3f22307fb9de9bcde6f6375bb758bdae068`, 과거 SYS-02/03이 `3c054bd7989e7be7c724fef5fb94eb3636bee730`, 최신 세 실행이 `97c371a71b36a678f50ddd20d20380e469e0d3f1`이다. 최신 merge는 `d9b0b8a702d6ac1b861fc2538d6c6fcd492fc936`와 base `667dd331ecf25b2130b500568d9cc70d9f1be8eb`의 시험용 병합이며 **PR의 실제 병합을 뜻하지 않는다**.
+- 10월 19일의 서로 다른 SHA 결과를 최신 변경의 근거로 재사용하지 않는다. 현재 #69 HEAD의 성공 근거는 **최신 세 실행 자체**이다. PR #70 문서 브랜치와 #69 검증 브랜치도 구분한다.
+- SYS-01: Ubuntu Actions에서 웹/확장 검증·빌드, Backend tests(MySQL 8.4), RAG 단위 테스트, Web/Spring 통합 smoke, fixture 브라우저 E2E의 **5개 job 성공**. 통합 검사는 결정적인 RAG stub을 사용한다.
+- SYS-02: Ubuntu Actions의 폐기 가능한 `ttalkak-ci` 웹/nginx·Spring·MySQL 8.4·RAG stub 환경. 로그에서 게스트 3/4회 제한, 인증·소유권, 합성 데이터 저장·조회 및 재시작 후 지속성, 비공개 참조 차단, 별도 DB 복원 후 컬럼·인덱스·제약조건 및 지정 테이블 건수 일치를 확인했다. 최신 로그에는 페이지 경계와 비공개 대상 변경 거부도 PASS다. **실사용자 데이터나 운영 DB 복구 근거가 아니다.**
+- SYS-03: `https://web-production-a82d94.up.railway.app`에 토큰 없이 GET/OPTIONS 수행. `/healthz`, `/api/tags/popular`, `/api/auth/config` 200, 개인/관리 API 6개 401, 신뢰하지 않는 웹·확장 origin의 CORS 403을 확인했다. 인증 검사는 로그상 **SKIP**이다. 위 SHA는 **검사 코드의 SHA이며 배포 서버의 SHA는 미확인**이다. Google 로그인/메일 성공, AI 생성, 사용자 저장·재로그인·재조회, 결제 승인 및 #69 배포 완료는 입증하지 않는다.
 
 ## 2. 졸업프로젝트 제출 전에 확보할 최종 증거
 
@@ -34,7 +45,7 @@
 | P0 | 판정기의 사람 평가 타당성 | 두 평가자 독립적으로 95문항 채점, κ 및 오판 확인 | 미완료 |
 | P0 | 시연 안정성 | 재현 가능한 합성 입력 2~3건과 실패 시 녹화·대체 발표 | 자료 준비 중 |
 | P1 | 운영 데이터 복구 | 실제 Railway MySQL 9 **격리 복원** + 백업 출처·권한·RTO/RPO 확인 | CI MySQL 8.4만 검증 |
-| P1 | #69 보안 수정 반영 | CI·리뷰→`develop` 병합→배포 SHA 확인→합성 데이터 재검증 | Draft / 미배포 |
+| P1 | #69 보안 수정 반영 | CI·리뷰→`develop` 병합→배포 SHA 확인→합성 데이터 재검증 | 미병합 / 배포 확인 미완료 |
 | P2 | 유료 판매/환불/개인정보 보존 정책 | 사업화 계약·운영 주체·PG 라이브 승인, 법적 검토 | 졸프 이후 |
 
 ## 3. 발표에 넣어도 되는 문장
