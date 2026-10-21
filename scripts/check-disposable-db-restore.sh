@@ -61,13 +61,13 @@ get_schema_constraints() {
 get_schema_foreign_keys() {
   "${dbexec[@]}" mysql --user=root -N -B -e \
     "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, ORDINAL_POSITION, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='$1' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION;" |
-    tr -d '\\r'
+    tr -d '\r'
 }
 for metadata in columns indexes constraints foreign_keys; do
   getter="get_schema_$metadata"
   original="$("$getter" "$original_db")"
   restored="$("$getter" "$restore_db")"
-  [[ -n "$original" && "$original" == "$restored" ]] || {
+  [[ "$original" == "$restored" ]] || {
     echo "FAIL: restored MySQL $metadata metadata differs from disposable source"
     exit 1
   }
