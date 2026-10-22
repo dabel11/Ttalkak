@@ -1,0 +1,26 @@
+# Disposable MySQL 9 + backend schema validation fixture.
+# Entirely separate from Railway; use only with the guarded CI script.
+services:
+  mysql:
+    image: mysql:9
+    environment:
+      MYSQL_DATABASE: ttalkak_validate_ci
+      MYSQL_ROOT_PASSWORD: fixture-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=fixture-only-password mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 36
+  backend:
+    build:
+      context: ../backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ttalkak_validate_ci?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: fixture-only-password
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      RAG_SERVER_URL: http://127.0.0.1:8000
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:?Set JPA_DDL_AUTO explicitly for disposable fixture}

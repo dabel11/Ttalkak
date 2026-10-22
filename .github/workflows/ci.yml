@@ -46,6 +46,9 @@ jobs:
           python3 scripts/test-graduation-eval-readiness.py
           python3 scripts/check-graduation-eval-readiness.py
 
+      - name: Test offline MySQL schema snapshot comparator
+        run: python3 scripts/test-compare-schema-snapshots.py
+
       - name: Validate isolated merchant review stack
         env:
           REVIEW_DB_PASSWORD: fixture-not-a-production-secret
@@ -305,6 +308,19 @@ jobs:
 
       - name: Run backend tests
         run: ./gradlew test --no-daemon
+
+  mysql9-schema-rehearsal:
+    name: Disposable MySQL 9 JPA schema boot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Boot disposable MySQL 9 and validate generated schema
+        env:
+          TTALKAK_MYSQL9_VALIDATE_CI: '1'
+        run: bash scripts/check-disposable-mysql9-validate.sh
 
   rag-server:
     name: RAG server unit tests

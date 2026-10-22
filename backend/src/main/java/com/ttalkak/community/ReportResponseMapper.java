@@ -118,7 +118,8 @@ public class ReportResponseMapper {
         }
         if (!viewableBy(prompt, reporterId)) {
             for (String field : new String[]{"targetPreview", "author", "promptTitle",
-                    "promptContent", "promptAuthor", "commentContent"}) {
+                    "promptContent", "promptAuthor", "commentContent",
+                    "promptId", "parentId", "targetExists", "targetDeleted", "targetHidden"}) {
                 body.put(field, null);
             }
         }
