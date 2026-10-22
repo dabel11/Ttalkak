@@ -66,6 +66,15 @@ def load(path):
     for kind in ('columns', 'indexes', 'constraints', 'foreign_keys'):
         if any(row['table'] not in known_tables for row in output[kind].values()):
             raise ValueError(f'{kind} references a table absent from snapshot')
+    # Positions are ordinal sequences within each index or composite FK.
+    # A gap such as [1, 3] is malformed metadata, not a valid schema match.
+    for kind in ('indexes', 'foreign_keys'):
+        groups = {}
+        for row in output[kind].values():
+            groups.setdefault((row['table'], row['name']), []).append(row['position'])
+        for positions in groups.values():
+            if sorted(positions) != list(range(1, len(positions) + 1)):
+                raise ValueError(f'{kind} positions must be contiguous starting at 1')
     column_pairs = set(output['columns'])
     for row in output['indexes'].values():
         if (row['table'], row['column']) not in column_pairs:
