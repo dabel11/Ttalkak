@@ -143,6 +143,32 @@ class SchemaSnapshotTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.load(path)
 
+    def test_sparse_index_positions_rejected(self):
+        a = self.empty()
+        a['indexes'] = [
+            {'table':'members','name':'idx_pair','position':1,'column':'id','unique':False},
+            {'table':'members','name':'idx_pair','position':3,'column':'id','unique':False},
+        ]
+        with self.assertRaisesRegex(ValueError, 'contiguous'):
+            self.snapshot(a)
+
+    def test_sparse_composite_fk_positions_rejected(self):
+        a = self.empty()
+        a['foreign_keys'] = [
+            {'table':'members','name':'fk_pair','position':1,'column':'id','referenced_table':'members','referenced_column':'id'},
+            {'table':'members','name':'fk_pair','position':3,'column':'id','referenced_table':'members','referenced_column':'id'},
+        ]
+        with self.assertRaisesRegex(ValueError, 'contiguous'):
+            self.snapshot(a)
+
+    def test_out_of_order_but_complete_positions_accepted(self):
+        a = self.empty()
+        a['indexes'] = [
+            {'table':'members','name':'idx_pair','position':2,'column':'id','unique':False},
+            {'table':'members','name':'idx_pair','position':1,'column':'id','unique':False},
+        ]
+        self.assertEqual([], module.compare(self.snapshot(a), self.snapshot(a)))
+
 
 if __name__ == '__main__':
     unittest.main()
