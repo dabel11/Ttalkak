@@ -10,23 +10,32 @@ FIELDS = {
     'columns': ('table', 'name', 'type', 'nullable'),
     'indexes': ('table', 'name', 'position', 'column', 'unique'),
     'constraints': ('table', 'name', 'type'),
-    'foreign_keys': ('table', 'name', 'column', 'referenced_table', 'referenced_column'),
+    'foreign_keys': ('table', 'name', 'position', 'column', 'referenced_table', 'referenced_column'),
 }
 KEYS = {
     'tables': ('name',),
     'columns': ('table', 'name'),
     'indexes': ('table', 'name', 'position'),
     'constraints': ('table', 'name'),
-    'foreign_keys': ('table', 'name', 'column'),
+    'foreign_keys': ('table', 'name', 'position'),
 }
 MAX_BYTES = 2_000_000
+
+
+def reject_duplicate_properties(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON property')
+        result[key] = value
+    return result
 
 
 def load(path):
     p = Path(path)
     if p.stat().st_size > MAX_BYTES:
         raise ValueError('snapshot exceeds size limit')
-    obj = json.loads(p.read_text(encoding='utf-8'))
+    obj = json.loads(p.read_text(encoding='utf-8'), object_pairs_hook=reject_duplicate_properties)
     if not isinstance(obj, dict) or set(obj) != set(KINDS):
         raise ValueError('snapshot must have exactly the five metadata sections')
     if not obj['tables'] or not obj['columns']:
@@ -57,6 +66,17 @@ def load(path):
     for kind in ('columns', 'indexes', 'constraints', 'foreign_keys'):
         if any(row['table'] not in known_tables for row in output[kind].values()):
             raise ValueError(f'{kind} references a table absent from snapshot')
+    column_pairs = set(output['columns'])
+    for row in output['indexes'].values():
+        if (row['table'], row['column']) not in column_pairs:
+            raise ValueError('index references a missing local column')
+    for row in output['foreign_keys'].values():
+        if (row['table'], row['column']) not in column_pairs:
+            raise ValueError('foreign key references a missing local column')
+        if row['referenced_table'] not in known_tables:
+            raise ValueError('foreign key references a missing target table')
+        if (row['referenced_table'], row['referenced_column']) not in column_pairs:
+            raise ValueError('foreign key references a missing target column')
     return output
 
 
