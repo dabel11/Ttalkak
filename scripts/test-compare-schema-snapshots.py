@@ -72,7 +72,9 @@ class SchemaSnapshotTests(unittest.TestCase):
         a, b = self.empty(), self.empty()
         a['tables'].append({'name':'comments','engine':'InnoDB'})
         b['tables'].append({'name':'comments','engine':'InnoDB'})
-        a['foreign_keys'] = [{'table':'comments','name':'fk_comment_member','column':'member_id','referenced_table':'members','referenced_column':'id'}]
+        for snap in (a, b):
+            snap['columns'].append({'table':'comments','name':'member_id','type':'bigint','nullable':False})
+        a['foreign_keys'] = [{'table':'comments','name':'fk_comment_member','position':1,'column':'member_id','referenced_table':'members','referenced_column':'id'}]
         result = module.compare(self.snapshot(a), self.snapshot(b))
         self.assertEqual('foreign_keys', result[0]['section'])
         self.assertEqual('missing', result[0]['status'])
@@ -89,6 +91,57 @@ class SchemaSnapshotTests(unittest.TestCase):
         a['columns'].append({'table':'not_listed','name':'id','type':'bigint','nullable':False})
         with self.assertRaises(ValueError):
             self.snapshot(a)
+
+    def test_composite_foreign_key_order_changed(self):
+        a, b = self.empty(), self.empty()
+        for snap in (a, b):
+            snap['tables'].append({'name':'comments','engine':'InnoDB'})
+            snap['columns'] += [
+                {'table':'comments','name':'left_id','type':'bigint','nullable':False},
+                {'table':'comments','name':'right_id','type':'bigint','nullable':False},
+                {'table':'members','name':'other_id','type':'bigint','nullable':False},
+            ]
+        a['foreign_keys'] = [
+            {'table':'comments','name':'fk_pair','position':1,'column':'left_id','referenced_table':'members','referenced_column':'id'},
+            {'table':'comments','name':'fk_pair','position':2,'column':'right_id','referenced_table':'members','referenced_column':'other_id'},
+        ]
+        b['foreign_keys'] = [
+            dict(a['foreign_keys'][1], position=1),
+            dict(a['foreign_keys'][0], position=2),
+        ]
+        changes = module.compare(self.snapshot(a), self.snapshot(b))
+        self.assertEqual(2, len(changes))
+        self.assertTrue(all(row['status'] == 'changed' for row in changes))
+
+    def test_missing_target_table_rejected(self):
+        a = self.empty()
+        a['foreign_keys'] = [{'table':'members','name':'fk_missing','position':1,'column':'id',
+                              'referenced_table':'missing','referenced_column':'id'}]
+        with self.assertRaises(ValueError):
+            self.snapshot(a)
+
+    def test_missing_local_and_target_columns_rejected(self):
+        for invalid in ('column','referenced_column'):
+            a = self.empty()
+            a['foreign_keys'] = [{'table':'members','name':'fk_bad','position':1,'column':'id',
+                                  'referenced_table':'members','referenced_column':'id'}]
+            a['foreign_keys'][0][invalid] = 'absent'
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.snapshot(a)
+
+    def test_index_missing_column_rejected(self):
+        a = self.empty()
+        a['indexes'] = [{'table':'members','name':'idx_bad','position':1,
+                         'column':'absent','unique':False}]
+        with self.assertRaises(ValueError):
+            self.snapshot(a)
+
+    def test_duplicate_json_property_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'duplicate.json'
+            path.write_text('{"tables":[],"tables":[],"columns":[],"indexes":[],"constraints":[],"foreign_keys":[]}')
+            with self.assertRaises(ValueError):
+                module.load(path)
 
 
 if __name__ == '__main__':
