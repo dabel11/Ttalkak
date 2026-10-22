@@ -22,11 +22,13 @@ Each array contains objects with **exactly** the keys shown below (no extra keys
   "constraints": [
     {"table": "members", "name": "PRIMARY", "type": "PRIMARY KEY"}
   ],
-  "foreign_keys": []
+  "foreign_keys": [
+    {"table": "members", "name": "fk_parent", "position": 1, "column": "id", "referenced_table": "members", "referenced_column": "id"}
+  ]
 }
 ```
 
-The `tables` and `columns` lists must be nonempty; the other three lists may be empty. Every column, index, constraint and foreign key must reference a table listed in `tables`. An empty database metadata export is not treated as a verified match. Incomplete snapshots can still lead to misleading differences. Capture the same scope in both snapshots.
+The `tables` and `columns` lists must be nonempty; the other three lists may be empty. Every column, index, constraint and foreign key must reference a table listed in `tables`. Index columns, foreign key local columns and referenced columns must actually exist. Composite foreign keys include a positive `position` for column ordering; swapping the order is a detectable difference. Duplicate JSON object properties are rejected. An empty database metadata export is not treated as a verified match. Incomplete snapshots can still lead to misleading differences. Capture the same scope in both snapshots.
 
 The table inventory (including tables without rows), columns and index ordering, types, constraint names, nullability and referenced columns must use the same normalization rules in both files. Do not manually infer missing metadata.
 
@@ -39,6 +41,6 @@ python3 scripts/compare-schema-snapshots.py baseline.json candidate.json
 
 Exit codes: `0` for exact match, `1` for differences, `2` for invalid or unreadable input. The output includes metadata identifiers for differing keys and their status (`added`, `missing`, `changed`), not column values or customer data.
 
-**Security:** Never commit real production snapshots, credentials, user records, connection URLs or billing details. Schema metadata can still reveal internal design, so approve and sanitize exports before storing them. The tool accepts only the limited JSON fields above and rejects duplicate identifiers.
+**Security:** Never commit real production snapshots, credentials, user records, connection URLs or billing details. Schema metadata can still reveal internal design, so approve and sanitize exports before storing them. The tool accepts only the limited JSON fields above and rejects duplicate identifiers and JSON properties.
 
 **Scope limits:** This comparison is *not* a Hibernate schema validation or a MySQL compatibility test. It does not check all DB properties, SQL defaults, checks expressions, collations, table options or actual data. The existing `backend/db/manual/schema-readiness.sql` returns rows from information_schema, **not this JSON contract**. It needs a separate reviewed transformation step; never feed the SQL's raw output to this comparator. A real `JPA_DDL_AUTO=validate` boot test must be run on a separate, disposable MySQL 9 restore before changing Railway production.
