@@ -78,3 +78,24 @@ Railway 공식 문서는 볼륨이 연결된 서비스에서 **Backups 탭**으�
 - `scripts/check-disposable-db-restore.sh` — **GitHub CI 전용** 폐기 가능한 DB 복원; 운영에서 실행 금지
 - `backend/docs/GRADUATION_EVALUATION_AND_DB_READINESS.md` — AI 평가 및 DB 인수인계
 - `backend/docs/INCIDENT_RESPONSE.md` — 장애 대응 기준
+
+
+## 2026-10-22 현장 점검 업데이트 (사용자 제공 실행 결과)
+
+> 앞선 섹션의 ‘미검증’ 기술은 **2026-10-21 당시 상태**다. 아래는 이후에 사용자가 PowerShell/Docker에서 실행해 공유한 결과이며, 독립적인 자동화 증빙이나 운영 배포 완료를 의미하지 않는다.
+
+- 백업: Railway MySQL 9에서 `mysqldump`로 특정 DB의 SQL 논리 덤프를 생성했다고 사용자가 보고함. 파일명 `ttalkak-20261022-155310.sql`, 크기 **11,069,239 bytes**. 해당 백업은 전체 MySQL 인스턴스의 `--all-databases` 백업이 아님.
+- 보관: 별도 `-secure.7z` 파일 생성 후 사용자 제공 7-Zip 테스트 결과 `7zAES`, `Everything is Ok`, 압축 크기 **4,040,163 bytes**. 암호 복구 가능성과 별도 안전 보관 위치는 추가 확인 필요. 실제 백업 및 암호는 GitHub에 보관하지 않음.
+- 격리 복원: 사용자 로컬의 MySQL **9.7.4** 테스트 컨테이너에 `ttalkak_restore`로 복원했다고 보고함. 테이블 23개. 정확한 `COUNT(*)` 표본: `members=7`, `prompt_posts=4`, `comments=2`, `rag_chunk=301`, `reports=2`. 이는 표본 데이터 조회 성공이며 운영 원본과 전 테이블·해시 단위의 완전 동일성 증거는 아님.
+- 애플리케이션 호환성: 최신 `develop` 로컬 이미지로 **`JPA_DDL_AUTO=validate`** 사용. 사용자가 공유한 Spring Boot 로그에 `Initialized JPA EntityManagerFactory`, `Tomcat started on port 8080`, `Started BackendApplication`이 확인됨. 첫 실행의 JWT 환경변수 누락은 별도 임시 테스트 키로 보완. API E2E 검증은 별도 필요.
+- GitHub 최신 SHA: `047453fb9c6d113ae0a07bb4ff77bf3d6f3172a7`. [CI #39729457041](https://github.com/dabel11/Ttalkak/actions/runs/39729457041) 성공.
+- Railway 실제 서비스: 백엔드·웹·RAG가 여전히 이전 SHA `667dd331ecf25b2130b500568d9cc70d9f1be8eb`로 실행 중. 백엔드 새 배포 요청은 Railway의 `Deploys have been paused due to an upstream issue` 오류로 거절됨. 기존 서비스/DB 변경 없이 중단됨.
+- 보안 사고 후속: Railway에 비밀정보 교체 필요. DB/JWT/외부 API 키 교체 순서와 장애 영향(로그아웃·DB 접속·서비스 재시작 등)을 확인 후 수행. 현재 **교체 완료가 아님**.
+
+### 배포 재개 시 남은 게이트
+
+1. Railway가 신규 **빌드**를 다시 허용하는지 확인한다. 과거 배포를 재사용하는 `Redeploy`를 최신 소스 배포로 오인하지 않는다.
+2. SHA 고정 여부, 이전 배포 롤백 경로, 외부 백업 암호 및 복구 절차를 확인한다.
+3. 운영 JPA 설정 `update`의 자동 DDL 위험을 관리한다. 로컬 `validate` 성공은 운영 변수를 임의 변경할 근거가 아니다.
+4. 기존 서비스에 최신 커밋 신규 빌드 후 배포된 SHA와 인증·프롬프트·권한·결제 관련 읽기 및 제한적 E2E 결과를 확인한다.
+5. Railway 보안 공지에 따라 비밀정보를 각 제공업체에서 교체하고 재배포/재시작 및 기능 검증한다. 비밀정보 값·DB 덤프·고객 데이터는 이 저장소 또는 CI 로그에 기록하지 않는다.
