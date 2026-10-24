@@ -13,6 +13,20 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       return false;
     };
   }
+  function assistantMessage(result, id, sourcePrompt, requestId) {
+    return {
+      id, role: "assistant", mode: result.mode || "improve",
+      content: result.text || "", answer: result.answer || "",
+      improvedPrompt: result.improvedPrompt || "",
+      questions: result.questions || [], changes: result.changes || [],
+      fields: result.fields || [], techniques: result.techniques || [],
+      summary: result.summary || "", sources: result.sources || [],
+      ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "",
+      sourcePrompt, requestId: result.requestId || requestId,
+      replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged),
+      excludeFromHistory: Boolean(result.excludeFromHistory),
+    };
+  }
   const concurrencyCounts = new Map();
   function recordConcurrency(threadId) {
     const key = String(threadId || "local");
@@ -169,7 +183,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
     resetConcurrency(threadId);
-    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    ctx.appendAssistant(assistantMessage(result, assistantMessageId, prompt, requestId));
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
     if (ctx.shouldSync()) {
@@ -293,7 +307,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       const retriedMessage = ctx.getMessages().find((message) => message.id === messageId);
       if (retriedMessage) delete retriedMessage.retryMode;
     }
-    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    ctx.finishEdit(assistantMessage(result, assistantMessageId, cleanValue, requestId));
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
