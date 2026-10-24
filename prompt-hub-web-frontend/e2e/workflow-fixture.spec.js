@@ -186,6 +186,17 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   expect(layout.menuRightInset).toBeLessThanOrEqual(20);
 
   const savedSort = page.locator(".saved-sort-select");
+  if (process.env.TTALKAK_E2E_DIAG_CSS === "1") {
+    console.log("PRODUCTION_CSS_DIAG", JSON.stringify(await page.evaluate(() => {
+      const select = document.querySelector(".saved-sort-select select");
+      const sheets = [...document.styleSheets].map(sheet => ({ href: sheet.href, rules: (() => {
+        try { return [...sheet.cssRules].filter(rule => /saved-sort-select/.test(rule.cssText)).slice(0, 7).map(rule => rule.cssText); }
+        catch { return ["inaccessible"]; }
+      })() }));
+      return { style: select ? { appearance: getComputedStyle(select).appearance, borderRadius: getComputedStyle(select).borderRadius, outer: select.outerHTML } : null, sheets };
+    })));
+  }
+
   expect(await savedSort.locator("select").evaluate((element) => {
     const style = getComputedStyle(element);
     return style.appearance || style.webkitAppearance;
