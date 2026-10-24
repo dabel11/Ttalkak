@@ -92,10 +92,7 @@ async function writeProductionStyles(source, destination, before = [], after = [
   const css = [...before, source, ...after].map((file) => fs.readFileSync(file, "utf8")).join("\n");
   const result = await esbuild.transform(css, {
     loader: "css",
-    // Retain authored CSS declarations and spacing in production. The compressed
-    // stylesheet diverged from the fixture-rendered select and Make question card.
-    // JS minification remains unchanged; production browser E2E gates this path.
-    minify: false,
+    minify: true,
     target: ["chrome110", "firefox110"],
   });
   fs.writeFileSync(destination, result.code, "utf8");
