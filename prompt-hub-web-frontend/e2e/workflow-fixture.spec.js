@@ -186,17 +186,12 @@ test("owned prompt can be edited, unshared, and deleted", async ({ page }) => {
   expect(layout.menuRightInset).toBeLessThanOrEqual(20);
 
   const savedSort = page.locator(".saved-sort-select");
-  {
-    console.log("PRODUCTION_CSS_DIAG", JSON.stringify(await page.evaluate(() => {
-      const select = document.querySelector(".saved-sort-select select");
-      const sheets = [...document.styleSheets].map(sheet => ({ href: sheet.href, rules: (() => {
-        try { return [...sheet.cssRules].filter(rule => /saved-sort-select/.test(rule.cssText)).slice(0, 7).map(rule => rule.cssText); }
-        catch { return ["inaccessible"]; }
-      })() }));
-      return { style: select ? { appearance: getComputedStyle(select).appearance, borderRadius: getComputedStyle(select).borderRadius, outer: select.outerHTML } : null, sheets };
-    })));
-  }
-
+  await expect(savedSort.locator("select")).toBeVisible();
+  // The saved route is lazy-rendered in production. Wait for its final
+  // styled select rather than reading computed CSS during a transient render.
+  await expect.poll(() => savedSort.locator("select").evaluate(
+    (element) => getComputedStyle(element).appearance || getComputedStyle(element).webkitAppearance,
+  )).toBe("none");
   expect(await savedSort.locator("select").evaluate((element) => {
     const style = getComputedStyle(element);
     return style.appearance || style.webkitAppearance;
