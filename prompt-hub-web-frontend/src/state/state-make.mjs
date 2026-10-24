@@ -1,12 +1,10 @@
 // @ts-check
-// Transient generations are deliberately excluded from persisted application data.
-const generations = new WeakMap();
-function viewGeneration(/** @type {TtalkakApplicationState} */ state) { return generations.get(state) || 0; }
-function invalidateMakeView(/** @type {TtalkakApplicationState} */ state) { generations.set(state, viewGeneration(state) + 1); }
+import { invalidateMakeView } from "../make/make-view-generation.mjs";
 
   "use strict";
 
 function deleteMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId) {
+  invalidateMakeView(state);
   state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
   if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
     state.pendingGuestThreadTransferId = null;
@@ -49,6 +47,7 @@ function deleteMakeFolderState(/** @type {TtalkakStateContext} */ ctx, /** @type
 
 function updateRecentMakeThreadState(/** @type {TtalkakStateContext} */ ctx, /** @type {TtalkakId} */ threadId) {
   const { makePreview, makePromptTitle, state } = ctx;
+  invalidateMakeView(state);
   const lastUser = [...state.messages].reverse().find((message) => message.role === "user");
   const firstUser = state.messages.find((message) => message.role === "user");
   const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
@@ -159,4 +158,4 @@ function toggleSavedMakeMessageState(/** @type {TtalkakStateContext} */ ctx, /**
 
 
 const api = Object.freeze({ deleteMakeThreadState, createLocalMakeFolderState, removeLocalMakeFolderState, restoreMakeThreadFolderState, deleteMakeFolderState, updateRecentMakeThreadState, openRecentMakeThreadState, openSavedMakePromptState, startNewMakeChatState, appendMakeUserMessageState, appendMakeAssistantMessageState, applyEditedMakeMessageState, finishEditedMakeMessageState, toggleSavedMakeMessageState });
-export { api, viewGeneration };
+export { api };

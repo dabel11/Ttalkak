@@ -1,4 +1,4 @@
-import { viewGeneration } from "../state/state-make.mjs";
+import { viewGeneration, beginMakeListRead } from "../make/make-view-generation.mjs";
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
 
@@ -275,6 +275,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
 
     if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
     const view = viewGeneration(state);
+    const currentList = beginMakeListRead(state);
+    const token = getMakeApiToken();
     const hydrationVersion = typeof getMakeInteractionVersion === "function" ? getMakeInteractionVersion() : 0;
 
     if (typeof hasBackendAuthToken === "function" && !hasBackendAuthToken()) {
@@ -315,7 +317,8 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       api.getMakeFolders?.(getMakeApiToken()),
     ]);
 
-    if (typeof getMakeInteractionVersion === "function" && getMakeInteractionVersion() !== hydrationVersion) return;
+    if (getMakeApiToken() !== token || !hasBackendAuthToken()) return;
+    const interacted = typeof getMakeInteractionVersion === "function" && getMakeInteractionVersion() !== hydrationVersion;
 
     let shouldRender = false;
     const backendDataContext = applyContext();
@@ -326,7 +329,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       ctx.reportWarning("backend-hydration", "make-folders", foldersResult.reason);
     }
 
-    if (threadsResult.status === "fulfilled" && viewGeneration(state) === view) {
+    if (threadsResult.status === "fulfilled" && !interacted && currentList() && viewGeneration(state) === view) {
       shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
     } else if (threadsResult.status === "rejected") {
       ctx.reportWarning("backend-hydration", "make-threads", threadsResult.reason);

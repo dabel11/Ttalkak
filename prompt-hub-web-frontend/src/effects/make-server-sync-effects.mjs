@@ -1,4 +1,4 @@
-import { viewGeneration } from "../state/state-make.mjs";
+import { captureMakeView, beginMakeListRead } from "../make/make-view-generation.mjs";
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
 
@@ -176,12 +176,14 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         throw error;
       }
 
+      const token = getMakeApiToken();
       try {
         const improved = await api.improvePrompt(
           buildMakeImprovePayload(prompt, history, threadId, { messageId, category, requestId }),
           getMakeApiToken(),
           { signal },
         );
+        if (getMakeApiToken() !== token) throw Object.assign(new Error(), { code: "REQUEST_ABORTED" });
         applyImproveThreadId(threadId, improved);
         const improvedText = typeof improved === "string" ? improved : improved?.text || "";
         const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
@@ -194,6 +196,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
           ? { ...improved, text: improvedText || polishPrompt(prompt), mode: improved.mode || "improve" }
           : { text: improvedText || polishPrompt(prompt), mode: "improve", improvedPrompt: improvedText || polishPrompt(prompt) };
       } catch (error) {
+        if (getMakeApiToken() !== token) throw Object.assign(new Error(), { code: "REQUEST_ABORTED" });
         const status = Number(error?.status || error?.payload?.status || 0);
         const code = String(error?.payload?.code || error?.code || "").toUpperCase();
         if (code === "REQUEST_ABORTED") throw error;
@@ -231,14 +234,17 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       const api = getMakeApi();
       if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
 
+      const token = getMakeApiToken();
+      const currentList = beginMakeListRead(state);
+      const currentView = captureMakeView(state);
+      const isCurrent = () => currentList() && currentView() && getMakeApiToken() === token && hasBackendAuthToken();
       try {
-        const view = viewGeneration(state);
-        const threads = await api.getMakeThreads(getMakeApiToken());
-        if (viewGeneration(state) !== view) return;
+        const threads = await api.getMakeThreads(token);
+        if (!isCurrent()) return;
         applyMakeThreadsResult(getBackendDataEffectContext(), threads);
         if (shouldRender) render();
       } catch (error) {
-        if (quiet) return;
+        if (!isCurrent() || quiet) return;
         handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
       }
     }
@@ -246,9 +252,9 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
     let detailGeneration = 0;
     async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false, scrollToLatest = false } = {}) {
       const generation = ++detailGeneration;
-      const view = viewGeneration(state);
-      const messages = state.messages;
-      const isCurrent = () => generation === detailGeneration && view === viewGeneration(state) && state.messages === messages;
+      const currentView = captureMakeView(state);
+      const token = getMakeApiToken();
+      const isCurrent = (active = true) => generation === detailGeneration && currentView() && getMakeApiToken() === token && hasBackendAuthToken() && (!active || getMakeBackendThreadId() === backendThreadId);
       const api = getMakeApi();
       const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
       const renderThread = () => {
@@ -265,6 +271,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         }
         render();
       };
+      if (getMakeBackendThreadId() !== backendThreadId) return null;
       if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
         try {
           const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
@@ -297,7 +304,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       }
 
       await refreshMakeThreadsFromBackend({ shouldRender: false, quiet });
-      if (!isCurrent()) return null;
+      if (!isCurrent(false)) return null;
       const refreshedThread = state.recentThreads.find((thread) => {
         const id = String(thread.id || "");
         const serverId = String(thread.serverId || "");

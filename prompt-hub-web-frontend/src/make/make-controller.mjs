@@ -1,6 +1,19 @@
+import { captureMakeView } from "../make/make-view-generation.mjs";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../utils/make-request-id.mjs";
 
 "use strict";
+  // A response belongs to the view that submitted it, even if the request was not aborted.
+  function captureMakeRequest(ctx, signal) {
+    const state = ctx.state;
+    const currentView = state && captureMakeView(state);
+    return () => {
+      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return false;
+      if (!currentView || currentView()) return true;
+      ctx.setThinking(false);
+      ctx.stopInFlight?.(signal);
+      return false;
+    };
+  }
   const concurrencyCounts = new Map();
   function recordConcurrency(threadId) {
     const key = String(threadId || "local");
@@ -17,7 +30,9 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const failure = ctx.classifyError(error);
     const retryMode = retryMessageId ? "edit" : "follow-up";
     const repeated = recordConcurrency(threadId) >= 2;
+    const isCurrent = captureMakeRequest(ctx);
     const refreshed = await ctx.refreshThread(threadId);
+    if (!refreshed && !isCurrent()) return true;
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
     if (!refreshed) {
@@ -107,12 +122,14 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.updateThread(threadId);
     ctx.render();
     ctx.scrollLatest();
+    const isCurrent = captureMakeRequest(ctx, signal);
     let result;
     try {
       await ctx.waitForPaint();
+      if (!isCurrent()) return;
       result = await ctx.improve(prompt, { history, threadId, requestId, signal });
     } catch (error) {
-      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+      if (!isCurrent()) return;
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
@@ -133,6 +150,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         ? false
         : await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
+      if (!isCurrent()) return;
       const failedMessage = ctx.state.messages.find((message) => message.id === userMessageId);
       if (failedMessage) failedMessage.retryMode = "follow-up";
       ctx.failRequest(userMessageId, failure);
@@ -143,7 +161,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.scrollLatest();
       return;
     }
-    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+    if (!isCurrent()) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
@@ -189,9 +207,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.setThinking(true);
       ctx.queueScroll(messageId);
       ctx.render();
+      const isCurrent = captureMakeRequest(ctx, signal);
       try {
         const result = await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", requestId, signal });
-        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        if (!isCurrent()) return;
         ctx.setThinking(false);
         ctx.reportOutcome?.(result, Date.now() - startedAt);
         resetConcurrency(threadId);
@@ -200,7 +219,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         if (!refreshed) ctx.render();
         ctx.notice(ctx.messages.edited);
       } catch (error) {
-        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        if (!isCurrent()) return;
         ctx.setThinking(false);
         if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
           ctx.failRequest(messageId, ctx.classifyError(error));
@@ -237,12 +256,14 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.setThinking(true);
     ctx.queueScroll(messageId);
     ctx.render();
+    const isCurrent = captureMakeRequest(ctx, signal);
     let result;
     try {
       await ctx.waitForPaint();
+      if (!isCurrent()) return;
       result = await ctx.improve(cleanValue, { history, threadId, requestId, signal });
     } catch (error) {
-      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+      if (!isCurrent()) return;
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
@@ -261,7 +282,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.render();
       return;
     }
-    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+    if (!isCurrent()) return;
     ctx.setThinking(false);
     ctx.completeRequest(signal);
     ctx.reportOutcome?.(result, Date.now() - startedAt);
