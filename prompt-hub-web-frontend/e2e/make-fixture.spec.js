@@ -1351,6 +1351,15 @@ test.describe("Make component visual regressions", () => {
     ));
     await page.evaluate(() => document.fonts.ready);
     await stabilizeVisuals(page);
+    console.log("ASK_CARD_STYLE_DIAG", JSON.stringify(await page.locator('[data-message-id="assistant-ask"] .message').evaluate((root) => {
+      const selectors = [".message-question-section", ".message-question-section li", ".message-question-section label", ".message-question-section input", ".ask-optional-questions", ".ask-answer-form"];
+      return Object.fromEntries(selectors.map(selector => {
+        const e = root.querySelector(selector);
+        if (!e) return [selector, null];
+        const c = getComputedStyle(e), rect = e.getBoundingClientRect();
+        return [selector, { height: rect.height, top: rect.top, display: c.display, padding: c.padding, margin: c.margin, rowGap: c.rowGap, gap: c.gap, lineHeight: c.lineHeight }];
+      }));
+    })));
     await expectComponentScreenshot(page.locator('[data-message-id="assistant-ask"] .message'), "make-ask-question-card.png");
   });
 
