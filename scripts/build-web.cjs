@@ -79,7 +79,7 @@ async function compressProductionJavaScript(metafile) {
     const cleanup = await terser.minify(normalized, {
       module: true,
       ecma: 2023,
-      compress: { passes: 2, unsafe: true },
+      compress: { passes: 5, unsafe: true },
       mangle: true,
       format: { comments: false, ecma: 2023, semicolons: true },
     });
