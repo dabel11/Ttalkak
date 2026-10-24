@@ -52,8 +52,8 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
     const messageId = `concurrency-${refreshed ? "" : "refresh-"}${Date.now()}`;
-    const latestMessages = refreshed?.messages || ctx.getMessages?.() || ctx.state?.messages || [];
-    const rawMessages = refreshed?.raw?.messages || [];
+    const latestMessages = Array.isArray(refreshed?.messages) ? refreshed.messages : (ctx.getMessages?.() || ctx.state?.messages || []);
+    const rawMessages = Array.isArray(refreshed?.raw?.messages) ? refreshed.raw.messages : [];
     const matchesRetryTarget = (message) => [message?.id, message?.messageId, message?.raw?.id, message?.raw?.messageId]
       .some((value) => String(value || "") === String(retryMessageId));
     const retryTargetContent = refreshed && retryMessageId
