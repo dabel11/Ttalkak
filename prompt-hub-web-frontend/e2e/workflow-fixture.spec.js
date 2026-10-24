@@ -259,3 +259,39 @@ test("report failure preserves the dialog and success prevents duplicate reporti
   await page.locator('[data-report-prompt="88"]').click();
   await expect(page.locator(".toast")).toContainText("이미 신고");
 });
+
+test("first Make hydration preserves a detached saved snapshot without duplicating recent threads", async ({ page }) => {
+  const messages = [
+    { id: "snapshot-user", role: "user", content: "저장된 원본 요청" },
+    { id: "snapshot-answer", role: "assistant", mode: "improve", content: "보존할 스냅샷 결과", improvedPrompt: "보존할 스냅샷 결과" },
+  ];
+  const prompt = { id: "snapshot-prompt", title: "스냅샷 검증", text: "보존할 스냅샷 결과", messages, source: "mine", owner: "Fixture User", author: "Fixture User", isShared: false, savedByMe: true };
+  let started;
+  let release;
+  const requested = new Promise(resolve => { started = resolve; });
+  const waiting = new Promise(resolve => { release = resolve; });
+  const writes = [];
+  await seed(page, { savedPrompts: [prompt] });
+  await mockBackend(page, async (route, request) => {
+    const path = new URL(request.url()).pathname;
+    if (!["GET", "OPTIONS"].includes(request.method())) writes.push(path);
+    if (path === "/api/make/threads") {
+      started();
+      await waiting;
+      await route.fulfill({ status: 200, headers: HEADERS, body: JSON.stringify({items:[{id:7,title:"서버 요약",messages:[]}]}) });
+      return true;
+    }
+    return false;
+  });
+  await gotoApp(page);
+  await page.locator('.sidebar [data-route="saved"]').click();
+  await page.locator('[data-open-make-history="snapshot-prompt"]').click();
+  await requested;
+  await expect(page.getByText("보존할 스냅샷 결과", {exact:true})).toBeVisible();
+  release();
+  await expect(page.getByText(/Make API 연결됨/)).toBeVisible();
+  await expect(page.getByText("저장된 원본 요청", {exact:true})).toBeVisible();
+  await expect(page.getByText("보존할 스냅샷 결과", {exact:true})).toBeVisible();
+  await expect(page.locator('[data-open-thread^="saved-thread-"]')).toHaveCount(0);
+  expect(writes).toEqual([]);
+});

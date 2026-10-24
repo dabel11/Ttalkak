@@ -1,3 +1,4 @@
+import { viewGeneration } from "../state/state-make.mjs";
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
 
@@ -122,6 +123,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     if (!Array.isArray(threads)) return false;
 
     const activeThreadId = String(state.activeThreadId || "");
+    const snapshot = activeThreadId.startsWith("saved-thread-");
     const activeThread = activeThreadId
       ? state.recentThreads.find((thread) => {
         return String(thread?.id || "") === activeThreadId || String(thread?.serverId || "") === activeThreadId;
@@ -139,7 +141,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     const validThreads = threads.filter((thread) => thread.id);
     if (!validThreads.length) {
       makeState.setMakeRecentThreads(state, preservedThreads);
-      reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
+      if (!snapshot) reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
       return true;
     }
 
@@ -151,11 +153,13 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       preview: makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
-      messages: Array.isArray(thread.messages) ? thread.messages : [],
+      messages: String(thread.serverId || thread.id) === activeLookupId
+        ? state.messages
+        : (Array.isArray(thread.messages) ? thread.messages : []),
     }));
     const nextThreads = [...preservedThreads, ...backendThreads];
     makeState.setMakeRecentThreads(state, nextThreads);
-    reconcileActiveMakeThread(state, nextThreads, pendingThread, activeLookupId);
+    if (!snapshot) reconcileActiveMakeThread(state, nextThreads, pendingThread, activeLookupId);
     normalizeRecentThreads();
     return true;
   }
@@ -169,6 +173,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     }) || pendingThread || null;
 
     state.activeThreadId = nextActiveThread?.id || null;
+    if (nextActiveThread?.messages === state.messages) return;
     state.messages = Array.isArray(nextActiveThread?.messages)
       ? nextActiveThread.messages.map((message) => ({ ...message }))
       : [];
@@ -269,6 +274,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
     } = ctx;
 
     if (state.route !== "make" || state.makeBackendStatus !== "idle") return;
+    const view = viewGeneration(state);
     const hydrationVersion = typeof getMakeInteractionVersion === "function" ? getMakeInteractionVersion() : 0;
 
     if (typeof hasBackendAuthToken === "function" && !hasBackendAuthToken()) {
@@ -320,7 +326,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       ctx.reportWarning("backend-hydration", "make-folders", foldersResult.reason);
     }
 
-    if (threadsResult.status === "fulfilled") {
+    if (threadsResult.status === "fulfilled" && viewGeneration(state) === view) {
       shouldRender = applyMakeThreadsResult(backendDataContext, threadsResult.value) || shouldRender;
     } else if (threadsResult.status === "rejected") {
       ctx.reportWarning("backend-hydration", "make-threads", threadsResult.reason);
