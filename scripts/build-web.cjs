@@ -67,10 +67,15 @@ async function compressProductionJavaScript(metafile) {
       format: { comments: false, ecma: 2023, semicolons: false },
     });
     if (!result.code) throw new Error(`Terser produced no output for ${output}`);
-    // Preserve whitespace inside HTML template literals: it participates in
-    // inline formatting, including the Make question card layout. Stripping
-    // it here makes production differ from development browser rendering.
-    const normalized = result.code;
+    // HTML template whitespace is significant for the question renderer's
+    // inline formatting. Preserve it only in the Make message renderer chunk
+    // while continuing to compact all unrelated production chunks.
+    const containsQuestionRenderer = Object.keys(metafile.outputs[output]?.inputs || {})
+      .some((input) => input.replaceAll("\\\\", "/").endsWith("src/renderers/pages/make-message-parts.mjs"));
+    const normalized = containsQuestionRenderer ? result.code : result.code
+      .replace(/>\\n\s+(?=<)/g, ">")
+      .replace(/>\\n\s+/g, "> ")
+      .replace(/\\n\s+(?=[<$])/g, " ");
     const cleanup = await terser.minify(normalized, {
       module: true,
       ecma: 2023,
