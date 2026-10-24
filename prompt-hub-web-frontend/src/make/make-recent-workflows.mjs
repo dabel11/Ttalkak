@@ -46,12 +46,15 @@ export function createMakeRecentWorkflows(ctx) {
     }
 
     /** @param {TtalkakId} threadId */
-    function openRecentThread(threadId) {
-      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => item.id === threadId);
+    async function openRecentThread(threadId) {
+      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => String(item.id) === String(threadId) || String(item.serverId) === String(threadId));
       if (!thread) return;
 
       openRecentMakeThreadState(state, thread);
       render();
+      if (hasBackendAuthToken() && isBackendNumericId(thread.serverId || thread.id)) {
+        await ctx.refreshActiveMakeThreadFromBackend(thread.id);
+      }
     }
 
     /** @param {TtalkakId} promptId */

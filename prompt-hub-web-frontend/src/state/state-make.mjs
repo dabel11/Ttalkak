@@ -72,11 +72,11 @@ function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state,
 
 
 function openSavedMakePromptState(/** @type {TtalkakStateContext} */ ctx, /** @type {TtalkakId} */ promptId, /** @type {TtalkakStateEntity} */ prompt) {
-  const { updateRecentThread, state } = ctx;
+  const { state } = ctx;
   const threadId = `saved-thread-${promptId}`;
   state.activeThreadId = threadId;
   state.messages = (prompt.messages || []).map((item) => ({ ...item }));
-  updateRecentThread(threadId);
+  // Saved history is a snapshot, not a newly created conversation.
   state.route = "make";
 }
 

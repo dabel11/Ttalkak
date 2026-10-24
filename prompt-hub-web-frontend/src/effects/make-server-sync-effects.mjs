@@ -241,6 +241,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
     }
 
     async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false, scrollToLatest = false } = {}) {
+      const activeAtStart = state.activeThreadId;
       const api = getMakeApi();
       const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
       const renderThread = () => {
@@ -260,6 +261,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
         try {
           const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
+          if (state.activeThreadId !== activeAtStart) return null;
           if (refreshedThread?.id) {
             makeState.setMakeRecentThreads(state, [
               refreshedThread,
@@ -276,6 +278,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
             return refreshedThread;
           }
         } catch (error) {
+          if (state.activeThreadId !== activeAtStart) return null;
           if (Number(error?.status || 0) !== 404) {
             if (quiet) return null;
             handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
@@ -284,6 +287,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       }
 
       await refreshMakeThreadsFromBackend({ shouldRender: false, quiet });
+      if (state.activeThreadId !== activeAtStart) return null;
       const refreshedThread = state.recentThreads.find((thread) => {
         const id = String(thread.id || "");
         const serverId = String(thread.serverId || "");

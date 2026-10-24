@@ -1409,3 +1409,32 @@ test.describe("Make component visual regressions", () => {
     releaseResponse();
   });
 });
+
+test("server summary reopens its detail after reload without creating data or calling AI", async ({ page }) => {
+  const messages = [
+    { id: "reopen-user", role: "user", content: "Reload persistence fixture" },
+    { id: "reopen-assistant", role: "assistant", mode: "improve", content: "Restored fixture result", improvedPrompt: "Restored fixture result" },
+  ];
+  const summary = { id: 77, serverId: 77, title: "Reopen fixture", preview: "Reload persistence fixture", createdAt: 1, messages: [] };
+  let detailReads = 0;
+  const writes = [];
+  page.on("request", request => {
+    if (request.url().startsWith("http://localhost:8080/") && !["GET", "OPTIONS"].includes(request.method())) writes.push(request.url());
+  });
+  await openMake(page, [], {
+    isLoggedIn: true, currentUser: "Fixture User", currentUserId: 7,
+    authToken: "fixture-token", token: "fixture-token", recentThreads: [summary], backendThreads: [summary],
+    threadHandler: async route => {
+      detailReads++;
+      await route.fulfill({status: 200, headers: CORS_HEADERS, body: JSON.stringify({...summary, messages})});
+    },
+  });
+  await page.reload();
+  await waitForAppHydration(page);
+  await page.locator('.sidebar [data-route="make"]').click();
+  await page.locator('.recent-thread-main').filter({hasText: "Reopen fixture"}).click();
+  await expect(page.getByText("Restored fixture result", {exact:true})).toBeVisible();
+  await expect(page.locator('.recent-thread')).toHaveCount(1);
+  expect(detailReads).toBeGreaterThan(0);
+  expect(writes).toEqual([]);
+});
