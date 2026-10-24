@@ -262,6 +262,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         try {
           const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
           if (state.activeThreadId !== activeAtStart) return null;
+          if (String(refreshedThread?.id) !== backendThreadId) throw new Error();
           if (refreshedThread?.id) {
             makeState.setMakeRecentThreads(state, [
               refreshedThread,

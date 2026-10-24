@@ -52,3 +52,12 @@ test('opening saved history repeatedly does not add synthetic recent threads', a
   assert.deepEqual(state.messages,prompt.messages);
   assert.notEqual(state.messages[0],prompt.messages[0]);
 });
+
+
+test('malformed detail identity cannot overwrite cached conversation', async () => {
+  const {state, flows, errors} = await fixture(async () => ({id:'backend-thread-0', messages:[]}));
+  state.recentThreads[0].messages = [{content:'cached'}];
+  await flows.openRecentThread('7');
+  assert.deepEqual(state.messages,[{content:'cached'}]);
+  assert.equal(errors.length,1);
+});
