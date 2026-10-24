@@ -6,11 +6,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
   function captureMakeRequest(ctx, signal) {
     const state = ctx.state;
     const currentView = state && captureMakeView(state);
-    return () => {
-      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return false;
+    return (checkRequest = true) => {
+      if (checkRequest && ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return false;
       if (!currentView || currentView()) return true;
-      ctx.setThinking(false);
-      ctx.stopInFlight?.(signal);
+      if (checkRequest) { ctx.setThinking(false); ctx.stopInFlight?.(signal); }
       return false;
     };
   }
@@ -147,11 +146,12 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         return;
       }
       const failure = ctx.classifyError(error);
+      const localMessagesSnapshot = [...ctx.state.messages];
       const recovered = failure.requiresLogin
         ? false
-        : await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
+        : await ctx.recover({ threadId, prompt, localMessagesSnapshot });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
-      if (!isCurrent()) return;
+      if (!isCurrent(false) && ctx.state.messages !== localMessagesSnapshot) return;
       const failedMessage = ctx.state.messages.find((message) => message.id === userMessageId);
       if (failedMessage) failedMessage.retryMode = "follow-up";
       ctx.failRequest(userMessageId, failure);
@@ -233,13 +233,15 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
         if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) return;
         ctx.setBackendFailure();
+        const localMessagesSnapshot = [...ctx.getMessages()];
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else if (isRequestIdReusedError(error)) {
           await ctx.refreshThread(threadId);
           ctx.notice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
           return;
         }
-        else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot: [...ctx.getMessages()] }).catch(() => null);
+        else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot }).catch(() => null);
+        if (!isCurrent(false) && ctx.state?.messages !== localMessagesSnapshot) return;
         ctx.handleError(error, ctx.messages.editFailed);
         ctx.render();
       } finally { ctx.stopInFlight(signal); }

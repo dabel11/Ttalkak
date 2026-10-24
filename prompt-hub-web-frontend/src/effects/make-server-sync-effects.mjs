@@ -274,7 +274,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       if (getMakeBackendThreadId() !== backendThreadId) return null;
       if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
         try {
-          const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
+          const refreshedThread = await api.getMakeThread(backendThreadId, token);
           if (!isCurrent()) return null;
           if (String(refreshedThread?.id) !== backendThreadId) throw new Error();
           if (refreshedThread?.id) {
@@ -297,7 +297,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
           if (Number(error?.status || 0) === 404) {
             makeState.setMakeRecentThreads(state, state.recentThreads.filter((thread) => String(thread.serverId || thread.id) !== backendThreadId));
             openRecentMakeThreadState(state, { messages: [] });
-            if (!quiet) handleBackendAccessError(error, "대화를 찾을 수 없습니다.");
+            if (!quiet) handleBackendAccessError(error);
             renderThread();
             return null;
           }

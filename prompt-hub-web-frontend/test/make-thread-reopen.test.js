@@ -355,3 +355,34 @@ test('an invalidated backend-edit conflict recovery cannot close the new convers
   api.openRecentMakeThreadState(state,{id:'8',messages:[{content:'B'}]});state.editingMessageId='uB';d.resolve(null);await pending;
   assert.equal(state.editingMessageId,'uB');assert.deepEqual(state.messages,[{content:'B'}]);
 });
+
+for (const refresh of [false,true]) test(`a real stopped request still shows its retry action after recovery=${refresh}`, async () => {
+  const {submitPrompt}=await import('../src/make/make-controller.mjs');
+  const {api}=await import('../src/state/state-make.mjs');
+  const OriginalFormData=global.FormData;global.FormData=class {get(){return 'retryable prompt';}};
+  const state={route:'make',activeThreadId:'7',messages:[]};let active=true,failed=0;
+  try {
+    await submitPrompt({state,guard:()=>false,isBusy:()=>false,bumpInteraction:()=>{},buildHistory:()=>[],shouldSync:()=>false,
+      startRequest:()=>new AbortController().signal,isCurrentRequest:()=>active,stopInFlight:()=>{active=false;},setDraft:()=>{},
+      appendUser:(id,m)=>api.appendMakeUserMessageState(state,id,m),setThinking:()=>{},
+      updateThread:()=>{},render:()=>{},scrollLatest:()=>{},waitForPaint:async()=>{},
+      improve:async()=>{throw Error('network');},classifyError:()=>({}),
+      recover:async({localMessagesSnapshot})=>{if(refresh){api.openRecentMakeThreadState(state,{id:'7',messages:[]});state.messages=localMessagesSnapshot;}return null;},
+      failRequest:()=>{failed++;},setBackendFailure:()=>{},handleError:()=>{}},{});
+  } finally {global.FormData=OriginalFormData;}
+  assert.equal(failed,1);assert.equal(state.messages[0].retryMode,'follow-up');
+});
+
+test('backend edit failure recovery cannot report an old error into a different login session', async () => {
+  const {resendEdited}=await import('../src/make/make-controller.mjs');
+  const {api}=await import('../src/state/state-make.mjs');const d=deferred(),started=deferred();
+  const state={route:'make',authToken:'old',activeThreadId:'7',messages:[{id:'u',role:'user',content:'A'}]};
+  const ctx={state,findEditableMessage:()=>0,guard:()=>false,isBusy:()=>false,
+    getActiveThreadId:()=>state.activeThreadId,getMessages:()=>state.messages,shouldSync:()=>true,getBackendThreadId:()=> '7',
+    buildHistory:()=>[],startRequest:()=>new AbortController().signal,updateThread:()=>{},setThinking:()=>{},queueScroll:()=>{},render:()=>{},
+    improve:async()=>{throw Error('old failure');},classifyError:()=>({}),setBackendFailure:()=>{},
+    recover:()=>{started.resolve();return d.promise;},handleError:()=>{throw Error('must not clear the new session');},stopInFlight:()=>{}};
+  const pending=resendEdited(ctx,'u','edited A');await started.promise;
+  state.authToken='new';api.openRecentMakeThreadState(state,{id:'8',messages:[{content:'B'}]});d.resolve(null);await pending;
+  assert.equal(state.authToken,'new');assert.deepEqual(state.messages,[{content:'B'}]);
+});

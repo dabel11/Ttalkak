@@ -1438,3 +1438,26 @@ test("server summary reopens its detail after reload without creating data or ca
   expect(detailReads).toBeGreaterThan(0);
   expect(writes).toEqual([]);
 });
+
+test('switching to a new chat while conflict refresh waits preserves the new composer', async ({page})=>{
+  const initialMessages=[{id:'conflict-initial-user',role:'user',content:'Old conversation prompt'},
+    {id:'conflict-initial-assistant',role:'assistant',mode:'improve',content:'Old conversation result',improvedPrompt:'Old conversation result'}];
+  const thread=serverThreadFixture(initialMessages);let conflict=false,attempts=0,release,started;
+  const waiting=new Promise(r=>{release=r;});const requested=new Promise(r=>{started=r;});
+  const state=signedInThreadState(thread);
+  state.threadHandler=async route=>{
+    if(conflict && ++attempts===1) return route.fulfill({status:503,headers:CORS_HEADERS,body:JSON.stringify({code:'SERVER_UNAVAILABLE'})});
+    if(conflict){started();await waiting;}
+    return route.fulfill({status:200,headers:CORS_HEADERS,body:JSON.stringify(thread)});
+  };
+  await openMake(page,initialMessages,state,async route=>{conflict=true;return route.fulfill({status:409,headers:CORS_HEADERS,body:JSON.stringify({code:'THREAD_CONCURRENTLY_UPDATED'})});});
+  await page.locator('[data-composer] textarea[name="prompt"]').fill('Conflict draft belonging to old conversation');
+  await page.locator('[data-composer] button[type="submit"]').click();
+  await page.locator('[data-refresh-concurrent]').click();await requested;
+  await page.locator('.make-side-panel [data-new-chat]').first().click();
+  await page.locator('[data-composer] textarea[name="prompt"]').fill('New independent draft');
+  const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/make/threads/77');release();
+  const received=await response;await received.finished();
+  await expect(page.locator('[data-composer] textarea[name="prompt"]')).toHaveValue('New independent draft');
+  await expect(page.locator('.message.user')).toHaveCount(0);
+});

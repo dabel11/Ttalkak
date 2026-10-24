@@ -42,10 +42,10 @@ for (const order of ['list-first','detail-first']) test(`real Make normalization
   if(order==='list-first') {
     releaseList();await expect(page.getByText(/Make API 연결됨/)).toBeVisible();releaseDetail();
   } else {
-    releaseDetail();await expect(page.getByText('Preserved race body',{exact:true})).toBeVisible();releaseList();
+    releaseDetail();await expect(page.getByRole('region',{name:'대화',exact:true}).getByText('Preserved race body',{exact:true})).toBeVisible();releaseList();
   }
   await expect(page.getByText(/Make API 연결됨/)).toBeVisible();
-  await expect(page.getByText('Preserved race body',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'대화',exact:true}).getByText('Preserved race body',{exact:true})).toBeVisible();
 });
 
 test('a delayed detail response cannot navigate away from Home', async ({page})=>{
