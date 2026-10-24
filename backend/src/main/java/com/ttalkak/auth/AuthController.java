@@ -191,21 +191,33 @@ public class AuthController {
 
     @PostMapping("/find-id")
     public ResponseEntity<?> findId(@RequestBody FindIdRequest request) {
-        Member member = "email".equals(request.method())
-                ? memberRepository
-                        .findByNameAndEmailAndAuthProviderAndActiveTrue(
-                                request.name(),
-                                request.email(),
-                                Member.PROVIDER_LOCAL
-                        )
-                        .orElse(null)
-                : memberRepository
-                        .findByNameAndPhoneAndAuthProviderAndActiveTrue(
-                                request.name(),
-                                request.phone(),
-                                Member.PROVIDER_LOCAL
-                        )
-                        .orElse(null);
+        if (request.name() == null || request.name().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이름을 입력해주세요.");
+        }
+
+        // Null inputs in Spring Data derived queries become IS NULL. A caller
+        // who knows only a name must not recover a masked ID by omitting the
+        // phone/email field of an account that has no registered phone/email.
+        Member member;
+        if ("email".equals(request.method())) {
+            if (request.email() == null || request.email().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이메일을 입력해주세요.");
+            }
+            member = memberRepository
+                    .findByNameAndEmailAndAuthProviderAndActiveTrue(
+                            request.name(), request.email(), Member.PROVIDER_LOCAL)
+                    .orElse(null);
+        } else if ("phone".equals(request.method())) {
+            if (request.phone() == null || request.phone().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호를 입력해주세요.");
+            }
+            member = memberRepository
+                    .findByNameAndPhoneAndAuthProviderAndActiveTrue(
+                            request.name(), request.phone(), Member.PROVIDER_LOCAL)
+                    .orElse(null);
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디 찾기 방법을 확인해주세요.");
+        }
 
         if (member == null) {
             return ResponseEntity.ok(Map.of("maskedUserId", ""));
