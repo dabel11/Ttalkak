@@ -68,8 +68,8 @@ function updateRecentMakeThreadState(/** @type {TtalkakStateContext} */ ctx, /**
 }
 
 
-function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ thread) {
-  invalidateMakeView(state);
+function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ thread, { preserveView = false } = {}) {
+  if (!preserveView) invalidateMakeView(state);
   state.activeThreadId = thread.id || null;
   state.messages = (thread.messages || []).map((item) => ({ ...item }));
   state.route = "make";
