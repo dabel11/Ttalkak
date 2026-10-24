@@ -204,6 +204,33 @@ class AuthRecoveryIntegrationTest {
             members.deleteById(member.getId());
         }
     }
+    @Test void legacyFindIdRequiresAnExplicitNonBlankContact() throws Exception {
+        // This existing fixture has no phone number. Previously requesting
+        // just its name hit a Spring Data IS NULL match and leaked a masked ID.
+        String endpoint = "/api/auth/find-id";
+        for (String json : new String[] {
+                "{\"method\":\"phone\",\"name\":\"Name\"}",
+                "{\"method\":\"phone\",\"name\":\"Name\",\"phone\":\"   \"}",
+                "{\"method\":\"email\",\"name\":\"Name\"}",
+                "{\"method\":\"email\",\"name\":\"Name\",\"email\":\"   \"}",
+                "{\"name\":\"Name\"}",
+                "{\"method\":\"unexpected\",\"name\":\"Name\",\"email\":\"user@example.com\"}",
+                "{\"method\":\"email\",\"name\":\"   \",\"email\":\"user@example.com\"}"
+        }) {
+            mvc.perform(post(endpoint).contentType("application/json").content(json))
+                    .andExpect(status().isBadRequest());
+        }
+
+        // A legitimate name + registered email lookup still returns only a
+        // masked value, not the full account identifier.
+        String id = member.getUserId();
+        mvc.perform(post(endpoint).contentType("application/json")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
