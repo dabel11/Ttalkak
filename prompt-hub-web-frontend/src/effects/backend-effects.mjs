@@ -139,6 +139,9 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       : null;
     const preservedThreads = pendingThread ? [pendingThread] : [];
     const validThreads = threads.filter((thread) => thread.id);
+    if (activeThread && isBackendNumericId(activeLookupId) && activeThread !== pendingThread && !validThreads.some((thread) => String(thread.serverId || thread.id) === activeLookupId)) {
+      preservedThreads.push({ ...activeThread, messages: state.messages });
+    }
     if (!validThreads.length) {
       makeState.setMakeRecentThreads(state, preservedThreads);
       if (!snapshot) reconcileActiveMakeThread(state, preservedThreads, pendingThread, activeLookupId);
@@ -153,7 +156,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       preview: makePreview(thread.preview || thread.messages?.at(-1)?.content || ""),
       folderId: thread.folderId || "uncategorized",
       createdAt: thread.createdAt || Date.now(),
-      messages: String(thread.serverId || thread.id) === activeLookupId
+      messages: state.messages.length && String(thread.serverId || thread.id) === activeLookupId
         ? state.messages
         : (Array.isArray(thread.messages) ? thread.messages : []),
     }));

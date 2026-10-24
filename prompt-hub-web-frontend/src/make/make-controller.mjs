@@ -33,6 +33,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const isCurrent = captureMakeRequest(ctx);
     const refreshed = await ctx.refreshThread(threadId);
     if (!refreshed && !isCurrent()) return true;
+    ctx.clearEditing?.();
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
     if (!refreshed) {
@@ -230,10 +231,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
           return;
         }
         ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
-        if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) {
-          ctx.clearEditing();
-          return;
-        }
+        if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) return;
         ctx.setBackendFailure();
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else if (isRequestIdReusedError(error)) {

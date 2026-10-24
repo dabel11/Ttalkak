@@ -317,3 +317,41 @@ test('switching conversations before the paint delay completes avoids the AI req
   api.openRecentMakeThreadState(state,{id:'local-B',messages:[{content:'B'}]});paint.resolve();await pending;
   assert.deepEqual(state.messages,[{content:'B'}]);
 });
+
+test('initial hydration can fill an empty active cache from a complete server list response', async () => {
+  const {state,ctx,backendEffects}=await hydrationFixture();
+  state.activeThreadId='7';state.messages=[];
+  backendEffects.applyMakeThreadsResult(ctx,[{id:'7',messages:[{role:'user',content:'server body'}]}]);
+  assert.equal(state.messages[0]?.content,'server body');
+});
+
+test('absence from a paginated list does not discard the active cached conversation', async () => {
+  const {state,ctx,backendEffects}=await hydrationFixture();state.activeThreadId='7';state.messages=[{role:'user',content:'older active body'}];
+  backendEffects.applyMakeThreadsResult(ctx,[{id:'8',messages:[]}]);
+  assert.equal(state.activeThreadId,'7');assert.equal(state.messages[0].content,'older active body');
+  assert.equal(state.recentThreads.some(t=>t.id==='7'),true);
+});
+
+test('a confirmed 404 cannot revive the conversation through a stale list response', async () => {
+  let listReads=0;
+  const {state,effects}=await fixture(async()=>{throw Object.assign(Error('missing'),{status:404});},async()=>{listReads++;return [{id:'7'}];});
+  state.activeThreadId='7';state.messages=[{content:'cached'}];
+  await effects.refreshActiveMakeThreadFromBackend('7');
+  assert.equal(listReads,0);assert.equal(state.activeThreadId,null);assert.deepEqual(state.recentThreads,[]);
+});
+
+test('an invalidated backend-edit conflict recovery cannot close the new conversation edit form', async () => {
+  const {resendEdited}=await import('../src/make/make-controller.mjs');
+  const {api}=await import('../src/state/state-make.mjs');
+  const d=deferred(),started=deferred();
+  const state={route:'make',authToken:'fixture',activeThreadId:'7',recentThreads:[{id:'7'}],editingMessageId:'uA',messages:[{id:'uA',role:'user',content:'A'}]};
+  const ctx={state,findEditableMessage:()=>0,guard:()=>false,isBusy:()=>false,
+    getActiveThreadId:()=>state.activeThreadId,getMessages:()=>state.messages,shouldSync:()=>true,getBackendThreadId:()=> '7',
+    buildHistory:()=>[],startRequest:()=>new AbortController().signal,
+    updateThread:id=>api.updateRecentMakeThreadState({state,makePreview:String,makePromptTitle:String},id),setThinking:()=>{},queueScroll:()=>{},render:()=>{},
+    improve:async()=>{throw {status:409,code:'THREAD_CONCURRENTLY_UPDATED'};},classifyError:()=>({}),
+    refreshThread:()=>{started.resolve();return d.promise;},clearEditing:()=>{state.editingMessageId=null;},stopInFlight:()=>{}};
+  const pending=resendEdited(ctx,'uA','edited A');await started.promise;
+  api.openRecentMakeThreadState(state,{id:'8',messages:[{content:'B'}]});state.editingMessageId='uB';d.resolve(null);await pending;
+  assert.equal(state.editingMessageId,'uB');assert.deepEqual(state.messages,[{content:'B'}]);
+});

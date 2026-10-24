@@ -254,7 +254,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       const generation = ++detailGeneration;
       const currentView = captureMakeView(state);
       const token = getMakeApiToken();
-      const isCurrent = (active = true) => generation === detailGeneration && currentView() && getMakeApiToken() === token && hasBackendAuthToken() && (!active || getMakeBackendThreadId() === backendThreadId);
+      const isCurrent = () => generation === detailGeneration && currentView() && getMakeApiToken() === token && hasBackendAuthToken() && getMakeBackendThreadId() === backendThreadId;
       const api = getMakeApi();
       const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
       const renderThread = () => {
@@ -294,29 +294,21 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
           }
         } catch (error) {
           if (!isCurrent()) return null;
-          if (Number(error?.status || 0) !== 404) {
-            if (quiet) return null;
-            handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+          if (Number(error?.status || 0) === 404) {
+            makeState.setMakeRecentThreads(state, state.recentThreads.filter((thread) => String(thread.serverId || thread.id) !== backendThreadId));
+            openRecentMakeThreadState(state, { messages: [] });
+            if (!quiet) handleBackendAccessError(error, "대화를 찾을 수 없습니다.");
             renderThread();
             return null;
           }
+          if (quiet) return null;
+          handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+          renderThread();
+          return null;
         }
       }
 
-      await refreshMakeThreadsFromBackend({ shouldRender: false, quiet });
-      if (!isCurrent(false)) return null;
-      const refreshedThread = state.recentThreads.find((thread) => {
-        const id = String(thread.id || "");
-        const serverId = String(thread.serverId || "");
-        return Boolean(backendThreadId) && (id === backendThreadId || serverId === backendThreadId);
-      });
-
-      if (refreshedThread) {
-        openRecentMakeThreadState(state, refreshedThread);
-        if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);
-      }
-      renderThread();
-      return refreshedThread;
+      return null;
     }
 
     return Object.freeze({
