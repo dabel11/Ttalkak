@@ -1,9 +1,9 @@
+// @ts-check
 // Transient generations are deliberately excluded from persisted application data.
 const generations = new WeakMap();
-function viewGeneration(state) { return generations.get(state) || 0; }
-function invalidateMakeView(state) { generations.set(state, viewGeneration(state) + 1); }
+function viewGeneration(/** @type {TtalkakApplicationState} */ state) { return generations.get(state) || 0; }
+function invalidateMakeView(/** @type {TtalkakApplicationState} */ state) { generations.set(state, viewGeneration(state) + 1); }
 
-// @ts-check
   "use strict";
 
 function deleteMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId) {
