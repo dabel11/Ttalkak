@@ -262,6 +262,7 @@ test('a successful concurrency refresh after switching conversations leaves the 
   const {api}=await import('../src/state/state-make.mjs');
   const d=deferred(), state={route:'make',activeThreadId:'7',messages:[{content:'A'}],editingMessageId:'uA'};
   const pending=handleThreadConcurrency({state,classifyError:()=>({}),refreshThread:()=>d.promise,
+    setThinking:()=>{},stopInFlight:()=>{},
     clearEditing:()=>{throw Error('must not clear editing in B');},
     reportConcurrencyRefresh:()=>{throw Error('must not report old recovery in B');},
     setDraft:()=>{throw Error('must not replace draft in B');},
