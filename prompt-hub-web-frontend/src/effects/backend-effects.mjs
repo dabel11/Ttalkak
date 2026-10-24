@@ -1,4 +1,4 @@
-import { viewGeneration, beginMakeListRead } from "../make/make-view-generation.mjs";
+import { viewGeneration, beginMakeListRead, invalidateMakeView } from "../make/make-view-generation.mjs";
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { runtimeConfig } from "../runtime/runtime-config.mjs";
 
@@ -139,7 +139,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       : null;
     const preservedThreads = pendingThread ? [pendingThread] : [];
     const validThreads = threads.filter((thread) => thread.id);
-    if (activeThread && isBackendNumericId(activeLookupId) && activeThread !== pendingThread && !validThreads.some((thread) => String(thread.serverId || thread.id) === activeLookupId)) {
+    if (activeThread && isBackendNumericId(activeLookupId) && !validThreads.some((thread) => String(thread.serverId || thread.id) === activeLookupId)) {
       preservedThreads.push({ ...activeThread, messages: state.messages });
     }
     if (!validThreads.length) {
@@ -175,6 +175,7 @@ const MY_PAGE_HYDRATION_TIMEOUT_MS = runtimeConfig.myPageHydrationTimeoutMs;
       return id === activeLookupId || serverId === activeLookupId;
     }) || pendingThread || null;
 
+    if (String(nextActiveThread?.serverId || nextActiveThread?.id || "") !== activeLookupId) invalidateMakeView(state);
     state.activeThreadId = nextActiveThread?.id || null;
     if (nextActiveThread?.messages === state.messages) return;
     state.messages = Array.isArray(nextActiveThread?.messages)

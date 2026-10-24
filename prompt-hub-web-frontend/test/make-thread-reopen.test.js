@@ -386,3 +386,11 @@ test('backend edit failure recovery cannot report an old error into a different 
   state.authToken='new';api.openRecentMakeThreadState(state,{id:'8',messages:[{content:'B'}]});d.resolve(null);await pending;
   assert.equal(state.authToken,'new');assert.deepEqual(state.messages,[{content:'B'}]);
 });
+
+test('account-scoped list reconciliation invalidates a response for a displaced local conversation', async () => {
+  const {captureMakeView}=await import('../src/make/make-view-generation.mjs');
+  const {state,ctx,backendEffects}=await hydrationFixture();
+  Object.assign(state,{activeThreadId:'local-A',recentThreads:[{id:'local-A',messages:[{content:'A'}]}],messages:[{content:'A'}]});
+  const current=captureMakeView(state);backendEffects.applyMakeThreadsResult(ctx,[{id:'8',messages:[]}]);
+  assert.equal(state.activeThreadId,null);assert.equal(current(),false);
+});
