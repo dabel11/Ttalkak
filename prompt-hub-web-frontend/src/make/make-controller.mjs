@@ -31,7 +31,9 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const repeated = recordConcurrency(threadId) >= 2;
     const isCurrent = captureMakeRequest(ctx);
     const refreshed = await ctx.refreshThread(threadId);
-    if (!refreshed && !isCurrent()) return true;
+    // A successful refresh can still finish after the user switches conversations.
+    // Never append conflict UI or clear editing state in the newer view.
+    if (!isCurrent()) return true;
     ctx.clearEditing?.();
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
