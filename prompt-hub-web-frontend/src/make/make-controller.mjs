@@ -27,6 +27,9 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       excludeFromHistory: Boolean(result.excludeFromHistory),
     };
   }
+  function finishSuccessfulRequest(ctx, signal, result, startedAt, threadId) {
+    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
+  }
   const concurrencyCounts = new Map();
   function recordConcurrency(threadId) {
     const key = String(threadId || "local");
@@ -167,10 +170,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       return;
     }
     if (!isCurrent()) return;
-    ctx.setThinking(false);
-    ctx.completeRequest(signal);
-    ctx.reportOutcome?.(result, Date.now() - startedAt);
-    resetConcurrency(threadId);
+    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
     ctx.appendAssistant(assistantMessage(result, assistantMessageId, prompt, requestId));
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
@@ -287,10 +287,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       return;
     }
     if (!isCurrent()) return;
-    ctx.setThinking(false);
-    ctx.completeRequest(signal);
-    ctx.reportOutcome?.(result, Date.now() - startedAt);
-    resetConcurrency(threadId);
+    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
     if (isFollowUpRetry) {
       const retriedMessage = ctx.getMessages().find((message) => message.id === messageId);
       if (retriedMessage) delete retriedMessage.retryMode;
