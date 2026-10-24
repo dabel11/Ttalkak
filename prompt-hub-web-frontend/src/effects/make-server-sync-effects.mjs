@@ -287,7 +287,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
               }),
             ].slice(0, 8));
             normalizeRecentThreads();
-            openRecentMakeThreadState(state, refreshedThread);
+            openRecentMakeThreadState(state, refreshedThread, { preserveView: true });
             if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);
             renderThread();
             return refreshedThread;
