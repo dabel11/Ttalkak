@@ -67,13 +67,10 @@ async function compressProductionJavaScript(metafile) {
       format: { comments: false, ecma: 2023, semicolons: false },
     });
     if (!result.code) throw new Error(`Terser produced no output for ${output}`);
-    // Terser preserves indentation inside HTML template literals. Production
-    // renderers do not rely on that formatting, so collapse inter-tag lines to
-    // one browser-equivalent space without changing text-node separation.
-    const normalized = result.code
-      .replace(/>\\n\s+(?=<)/g, ">")
-      .replace(/>\\n\s+/g, "> ")
-      .replace(/\\n\s+(?=[<$])/g, " ");
+    // Preserve whitespace inside HTML template literals: it participates in
+    // inline formatting, including the Make question card layout. Stripping
+    // it here makes production differ from development browser rendering.
+    const normalized = result.code;
     const cleanup = await terser.minify(normalized, {
       module: true,
       ecma: 2023,
