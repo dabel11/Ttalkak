@@ -28,7 +28,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     };
   }
   function finishSuccessfulRequest(ctx, signal, result, startedAt, threadId) {
-    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
+    ctx.setThinking(false);
+    ctx.completeRequest(signal);
+    ctx.reportOutcome?.(result, Date.now() - startedAt);
+    resetConcurrency(threadId);
   }
   const concurrencyCounts = new Map();
   function recordConcurrency(threadId) {
