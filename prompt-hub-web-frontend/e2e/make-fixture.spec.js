@@ -1344,6 +1344,12 @@ test.describe("Make component visual regressions", () => {
   test("ask question card", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openMake(page, [askMessage]);
+    // Make styles are lazy-loaded; route visibility can precede stylesheet
+    // application, yielding a stable but incorrectly unstyled screenshot.
+    await page.waitForFunction(() => [...document.styleSheets].some(
+      (sheet) => sheet.href && /\/styles\/make\.css(?:\?|$)/.test(sheet.href),
+    ));
+    await page.evaluate(() => document.fonts.ready);
     await stabilizeVisuals(page);
     await expectComponentScreenshot(page.locator('[data-message-id="assistant-ask"] .message'), "make-ask-question-card.png");
   });
