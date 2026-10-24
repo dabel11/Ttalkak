@@ -283,6 +283,8 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
           if (Number(error?.status || 0) !== 404) {
             if (quiet) return null;
             handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+            renderThread();
+            return null;
           }
         }
       }
