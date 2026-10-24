@@ -257,6 +257,28 @@ test('a missing detail and missing list entry clear the cached conversation and 
   assert.equal(state.activeThreadId,null);assert.deepEqual(state.messages,[]);assert.equal(rendered(),1);
 });
 
+test('a successful concurrency refresh after switching conversations leaves the new view untouched', async () => {
+  const {handleThreadConcurrency}=await import('../src/make/make-controller.mjs');
+  const {api}=await import('../src/state/state-make.mjs');
+  const d=deferred(), state={route:'make',activeThreadId:'7',messages:[{content:'A'}],editingMessageId:'uA'};
+  const pending=handleThreadConcurrency({state,classifyError:()=>({}),refreshThread:()=>d.promise,
+    clearEditing:()=>{throw Error('must not clear editing in B');},
+    reportConcurrencyRefresh:()=>{throw Error('must not report old recovery in B');},
+    setDraft:()=>{throw Error('must not replace draft in B');},
+    appendUser:()=>{throw Error('must not append to B');},
+    failRequest:()=>{throw Error('must not flag B');},
+    updateThread:()=>{throw Error('must not update B');},
+    render:()=>{throw Error('must not render old recovery in B');}},
+    {error:{status:409,code:'THREAD_CONCURRENTLY_UPDATED'},threadId:'7',prompt:'A'});
+  api.openRecentMakeThreadState(state,{id:'8',messages:[{content:'B'}]});
+  state.editingMessageId='uB';
+  d.resolve({id:'7',messages:[{content:'A refreshed'}]});
+  assert.equal(await pending,true);
+  assert.equal(state.activeThreadId,'8');
+  assert.equal(state.editingMessageId,'uB');
+  assert.deepEqual(state.messages,[{content:'B'}]);
+});
+
 test('a failed concurrency refresh after a conversation switch does not append to the new conversation', async () => {
   const {handleThreadConcurrency}=await import('../src/make/make-controller.mjs');
   const {api}=await import('../src/state/state-make.mjs');
