@@ -394,3 +394,10 @@ test('account-scoped list reconciliation invalidates a response for a displaced 
   const current=captureMakeView(state);backendEffects.applyMakeThreadsResult(ctx,[{id:'8',messages:[]}]);
   assert.equal(state.activeThreadId,null);assert.equal(current(),false);
 });
+
+test('missing recent-thread IDs cannot accidentally select a cached thread with no serverId', async () => {
+  let reads=0;const {state,flows}=await fixture(async()=>{reads++;return {id:'7'};});
+  state.recentThreads=[{id:'local-A',messages:[{content:'A'}]}];state.route='home';
+  for(const id of [undefined,null,'','undefined']) await flows.openRecentThread(id);
+  assert.equal(reads,0);assert.equal(state.activeThreadId,undefined);assert.equal(state.route,'home');assert.deepEqual(state.messages,[]);
+});

@@ -48,7 +48,8 @@ export function createMakeRecentWorkflows(ctx) {
 
     /** @param {TtalkakId} threadId */
     async function openRecentThread(threadId) {
-      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => String(item.id) === String(threadId) || String(item.serverId) === String(threadId));
+      if (threadId == null || String(threadId).trim() === "") return;
+      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => [item.id, item.serverId].some(id => id != null && String(id) === String(threadId)));
       if (!thread) return;
 
       openRecentMakeThreadState(state, thread);
