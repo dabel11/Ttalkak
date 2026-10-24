@@ -59,7 +59,7 @@ test("production build excludes optional demo data while development keeps lazy 
   assert.match(build, /nameCache,/);
   assert.match(build, /format:\s*\{\s*comments:\s*false/);
   assert.match(build, /compressionPolicy: production \? productionCompressionPolicy : null/);
-  assert.match(build, /const normalized = result\.code/);
+  assert.match(build, /const normalized = containsQuestionRenderer \? result\.code : result\.code/);
   assert.doesNotMatch(build, /replace\(\/>\\n\s\+\/g/);
   assert.match(build, /Terser cleanup produced no output/);
   assert.match(build, /await compressProductionJavaScript\(result\.metafile\)/);
