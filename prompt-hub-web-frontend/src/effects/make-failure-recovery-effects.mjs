@@ -13,6 +13,7 @@
     if (!backendThreadId) return null;
 
     const refreshedThread = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, scrollToLatest: true });
+    if (!refreshedThread) return null;
     const hasSubmittedPrompt = Array.isArray(refreshedThread?.messages)
       && refreshedThread.messages.some(
         (message) => message?.role === "user" && String(message.content || "").trim() === String(prompt || "").trim(),

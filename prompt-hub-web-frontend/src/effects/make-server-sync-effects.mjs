@@ -1,3 +1,4 @@
+import { captureMakeView, beginMakeListRead } from "../make/make-view-generation.mjs";
 import { classifyMakeError } from "../utils/make-message-model.mjs";
 import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
 
@@ -175,12 +176,14 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         throw error;
       }
 
+      const token = getMakeApiToken();
       try {
         const improved = await api.improvePrompt(
           buildMakeImprovePayload(prompt, history, threadId, { messageId, category, requestId }),
           getMakeApiToken(),
           { signal },
         );
+        if (getMakeApiToken() !== token) throw Object.assign(new Error(), { code: "REQUEST_ABORTED" });
         applyImproveThreadId(threadId, improved);
         const improvedText = typeof improved === "string" ? improved : improved?.text || "";
         const ragStatus = typeof improved === "object" && improved ? String(improved.ragStatus || improved.rag_status || "").toLowerCase() : "";
@@ -193,6 +196,7 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
           ? { ...improved, text: improvedText || polishPrompt(prompt), mode: improved.mode || "improve" }
           : { text: improvedText || polishPrompt(prompt), mode: "improve", improvedPrompt: improvedText || polishPrompt(prompt) };
       } catch (error) {
+        if (getMakeApiToken() !== token) throw Object.assign(new Error(), { code: "REQUEST_ABORTED" });
         const status = Number(error?.status || error?.payload?.status || 0);
         const code = String(error?.payload?.code || error?.code || "").toUpperCase();
         if (code === "REQUEST_ABORTED") throw error;
@@ -230,17 +234,27 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
       const api = getMakeApi();
       if (!api?.getMakeThreads || !hasBackendAuthToken()) return;
 
+      const token = getMakeApiToken();
+      const currentList = beginMakeListRead(state);
+      const currentView = captureMakeView(state);
+      const isCurrent = () => currentList() && currentView() && getMakeApiToken() === token && hasBackendAuthToken();
       try {
-        const threads = await api.getMakeThreads(getMakeApiToken());
+        const threads = await api.getMakeThreads(token);
+        if (!isCurrent()) return;
         applyMakeThreadsResult(getBackendDataEffectContext(), threads);
         if (shouldRender) render();
       } catch (error) {
-        if (quiet) return;
+        if (!isCurrent() || quiet) return;
         handleBackendAccessError(error, "최근 대화 목록을 다시 불러오지 못했습니다.");
       }
     }
 
+    let detailGeneration = 0;
     async function refreshActiveMakeThreadFromBackend(threadId = state.activeThreadId, { quiet = false, preserveScroll = false, scrollToLatest = false } = {}) {
+      const generation = ++detailGeneration;
+      const currentView = captureMakeView(state);
+      const token = getMakeApiToken();
+      const isCurrent = () => generation === detailGeneration && currentView() && getMakeApiToken() === token && hasBackendAuthToken() && getMakeBackendThreadId() === backendThreadId;
       const api = getMakeApi();
       const backendThreadId = String(getMakeBackendThreadId(threadId) || threadId || "");
       const renderThread = () => {
@@ -257,9 +271,12 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
         }
         render();
       };
+      if (getMakeBackendThreadId() !== backendThreadId) return null;
       if (api?.getMakeThread && hasBackendAuthToken() && isBackendNumericId(backendThreadId)) {
         try {
-          const refreshedThread = await api.getMakeThread(backendThreadId, getMakeApiToken());
+          const refreshedThread = await api.getMakeThread(backendThreadId, token);
+          if (!isCurrent()) return null;
+          if (String(refreshedThread?.id) !== backendThreadId) throw new Error();
           if (refreshedThread?.id) {
             makeState.setMakeRecentThreads(state, [
               refreshedThread,
@@ -276,26 +293,22 @@ import { normalizeMakeRequestId } from "../utils/make-request-id.mjs";
             return refreshedThread;
           }
         } catch (error) {
-          if (Number(error?.status || 0) !== 404) {
-            if (quiet) return null;
-            handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+          if (!isCurrent()) return null;
+          if (Number(error?.status || 0) === 404) {
+            makeState.setMakeRecentThreads(state, state.recentThreads.filter((thread) => String(thread.serverId || thread.id) !== backendThreadId));
+            openRecentMakeThreadState(state, { messages: [] });
+            if (!quiet) handleBackendAccessError(error);
+            renderThread();
+            return null;
           }
+          if (quiet) return null;
+          handleBackendAccessError(error, "최근 대화를 다시 불러오지 못했습니다.");
+          renderThread();
+          return null;
         }
       }
 
-      await refreshMakeThreadsFromBackend({ shouldRender: false, quiet });
-      const refreshedThread = state.recentThreads.find((thread) => {
-        const id = String(thread.id || "");
-        const serverId = String(thread.serverId || "");
-        return Boolean(backendThreadId) && (id === backendThreadId || serverId === backendThreadId);
-      });
-
-      if (refreshedThread) {
-        openRecentMakeThreadState(state, refreshedThread);
-        if (scrollToLatest) queueLatestMakeThreadScroll(refreshedThread);
-      }
-      renderThread();
-      return refreshedThread;
+      return null;
     }
 
     return Object.freeze({

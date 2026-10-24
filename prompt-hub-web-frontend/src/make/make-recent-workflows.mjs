@@ -1,4 +1,5 @@
 // @ts-check
+import { invalidateMakeView } from "./make-view-generation.mjs";
 /** @param {Record<string, any>} ctx */
 export function createMakeRecentWorkflows(ctx) {
     const { state, savedPrompts, render, showNotice, makePreview, makePromptTitle, getMakeApi, getMakeApiToken, isBackendNumericId, canSplitMakeThread, findMakeThread, hasBackendAuthToken, deleteMakeThreadState, handleBackendAccessError, refreshMakeThreadsFromBackend, updateRecentMakeThreadState, getMakeMutationStateContext, openRecentMakeThreadState, openSavedMakePromptState, startNewMakeChatState } = ctx;
@@ -46,12 +47,16 @@ export function createMakeRecentWorkflows(ctx) {
     }
 
     /** @param {TtalkakId} threadId */
-    function openRecentThread(threadId) {
-      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => item.id === threadId);
+    async function openRecentThread(threadId) {
+      if (threadId == null || String(threadId).trim() === "") return;
+      const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => [item.id, item.serverId].some(id => id != null && String(id) === String(threadId)));
       if (!thread) return;
 
       openRecentMakeThreadState(state, thread);
       render();
+      if (hasBackendAuthToken() && isBackendNumericId(thread.serverId || thread.id)) {
+        await ctx.refreshActiveMakeThreadFromBackend(thread.id);
+      }
     }
 
     /** @param {TtalkakId} promptId */
@@ -92,6 +97,7 @@ export function createMakeRecentWorkflows(ctx) {
         serverId: "",
         messages: splitMessages,
       };
+      invalidateMakeView(state);
       state.messages = splitMessages;
       state.activeThreadId = threadId;
       state.recentThreads = [newThread, ...state.recentThreads.filter((/** @type {TtalkakStateEntity} */ item) => item.id !== threadId)].slice(0, 8);
