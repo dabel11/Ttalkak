@@ -92,11 +92,7 @@ async function writeProductionStyles(source, destination, before = [], after = [
   const css = [...before, source, ...after].map((file) => fs.readFileSync(file, "utf8")).join("\n");
   const result = await esbuild.transform(css, {
     loader: "css",
-    // Only compact whitespace: preserve authored CSS values and rule semantics.
-    // Aggressive syntax minification changes production fixture layout/select behavior.
-    minifyWhitespace: true,
-    minifySyntax: false,
-    minifyIdentifiers: false,
+    minify: true,
     target: ["chrome110", "firefox110"],
   });
   fs.writeFileSync(destination, result.code, "utf8");
