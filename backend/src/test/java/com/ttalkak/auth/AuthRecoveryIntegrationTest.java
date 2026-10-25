@@ -234,11 +234,11 @@ class AuthRecoveryIntegrationTest {
 
     @Test void legacyFindIdDoesNotRevealAnIdForUnmatchedContact() throws Exception {
         mvc.perform(post("/api/auth/find-id").contentType("application/json")
-                        .content("{\\"method\\":\\"email\\",\\"name\\":\\"Name\\",\\"email\\":\\"wrong@example.com\\"}"))
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"wrong@example.com\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.maskedUserId").value(""));
         mvc.perform(post("/api/auth/find-id").contentType("application/json")
-                        .content("{\\"method\\":\\"phone\\",\\"name\\":\\"Name\\",\\"phone\\":\\"01012345678\\"}"))
+                        .content("{\"method\":\"phone\",\"name\":\"Name\",\"phone\":\"01012345678\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
@@ -251,7 +251,7 @@ class AuthRecoveryIntegrationTest {
                 "google-" + UUID.randomUUID(),
                 "Google Name", email, "google-subject-" + UUID.randomUUID()));
         mvc.perform(post("/api/auth/find-id").contentType("application/json")
-                        .content("{\\"method\\":\\"email\\",\\"name\\":\\"Google Name\\",\\"email\\":\\"" + email + "\\"}"))
+                        .content("{\"method\":\"email\",\"name\":\"Google Name\",\"email\":\"" + email + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
