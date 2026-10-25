@@ -1,5 +1,5 @@
 // @ts-check
-import { invalidateMakeView } from "./make-view-generation.mjs";
+import { invalidateMakeView, invalidateMakeListReads } from "./make-view-generation.mjs";
 /** @param {Record<string, any>} ctx */
 export function createMakeRecentWorkflows(ctx) {
     const { state, savedPrompts, render, showNotice, makePreview, makePromptTitle, getMakeApi, getMakeApiToken, isBackendNumericId, canSplitMakeThread, findMakeThread, hasBackendAuthToken, deleteMakeThreadState, handleBackendAccessError, refreshMakeThreadsFromBackend, updateRecentMakeThreadState, getMakeMutationStateContext, openRecentMakeThreadState, openSavedMakePromptState, startNewMakeChatState } = ctx;
@@ -9,6 +9,7 @@ export function createMakeRecentWorkflows(ctx) {
       const thread = state.recentThreads.find((/** @type {TtalkakStateEntity} */ item) => item.id === threadId || item.serverId === threadId);
       const backendThreadId = thread?.serverId || (isBackendNumericId(threadId) ? threadId : "");
       const api = getMakeApi();
+      invalidateMakeListReads(state);
       if (!state.isLoggedIn || !backendThreadId || !api?.deleteMakeThread || !hasBackendAuthToken()) {
         performDeleteThreadLocal(threadId);
         render();
