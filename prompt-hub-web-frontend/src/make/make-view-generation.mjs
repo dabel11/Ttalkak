@@ -6,6 +6,9 @@ function viewGeneration(/** @type {TtalkakApplicationState} */ state) { return g
 function invalidateMakeView(/** @type {TtalkakApplicationState} */ state) { generations.set(state, {}); }
 
 /** @param {TtalkakApplicationState} state */
+function invalidateMakeListReads(state) { listReads.set(state, {}); }
+
+/** @param {TtalkakApplicationState} state */
 function beginMakeListRead(state) {
   const request = {};
   listReads.set(state, request);
@@ -17,4 +20,4 @@ function captureMakeView(state) {
   const view = viewGeneration(state), route = state.route, token = state.authToken, editing = state.editingMessageId;
   return () => viewGeneration(state) === view && state.route === route && state.authToken === token && state.editingMessageId === editing;
 }
-export { viewGeneration, invalidateMakeView, beginMakeListRead, captureMakeView };
+export { viewGeneration, invalidateMakeView, invalidateMakeListReads, beginMakeListRead, captureMakeView };
