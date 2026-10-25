@@ -210,6 +210,45 @@ test('deleting an inactive conversation invalidates the earlier list response', 
   d.resolve([{id:'7'}]);await pending;assert.deepEqual(state.recentThreads,[]);
 });
 
+test('deleting inactive thread preserves the active detail response', async () => {
+  const detail = deferred();
+  const {state, flows} = await fixture(() => detail.promise);
+  state.recentThreads.push({id:'8',serverId:'8',messages:[]});
+  const pending = flows.openRecentThread('7');
+  const {api} = await import('../src/state/state-make.mjs');
+  api.deleteMakeThreadState(state,'8');
+  detail.resolve({id:'7',serverId:'7',messages:[{id:'m1',role:'assistant',content:'A result'}]});
+  await pending;
+  assert.equal(state.activeThreadId,'7');
+  assert.equal(state.messages[0]?.content,'A result');
+  assert.deepEqual(state.recentThreads.map(thread=>thread.id),['7']);
+});
+
+test('deleting inactive thread does not invalidate active AI response guard', async () => {
+  const {api} = await import('../src/state/state-make.mjs');
+  const {captureMakeView} = await import('../src/make/make-view-generation.mjs');
+  const state={route:'make',authToken:'fixture',activeThreadId:'7',editingMessageId:null,
+    recentThreads:[{id:'7',messages:[]},{id:'8',messages:[]}],messages:[]};
+  const current=captureMakeView(state);
+  api.deleteMakeThreadState(state,'8');
+  assert.equal(current(),true,'in-flight AI result for A must remain applicable');
+  api.appendMakeAssistantMessageState(state,{role:'assistant',content:'AI A'});
+  assert.equal(state.messages[0].content,'AI A');
+});
+
+test('a list response started before inactive deletion cannot reappear afterwards', async () => {
+  const pendingList=deferred();
+  const {state,effects}=await fixture(null,()=>pendingList.promise);
+  state.activeThreadId='7';
+  state.recentThreads.push({id:'8',serverId:'8',messages:[]});
+  const request=effects.refreshMakeThreadsFromBackend();
+  const {api}=await import('../src/state/state-make.mjs');
+  api.deleteMakeThreadState(state,'8');
+  pendingList.resolve([{id:'7'},{id:'8'}]);
+  await request;
+  assert.deepEqual(state.recentThreads.map(t=>t.id),['7']);
+});
+
 test('hydration from an old session cannot restore conversations or folders', async () => {
   const d=deferred();const {state,ctx,backendEffects}=await hydrationFixture();
   Object.assign(state,{route:'make',makeBackendStatus:'idle',makeFolders:[]});
