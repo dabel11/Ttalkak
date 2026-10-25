@@ -1,6 +1,38 @@
+import { captureMakeView } from "../make/make-view-generation.mjs";
 import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId } from "../utils/make-request-id.mjs";
 
 "use strict";
+  // A response belongs to the view that submitted it, even if the request was not aborted.
+  function captureMakeRequest(ctx, signal) {
+    const state = ctx.state;
+    const currentView = state && captureMakeView(state);
+    return (checkRequest = true) => {
+      if (checkRequest && ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return false;
+      if (!currentView || currentView()) return true;
+      if (checkRequest) { ctx.setThinking(false); ctx.stopInFlight?.(signal); }
+      return false;
+    };
+  }
+  function assistantMessage(result, id, sourcePrompt, requestId) {
+    return {
+      id, role: "assistant", mode: result.mode || "improve",
+      content: result.text || "", answer: result.answer || "",
+      improvedPrompt: result.improvedPrompt || "",
+      questions: result.questions || [], changes: result.changes || [],
+      fields: result.fields || [], techniques: result.techniques || [],
+      summary: result.summary || "", sources: result.sources || [],
+      ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "",
+      sourcePrompt, requestId: result.requestId || requestId,
+      replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged),
+      excludeFromHistory: Boolean(result.excludeFromHistory),
+    };
+  }
+  function finishSuccessfulRequest(ctx, signal, result, startedAt, threadId) {
+    ctx.setThinking(false);
+    ctx.completeRequest(signal);
+    ctx.reportOutcome?.(result, Date.now() - startedAt);
+    resetConcurrency(threadId);
+  }
   const concurrencyCounts = new Map();
   function recordConcurrency(threadId) {
     const key = String(threadId || "local");
@@ -17,43 +49,36 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     const failure = ctx.classifyError(error);
     const retryMode = retryMessageId ? "edit" : "follow-up";
     const repeated = recordConcurrency(threadId) >= 2;
+    const isCurrent = captureMakeRequest(ctx);
     const refreshed = await ctx.refreshThread(threadId);
+    // A successful refresh can still finish after the user switches conversations.
+    // Never append conflict UI or clear editing state in the newer view.
+    if (!isCurrent()) return true;
+    ctx.clearEditing?.();
     ctx.reportConcurrencyRefresh?.(requestId, Boolean(refreshed));
     ctx.setDraft(prompt);
-    if (!refreshed) {
-      const messageId = `concurrency-refresh-${Date.now()}`;
-      ctx.appendUser(threadId, {
-        id: messageId, role: "user", content: prompt, requestId, excludeFromHistory: true,
-        retryMode, retryMessageId, concurrencyRepeated: repeated,
-      });
-      ctx.failRequest(messageId, {
-        ...failure,
-        kind: "concurrency_refresh",
-        retryMode, repeated,
-      });
-      ctx.updateThread(threadId);
-      ctx.notice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
-      ctx.queueScroll?.(messageId);
-      ctx.render();
-      return true;
-    }
+    const messageId = `concurrency-${refreshed ? "" : "refresh-"}${Date.now()}`;
     const latestMessages = Array.isArray(refreshed?.messages) ? refreshed.messages : (ctx.getMessages?.() || ctx.state?.messages || []);
     const rawMessages = Array.isArray(refreshed?.raw?.messages) ? refreshed.raw.messages : [];
     const matchesRetryTarget = (message) => [message?.id, message?.messageId, message?.raw?.id, message?.raw?.messageId]
       .some((value) => String(value || "") === String(retryMessageId));
-    const retryTargetContent = retryMessageId
+    const retryTargetContent = refreshed && retryMessageId
       ? String([...latestMessages, ...rawMessages].find(matchesRetryTarget)?.content || "")
       : "";
-    const messageId = `concurrency-${Date.now()}`;
     ctx.appendUser(threadId, {
       id: messageId, role: "user", content: prompt, requestId, excludeFromHistory: true,
-      retryMode, retryMessageId, retryTargetContent, concurrencyRepeated: repeated,
+      retryMode, retryMessageId, concurrencyRepeated: repeated,
+      ...(refreshed ? { retryTargetContent } : {}),
     });
-    ctx.failRequest(messageId, { ...failure, retryMode, repeated });
+    ctx.failRequest(messageId, {
+      ...failure, retryMode, repeated,
+      ...(!refreshed ? { kind: "concurrency_refresh" } : {}),
+    });
     ctx.updateThread(threadId);
+    if (!refreshed) ctx.notice("최신 대화를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 열어주세요.");
     ctx.queueScroll?.(messageId);
     ctx.render();
-    ctx.focusRestored?.(prompt);
+    if (refreshed) ctx.focusRestored?.(prompt);
     return true;
   }
   function collectAskAnswerPayload(form, model) {
@@ -107,12 +132,14 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.updateThread(threadId);
     ctx.render();
     ctx.scrollLatest();
+    const isCurrent = captureMakeRequest(ctx, signal);
     let result;
     try {
       await ctx.waitForPaint();
+      if (!isCurrent()) return;
       result = await ctx.improve(prompt, { history, threadId, requestId, signal });
     } catch (error) {
-      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+      if (!isCurrent()) return;
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
@@ -129,10 +156,12 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         return;
       }
       const failure = ctx.classifyError(error);
+      const localMessagesSnapshot = [...ctx.state.messages];
       const recovered = failure.requiresLogin
         ? false
-        : await ctx.recover({ threadId, prompt, localMessagesSnapshot: [...ctx.state.messages] });
+        : await ctx.recover({ threadId, prompt, localMessagesSnapshot });
       if (recovered) { ctx.completeRequest(signal); ctx.notice("요청 상태를 서버 대화 기준으로 다시 확인했습니다."); return; }
+      if (!isCurrent(false) && ctx.state.messages !== localMessagesSnapshot) return;
       const failedMessage = ctx.state.messages.find((message) => message.id === userMessageId);
       if (failedMessage) failedMessage.retryMode = "follow-up";
       ctx.failRequest(userMessageId, failure);
@@ -143,12 +172,9 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.scrollLatest();
       return;
     }
-    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
-    ctx.setThinking(false);
-    ctx.completeRequest(signal);
-    ctx.reportOutcome?.(result, Date.now() - startedAt);
-    resetConcurrency(threadId);
-    ctx.appendAssistant({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: prompt, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    if (!isCurrent()) return;
+    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
+    ctx.appendAssistant(assistantMessage(result, assistantMessageId, prompt, requestId));
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);
     if (ctx.shouldSync()) {
@@ -189,9 +215,10 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.setThinking(true);
       ctx.queueScroll(messageId);
       ctx.render();
+      const isCurrent = captureMakeRequest(ctx, signal);
       try {
         const result = await ctx.improve(cleanValue, { threadId, messageId, category: "prompt_techniques", requestId, signal });
-        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        if (!isCurrent()) return;
         ctx.setThinking(false);
         ctx.reportOutcome?.(result, Date.now() - startedAt);
         resetConcurrency(threadId);
@@ -200,7 +227,7 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
         if (!refreshed) ctx.render();
         ctx.notice(ctx.messages.edited);
       } catch (error) {
-        if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+        if (!isCurrent()) return;
         ctx.setThinking(false);
         if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
           ctx.failRequest(messageId, ctx.classifyError(error));
@@ -211,18 +238,17 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
           return;
         }
         ctx.reportFailure?.(error, requestId, Date.now() - startedAt);
-        if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) {
-          ctx.clearEditing();
-          return;
-        }
+        if (await handleThreadConcurrency(ctx, { error, prompt: cleanValue, requestId, retryMessageId: messageId, threadId })) return;
         ctx.setBackendFailure();
+        const localMessagesSnapshot = [...ctx.getMessages()];
         if (Number(error?.status || 0) === 404) await ctx.refreshThreads();
         else if (isRequestIdReusedError(error)) {
           await ctx.refreshThread(threadId);
           ctx.notice("요청 상태가 변경되어 서버 대화를 새로고침했습니다. 내용을 확인한 뒤 다시 요청해주세요.");
           return;
         }
-        else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot: [...ctx.getMessages()] }).catch(() => null);
+        else await ctx.recover({ threadId, prompt: cleanValue, localMessagesSnapshot }).catch(() => null);
+        if (!isCurrent(false) && ctx.state?.messages !== localMessagesSnapshot) return;
         ctx.handleError(error, ctx.messages.editFailed);
         ctx.render();
       } finally { ctx.stopInFlight(signal); }
@@ -237,12 +263,14 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
     ctx.setThinking(true);
     ctx.queueScroll(messageId);
     ctx.render();
+    const isCurrent = captureMakeRequest(ctx, signal);
     let result;
     try {
       await ctx.waitForPaint();
+      if (!isCurrent()) return;
       result = await ctx.improve(cleanValue, { history, threadId, requestId, signal });
     } catch (error) {
-      if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
+      if (!isCurrent()) return;
       ctx.setThinking(false);
       ctx.stopInFlight(signal);
       if (String(error?.code || "").toUpperCase() === "REQUEST_ABORTED") {
@@ -261,16 +289,13 @@ import { isRequestIdReusedError, isThreadConcurrencyError, resolveMakeRequestId 
       ctx.render();
       return;
     }
-    if (ctx.isCurrentRequest && !ctx.isCurrentRequest(signal)) return;
-    ctx.setThinking(false);
-    ctx.completeRequest(signal);
-    ctx.reportOutcome?.(result, Date.now() - startedAt);
-    resetConcurrency(threadId);
+    if (!isCurrent()) return;
+    finishSuccessfulRequest(ctx, signal, result, startedAt, threadId);
     if (isFollowUpRetry) {
       const retriedMessage = ctx.getMessages().find((message) => message.id === messageId);
       if (retriedMessage) delete retriedMessage.retryMode;
     }
-    ctx.finishEdit({ id: assistantMessageId, role: "assistant", mode: result.mode || "improve", content: result.text || "", answer: result.answer || "", improvedPrompt: result.improvedPrompt || "", questions: result.questions || [], changes: result.changes || [], fields: result.fields || [], techniques: result.techniques || [], summary: result.summary || "", sources: result.sources || [], ragStatus: result.ragStatus || "", ragMessage: result.ragMessage || "", sourcePrompt: cleanValue, requestId: result.requestId || requestId, replayed: result.replayed === true, isUnchanged: Boolean(result.isUnchanged), excludeFromHistory: Boolean(result.excludeFromHistory) });
+    ctx.finishEdit(assistantMessage(result, assistantMessageId, cleanValue, requestId));
     ctx.queueScroll(assistantMessageId);
     ctx.updateThread(threadId);
     ctx.applyPendingThread(threadId);

@@ -1,7 +1,11 @@
 // @ts-check
+import { invalidateMakeView, invalidateMakeListReads } from "../make/make-view-generation.mjs";
+
   "use strict";
 
 function deleteMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId) {
+  invalidateMakeListReads(state);
+  if (String(state.activeThreadId ?? "") === String(threadId ?? "")) invalidateMakeView(state);
   state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
   if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
     state.pendingGuestThreadTransferId = null;
@@ -44,6 +48,7 @@ function deleteMakeFolderState(/** @type {TtalkakStateContext} */ ctx, /** @type
 
 function updateRecentMakeThreadState(/** @type {TtalkakStateContext} */ ctx, /** @type {TtalkakId} */ threadId) {
   const { makePreview, makePromptTitle, state } = ctx;
+  invalidateMakeView(state);
   const lastUser = [...state.messages].reverse().find((message) => message.role === "user");
   const firstUser = state.messages.find((message) => message.role === "user");
   const lastAssistant = [...state.messages].reverse().find((message) => message.role === "assistant");
@@ -64,7 +69,8 @@ function updateRecentMakeThreadState(/** @type {TtalkakStateContext} */ ctx, /**
 }
 
 
-function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ thread) {
+function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ thread, { preserveView = false } = {}) {
+  if (!preserveView) invalidateMakeView(state);
   state.activeThreadId = thread.id || null;
   state.messages = (thread.messages || []).map((item) => ({ ...item }));
   state.route = "make";
@@ -72,16 +78,18 @@ function openRecentMakeThreadState(/** @type {TtalkakApplicationState} */ state,
 
 
 function openSavedMakePromptState(/** @type {TtalkakStateContext} */ ctx, /** @type {TtalkakId} */ promptId, /** @type {TtalkakStateEntity} */ prompt) {
-  const { updateRecentThread, state } = ctx;
+  const { state } = ctx;
+  invalidateMakeView(state);
   const threadId = `saved-thread-${promptId}`;
   state.activeThreadId = threadId;
   state.messages = (prompt.messages || []).map((item) => ({ ...item }));
-  updateRecentThread(threadId);
+  // Saved history is a snapshot, not a newly created conversation.
   state.route = "make";
 }
 
 
 function startNewMakeChatState(/** @type {TtalkakApplicationState} */ state) {
+  invalidateMakeView(state);
   state.activeThreadId = null;
   state.messages = [];
   state.copiedMessageId = "";
@@ -90,24 +98,28 @@ function startNewMakeChatState(/** @type {TtalkakApplicationState} */ state) {
 
 
 function appendMakeUserMessageState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId, /** @type {TtalkakStateEntity} */ message) {
+  invalidateMakeView(state);
   state.activeThreadId = threadId;
   state.messages.push(message);
 }
 
 
 function appendMakeAssistantMessageState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ message) {
+  invalidateMakeView(state);
   state.messages.push(message);
   state.composerDraft = "";
 }
 
 
 function applyEditedMakeMessageState(/** @type {TtalkakApplicationState} */ state, /** @type {number} */ index, /** @type {string} */ cleanValue, /** @type {number} */ now) {
+  invalidateMakeView(state);
   state.messages = state.messages.slice(0, index + 1);
   state.messages[index] = { ...state.messages[index], content: cleanValue, editedAt: now };
 }
 
 
 function finishEditedMakeMessageState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakStateEntity} */ message) {
+  invalidateMakeView(state);
   state.messages.push(message);
   state.editingMessageId = null;
 }

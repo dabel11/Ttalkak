@@ -1,3 +1,4 @@
+import { captureMakeView } from "./make/make-view-generation.mjs";
 import { createDeferredMethodFacade, createLazyRuntimeFacade, createMethodFacade } from "./runtime/lazy-runtime-facade.mjs";
 import { createAppStaticData } from "./runtime/app-static-data.mjs";
 import { autosizeTextarea, normalizeDisplayAuthorName, parseSharedTags, truncateText, upsertPrompt } from "./runtime/app-helpers.mjs";
@@ -1768,12 +1769,13 @@ function bindDelegatedMakeEvents() {
       },
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
       retryConcurrent: (message) => {
-        const prompt = String(message?.content || "").trim();
+        const prompt = String(message?.content || "").trim(), currentView = captureMakeView(state);
         const retryMessageId = message?.retryMode === "edit" ? String(message.retryMessageId || "") : "";
         if (!prompt || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "retry")) return;
         pendingMessageScrollId = message.id;
         renderPreservingMakeScroll();
         window.setTimeout(() => {
+          if (!currentView()) { makeStateModule.finishMakeRecovery(makeRequestState); return; }
           state.messages = state.messages.filter((item) => item.id !== message.id);
           makeStateModule.completeMakeRequest(makeRequestState);
           makeStateModule.setMakeComposerDraft(state, prompt);
@@ -1795,12 +1797,13 @@ function bindDelegatedMakeEvents() {
         focusRestoredMakeComposer(prompt);
       },
       refreshConcurrent: async (message) => {
-        const prompt = String(message?.content || "").trim();
+        const prompt = String(message?.content || "").trim(), currentView = captureMakeView(state);
         const threadId = String(state.activeThreadId || "");
         if (!prompt || !threadId || !makeStateModule.startMakeRecovery(makeRequestState, message?.id, "refresh")) return;
         pendingMessageScrollId = message.id;
         renderPreservingMakeScroll();
         const refreshed = await refreshActiveMakeThreadFromBackend(threadId, { quiet: true, preserveScroll: true });
+        if (!refreshed && !currentView()) { makeStateModule.finishMakeRecovery(makeRequestState); return; }
         modules.observability.report(new Error("Make concurrency refresh"), {
           area: "make", action: "refresh-thread", kind: "concurrency",
           code: refreshed ? "THREAD_REFRESHED_AFTER_CONFLICT" : "THREAD_REFRESH_FAILED_AFTER_CONFLICT",
@@ -1863,9 +1866,7 @@ function submitMakeComposer(composer) {
   }
   composer.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 }
-async function submitMakePrompt(composer) {
-  return makeControllerModule.submitPrompt(getMakeControllerContext(), composer);
-}
+async function submitMakePrompt(composer) { return makeControllerModule.submitPrompt(getMakeControllerContext(), composer); }
 function updateMakeProgressStatus() {
   if (!makeProgressStartedAt) return;
   const progress = makeMessageModel.getMakeProgressStatus(Date.now() - makeProgressStartedAt);

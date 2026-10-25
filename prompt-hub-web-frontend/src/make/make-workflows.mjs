@@ -11,6 +11,6 @@ export function createMakeWorkflows(ctx) {
   const sync = createMakeSyncWorkflows(ctx);
   const folder = createMakeFolderWorkflows({ ...ctx, ensureBackendMakeThreadId: sync.ensureBackendMakeThreadId });
   const execution = createMakeExecutionWorkflows({ ...ctx, makeController, makeState });
-  const recent = createMakeRecentWorkflows({ ...ctx, refreshMakeThreadsFromBackend: sync.refreshMakeThreadsFromBackend });
+  const recent = createMakeRecentWorkflows({ ...ctx, ...sync });
   return Object.freeze({ ...folder, ...execution, ...recent, ...sync });
 }
