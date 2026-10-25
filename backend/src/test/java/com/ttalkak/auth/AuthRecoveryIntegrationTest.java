@@ -252,7 +252,8 @@ class AuthRecoveryIntegrationTest {
                 "Google Name", email, "google-subject-" + UUID.randomUUID()));
         mvc.perform(post("/api/auth/find-id").contentType("application/json")
                         .content("{\"method\":\"email\",\"name\":\"Google Name\",\"email\":\"" + email + "\"}"))
-                .andExpect(status().isOk())
+                .andExpect(result -> assertEquals(200, result.getResponse().getStatus(),
+                        "find-id unexpected response: " + result.getResponse().getContentAsString()))
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
@@ -261,7 +262,8 @@ class AuthRecoveryIntegrationTest {
         members.saveAndFlush(member);
         mvc.perform(post("/api/auth/find-id").contentType("application/json")
                         .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
-                .andExpect(status().isOk())
+                .andExpect(result -> assertEquals(200, result.getResponse().getStatus(),
+                        "find-id unexpected response: " + result.getResponse().getContentAsString()))
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
