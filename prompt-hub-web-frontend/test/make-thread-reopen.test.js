@@ -236,6 +236,37 @@ test('deleting inactive thread does not invalidate active AI response guard', as
   assert.equal(state.messages[0].content,'AI A');
 });
 
+test('in-flight edited AI result is rendered after deleting a different conversation', async () => {
+  const {resendEdited}=await import('../src/make/make-controller.mjs');
+  const {api}=await import('../src/state/state-make.mjs');
+  const response=deferred(), requested=deferred();
+  const signal=new AbortController().signal;
+  const state={route:'make',authToken:'test-session',activeThreadId:'7',editingMessageId:null,
+    recentThreads:[{id:'7',messages:[]},{id:'8',messages:[]}],
+    messages:[{id:'u',role:'user',content:'original'}]};
+  let completed=0, stopped=0;
+  const ctx={state,findEditableMessage:()=>0,guard:()=>false,isBusy:()=>false,
+    getActiveThreadId:()=>state.activeThreadId,getMessages:()=>state.messages,shouldSync:()=>false,
+    buildHistory:()=>[],startRequest:()=>signal,isCurrentRequest:()=>true,
+    applyEdit:(i,v,n)=>api.applyEditedMakeMessageState(state,i,v,n),
+    setThinking:()=>{},queueScroll:()=>{},render:()=>{},waitForPaint:async()=>{},
+    improve:async()=>{requested.resolve();return response.promise;},
+    completeRequest:()=>{completed++;},stopInFlight:()=>{stopped++;},
+    finishEdit:message=>api.finishEditedMakeMessageState(state,message),
+    updateThread:()=>{},applyPendingThread:()=>{},syncThread:()=>{},notice:()=>{},
+    messages:{edited:'edited'}};
+  const pending=resendEdited(ctx,'u','edited A');
+  await requested.promise;
+  api.deleteMakeThreadState(state,'8');
+  response.resolve({mode:'improve',text:'AI answer for A'});
+  await pending;
+  assert.equal(completed,1,'the successful AI request must complete');
+  assert.equal(stopped,0,'the valid response must not be discarded');
+  assert.equal(state.activeThreadId,'7');
+  assert.equal(state.messages.at(-1)?.content,'AI answer for A');
+  assert.deepEqual(state.recentThreads.map(t=>t.id),['7']);
+});
+
 test('a list response started before inactive deletion cannot reappear afterwards', async () => {
   const pendingList=deferred();
   const {state,effects}=await fixture(null,()=>pendingList.promise);
