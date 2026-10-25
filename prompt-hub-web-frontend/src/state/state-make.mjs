@@ -1,10 +1,11 @@
 // @ts-check
-import { invalidateMakeView } from "../make/make-view-generation.mjs";
+import { invalidateMakeView, invalidateMakeListReads } from "../make/make-view-generation.mjs";
 
   "use strict";
 
 function deleteMakeThreadState(/** @type {TtalkakApplicationState} */ state, /** @type {TtalkakId} */ threadId) {
-  invalidateMakeView(state);
+  invalidateMakeListReads(state);
+  if (String(state.activeThreadId ?? "") === String(threadId ?? "")) invalidateMakeView(state);
   state.recentThreads = state.recentThreads.filter((thread) => thread.id !== threadId);
   if (String(state.pendingGuestThreadTransferId || "") === String(threadId || "")) {
     state.pendingGuestThreadTransferId = null;
