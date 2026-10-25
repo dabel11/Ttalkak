@@ -256,6 +256,15 @@ class AuthRecoveryIntegrationTest {
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
+    @Test void legacyFindIdDoesNotExposeBlockedLocalAccount() throws Exception {
+        member.block("test restriction");
+        members.saveAndFlush(member);
+        mvc.perform(post("/api/auth/find-id").contentType("application/json")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
