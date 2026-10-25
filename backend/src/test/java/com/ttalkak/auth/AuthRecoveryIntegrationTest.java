@@ -32,6 +32,18 @@ class AuthRecoveryIntegrationTest {
     @Autowired MockMvc mvc;
     @MockitoBean PasswordResetMailer mailer;
     private Member member;
+
+    // Keep independent recovery scenarios in separate production-like rate-limit
+    // buckets. The filter keys the 10/minute limit by IP + path, while MockMvc
+    // otherwise makes all test methods appear to come from the same IP.
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder isolatedFindIdPost(String ip) {
+        return post("/api/auth/find-id")
+                .with(request -> {
+                    request.setRemoteAddr(ip);
+                    return request;
+                })
+                .contentType("application/json");
+    }
     @BeforeEach void setup() {
         member = members.saveAndFlush(new Member("recovery_" + UUID.randomUUID().toString().substring(0, 8),
                 encoder.encode("old-password"), "recovery-" + UUID.randomUUID(), "Name", null, null, "user@example.com"));
@@ -204,6 +216,68 @@ class AuthRecoveryIntegrationTest {
             members.deleteById(member.getId());
         }
     }
+    @Test void legacyFindIdRequiresAnExplicitNonBlankContact() throws Exception {
+        // This existing fixture has no phone number. Previously requesting
+        // just its name hit a Spring Data IS NULL match and leaked a masked ID.
+        for (String json : new String[] {
+                "{\"method\":\"phone\",\"name\":\"Name\"}",
+                "{\"method\":\"phone\",\"name\":\"Name\",\"phone\":\"   \"}",
+                "{\"method\":\"email\",\"name\":\"Name\"}",
+                "{\"method\":\"email\",\"name\":\"Name\",\"email\":\"   \"}",
+                "{\"name\":\"Name\"}",
+                "{\"method\":\"unexpected\",\"name\":\"Name\",\"email\":\"user@example.com\"}",
+                "{\"method\":\"email\",\"name\":\"   \",\"email\":\"user@example.com\"}"
+        }) {
+            mvc.perform(isolatedFindIdPost("192.0.2.11").content(json))
+                    .andExpect(status().isBadRequest());
+        }
+
+        // A legitimate name + registered email lookup still returns only a
+        // masked value, not the full account identifier.
+        String id = member.getUserId();
+        mvc.perform(isolatedFindIdPost("192.0.2.11")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
+
+    @Test void legacyFindIdDoesNotRevealAnIdForUnmatchedContact() throws Exception {
+        mvc.perform(isolatedFindIdPost("192.0.2.12")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"wrong@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+        mvc.perform(isolatedFindIdPost("192.0.2.12")
+                        .content("{\"method\":\"phone\",\"name\":\"Name\",\"phone\":\"01012345678\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdDoesNotExposeGoogleOnlyAccount() throws Exception {
+        String email = "google-only-" + UUID.randomUUID() + "@example.com";
+        Member google = members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("random-password"),
+                "google-" + UUID.randomUUID(),
+                "Google Name", email, "google-subject-" + UUID.randomUUID()));
+        mvc.perform(isolatedFindIdPost("192.0.2.13")
+                        .content("{\"method\":\"email\",\"name\":\"Google Name\",\"email\":\"" + email + "\"}"))
+                .andExpect(result -> assertEquals(200, result.getResponse().getStatus(),
+                        "find-id unexpected response: " + result.getResponse().getContentAsString()))
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdDoesNotExposeBlockedLocalAccount() throws Exception {
+        member.block("test restriction");
+        members.saveAndFlush(member);
+        mvc.perform(isolatedFindIdPost("192.0.2.14")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(result -> assertEquals(200, result.getResponse().getStatus(),
+                        "find-id unexpected response: " + result.getResponse().getContentAsString()))
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
