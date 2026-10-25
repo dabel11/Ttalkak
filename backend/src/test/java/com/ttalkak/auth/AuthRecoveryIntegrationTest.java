@@ -231,6 +231,31 @@ class AuthRecoveryIntegrationTest {
                         .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
     }
 
+
+    @Test void legacyFindIdDoesNotRevealAnIdForUnmatchedContact() throws Exception {
+        mvc.perform(post("/api/auth/find-id").contentType("application/json")
+                        .content("{\\"method\\":\\"email\\",\\"name\\":\\"Name\\",\\"email\\":\\"wrong@example.com\\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+        mvc.perform(post("/api/auth/find-id").contentType("application/json")
+                        .content("{\\"method\\":\\"phone\\",\\"name\\":\\"Name\\",\\"phone\\":\\"01012345678\\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdDoesNotExposeGoogleOnlyAccount() throws Exception {
+        String email = "google-only-" + UUID.randomUUID() + "@example.com";
+        Member google = members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("random-password"),
+                "google-" + UUID.randomUUID(),
+                "Google Name", email, "google-subject-" + UUID.randomUUID()));
+        mvc.perform(post("/api/auth/find-id").contentType("application/json")
+                        .content("{\\"method\\":\\"email\\",\\"name\\":\\"Google Name\\",\\"email\\":\\"" + email + "\\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
