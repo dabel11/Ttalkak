@@ -219,7 +219,7 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디 찾기 방법을 확인해주세요.");
         }
 
-        if (member == null) {
+        if (member == null || member.isBlocked()) {
             return ResponseEntity.ok(Map.of("maskedUserId", ""));
         }
 
