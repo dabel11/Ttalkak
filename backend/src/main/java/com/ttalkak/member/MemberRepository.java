@@ -47,6 +47,9 @@ public interface MemberRepository
             String authProvider
     );
 
+    List<Member> findAllByNameAndPhoneAndAuthProviderAndActiveTrue(
+            String name, String phone, String authProvider);
+
     Optional<Member> findByNameAndEmailAndActiveTrue(
             String name,
             String email
