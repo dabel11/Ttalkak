@@ -278,6 +278,56 @@ class AuthRecoveryIntegrationTest {
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
+
+    @Test void idRecoveryWithDuplicateContactMailsOnlyEligibleLocalIds() {
+        String email = member.getEmail();
+        Member anotherLocal = members.saveAndFlush(new Member(
+                "local_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "local-" + UUID.randomUUID(),
+                "Name", null, null, email));
+
+        Member blockedLocal = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "blocked-" + UUID.randomUUID(),
+                "Name", null, null, email));
+        blockedLocal.block("test restriction");
+        members.saveAndFlush(blockedLocal);
+
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"),
+                "google-" + UUID.randomUUID(),
+                "Name", email, "google-subject-" + UUID.randomUUID()));
+
+        recovery.recoverUserId("Name", email);
+
+        String expectedIds = java.util.stream.Stream.of(member.getUserId(), anotherLocal.getUserId())
+                .sorted().collect(java.util.stream.Collectors.joining(", "));
+        verify(mailer, times(1)).sendUserId(eq(email), eq(expectedIds));
+        verifyNoMoreInteractions(mailer);
+    }
+
+    @Test void idRecoveryDoesNotMailWhenOnlyBlockedOrGoogleAccountsMatch() {
+        String email = "unavailable-" + UUID.randomUUID() + "@example.com";
+        Member blockedLocal = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "blocked-" + UUID.randomUUID(),
+                "Name", null, null, email));
+        blockedLocal.block("test restriction");
+        members.saveAndFlush(blockedLocal);
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"),
+                "google-" + UUID.randomUUID(),
+                "Name", email, "google-subject-" + UUID.randomUUID()));
+
+        recovery.recoverUserId("Name", email);
+        verify(mailer, never()).sendUserId(anyString(), anyString());
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
