@@ -279,6 +279,66 @@ class AuthRecoveryIntegrationTest {
     }
 
 
+
+    @Test void legacyFindIdAmbiguousEmailReturnsEmptyMaskedIdInsteadOfServerError() throws Exception {
+        members.saveAndFlush(new Member(
+                "duplicate_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "duplicate-" + UUID.randomUUID(),
+                "Name", null, null, member.getEmail()));
+
+        mvc.perform(isolatedFindIdPost("192.0.2.31")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdAmbiguousPhoneReturnsEmptyMaskedIdInsteadOfServerError() throws Exception {
+        String phone = "01098765432";
+        members.saveAndFlush(new Member(
+                "phone_a_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "phone-a-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "phone-a-" + UUID.randomUUID() + "@example.com"));
+        members.saveAndFlush(new Member(
+                "phone_b_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "phone-b-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "phone-b-" + UUID.randomUUID() + "@example.com"));
+
+        mvc.perform(isolatedFindIdPost("192.0.2.32")
+                        .content("{\"method\":\"phone\",\"name\":\"Phone Name\",\"phone\":\"01098765432\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdSkipsBlockedDuplicateAndKeepsUniqueEligibleLocalMatch() throws Exception {
+        Member blocked = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "blocked-" + UUID.randomUUID(),
+                "Name", null, null, member.getEmail()));
+        blocked.block("test");
+        members.saveAndFlush(blocked);
+        String id = member.getUserId();
+
+        mvc.perform(isolatedFindIdPost("192.0.2.33")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
+    @Test void legacyFindIdOnePhoneMatchStillReturnsMaskedId() throws Exception {
+        String phone = "01012349876";
+        Member local = members.saveAndFlush(new Member(
+                "single_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "single-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "single-" + UUID.randomUUID() + "@example.com"));
+        String id = local.getUserId();
+        mvc.perform(isolatedFindIdPost("192.0.2.34")
+                        .content("{\"method\":\"phone\",\"name\":\"Phone Name\",\"phone\":\"01012349876\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
     @Test void idRecoveryWithDuplicateContactMailsOnlyEligibleLocalIds() {
         String email = member.getEmail();
         Member anotherLocal = members.saveAndFlush(new Member(
