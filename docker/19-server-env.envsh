@@ -20,3 +20,10 @@ if [ -n "$TTALKAK_AUTH_PROXY_SECRET" ] && [ "${#TTALKAK_AUTH_PROXY_SECRET}" -lt 
     echo 'TTALKAK_AUTH_PROXY_SECRET must contain at least 32 characters' >&2
     exit 1
 fi
+
+case "$TTALKAK_AUTH_PROXY_SECRET" in
+    *[!a-zA-Z0-9_-]*)
+        echo 'TTALKAK_AUTH_PROXY_SECRET must use URL-safe ASCII characters only' >&2
+        exit 1
+        ;;
+esac
