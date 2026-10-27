@@ -83,6 +83,36 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("198.51.100.9", endpoint, 61_000));
     }
 
+    @Test void exhaustedKeySpaceStillEnforcesLimitsForPreviouslyTrackedClients() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String endpoint = "/api/auth/id-recovery/request";
+        assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
+        for (int i = 1; i < 10_000; i++) {
+            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), endpoint, 1_000));
+        }
+        for (int i = 1; i < 10; i++) {
+            assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
+        }
+        assertFalse(filter.allow("198.51.100.1", endpoint, 1_000),
+                "capacity exhaustion must not reset existing account recovery throttles");
+        assertFalse(filter.allow("203.0.113.200", endpoint, 1_000),
+                "an untracked client is denied when memory reaches its bound");
+    }
+
+    @Test void nonAuthRequestsBypassAuthenticationLimiterAtKeyCapacity() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        for (int i = 0; i < 10_000; i++) {
+            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
+                    "/api/auth/login", 1_000));
+        }
+        var getRequest = new MockHttpServletRequest("GET", "/api/auth/login");
+        getRequest.setRemoteAddr("203.0.113.200");
+        var response = new MockHttpServletResponse();
+        var passed = new java.util.concurrent.atomic.AtomicBoolean();
+        filter.doFilter(getRequest, response, (req, resp) -> passed.set(true));
+        assertTrue(passed.get(), "limiter must not affect methods outside its POST contract");
+    }
+
     @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
