@@ -125,6 +125,29 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void shiftedThirtySecondBoundaryDoesNotResetTheOtherQuota() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String endpoint = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.111", endpoint, 29_900));
+        assertFalse(filter.allow("192.0.2.111", endpoint, 30_000),
+                "shifted window rollover must not replenish an exhausted primary window");
+        assertFalse(filter.allow("192.0.2.111", endpoint, 59_999));
+        assertFalse(filter.allow("192.0.2.111", endpoint, 60_000),
+                "primary window rollover must not replenish an exhausted shifted window");
+        assertTrue(filter.allow("192.0.2.111", endpoint, 90_000));
+    }
+
+    @Test void repeatedDeniedRequestsCannotExtendOrResetShiftedWindow() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String endpoint = "/api/auth/find-id";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.112", endpoint, 29_900));
+        for (int i = 0; i < 1_000; i++) {
+            assertFalse(filter.allow("192.0.2.112", endpoint, 60_000));
+        }
+        assertTrue(filter.allow("192.0.2.112", endpoint, 90_000),
+                "denied requests must not move the release boundary");
+    }
+
     @Test void staggeredWindowsPreventImmediateBoundaryBurst() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
