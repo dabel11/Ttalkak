@@ -189,6 +189,31 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void duplicateProxyAttestationHeadersNeverAuthorizeAClientIdentity() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        var duplicateSecret = new MockHttpServletRequest("POST", "/api/auth/login");
+        duplicateSecret.setRemoteAddr("10.0.0.20");
+        duplicateSecret.addHeader("X-Ttalkak-Proxy-Secret", "this-is-a-long-test-secret-over-32-characters");
+        duplicateSecret.addHeader("X-Ttalkak-Proxy-Secret", "attacker-value");
+        duplicateSecret.addHeader("X-Ttalkak-Client-IP", "203.0.113.7");
+        assertNull(filter.clientKey(duplicateSecret));
+
+        var duplicateIp = new MockHttpServletRequest("POST", "/api/auth/login");
+        duplicateIp.setRemoteAddr("10.0.0.20");
+        duplicateIp.addHeader("X-Ttalkak-Proxy-Secret", "this-is-a-long-test-secret-over-32-characters");
+        duplicateIp.addHeader("X-Ttalkak-Client-IP", "203.0.113.7");
+        duplicateIp.addHeader("X-Ttalkak-Client-IP", "203.0.113.8");
+        assertNull(filter.clientKey(duplicateIp));
+
+        var combined = new MockHttpServletRequest("POST", "/api/auth/login");
+        combined.setRemoteAddr("10.0.0.20");
+        combined.addHeader("X-Ttalkak-Proxy-Secret",
+                "this-is-a-long-test-secret-over-32-characters, forged");
+        combined.addHeader("X-Ttalkak-Client-IP", "203.0.113.7");
+        assertNull(filter.clientKey(combined));
+    }
+
     @Test void canonicalIpv6AttestationCannotSplitRateLimitBuckets() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters");
