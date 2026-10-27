@@ -146,7 +146,13 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             window = null;
         }
         if (window == null) {
-            if (windows.size() >= 10_000) return false;
+            if (windows.size() >= 10_000) {
+                // A different request may have triggered cleanup immediately before
+                // expiration. Reclaim expired entries before refusing a new client.
+                windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
+                lastCleanupAt = now;
+                if (windows.size() >= 10_000) return false;
+            }
             window = new Window(now);
             windows.put(key, window);
         }
