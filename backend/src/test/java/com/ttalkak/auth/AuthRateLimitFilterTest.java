@@ -83,27 +83,32 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("198.51.100.9", endpoint, 61_000));
     }
 
-    @Test void exhaustedKeySpaceStillEnforcesLimitsForPreviouslyTrackedClients() {
+    @Test void aggregateCeilingAppliesAcrossDistinctSpoofedAddresses() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
-        assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
-        for (int i = 1; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), endpoint, 1_000));
+        for (int i = 0; i < 100; i++) {
+            assertTrue(filter.allow("203.0.113." + i, endpoint, 1000));
         }
-        for (int i = 1; i < 10; i++) {
-            assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
-        }
-        assertFalse(filter.allow("198.51.100.1", endpoint, 1_000),
-                "capacity exhaustion must not reset existing account recovery throttles");
-        assertFalse(filter.allow("203.0.113.200", endpoint, 1_000),
-                "an untracked client is denied when memory reaches its bound");
+        assertFalse(filter.allow("203.0.113.200", endpoint, 1000),
+                "distinct forwarded identities must not bypass the endpoint aggregate ceiling");
+        assertFalse(filter.allow("203.0.113.0", endpoint, 1000),
+                "existing identities are also subject to the aggregate ceiling");
+        assertTrue(filter.allow("203.0.113.200", endpoint, 61_000),
+                "aggregate ceiling resets on the next minute");
     }
 
-    @Test void nonAuthRequestsBypassAuthenticationLimiterAtKeyCapacity() throws Exception {
+    @Test void perIpLimitStillProtectsAnExistingIdentity() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
-        for (int i = 0; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
-                    "/api/auth/login", 1_000));
+        String endpoint = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("198.51.100.1", endpoint, 1000));
+        assertFalse(filter.allow("198.51.100.1", endpoint, 1000));
+        assertTrue(filter.allow("198.51.100.2", endpoint, 1000));
+    }
+
+    @Test void nonAuthRequestsBypassAuthenticationLimiterAtAggregateCapacity() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        for (int i = 0; i < 600; i++) {
+            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), "/api/auth/login", 1000));
         }
         var getRequest = new MockHttpServletRequest("GET", "/api/auth/login");
         getRequest.setRemoteAddr("203.0.113.200");
@@ -113,20 +118,22 @@ class AuthRateLimitFilterTest {
         assertTrue(passed.get(), "limiter must not affect methods outside its POST contract");
     }
 
-    @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
-        String endpoint = "/api/auth/id-recovery/request";
-        for (int i = 0; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
-                    endpoint, 1000), "fixture should fill exactly 10,000 windows");
+    @Test void aggregateCeilingBlocksUntrustedForwardedHeaderRotation() throws Exception {
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
+        int accepted = 0;
+        for (int i = 0; i < 110; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("198.51.100.100");
+            request.addHeader("X-Forwarded-For", "203.0.113." + i + ", 198.51.100.100");
+            var response = new MockHttpServletResponse();
+            var passed = new java.util.concurrent.atomic.AtomicBoolean();
+            forwarding.doFilter(request, response,
+                    (req, resp) -> limiter.doFilter(req, resp, (a, b) -> passed.set(true)));
+            if (passed.get()) accepted++;
+            else assertEquals(429, response.getStatus());
         }
-        // Documents the existing availability risk; this is not a security fix.
-        assertFalse(filter.allow("203.0.113.5", endpoint, 1000),
-                "previously unseen legitimate client is denied at capacity");
-        assertTrue(filter.allow("198.51.0.0", endpoint, 1000),
-                "existing clients continue within their quota");
-        assertTrue(filter.allow("203.0.113.5", endpoint, 61_000),
-                "expired windows eventually release capacity");
+        assertEquals(100, accepted);
     }
 
     @Test void forwardedHeaderWrappingCanChangeTheObservedRateLimitKey() throws Exception {
