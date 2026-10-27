@@ -37,3 +37,10 @@
 
 ## 릴리스 판정
 **Draft / 운영 배포 차단.** 본 PR은 코드 수준의 XFF 스푸핑 방어를 추가하지만, Railway 실제 ingress 통합·비운영 E2E·인증 비밀 설정·다중 인스턴스 문제까지 해결됐다는 의미는 아니다. 공개 도메인 삭제, 환경변수 변경, 실제 서비스 배포, DB 변경·병합은 별도 사용자 승인 없이 수행하지 않는다.
+
+## 자동화된 격리 종단간 검사
+- `docker/compose.auth-proxy-ci.yml`은 기존 disposable Compose 스택에서 **백엔드 strict 프록시 모드** 및 웹 nginx/백엔드 공유 **테스트 전용 비밀값**을 적용한다. 실제 Railway 변수나 사용자 DB는 사용하지 않는다.
+- `scripts/check-disposable-auth-proxy.py`는 실제 nginx → Spring을 통해 가짜 XFF/RFC Forwarded/가짜 프록시 비밀 헤더가 덮어써지는지, 동일한 검증된 IP의 11번째 아이디 찾기 요청이 429인지, 다른 검증된 IP는 별도 제한을 갖는지 확인한다.
+- 또 다른 컨테이너에서 backend 사설 주소로 직접 전송한 미인증 인증 요청이 strict 모드에서 **503 AUTH_PROXY_REQUIRED**로 거부되는지 검증한다.
+- 해당 테스트는 호스트에서 보내는 `X-Real-IP`로 Railway 공개 엣지가 부여한 값을 **모의**한다. Railway 엣지의 실제 재작성 보장이나 다른 서비스가 nginx 사설 주소로 접근하는 위험까지 자동 증명하지는 않는다.
+- CI에서 기존 전체 disposable 게스트/회원/DB 검사 후 별도 strict 프록시 E2E를 수행하도록 설정했다. 결과가 확인되기 전에는 통과로 표시하지 않는다.
