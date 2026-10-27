@@ -27,6 +27,28 @@ class AuthRateLimitFilterTest {
         assertEquals("60", response.getHeader("Retry-After"));
         assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
     }
+    @Test void emailIdRecoveryEndpointRejectsEleventhRequestBeforeDispatch() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        int reached = 0;
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("198.51.100.44");
+            var response = new MockHttpServletResponse();
+            var counter = new java.util.concurrent.atomic.AtomicBoolean();
+            filter.doFilter(request, response, (req, resp) -> counter.set(true));
+            if (i < 10) {
+                assertTrue(counter.get(), "requests inside per-IP window should reach the dispatcher");
+                reached++;
+            } else {
+                assertFalse(counter.get(), "rate limited request must not reach the mail dispatcher");
+                assertEquals(429, response.getStatus());
+                assertEquals("60", response.getHeader("Retry-After"));
+                assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
+            }
+        }
+        assertEquals(10, reached);
+    }
+
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.
