@@ -325,6 +325,32 @@ class AuthRecoveryIntegrationTest {
                         .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
     }
 
+    @Test void legacyFindIdIgnoresWithdrawnAndGoogleMatches() throws Exception {
+        String email = "shared-" + UUID.randomUUID() + "@example.com";
+        String name = "Shared Name";
+        Member eligible = members.saveAndFlush(new Member(
+                "eligible_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "eligible-" + UUID.randomUUID(),
+                name, null, null, email));
+        Member withdrawn = members.saveAndFlush(new Member(
+                "old_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "old-" + UUID.randomUUID(),
+                name, null, null, email));
+        withdrawn.withdraw();
+        members.saveAndFlush(withdrawn);
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"), "google-" + UUID.randomUUID(),
+                name, email, "subject-" + UUID.randomUUID()));
+
+        String id = eligible.getUserId();
+        mvc.perform(isolatedFindIdPost("192.0.2.35")
+                        .content("{\"method\":\"email\",\"name\":\"" + name + "\",\"email\":\"" + email + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
     @Test void legacyFindIdOnePhoneMatchStillReturnsMaskedId() throws Exception {
         String phone = "01012349876";
         Member local = members.saveAndFlush(new Member(
