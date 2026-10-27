@@ -125,6 +125,28 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void stableIdentityStillThrottledAfterManyRequestsOnOtherEndpoints() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String recovery = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.99", recovery, 1_000));
+        // A separate endpoint has a higher quota; unrelated traffic must not
+        // reset the recovery endpoint's already-exhausted budget.
+        for (int i = 0; i < 30; i++) {
+            assertTrue(filter.allow("192.0.2.99", "/api/auth/login", 1_000));
+        }
+        assertFalse(filter.allow("192.0.2.99", recovery, 1_000));
+        assertFalse(filter.allow("192.0.2.99", "/api/auth/login", 1_000));
+        assertTrue(filter.allow("192.0.2.99", recovery, 61_000));
+    }
+
+    @Test void rejectedRequestsDoNotIncrementOrResetTheirOwnSketchBudget() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String endpoint = "/api/auth/find-id";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.14", endpoint, 2_000));
+        for (int i = 0; i < 1_000; i++) assertFalse(filter.allow("192.0.2.14", endpoint, 2_000));
+        assertTrue(filter.allow("192.0.2.14", endpoint, 62_000));
+    }
+
     @Test void javaStringHashCollisionDoesNotShareIdentityBudget() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
