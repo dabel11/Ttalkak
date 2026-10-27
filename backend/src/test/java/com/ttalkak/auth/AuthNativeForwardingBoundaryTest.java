@@ -30,6 +30,7 @@ class AuthNativeForwardingBoundaryTest {
             .withUserConfiguration(ForwardingProperties.class)
             .withPropertyValues("server.forward-headers-strategy=none")
             .withBean(ApiErrorWriter.class, () -> new ApiErrorWriter(new ObjectMapper()))
+            .withBean(AuthRequestLimiter.class, () -> (address, path) -> true)
             .withBean(AuthRateLimitFilter.class);
 
     @Test void nativeForwardingMustFailConfigurationBeforeAcceptingAuthRequests() {

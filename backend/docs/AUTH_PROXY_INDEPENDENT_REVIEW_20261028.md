@@ -1,5 +1,7 @@
 # PR #81 independent authentication ingress review — 2026-10-28 KST
 
+> Historical reproduction record. The final shared-store implementation and remaining rollout gates are described in [AUTH_RATE_LIMIT_REVIEW.md](AUTH_RATE_LIMIT_REVIEW.md). Removed sketch limitations below are historical, not the current runtime contract.
+
 Status: Draft; release blocked. No deployment, merge, production variable/domain/DB changes or live email requests.
 
 ## Commit evidence

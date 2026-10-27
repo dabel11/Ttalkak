@@ -366,14 +366,14 @@ class AuthRateLimitFilterTest {
         assertEquals(10, accepted.get());
     }
 
-    @Test void instanceReplacementAndReplicasDoNotShareRateLimitState() {
+    @Test void isolatedNonManagedFilterFixturesKeepTheirOwnState() {
         var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
         var first = new AuthRateLimitFilter(writer);
         var second = new AuthRateLimitFilter(writer);
         String path = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(first.allow("203.0.113.19", path, 1000));
         assertFalse(first.allow("203.0.113.19", path, 1000));
-        // Explicit limitation: a second replica or restart has an independent allowance.
+        // Non-managed fixture only. Production replica/restart sharing is tested against the database store.
         for (int i = 0; i < 10; i++) assertTrue(second.allow("203.0.113.19", path, 1000));
         assertFalse(second.allow("203.0.113.19", path, 1000));
     }

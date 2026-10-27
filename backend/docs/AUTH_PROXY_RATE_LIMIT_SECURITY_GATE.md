@@ -1,5 +1,7 @@
 # 인증 요청 제한 — 신뢰 경계·검증·운영 게이트
 
+> Historical reproduction record. The final shared-store implementation and remaining rollout gates are described in [AUTH_RATE_LIMIT_REVIEW.md](AUTH_RATE_LIMIT_REVIEW.md). Removed sketch limitations below are historical, not the current runtime contract.
+
 ## 취약 원인
 - 기존 `AuthRateLimitFilter`는 `getRemoteAddr()`를 신뢰했다. `FORWARD_HEADERS_STRATEGY=framework`일 때 Spring `ForwardedHeaderFilter`가 감싼 요청의 원격 주소는 클라이언트가 전달한 `Forwarded` 또는 `X-Forwarded-For`의 영향을 받을 수 있다.
 - 기존 nginx는 `$proxy_add_x_forwarded_for`로 기존 XFF에 값을 추가했다. 신뢰되지 않은 XFF를 백엔드 제한 키에 사용하는 것은 위험하다.

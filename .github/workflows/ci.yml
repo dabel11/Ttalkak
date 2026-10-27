@@ -284,6 +284,7 @@ jobs:
           --health-retries=10
 
     env:
+      TTALKAK_AUTH_LIMITER_CI: '1'
       DB_URL: jdbc:mysql://127.0.0.1:3306/ttalkak?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
       DB_USERNAME: root
       DB_PASSWORD: root

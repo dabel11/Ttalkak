@@ -18,10 +18,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.GeneralSecurityException;
 import java.util.Set;
 
 @Component
@@ -29,17 +25,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> PATHS = Set.of("/api/auth/login", "/api/auth/signup", "/api/auth/google",
             "/api/auth/password-reset/request", "/api/auth/password-reset/complete", "/api/auth/password/change",
             "/api/auth/id-recovery/request", "/api/auth/find-id");
-    // A bounded, conservative count-min limiter avoids the unbounded identity map
-    // and never evicts a live counter merely because a new address appears.
-    // Collisions can cause false-positive throttling, never undercount an address.
-    private static final int ROWS = 4;
-    private static final int SLOTS = 1 << 16;
-    private static final int MASK = SLOTS - 1;
-    private static final int BUCKETS = 12;
-    private static final long BUCKET_MS = 5_000L;
-    // Twelve 5-second buckets give a bounded sliding lookback (quantized to 5s).
-    private final Window[][][] counters = new Window[BUCKETS][ROWS][SLOTS];
-    private final SecretKeySpec sketchHashKey = createSketchKey();
+    private final AuthRequestLimiter limiter;
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
     private final boolean trustedProxyRequired;
@@ -54,11 +40,16 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         this(errors, trustedProxySecret, trustedProxyRequired, socketPeerServerProperties());
     }
 
+    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret, boolean trustedProxyRequired,
+                               ServerProperties serverProperties) {
+        this(errors, trustedProxySecret, trustedProxyRequired, serverProperties, new IsolatedLimiter());
+    }
+
     @Autowired
     public AuthRateLimitFilter(ApiErrorWriter errors,
                                @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret,
                                @Value("${ttalkak.auth.trusted-proxy-required:false}") boolean trustedProxyRequired,
-                               ServerProperties serverProperties) {
+                               ServerProperties serverProperties, AuthRequestLimiter limiter) {
         // Native Tomcat forwarding rewrites the underlying request before the
         // servlet chain; unwrapping cannot recover the original socket peer.
         var strategy = serverProperties.getForwardHeadersStrategy();
@@ -74,6 +65,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                     "Native forwarded headers cannot preserve the authentication socket peer; use explicit none/framework without Tomcat remoteip headers");
         }
         this.errors = errors;
+        this.limiter = java.util.Objects.requireNonNull(limiter);
         this.trustedProxySecret = trustedProxySecret == null ? "" : trustedProxySecret;
         this.trustedProxyRequired = trustedProxyRequired;
         if ((!this.trustedProxySecret.isEmpty() && !this.trustedProxySecret.matches("[A-Za-z0-9_-]{32,}"))
@@ -98,7 +90,15 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                         "인증 요청 경로를 확인할 수 없습니다.");
                 return;
             }
-            if (!allow(identity, authPath, System.currentTimeMillis())) {
+            boolean allowed;
+            try { allowed = limiter.allow(identity, authPath); }
+            catch (RuntimeException ex) {
+                response.setHeader("Retry-After", "5");
+                errors.write(request, response, HttpStatus.SERVICE_UNAVAILABLE, "AUTH_RATE_LIMIT_UNAVAILABLE",
+                        "인증 요청을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
+                return;
+            }
+            if (!allowed) {
                 response.setHeader("Retry-After", "60");
                 errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
                         "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
@@ -189,71 +189,22 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         return ip;
     }
 
-    synchronized boolean allow(String address, String path, long now) {
-        String key = address + ":" + path;
-        int limit = path.contains("password-reset") || path.contains("recovery")
-                || path.endsWith("find-id") ? 10 : 30;
-        int[] indices = indices(key);
-        long bucketEpoch = Math.floorDiv(now, BUCKET_MS);
-        // Read only active buckets. An expired slot must not retain a quota
-        // from a previous revolution of the circular buffer.
-        long count = 0;
-        for (int age = 0; age < BUCKETS; age++) {
-            long epoch = bucketEpoch - age;
-            int slotIndex = (int) Math.floorMod(epoch, BUCKETS);
-            int minimum = Integer.MAX_VALUE;
-            for (int row = 0; row < ROWS; row++) {
-                Window slot = counters[slotIndex][row][indices[row]];
-                int value = slot != null && slot.startedAt == epoch ? slot.count : 0;
-                minimum = Math.min(minimum, value);
-            }
-            count += minimum;
-        }
-        if (count >= limit) return false;
-        int target = (int) Math.floorMod(bucketEpoch, BUCKETS);
-        int minimum = Integer.MAX_VALUE;
-        for (int row = 0; row < ROWS; row++) {
-            Window slot = counters[target][row][indices[row]];
-            if (slot == null || slot.startedAt != bucketEpoch) {
-                slot = new Window(bucketEpoch);
-                counters[target][row][indices[row]] = slot;
-            }
-            minimum = Math.min(minimum, slot.count);
-        }
-        for (int row = 0; row < ROWS; row++) {
-            Window slot = counters[target][row][indices[row]];
-            if (slot.count == minimum) slot.count++;
-        }
-        return true;
+    // Non-managed constructors and the explicit clock are isolated filter fixtures.
+    // Spring always injects SharedAuthRequestLimiter; store errors never use this map.
+    boolean allow(String address, String path, long now) {
+        if (!(limiter instanceof IsolatedLimiter isolated)) throw new IllegalStateException("Shared limiter uses database time");
+        return isolated.allowAt(address, path, now);
     }
 
-    private static SecretKeySpec createSketchKey() {
-        byte[] secret = new byte[32];
-        new SecureRandom().nextBytes(secret);
-        return new SecretKeySpec(secret, "HmacSHA256");
-    }
-
-    private int[] indices(String key) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(sketchHashKey);
-            byte[] digest = mac.doFinal(key.getBytes(StandardCharsets.UTF_8));
-            int[] result = new int[ROWS];
-            for (int row = 0; row < ROWS; row++) {
-                int offset = row * 4;
-                int hash = ((digest[offset] & 0xff) << 24) | ((digest[offset + 1] & 0xff) << 16)
-                        | ((digest[offset + 2] & 0xff) << 8) | (digest[offset + 3] & 0xff);
-                result[row] = hash & MASK;
-            }
-            return result;
-        } catch (GeneralSecurityException ex) {
-            throw new IllegalStateException("Unable to initialize secure rate limiter hash", ex);
+    private static final class IsolatedLimiter implements AuthRequestLimiter {
+        private final java.util.Map<String, java.util.ArrayDeque<Long>> histories = new java.util.HashMap<>();
+        public boolean allow(String address, String path) { return allowAt(address, path, System.currentTimeMillis()); }
+        synchronized boolean allowAt(String address, String path, long now) {
+            var history = histories.computeIfAbsent(address + "\0" + path, key -> new java.util.ArrayDeque<>());
+            history.removeIf(time -> time <= now - 60_000);
+            if (history.size() >= AuthRequestLimiter.limit(path)) return false;
+            history.addLast(now);
+            return true;
         }
-    }
-
-    private static class Window {
-        private final long startedAt;
-        private int count;
-        Window(long startedAt) { this.startedAt = startedAt; }
     }
 }
