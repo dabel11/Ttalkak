@@ -29,24 +29,42 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private long lastCleanupAt = Long.MIN_VALUE;
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
+    private final boolean trustedProxyRequired;
 
-    public AuthRateLimitFilter(ApiErrorWriter errors) { this(errors, ""); }
+    public AuthRateLimitFilter(ApiErrorWriter errors) { this(errors, "", false); }
+
+    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret) {
+        this(errors, trustedProxySecret, false);
+    }
 
     @Autowired
     public AuthRateLimitFilter(ApiErrorWriter errors,
-                               @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret) {
+                               @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret,
+                               @Value("${ttalkak.auth.trusted-proxy-required:false}") boolean trustedProxyRequired) {
         this.errors = errors;
         this.trustedProxySecret = trustedProxySecret == null ? "" : trustedProxySecret;
+        this.trustedProxyRequired = trustedProxyRequired;
+        if ((!this.trustedProxySecret.isEmpty() && !this.trustedProxySecret.matches("[A-Za-z0-9_-]{32,}"))
+                || (trustedProxyRequired && this.trustedProxySecret.isEmpty())) {
+            throw new IllegalStateException("Invalid authentication proxy configuration");
+        }
     }
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
-        if ("POST".equals(request.getMethod()) && PATHS.contains(request.getRequestURI())
-                && !allow(clientKey(request), request.getRequestURI(), System.currentTimeMillis())) {
-            response.setHeader("Retry-After", "60");
-            errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
-                    "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
-            return;
+        if ("POST".equals(request.getMethod()) && PATHS.contains(request.getRequestURI())) {
+            String identity = clientKey(request);
+            if (identity == null) {
+                errors.write(request, response, HttpStatus.SERVICE_UNAVAILABLE, "AUTH_PROXY_REQUIRED",
+                        "인증 요청 경로를 확인할 수 없습니다.");
+                return;
+            }
+            if (!allow(identity, request.getRequestURI(), System.currentTimeMillis())) {
+                response.setHeader("Retry-After", "60");
+                errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
+                        "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
+                return;
+            }
         }
         chain.doFilter(request, response);
     }
@@ -75,7 +93,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 return ip;
             }
         }
-        return unforwardedPeerAddress(request);
+        return trustedProxyRequired ? null : unforwardedPeerAddress(request);
     }
 
     private static boolean constantTimeEqual(String expected, String actual) {
