@@ -28,6 +28,8 @@ jobs:
         run: docker compose -p ttalkak-ci -f docker/compose.ci.yml up -d --build
       - name: Check guest/member quota and auth through nginx and restart
         run: python3 scripts/check-server-guest-policy.py
+      - name: Strict authenticated proxy and forwarded header E2E (disposable)
+        run: python3 scripts/check-disposable-auth-proxy.py
       - name: Test privacy-preserving withdrawal inventory parser
         run: python3 scripts/test-withdrawal-inventory-output.py
       - name: Check disposable CI withdrawn-account inventory (read-only)
