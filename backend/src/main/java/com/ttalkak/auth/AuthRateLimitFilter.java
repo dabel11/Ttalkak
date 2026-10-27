@@ -16,8 +16,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 @Component
@@ -25,9 +23,13 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> PATHS = Set.of("/api/auth/login", "/api/auth/signup", "/api/auth/google",
             "/api/auth/password-reset/request", "/api/auth/password-reset/complete", "/api/auth/password/change",
             "/api/auth/id-recovery/request", "/api/auth/find-id");
-    private final Map<String, Window> windows = new HashMap<>();
-    private long lastCleanupAt = Long.MIN_VALUE;
-    private long lastCapacityCleanupAt = Long.MIN_VALUE;
+    // A bounded, conservative count-min limiter avoids the unbounded identity map
+    // and never evicts a live counter merely because a new address appears.
+    // Collisions can cause false-positive throttling, never undercount an address.
+    private static final int ROWS = 4;
+    private static final int SLOTS = 1 << 16;
+    private static final int MASK = SLOTS - 1;
+    private final Window[][] counters = new Window[ROWS][SLOTS];
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
     private final boolean trustedProxyRequired;
@@ -135,35 +137,40 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     }
 
     synchronized boolean allow(String address, String path, long now) {
-        // Avoid a full map scan on every incoming request, especially under key-flood traffic.
-        if (lastCleanupAt == Long.MIN_VALUE || now < lastCleanupAt || now - lastCleanupAt >= 1_000) {
-            windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
-            lastCleanupAt = now;
-        }
         String key = address + ":" + path;
-        Window window = windows.get(key);
-        if (window != null && now - window.startedAt >= 60_000) {
-            windows.remove(key);
-            window = null;
-        }
-        if (window == null) {
-            if (windows.size() >= 10_000) {
-                // Do not scan 10,000 keys for *every* rejected attacker request.
-                // Check more frequently at capacity, but keep the expensive scan bounded.
-                if (lastCapacityCleanupAt == Long.MIN_VALUE || now < lastCapacityCleanupAt
-                        || now - lastCapacityCleanupAt >= 250) {
-                    windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
-                    lastCapacityCleanupAt = now;
-                    lastCleanupAt = now;
-                }
-                if (windows.size() >= 10_000) return false;
+        int limit = path.contains("password-reset") || path.contains("recovery")
+                || path.endsWith("find-id") ? 10 : 30;
+        int minimum = Integer.MAX_VALUE;
+        int[] indices = new int[ROWS];
+        for (int row = 0; row < ROWS; row++) {
+            indices[row] = index(key, row);
+            Window slot = counters[row][indices[row]];
+            if (slot == null || now < slot.startedAt || now - slot.startedAt >= 60_000) {
+                slot = new Window(now);
+                counters[row][indices[row]] = slot;
             }
-            window = new Window(now);
-            windows.put(key, window);
+            minimum = Math.min(minimum, slot.count);
         }
-        int limit = path.contains("password-reset") || path.contains("recovery") || path.endsWith("find-id") ? 10 : 30;
-        return ++window.count <= limit;
+        if (minimum >= limit) return false;
+        // Conservative update prevents unrelated hash collisions from causing
+        // needless counter increases when the colliding slot is already ahead.
+        for (int row = 0; row < ROWS; row++) {
+            Window slot = counters[row][indices[row]];
+            if (slot.count == minimum) slot.count++;
+        }
+        return true;
     }
+
+    private static int index(String key, int row) {
+        int hash = key.hashCode() ^ (0x9e3779b9 * (row + 1));
+        hash ^= hash >>> 16;
+        hash *= 0x7feb352d;
+        hash ^= hash >>> 15;
+        hash *= 0x846ca68b;
+        hash ^= hash >>> 16;
+        return hash & MASK;
+    }
+
     private static class Window {
         private final long startedAt;
         private int count;
