@@ -346,6 +346,52 @@ class AuthRateLimitFilterTest {
         assertEquals(filter.clientKey(first), filter.clientKey(alternate));
     }
 
+    @Test void strictProxyAcceptsMappedIpv6WithoutCreatingAnotherIpv4Quota() throws Exception {
+        String secret = "this-is-a-long-test-secret-over-32-characters";
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                secret, true);
+        String[] equivalent = {"203.0.113.7", "::ffff:203.0.113.7", "::FFFF:CB00:7107"};
+        var accepted = new java.util.concurrent.atomic.AtomicInteger();
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("10.0.0.20");
+            request.addHeader("X-Ttalkak-Proxy-Secret", secret);
+            request.addHeader("X-Ttalkak-Client-IP", equivalent[i % equivalent.length]);
+            assertEquals("203.0.113.7", filter.clientKey(request),
+                    "mapped IPv6 is a valid IP literal and must share the IPv4 identity");
+            var response = new MockHttpServletResponse();
+            filter.doFilter(request, response, (req, resp) -> accepted.incrementAndGet());
+            assertEquals(i < 10 ? 200 : 429, response.getStatus());
+        }
+        assertEquals(10, accepted.get());
+    }
+
+    @Test void instanceReplacementAndReplicasDoNotShareRateLimitState() {
+        var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
+        var first = new AuthRateLimitFilter(writer);
+        var second = new AuthRateLimitFilter(writer);
+        String path = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(first.allow("203.0.113.19", path, 1000));
+        assertFalse(first.allow("203.0.113.19", path, 1000));
+        // Explicit limitation: a second replica or restart has an independent allowance.
+        for (int i = 0; i < 10; i++) assertTrue(second.allow("203.0.113.19", path, 1000));
+        assertFalse(second.allow("203.0.113.19", path, 1000));
+    }
+
+    @Test void optionalIngressUsersSharingSocketPeerAlsoShareQuota() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var accepted = new java.util.concurrent.atomic.AtomicInteger();
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("10.0.0.20");
+            request.addHeader("X-Real-IP", "203.0.113." + (i + 1));
+            var response = new MockHttpServletResponse();
+            filter.doFilter(request, response, (req, resp) -> accepted.incrementAndGet());
+            assertEquals(i < 10 ? 200 : 429, response.getStatus());
+        }
+        assertEquals(10, accepted.get(), "unattested users on one edge cannot get independent quotas");
+    }
+
     @Test void proxyRequiredModeFailsStartupWithoutStrongSecret() {
         var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
         assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "", true));
