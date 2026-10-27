@@ -27,6 +27,49 @@ class AuthRateLimitFilterTest {
         assertEquals("60", response.getHeader("Retry-After"));
         assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
     }
+    @Test void emailIdRecoveryEndpointRejectsEleventhRequestBeforeDispatch() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        int reached = 0;
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("198.51.100.44");
+            var response = new MockHttpServletResponse();
+            var counter = new java.util.concurrent.atomic.AtomicBoolean();
+            filter.doFilter(request, response, (req, resp) -> counter.set(true));
+            if (i < 10) {
+                assertTrue(counter.get(), "requests inside per-IP window should reach the dispatcher");
+                reached++;
+            } else {
+                assertFalse(counter.get(), "rate limited request must not reach the mail dispatcher");
+                assertEquals(429, response.getStatus());
+                assertEquals("60", response.getHeader("Retry-After"));
+                assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
+            }
+        }
+        assertEquals(10, reached);
+    }
+
+    @Test void concurrentEmailRecoveryRequestsRespectSingleInstanceLimit() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(12);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var tasks = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+        try {
+            for (int i = 0; i < 12; i++) {
+                tasks.add(pool.submit(() -> {
+                    start.await();
+                    return filter.allow("198.51.100.55", "/api/auth/id-recovery/request", 1000) ? 1 : 0;
+                }));
+            }
+            start.countDown();
+            int accepted = 0;
+            for (var task : tasks) accepted += task.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(10, accepted, "concurrent requests must not exceed the per-IP window");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.

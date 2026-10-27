@@ -39,6 +39,24 @@ class PasswordResetMailerTest {
     }
 
     @SuppressWarnings("unchecked")
+    @Test void idRecoveryMailFailureNeverLeaksAccountIdsOrTransportDetails() {
+        ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+        JavaMailSender sender = mock(JavaMailSender.class);
+        when(provider.getIfAvailable()).thenReturn(sender);
+        when(provider.getObject()).thenReturn(sender);
+        var mailer = new PasswordResetMailer(provider, true, "from@example.com", "smtp.example.com");
+        String accounts = "private-user-1, private-user-2";
+        doThrow(new MailSendException("SMTP rejected " + accounts)).when(sender).send(any(SimpleMailMessage.class));
+
+        var error = assertThrows(ApiException.class,
+                () -> mailer.sendUserId("registered@example.com", accounts));
+        assertEquals("PASSWORD_RESET_DELIVERY_FAILED", error.getCode());
+        assertFalse(error.getReason().contains(accounts));
+        assertFalse(error.getReason().contains("SMTP"));
+        assertNull(error.getCause());
+    }
+
+    @SuppressWarnings("unchecked")
     @Test void resendNeedsKeyAndSharedDomainNeedsRestrictedRecipient() {
         ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
         var gateway = mock(ResendMailGateway.class);
