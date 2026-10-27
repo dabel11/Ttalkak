@@ -25,6 +25,7 @@ def send(ip, spoof_index):
         "X-Real-IP": ip,  # Simulated verified Railway edge, NOT attacker-controlled in public ingress.
         "X-Forwarded-For": "203.0.113." + str(spoof_index % 200),
         "Forwarded": 'for="198.51.100.' + str(spoof_index % 200) + '";proto=http',
+        "X-Forwarded-Prefix": "/attacker-" + str(spoof_index),
         "X-Ttalkak-Proxy-Secret": "forged-untrusted-client-header",
         "X-Ttalkak-Client-IP": "192.0.2.250",
     }
@@ -58,6 +59,7 @@ const req = async () => {
     method: 'POST', headers: {
       'Content-Type': 'application/json',
       'X-Real-IP': '198.51.100.99',
+      'X-Forwarded-Prefix': '/attacker',
       'X-Forwarded-For': '203.0.113.44',
       'X-Ttalkak-Client-IP': '203.0.113.44',
       'X-Ttalkak-Proxy-Secret': 'invalid'

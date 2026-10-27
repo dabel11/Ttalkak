@@ -63,14 +63,15 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
-        if ("POST".equals(request.getMethod()) && PATHS.contains(request.getRequestURI())) {
+        String authPath = unforwardedPath(request);
+        if ("POST".equals(request.getMethod()) && PATHS.contains(authPath)) {
             String identity = clientKey(request);
             if (identity == null) {
                 errors.write(request, response, HttpStatus.SERVICE_UNAVAILABLE, "AUTH_PROXY_REQUIRED",
                         "인증 요청 경로를 확인할 수 없습니다.");
                 return;
             }
-            if (!allow(identity, request.getRequestURI(), System.currentTimeMillis())) {
+            if (!allow(identity, authPath, System.currentTimeMillis())) {
                 response.setHeader("Retry-After", "60");
                 errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
                         "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
@@ -83,6 +84,20 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     // ForwardedHeaderFilter can replace getRemoteAddr() on outer wrappers,
     // even if an upstream proxy accidentally preserved client-supplied XFF.
     static String unforwardedPeerAddress(HttpServletRequest request) {
+        return unforwardedRequest(request).getRemoteAddr();
+    }
+
+    private static String unforwardedPath(HttpServletRequest request) {
+        ServletRequest original = unforwardedRequest(request);
+        HttpServletRequest http = original instanceof HttpServletRequest raw ? raw : request;
+        // ForwardedHeaderFilter also rewrites URI/contextPath via X-Forwarded-Prefix.
+        // Match the backend route, never an externally supplied public prefix.
+        String uri = http.getRequestURI();
+        String context = http.getContextPath();
+        return !context.isEmpty() && uri.startsWith(context + "/") ? uri.substring(context.length()) : uri;
+    }
+
+    private static ServletRequest unforwardedRequest(HttpServletRequest request) {
         ServletRequest original = request;
         int unwrapCount = 0;
         while (original instanceof ServletRequestWrapper wrapper && unwrapCount++ < 32) {
@@ -90,7 +105,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             if (delegate == original) break;
             original = delegate;
         }
-        return original.getRemoteAddr();
+        return original;
     }
 
     String clientKey(HttpServletRequest request) {

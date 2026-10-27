@@ -433,4 +433,45 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void rotatingForwardedPrefixesCannotResetOptionalModeQuota() throws Exception {
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
+        var reached = new java.util.concurrent.atomic.AtomicInteger();
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/find-id");
+            request.setRemoteAddr("198.51.100.100");
+            request.addHeader("X-Forwarded-Prefix", "/attacker-" + i);
+            request.addHeader("Forwarded", "for=203.0.113." + i + ";proto=https");
+            var response = new MockHttpServletResponse();
+            forwarding.doFilter(request, response,
+                    (req, resp) -> limiter.doFilter(req, resp, (a, b) -> reached.incrementAndGet()));
+            if (i == 10) assertEquals(429, response.getStatus());
+        }
+        assertEquals(10, reached.get());
+    }
+
+    @Test void duplicateAttestationFailsAtDispatchBeforeController() throws Exception {
+        String secret = "this-is-a-long-test-secret-over-32-characters";
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()), secret, true);
+        for (String header : new String[]{"X-Ttalkak-Proxy-Secret", "X-Ttalkak-Client-IP"}) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/login");
+            request.addHeader("X-Ttalkak-Proxy-Secret", secret);
+            request.addHeader("X-Ttalkak-Client-IP", "203.0.113.7");
+            request.addHeader(header, header.endsWith("IP") ? "203.0.113.8" : secret);
+            var response = new MockHttpServletResponse();
+            limiter.doFilter(request, response, (a, b) -> fail("duplicate headers must fail closed"));
+            assertEquals(503, response.getStatus());
+        }
+    }
+
+    @Test void strictGateUsesBackendPathInsideServletContext() throws Exception {
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        var request = new MockHttpServletRequest("POST", "/backend/api/auth/login");
+        request.setContextPath("/backend");
+        var response = new MockHttpServletResponse();
+        limiter.doFilter(request, response, (a, b) -> fail("context path must not bypass gate"));
+        assertEquals(503, response.getStatus());
+    }
+
 }
