@@ -87,14 +87,23 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         // authenticates its own hop using an explicitly configured secret.
         // Neither X-Forwarded-For nor X-Real-IP is trusted on its own.
         if (trustedProxySecret.length() >= 32) {
-            String presented = request.getHeader("X-Ttalkak-Proxy-Secret");
-            String ip = request.getHeader("X-Ttalkak-Client-IP");
+            String presented = singleHeader(request, "X-Ttalkak-Proxy-Secret");
+            String ip = singleHeader(request, "X-Ttalkak-Client-IP");
             String canonical = canonicalIpLiteral(ip);
             if (presented != null && constantTimeEqual(trustedProxySecret, presented) && canonical != null) {
                 return canonical;
             }
         }
         return trustedProxyRequired ? null : unforwardedPeerAddress(request);
+    }
+
+    private static String singleHeader(HttpServletRequest request, String name) {
+        java.util.Enumeration<String> values = request.getHeaders(name);
+        if (values == null || !values.hasMoreElements()) return null;
+        String value = values.nextElement();
+        // HTTP header field coalescing also makes comma-separated credentials ambiguous.
+        if (values.hasMoreElements() || value == null || value.indexOf(',') >= 0) return null;
+        return value;
     }
 
     private static boolean constantTimeEqual(String expected, String actual) {
