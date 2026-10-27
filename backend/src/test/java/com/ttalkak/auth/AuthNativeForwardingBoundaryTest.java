@@ -10,6 +10,9 @@ import org.apache.catalina.valves.RemoteIpValve;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.autoconfigure.web.ServerProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
 import java.net.URI;
@@ -24,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthNativeForwardingBoundaryTest {
     private final ApplicationContextRunner context = new ApplicationContextRunner()
+            .withUserConfiguration(ForwardingProperties.class)
+            .withPropertyValues("server.forward-headers-strategy=none")
             .withBean(ApiErrorWriter.class, () -> new ApiErrorWriter(new ObjectMapper()))
             .withBean(AuthRateLimitFilter.class);
 
@@ -31,7 +36,7 @@ class AuthNativeForwardingBoundaryTest {
         context.withPropertyValues("server.forward-headers-strategy=native").run(app -> {
             assertThat(app).hasFailed();
             assertThat(app.getStartupFailure()).hasRootCauseMessage(
-                    "Native forwarded headers cannot preserve the authentication socket peer; use none or framework");
+                    "Native forwarded headers cannot preserve the authentication socket peer; use explicit none/framework without Tomcat remoteip headers");
         });
     }
 
@@ -41,6 +46,24 @@ class AuthNativeForwardingBoundaryTest {
                     .run(app -> assertThat(app).hasNotFailed().hasSingleBean(AuthRateLimitFilter.class));
         }
     }
+
+    @Test void explicitTomcatHeadersCannotEnableNativeValveUnderSupportedStrategies() {
+        for (String strategy : new String[]{"none", "framework"}) {
+            for (String header : new String[]{"remote-ip-header=X-Forwarded-For", "protocol-header=X-Forwarded-Proto"}) {
+                context.withPropertyValues("server.forward-headers-strategy=" + strategy,
+                        "server.tomcat.remoteip." + header).run(app -> assertThat(app).hasFailed());
+            }
+        }
+    }
+
+    @Test void implicitCloudStrategyIsNotAcceptedAsAnExplicitSocketPeerGuarantee() {
+        context.withPropertyValues("server.forward-headers-strategy=")
+                .run(app -> assertThat(app).hasFailed());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties(ServerProperties.class)
+    static class ForwardingProperties { }
 
     @Test void nativeValveChangesEvenTheInnermostPeerBeforeTheFilter(@TempDir Path directory) throws Exception {
         // Real loopback Tomcat, no Spring application, database, accounts, or mail.

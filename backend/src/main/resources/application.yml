@@ -1,5 +1,6 @@
 server:
   port: ${PORT:8080}
+  # Use explicit none/framework; native or Tomcat remoteip headers fail auth ingress startup.
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
 
 spring:

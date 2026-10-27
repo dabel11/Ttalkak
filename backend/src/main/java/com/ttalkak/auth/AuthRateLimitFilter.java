@@ -8,6 +8,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.boot.autoconfigure.web.ServerProperties;
+import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -48,10 +50,29 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         this(errors, trustedProxySecret, false);
     }
 
+    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret, boolean trustedProxyRequired) {
+        this(errors, trustedProxySecret, trustedProxyRequired, socketPeerServerProperties());
+    }
+
     @Autowired
     public AuthRateLimitFilter(ApiErrorWriter errors,
                                @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret,
-                               @Value("${ttalkak.auth.trusted-proxy-required:false}") boolean trustedProxyRequired) {
+                               @Value("${ttalkak.auth.trusted-proxy-required:false}") boolean trustedProxyRequired,
+                               ServerProperties serverProperties) {
+        // Native Tomcat forwarding rewrites the underlying request before the
+        // servlet chain; unwrapping cannot recover the original socket peer.
+        var strategy = serverProperties.getForwardHeadersStrategy();
+        var remoteIp = serverProperties.getTomcat().getRemoteip();
+        // Boot also enables RemoteIpValve for either explicit remoteip header,
+        // even when the global strategy is none/framework. Reject implicit
+        // strategy deduction too, since cloud defaults can enable native mode.
+        if ((strategy != ServerProperties.ForwardHeadersStrategy.NONE
+                && strategy != ServerProperties.ForwardHeadersStrategy.FRAMEWORK)
+                || StringUtils.hasText(remoteIp.getRemoteIpHeader())
+                || StringUtils.hasText(remoteIp.getProtocolHeader())) {
+            throw new IllegalStateException(
+                    "Native forwarded headers cannot preserve the authentication socket peer; use explicit none/framework without Tomcat remoteip headers");
+        }
         this.errors = errors;
         this.trustedProxySecret = trustedProxySecret == null ? "" : trustedProxySecret;
         this.trustedProxyRequired = trustedProxyRequired;
@@ -60,6 +81,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             throw new IllegalStateException("Invalid authentication proxy configuration");
         }
     }
+    private static ServerProperties socketPeerServerProperties() {
+        var properties = new ServerProperties();
+        properties.setForwardHeadersStrategy(ServerProperties.ForwardHeadersStrategy.NONE);
+        return properties;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {

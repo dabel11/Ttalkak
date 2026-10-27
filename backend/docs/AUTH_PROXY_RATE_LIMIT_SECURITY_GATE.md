@@ -21,7 +21,7 @@
 ## 환경변수 설정 게이트 (현재 운영에 적용하지 않음)
 - web nginx와 backend 양쪽에 동일한 **URL-safe 영숫자·`_`·`-`만 포함하는 무작위 32자 이상** 비밀값 `TTALKAK_AUTH_PROXY_SECRET`을 별도 주입한다. nginx 템플릿 주입 위험을 막기 위해 허용 문자 검증을 적용한다. 저장소·PR·메신저에 실제 값을 남기지 않는다.
 - nginx 템플릿의 환경변수 치환 방식이 `TTALKAK_AUTH_PROXY_SECRET`을 정상 치환하는지 격리 컨테이너에서 검증한다. 비밀값이 누락되면 백엔드는 socket peer를 사용하므로 헤더 위조를 신뢰하지 않는다.
-- `FORWARD_HEADERS_STRATEGY`가 `framework`가 아닌 `native` 등으로 바뀌면 서블릿 원본 주소에도 영향을 줄 수 있으므로 **현재 확인된 설정의 변경을 별도 검토**한다.
+- `FORWARD_HEADERS_STRATEGY`는 `none` 또는 `framework`만 지원한다. `native`는 Tomcat이 필터보다 먼저 원본 주소를 바꾸므로 래퍼 제거로 복구할 수 없다. 명시적 Tomcat remoteip의 remote-ip-header/protocol-header 설정도 같은 변환기를 켜므로 금지하며, 비어 있는 암묵적 전략도 거부한다. 이 PR은 Spring이 바인딩한 설정을 검사해 해당 구성에서 기동을 거부한다. **배포 전 실제 설정값을 확인**해야 하며 운영 변수는 이 작업에서 변경하지 않는다.
 - 백엔드 직통 공개 도메인과 확장 프로그램·외부 API 호출이 모두 웹 프록시 경로로 이전했음을 확인한 뒤 `TTALKAK_AUTH_PROXY_REQUIRED=true`를 승인된 배포 시점에 적용한다. 엄격 모드에서는 백엔드 직통 인증 POST가 503으로 거부된다.
 - 비밀값이 적용된 상태의 nginx 직접 사설 경로는 신뢰된 서비스만 접근 가능한지 검증한다. 비밀값을 보유한 nginx가 신뢰되지 않은 X-Real-IP를 그대로 전달한다면 내부 인증만으로 사용자 IP 진위가 증명되지 않는다.
 
