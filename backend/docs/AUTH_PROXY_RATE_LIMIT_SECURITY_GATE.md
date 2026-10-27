@@ -29,3 +29,8 @@
 ## 격리된 단위 회귀 검증
 - `AuthRateLimitFilterTest.keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires`는 테스트 시간 기준으로 키 10,000개를 채우고 신규 주소가 거부되는 현재 동작과 윈도 만료 후 회복을 확인한다.
 - 이는 정상 사용자 429 위험을 **재현하는 성격의 테스트**이며, 이 위험을 수정한 테스트가 아니다. 프록시/forwarded-header 경로의 위조 성공 여부 역시 별도 비운영 통합 재현이 필요하다.
+
+## Spring 필터 체인 격리 재현 테스트
+- `AuthRateLimitFilterTest.forwardedHeaderWrappingCanChangeTheObservedRateLimitKey`는 `ForwardedHeaderFilter`가 요청 제한 필터보다 먼저 동작하는 상황을 모의하고, 같은 직접 연결 주소에서 전달된 XFF를 바꾸면 서로 다른 제한 키가 될 수 있는지 검사한다.
+- 이는 헤더 신뢰 정책의 **격리된 코드 수준 재현**이며 Railway 실제 엣지나 Nginx 배포 환경의 공격 성공을 증명하지 않는다.
+- 신뢰 프록시 구간에서 클라이언트가 만든 전달 헤더를 어떻게 제거/재작성하는지 확인한 뒤, Spring의 해석 정책과 일관되게 적용해야 한다.
