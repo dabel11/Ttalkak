@@ -83,64 +83,46 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("198.51.100.9", endpoint, 61_000));
     }
 
-    @Test void exhaustedKeySpaceStillEnforcesLimitsForPreviouslyTrackedClients() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
-        String endpoint = "/api/auth/id-recovery/request";
-        assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
-        for (int i = 1; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), endpoint, 1_000));
-        }
-        for (int i = 1; i < 10; i++) {
-            assertTrue(filter.allow("198.51.100.1", endpoint, 1_000));
-        }
-        assertFalse(filter.allow("198.51.100.1", endpoint, 1_000),
-                "capacity exhaustion must not reset existing account recovery throttles");
-        assertFalse(filter.allow("203.0.113.200", endpoint, 1_000),
-                "an untracked client is denied when memory reaches its bound");
-    }
-
-    @Test void nonAuthRequestsBypassAuthenticationLimiterAtKeyCapacity() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
-        for (int i = 0; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
-                    "/api/auth/login", 1_000));
-        }
-        var getRequest = new MockHttpServletRequest("GET", "/api/auth/login");
-        getRequest.setRemoteAddr("203.0.113.200");
-        var response = new MockHttpServletResponse();
-        var passed = new java.util.concurrent.atomic.AtomicBoolean();
-        filter.doFilter(getRequest, response, (req, resp) -> passed.set(true));
-        assertTrue(passed.get(), "limiter must not affect methods outside its POST contract");
-    }
-
-    @Test void fullCapacityReclaimsExpiredKeysEvenInsideCleanupInterval() {
+    @Test void mixedLegitimateAndHostileDistinctAddressesDoNotExhaustCapacity() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
-        for (int i = 0; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), path, 1_000));
+        String legitimate = "192.0.2.45";
+        assertTrue(filter.allow(legitimate, path, 1_000));
+        // More than the former 10,000-key hard limit: each hostile key is distinct.
+        for (int i = 0; i < 20_000; i++) {
+            assertTrue(filter.allow("attacker-" + i, path, 1_000),
+                    "new identities should not be rejected by global map capacity");
         }
-        // The periodic scan runs just BEFORE those 10,000 entries expire.
-        assertTrue(filter.allow("198.51.0.0", path, 60_900));
-        // At capacity, the new client must not be falsely denied just because
-        // the next periodic sweep is not due for another 900 ms.
-        assertTrue(filter.allow("203.0.113.88", path, 61_000));
-        assertTrue(filter.allow("198.51.0.0", path, 61_000));
+        for (int i = 1; i < 10; i++) {
+            assertTrue(filter.allow(legitimate, path, 1_000),
+                    "the legitimate client retains its original quota during the flood");
+        }
+        assertFalse(filter.allow(legitimate, path, 1_000));
+        assertTrue(filter.allow("new-legitimate-after-flood", path, 1_000));
     }
 
-    @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
+    @Test void sameAddressCannotResetItsQuotaByFloodingNewKeys() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
-        String endpoint = "/api/auth/id-recovery/request";
-        for (int i = 0; i < 10_000; i++) {
-            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
-                    endpoint, 1000), "fixture should fill exactly 10,000 windows");
+        String path = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("203.0.113.8", path, 1_000));
+        for (int i = 0; i < 20_000; i++) {
+            filter.allow("rotating-" + i, path, 1_000);
         }
-        // Documents the existing availability risk; this is not a security fix.
-        assertFalse(filter.allow("203.0.113.5", endpoint, 1000),
-                "previously unseen legitimate client is denied at capacity");
-        assertTrue(filter.allow("198.51.0.0", endpoint, 1000),
-                "existing clients continue within their quota");
-        assertTrue(filter.allow("203.0.113.5", endpoint, 61_000),
-                "expired windows eventually release capacity");
+        assertFalse(filter.allow("203.0.113.8", path, 1_000),
+                "identity floods must not evict existing counters");
+        assertTrue(filter.allow("203.0.113.8", path, 61_000),
+                "expired counters can be used again");
+    }
+
+    @Test void nonAuthRequestsBypassLimiterAfterHighIdentityChurn() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        for (int i = 0; i < 20_000; i++) filter.allow("rotating-" + i, "/api/auth/login", 1_000);
+        var request = new MockHttpServletRequest("GET", "/api/auth/login");
+        request.setRemoteAddr("203.0.113.200");
+        var response = new MockHttpServletResponse();
+        var reached = new java.util.concurrent.atomic.AtomicBoolean();
+        filter.doFilter(request, response, (req, resp) -> reached.set(true));
+        assertTrue(reached.get());
     }
 
     @Test void forwardedHeaderWrappingCannotChangeSocketPeerThrottleKey() throws Exception {
