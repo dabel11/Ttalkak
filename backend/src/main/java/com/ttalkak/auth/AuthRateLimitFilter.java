@@ -27,6 +27,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             "/api/auth/id-recovery/request", "/api/auth/find-id");
     private final Map<String, Window> windows = new HashMap<>();
     private long lastCleanupAt = Long.MIN_VALUE;
+    private long lastCapacityCleanupAt = Long.MIN_VALUE;
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
     private final boolean trustedProxyRequired;
@@ -147,10 +148,14 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         }
         if (window == null) {
             if (windows.size() >= 10_000) {
-                // A different request may have triggered cleanup immediately before
-                // expiration. Reclaim expired entries before refusing a new client.
-                windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
-                lastCleanupAt = now;
+                // Do not scan 10,000 keys for *every* rejected attacker request.
+                // Check more frequently at capacity, but keep the expensive scan bounded.
+                if (lastCapacityCleanupAt == Long.MIN_VALUE || now < lastCapacityCleanupAt
+                        || now - lastCapacityCleanupAt >= 250) {
+                    windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
+                    lastCapacityCleanupAt = now;
+                    lastCleanupAt = now;
+                }
                 if (windows.size() >= 10_000) return false;
             }
             window = new Window(now);
