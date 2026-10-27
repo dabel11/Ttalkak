@@ -113,6 +113,20 @@ class AuthRateLimitFilterTest {
         assertTrue(passed.get(), "limiter must not affect methods outside its POST contract");
     }
 
+    @Test void fullCapacityReclaimsExpiredKeysEvenInsideCleanupInterval() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String path = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10_000; i++) {
+            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256), path, 1_000));
+        }
+        // The periodic scan runs just BEFORE those 10,000 entries expire.
+        assertTrue(filter.allow("198.51.0.0", path, 60_900));
+        // At capacity, the new client must not be falsely denied just because
+        // the next periodic sweep is not due for another 900 ms.
+        assertTrue(filter.allow("203.0.113.88", path, 61_000));
+        assertTrue(filter.allow("198.51.0.0", path, 61_000));
+    }
+
     @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
