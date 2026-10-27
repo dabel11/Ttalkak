@@ -125,7 +125,7 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
-    @Test void shiftedThirtySecondBoundaryDoesNotResetTheOtherQuota() {
+    @Test void slidingBucketsRetainQuotaAcrossThirtySecondBoundary() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.111", endpoint, 29_900));
@@ -137,7 +137,7 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("192.0.2.111", endpoint, 90_000));
     }
 
-    @Test void repeatedDeniedRequestsCannotExtendOrResetShiftedWindow() {
+    @Test void repeatedDeniedRequestsCannotExtendOrResetSlidingWindow() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/find-id";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.112", endpoint, 29_900));
@@ -148,7 +148,7 @@ class AuthRateLimitFilterTest {
                 "denied requests must not move the release boundary");
     }
 
-    @Test void staggeredWindowsPreventImmediateBoundaryBurst() {
+    @Test void slidingBucketsPreventImmediateBoundaryBurst() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 59_900));
@@ -157,8 +157,9 @@ class AuthRateLimitFilterTest {
         // against consuming a second full allowance in the next instant.
         assertFalse(filter.allow("192.0.2.90", path, 60_000));
         assertFalse(filter.allow("192.0.2.90", path, 89_999));
-        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 90_000));
-        assertFalse(filter.allow("192.0.2.90", path, 90_001));
+        assertFalse(filter.allow("192.0.2.90", path, 90_000));
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 120_000));
+        assertFalse(filter.allow("192.0.2.90", path, 120_001));
     }
 
     @Test void highChurnAcrossMinuteBoundaryDoesNotCarryOldSketchCounts() {
