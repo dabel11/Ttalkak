@@ -129,10 +129,7 @@ class AuthRateLimitFilterTest {
                 "expired windows eventually release capacity");
     }
 
-    @Test void forwardedHeaderWrappingCanChangeTheObservedRateLimitKey() throws Exception {
-        // Isolated reproduction of the trust-boundary risk, NOT proof of Railway behavior.
-        // Spring's ForwardedHeaderFilter processes untrusted X-Forwarded-For
-        // before the auth limiter sees getRemoteAddr().
+    @Test void forwardedHeaderWrappingCannotChangeSocketPeerThrottleKey() throws Exception {
         var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
         var accepted = new java.util.concurrent.atomic.AtomicInteger();
@@ -143,9 +140,10 @@ class AuthRateLimitFilterTest {
             var response = new MockHttpServletResponse();
             forwarding.doFilter(request, response,
                     (req, resp) -> limiter.doFilter(req, resp, (a, b) -> accepted.incrementAndGet()));
+            if (i == 10) assertEquals(429, response.getStatus());
         }
-        assertEquals(11, accepted.get(),
-                "Demonstrates that trusting spoofed forwarded addresses bypasses IP bucketing");
+        assertEquals(10, accepted.get(),
+                "forwarded spoofing must not reset the socket peer rate limit");
     }
 
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
