@@ -181,9 +181,11 @@ class AuthRateLimitFilterTest {
             request.addHeader("X-Ttalkak-Client-IP", ip);
             if (!ip.equals("203.0.113.1")) assertEquals("10.0.0.20", filter.clientKey(request));
             else assertEquals(ip, filter.clientKey(request));
-            request.removeHeader("X-Ttalkak-Proxy-Secret");
-            request.addHeader("X-Ttalkak-Proxy-Secret", "forged-client-value");
-            assertEquals("10.0.0.20", filter.clientKey(request));
+            var forged = new MockHttpServletRequest("POST", "/api/auth/login");
+            forged.setRemoteAddr("10.0.0.20");
+            forged.addHeader("X-Ttalkak-Proxy-Secret", "forged-client-value");
+            forged.addHeader("X-Ttalkak-Client-IP", ip);
+            assertEquals("10.0.0.20", filter.clientKey(forged));
         }
     }
 
