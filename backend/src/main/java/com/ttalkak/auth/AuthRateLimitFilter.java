@@ -19,6 +19,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             "/api/auth/password-reset/request", "/api/auth/password-reset/complete", "/api/auth/password/change",
             "/api/auth/id-recovery/request", "/api/auth/find-id");
     private final Map<String, Window> windows = new HashMap<>();
+    private long lastCleanupAt = Long.MIN_VALUE;
     private final ApiErrorWriter errors;
     public AuthRateLimitFilter(ApiErrorWriter errors) { this.errors = errors; }
     @Override
@@ -34,9 +35,17 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
     synchronized boolean allow(String address, String path, long now) {
-        windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
+        // Avoid a full map scan on every incoming request, especially under key-flood traffic.
+        if (lastCleanupAt == Long.MIN_VALUE || now < lastCleanupAt || now - lastCleanupAt >= 1_000) {
+            windows.entrySet().removeIf(entry -> now - entry.getValue().startedAt >= 60_000);
+            lastCleanupAt = now;
+        }
         String key = address + ":" + path;
         Window window = windows.get(key);
+        if (window != null && now - window.startedAt >= 60_000) {
+            windows.remove(key);
+            window = null;
+        }
         if (window == null) {
             if (windows.size() >= 10_000) return false;
             window = new Window(now);
