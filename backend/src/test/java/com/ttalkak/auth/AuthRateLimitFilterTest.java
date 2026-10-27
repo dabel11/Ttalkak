@@ -125,6 +125,44 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void concurrentHostileIdentityChurnDoesNotResetLegitimateClientQuota() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String path = "/api/auth/id-recovery/request";
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(9);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var tasks = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+        try {
+            for (int worker = 0; worker < 8; worker++) {
+                int group = worker;
+                tasks.add(pool.submit(() -> {
+                    start.await();
+                    int accepted = 0;
+                    for (int i = 0; i < 2_000; i++) {
+                        if (filter.allow("hostile-" + group + "-" + i, path, 1000)) accepted++;
+                    }
+                    return accepted;
+                }));
+            }
+            tasks.add(pool.submit(() -> {
+                start.await();
+                int accepted = 0;
+                for (int i = 0; i < 12; i++) {
+                    if (filter.allow("stable-legitimate", path, 1000)) accepted++;
+                }
+                return accepted;
+            }));
+            start.countDown();
+            for (int i = 0; i < 8; i++) {
+                assertEquals(2_000, tasks.get(i).get(30, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            assertEquals(10, tasks.get(8).get(30, java.util.concurrent.TimeUnit.SECONDS),
+                    "legitimate client remains limited but not locked out by distinct hostile keys");
+            assertFalse(filter.allow("stable-legitimate", path, 1000));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     @Test void forwardedHeaderWrappingCannotChangeSocketPeerThrottleKey() throws Exception {
         var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
