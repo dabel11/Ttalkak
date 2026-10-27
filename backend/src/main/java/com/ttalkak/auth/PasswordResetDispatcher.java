@@ -57,5 +57,4 @@ public class PasswordResetDispatcher {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED", "잠시 후 다시 요청해주세요.");
         }
     }
-
 }
