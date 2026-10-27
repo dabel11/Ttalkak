@@ -70,6 +70,19 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void expiredKeyResetsEvenBetweenPeriodicCleanupPasses() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var endpoint = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) {
+            assertTrue(filter.allow("198.51.100.9", endpoint, 1_000));
+        }
+        assertFalse(filter.allow("198.51.100.9", endpoint, 1_000));
+        // A separate request triggers cleanup shortly before the first key expires.
+        assertTrue(filter.allow("198.51.100.10", endpoint, 60_900));
+        // The next request arrives within the cleanup interval, but this key has expired.
+        assertTrue(filter.allow("198.51.100.9", endpoint, 61_000));
+    }
+
     @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
