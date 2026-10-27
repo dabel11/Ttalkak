@@ -8,9 +8,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -23,12 +28,21 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final Map<String, Window> windows = new HashMap<>();
     private long lastCleanupAt = Long.MIN_VALUE;
     private final ApiErrorWriter errors;
-    public AuthRateLimitFilter(ApiErrorWriter errors) { this.errors = errors; }
+    private final String trustedProxySecret;
+
+    public AuthRateLimitFilter(ApiErrorWriter errors) { this(errors, ""); }
+
+    @Autowired
+    public AuthRateLimitFilter(ApiErrorWriter errors,
+                               @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret) {
+        this.errors = errors;
+        this.trustedProxySecret = trustedProxySecret == null ? "" : trustedProxySecret;
+    }
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
         if ("POST".equals(request.getMethod()) && PATHS.contains(request.getRequestURI())
-                && !allow(unforwardedPeerAddress(request), request.getRequestURI(), System.currentTimeMillis())) {
+                && !allow(clientKey(request), request.getRequestURI(), System.currentTimeMillis())) {
             response.setHeader("Retry-After", "60");
             errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
                     "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
@@ -48,6 +62,46 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             original = delegate;
         }
         return original.getRemoteAddr();
+    }
+
+    String clientKey(HttpServletRequest request) {
+        // Trust the edge-provided IP only if a separate internal proxy
+        // authenticates its own hop using an explicitly configured secret.
+        // Neither X-Forwarded-For nor X-Real-IP is trusted on its own.
+        if (trustedProxySecret.length() >= 32) {
+            String presented = request.getHeader("X-Ttalkak-Proxy-Secret");
+            String ip = request.getHeader("X-Ttalkak-Client-IP");
+            if (presented != null && constantTimeEqual(trustedProxySecret, presented) && isIpLiteral(ip)) {
+                return ip;
+            }
+        }
+        return unforwardedPeerAddress(request);
+    }
+
+    private static boolean constantTimeEqual(String expected, String actual) {
+        return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),
+                actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static boolean isIpLiteral(String ip) {
+        if (ip == null || ip.isBlank() || ip.length() > 45 || !ip.equals(ip.trim())
+                || ip.indexOf(',') >= 0 || ip.indexOf('%') >= 0) return false;
+        if (ip.indexOf(':') >= 0) {
+            if (!ip.matches("[0-9a-fA-F:.]+")) return false;
+            try {
+                return InetAddress.getByName(ip).getHostAddress().contains(":");
+            } catch (java.net.UnknownHostException ex) {
+                return false;
+            }
+        }
+        String[] parts = ip.split("\\.", -1);
+        if (parts.length != 4) return false;
+        for (String part : parts) {
+            if (part.isEmpty() || part.length() > 3 || (part.length() > 1 && part.charAt(0) == '0')) return false;
+            for (int i = 0; i < part.length(); i++) if (!Character.isDigit(part.charAt(i))) return false;
+            if (Integer.parseInt(part) > 255) return false;
+        }
+        return true;
     }
 
     synchronized boolean allow(String address, String path, long now) {
