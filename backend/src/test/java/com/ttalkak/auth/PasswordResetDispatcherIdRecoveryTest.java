@@ -31,6 +31,25 @@ class PasswordResetDispatcherIdRecoveryTest {
     }
 
     @Test
+    void wrongNameRequestCannotSuppressCorrectNameOnSameEmail() throws Exception {
+        var service = mock(PasswordResetService.class);
+        var mailer = mock(PasswordResetMailer.class);
+        var delivered = new CountDownLatch(2);
+        doAnswer(invocation -> { delivered.countDown(); return null; })
+                .when(service).recoverUserId(anyString(), anyString());
+        var dispatcher = new PasswordResetDispatcher(service, mailer);
+        try {
+            dispatcher.recoverUserId("Incorrect Name", "member@example.com");
+            dispatcher.recoverUserId("Correct Name", "member@example.com");
+            assertTrue(delivered.await(3, TimeUnit.SECONDS));
+            verify(service).recoverUserId("Incorrect Name", "member@example.com");
+            verify(service).recoverUserId("Correct Name", "member@example.com");
+        } finally {
+            dispatcher.close();
+        }
+    }
+
+    @Test
     void independentEmailCanStillRequestRecovery() throws Exception {
         var service = mock(PasswordResetService.class);
         var mailer = mock(PasswordResetMailer.class);
