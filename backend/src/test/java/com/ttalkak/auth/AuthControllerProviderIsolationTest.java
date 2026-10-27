@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -190,12 +191,12 @@ class AuthControllerProviderIsolationTest {
         Member member = localMember();
 
         when(memberRepository
-                .findByNameAndEmailAndAuthProviderAndActiveTrue(
+                .findAllByNameAndEmailAndAuthProviderAndActiveTrue(
                         "Local User",
                         "local@example.com",
                         Member.PROVIDER_LOCAL
                 ))
-                .thenReturn(Optional.of(member));
+                .thenReturn(List.of(member));
 
         ResponseEntity<?> response = controller.findId(
                 new AuthController.FindIdRequest(
@@ -210,7 +211,7 @@ class AuthControllerProviderIsolationTest {
         assertEquals("l***r", body.get("maskedUserId"));
 
         verify(memberRepository)
-                .findByNameAndEmailAndAuthProviderAndActiveTrue(
+                .findAllByNameAndEmailAndAuthProviderAndActiveTrue(
                         "Local User",
                         "local@example.com",
                         Member.PROVIDER_LOCAL
@@ -220,12 +221,12 @@ class AuthControllerProviderIsolationTest {
     @Test
     void doesNotExposeGoogleInternalUserId() {
         when(memberRepository
-                .findByNameAndEmailAndAuthProviderAndActiveTrue(
+                .findAllByNameAndEmailAndAuthProviderAndActiveTrue(
                         "Google User",
                         "google@example.com",
                         Member.PROVIDER_LOCAL
                 ))
-                .thenReturn(Optional.empty());
+                .thenReturn(List.of());
 
         ResponseEntity<?> response = controller.findId(
                 new AuthController.FindIdRequest(

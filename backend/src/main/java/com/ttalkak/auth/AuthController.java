@@ -198,32 +198,32 @@ public class AuthController {
         // Null inputs in Spring Data derived queries become IS NULL. A caller
         // who knows only a name must not recover a masked ID by omitting the
         // phone/email field of an account that has no registered phone/email.
-        Member member;
+        java.util.List<Member> matches;
         if ("email".equals(request.method())) {
             if (request.email() == null || request.email().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이메일을 입력해주세요.");
             }
-            member = memberRepository
-                    .findByNameAndEmailAndAuthProviderAndActiveTrue(
-                            request.name(), request.email(), Member.PROVIDER_LOCAL)
-                    .orElse(null);
+            matches = memberRepository.findAllByNameAndEmailAndAuthProviderAndActiveTrue(
+                    request.name(), request.email(), Member.PROVIDER_LOCAL);
         } else if ("phone".equals(request.method())) {
             if (request.phone() == null || request.phone().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호를 입력해주세요.");
             }
-            member = memberRepository
-                    .findByNameAndPhoneAndAuthProviderAndActiveTrue(
-                            request.name(), request.phone(), Member.PROVIDER_LOCAL)
-                    .orElse(null);
+            matches = memberRepository.findAllByNameAndPhoneAndAuthProviderAndActiveTrue(
+                    request.name(), request.phone(), Member.PROVIDER_LOCAL);
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "아이디 찾기 방법을 확인해주세요.");
         }
 
-        if (member == null || member.isBlocked()) {
+        // Preserve the legacy response contract without choosing one account
+        // arbitrarily or revealing which eligible IDs share a contact.
+        java.util.List<Member> eligible = matches.stream()
+                .filter(member -> !member.isBlocked())
+                .toList();
+        if (eligible.size() != 1) {
             return ResponseEntity.ok(Map.of("maskedUserId", ""));
         }
-
-        return ResponseEntity.ok(Map.of("maskedUserId", maskUserId(member.getUserId())));
+        return ResponseEntity.ok(Map.of("maskedUserId", maskUserId(eligible.get(0).getUserId())));
     }
 
     private Map<String, Object> authResponse(Member member) {

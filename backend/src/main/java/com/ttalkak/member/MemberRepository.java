@@ -41,21 +41,12 @@ public interface MemberRepository
             String phone
     );
 
-    Optional<Member> findByNameAndPhoneAndAuthProviderAndActiveTrue(
-            String name,
-            String phone,
-            String authProvider
-    );
+    List<Member> findAllByNameAndPhoneAndAuthProviderAndActiveTrue(
+            String name, String phone, String authProvider);
 
     Optional<Member> findByNameAndEmailAndActiveTrue(
             String name,
             String email
-    );
-
-    Optional<Member> findByNameAndEmailAndAuthProviderAndActiveTrue(
-            String name,
-            String email,
-            String authProvider
     );
 
     Optional<Member> findByAuthProviderAndProviderSubject(
