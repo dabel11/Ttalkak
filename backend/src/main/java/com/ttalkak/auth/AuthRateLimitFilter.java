@@ -33,7 +33,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final int ROWS = 4;
     private static final int SLOTS = 1 << 16;
     private static final int MASK = SLOTS - 1;
-    private final Window[][] counters = new Window[ROWS][SLOTS];
+    private final Window[][][] counters = new Window[2][ROWS][SLOTS];
     private final SecretKeySpec sketchHashKey = createSketchKey();
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
@@ -145,23 +145,28 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         String key = address + ":" + path;
         int limit = path.contains("password-reset") || path.contains("recovery")
                 || path.endsWith("find-id") ? 10 : 30;
-        int minimum = Integer.MAX_VALUE;
-        long epoch = Math.floorDiv(now, 60_000L);
         int[] indices = indices(key);
-        for (int row = 0; row < ROWS; row++) {
-            Window slot = counters[row][indices[row]];
-            if (slot == null || slot.startedAt != epoch) {
-                slot = new Window(epoch);
-                counters[row][indices[row]] = slot;
+        int[] minimum = {Integer.MAX_VALUE, Integer.MAX_VALUE};
+        // Two staggered fixed windows close the full-minute boundary burst.
+        // The shifted window crosses the other boundary at its midpoint.
+        long[] epochs = {Math.floorDiv(now, 60_000L),
+                Math.floorDiv(now - 30_000L, 60_000L)};
+        for (int plane = 0; plane < 2; plane++) {
+            for (int row = 0; row < ROWS; row++) {
+                Window slot = counters[plane][row][indices[row]];
+                if (slot == null || slot.startedAt != epochs[plane]) {
+                    slot = new Window(epochs[plane]);
+                    counters[plane][row][indices[row]] = slot;
+                }
+                minimum[plane] = Math.min(minimum[plane], slot.count);
             }
-            minimum = Math.min(minimum, slot.count);
+            if (minimum[plane] >= limit) return false;
         }
-        if (minimum >= limit) return false;
-        // Conservative update prevents unrelated hash collisions from causing
-        // needless counter increases when the colliding slot is already ahead.
-        for (int row = 0; row < ROWS; row++) {
-            Window slot = counters[row][indices[row]];
-            if (slot.count == minimum) slot.count++;
+        for (int plane = 0; plane < 2; plane++) {
+            for (int row = 0; row < ROWS; row++) {
+                Window slot = counters[plane][row][indices[row]];
+                if (slot.count == minimum[plane]) slot.count++;
+            }
         }
         return true;
     }
