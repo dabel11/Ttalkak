@@ -146,11 +146,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         int limit = path.contains("password-reset") || path.contains("recovery")
                 || path.endsWith("find-id") ? 10 : 30;
         int minimum = Integer.MAX_VALUE;
+        long epoch = Math.floorDiv(now, 60_000L);
         int[] indices = indices(key);
         for (int row = 0; row < ROWS; row++) {
             Window slot = counters[row][indices[row]];
-            if (slot == null || now < slot.startedAt || now - slot.startedAt >= 60_000) {
-                slot = new Window(now);
+            if (slot == null || slot.startedAt != epoch) {
+                slot = new Window(epoch);
                 counters[row][indices[row]] = slot;
             }
             minimum = Math.min(minimum, slot.count);
