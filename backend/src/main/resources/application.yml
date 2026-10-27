@@ -49,6 +49,8 @@ ttalkak:
     # Leave unset until both services share the same 32+ character secret and
     # non-public ingress paths have been reviewed.
     trusted-proxy-secret: ${TTALKAK_AUTH_PROXY_SECRET:}
+    # Activate only after all clients use the authenticated web ingress.
+    trusted-proxy-required: ${TTALKAK_AUTH_PROXY_REQUIRED:false}
     mail-from: ${AUTH_MAIL_FROM:}
     mail-transport: ${AUTH_MAIL_TRANSPORT:smtp}
     mail-test-recipient: ${AUTH_MAIL_TEST_RECIPIENT:}
