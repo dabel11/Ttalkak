@@ -125,6 +125,18 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void highChurnAcrossMinuteBoundaryDoesNotCarryOldSketchCounts() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var endpoint = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.18", endpoint, 1000));
+        assertFalse(filter.allow("192.0.2.18", endpoint, 1000));
+        for (int i = 0; i < 25_000; i++) {
+            assertTrue(filter.allow("churn-" + i, endpoint, 61_001),
+                    "expired sketch slots should not carry old budgets into new window");
+        }
+        assertTrue(filter.allow("192.0.2.18", endpoint, 61_001));
+    }
+
     @Test void stableIdentityStillThrottledAfterManyRequestsOnOtherEndpoints() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String recovery = "/api/auth/id-recovery/request";
