@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuthRateLimitFilterTest {
     @Test void limitsRequestsSeparatelyAndAllowsNextWindow() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         for (int i=0; i<10; i++) assertTrue(filter.allow("ip", "/api/auth/password-reset/request", 1000));
         assertFalse(filter.allow("ip", "/api/auth/password-reset/request", 1000));
         assertTrue(filter.allow("other", "/api/auth/password-reset/request", 1000));
@@ -17,7 +17,7 @@ class AuthRateLimitFilterTest {
         assertTrue(filter.allow("ip", "/api/auth/password-reset/request", 61000));
     }
     @Test void rejectedRequestReturnsStructured429AndDoesNotReachController() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         for (int i=0; i<10; i++) filter.allow("127.0.0.1", "/api/auth/password-reset/request", System.currentTimeMillis());
         var request = new MockHttpServletRequest("POST", "/api/auth/password-reset/request");
         request.setRemoteAddr("127.0.0.1");
@@ -28,7 +28,7 @@ class AuthRateLimitFilterTest {
         assertTrue(response.getContentAsString().contains("AUTH_RATE_LIMITED"));
     }
     @Test void emailIdRecoveryEndpointRejectsEleventhRequestBeforeDispatch() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         int reached = 0;
         for (int i = 0; i < 11; i++) {
             var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
@@ -50,7 +50,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void concurrentEmailRecoveryRequestsRespectSingleInstanceLimit() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var pool = java.util.concurrent.Executors.newFixedThreadPool(12);
         var start = new java.util.concurrent.CountDownLatch(1);
         var tasks = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
@@ -71,7 +71,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void expiredKeyResetsEvenBetweenPeriodicCleanupPasses() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var endpoint = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) {
             assertTrue(filter.allow("198.51.100.9", endpoint, 1_000));
@@ -84,7 +84,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void mixedLegitimateAndHostileDistinctAddressesDoNotExhaustCapacity() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         String legitimate = "192.0.2.45";
         assertTrue(filter.allow(legitimate, path, 1_000));
@@ -102,7 +102,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void sameAddressCannotResetItsQuotaByFloodingNewKeys() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("203.0.113.8", path, 1_000));
         for (int i = 0; i < 20_000; i++) {
@@ -115,7 +115,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void nonAuthRequestsBypassLimiterAfterHighIdentityChurn() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         for (int i = 0; i < 20_000; i++) filter.allow("rotating-" + i, "/api/auth/login", 1_000);
         var request = new MockHttpServletRequest("GET", "/api/auth/login");
         request.setRemoteAddr("203.0.113.200");
@@ -126,7 +126,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void slidingBucketsRetainQuotaAcrossThirtySecondBoundary() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.111", endpoint, 29_900));
         assertFalse(filter.allow("192.0.2.111", endpoint, 30_000),
@@ -138,7 +138,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void repeatedDeniedRequestsCannotExtendOrResetSlidingWindow() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/find-id";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.112", endpoint, 29_900));
         for (int i = 0; i < 1_000; i++) {
@@ -149,7 +149,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void slidingBucketsPreventImmediateBoundaryBurst() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 59_900));
         assertFalse(filter.allow("192.0.2.90", path, 59_999));
@@ -163,7 +163,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void highChurnAcrossMinuteBoundaryDoesNotCarryOldSketchCounts() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var endpoint = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.18", endpoint, 1000));
         assertFalse(filter.allow("192.0.2.18", endpoint, 1000));
@@ -175,7 +175,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void stableIdentityStillThrottledAfterManyRequestsOnOtherEndpoints() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String recovery = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.99", recovery, 1_000));
         // A separate endpoint has a higher quota; unrelated traffic must not
@@ -189,7 +189,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void rejectedRequestsDoNotIncrementOrResetTheirOwnSketchBudget() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String endpoint = "/api/auth/find-id";
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.14", endpoint, 2_000));
         for (int i = 0; i < 1_000; i++) assertFalse(filter.allow("192.0.2.14", endpoint, 2_000));
@@ -197,7 +197,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void javaStringHashCollisionDoesNotShareIdentityBudget() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         assertEquals("Aa".hashCode(), "BB".hashCode(), "fixture is a known Java String hash collision");
         for (int i = 0; i < 10; i++) assertTrue(filter.allow("Aa", path, 1_000));
@@ -210,7 +210,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void concurrentHostileIdentityChurnDoesNotResetLegitimateClientQuota() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
         var pool = java.util.concurrent.Executors.newFixedThreadPool(9);
         var start = new java.util.concurrent.CountDownLatch(1);
@@ -248,7 +248,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void forwardedHeaderWrappingCannotChangeSocketPeerThrottleKey() throws Exception {
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
         var accepted = new java.util.concurrent.atomic.AtomicInteger();
         for (int i = 0; i < 11; i++) {
@@ -265,7 +265,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void attestedProxyUsesClientIpForIndependentRateLimits() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters");
         var accepted = new java.util.concurrent.atomic.AtomicInteger();
         for (int i = 0; i < 11; i++) {
@@ -289,7 +289,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void forgedOrInvalidProxyAttestationFallsBackToSocketPeer() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters");
         for (String ip : new String[]{"203.0.113.1", "203.0.113.2, 192.0.2.1",
                 "127.0.0.1.example.com", "999.0.0.1", "2001:db8::zz"}) {
@@ -308,7 +308,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void duplicateProxyAttestationHeadersNeverAuthorizeAClientIdentity() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         var duplicateSecret = new MockHttpServletRequest("POST", "/api/auth/login");
         duplicateSecret.setRemoteAddr("10.0.0.20");
@@ -333,7 +333,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void canonicalIpv6AttestationCannotSplitRateLimitBuckets() {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters");
         var first = new MockHttpServletRequest("POST", "/api/auth/login");
         first.setRemoteAddr("10.0.0.20");
@@ -348,7 +348,7 @@ class AuthRateLimitFilterTest {
 
     @Test void strictProxyAcceptsMappedIpv6WithoutCreatingAnotherIpv4Quota() throws Exception {
         String secret = "this-is-a-long-test-secret-over-32-characters";
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 secret, true);
         String[] equivalent = {"203.0.113.7", "::ffff:203.0.113.7", "::FFFF:CB00:7107"};
         var accepted = new java.util.concurrent.atomic.AtomicInteger();
@@ -368,8 +368,8 @@ class AuthRateLimitFilterTest {
 
     @Test void isolatedNonManagedFilterFixturesKeepTheirOwnState() {
         var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
-        var first = new AuthRateLimitFilter(writer);
-        var second = new AuthRateLimitFilter(writer);
+        var first = new TestAuthRateLimitFilter(writer);
+        var second = new TestAuthRateLimitFilter(writer);
         String path = "/api/auth/id-recovery/request";
         for (int i = 0; i < 10; i++) assertTrue(first.allow("203.0.113.19", path, 1000));
         assertFalse(first.allow("203.0.113.19", path, 1000));
@@ -379,7 +379,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void optionalIngressUsersSharingSocketPeerAlsoShareQuota() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var accepted = new java.util.concurrent.atomic.AtomicInteger();
         for (int i = 0; i < 11; i++) {
             var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
@@ -394,14 +394,14 @@ class AuthRateLimitFilterTest {
 
     @Test void proxyRequiredModeFailsStartupWithoutStrongSecret() {
         var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
-        assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "", true));
-        assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "short", true));
+        assertThrows(IllegalStateException.class, () -> new TestAuthRateLimitFilter(writer, "", true));
+        assertThrows(IllegalStateException.class, () -> new TestAuthRateLimitFilter(writer, "short", true));
         assertThrows(IllegalStateException.class, () ->
-                new AuthRateLimitFilter(writer, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";", true));
+                new TestAuthRateLimitFilter(writer, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";", true));
     }
 
     @Test void proxyRequiredModeRejectsUnauthenticatedDirectAuthRequests() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         for (String forgedIp : new String[]{ "203.0.113.1", "198.51.100.8" }) {
             var request = new MockHttpServletRequest("POST", "/api/auth/login");
@@ -417,7 +417,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void proxyRequiredModeAllowsAuthenticatedProxyWithValidIp() throws Exception {
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         var request = new MockHttpServletRequest("POST", "/api/auth/login");
         request.setRemoteAddr("10.0.0.20");
@@ -432,7 +432,7 @@ class AuthRateLimitFilterTest {
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var reached = new java.util.concurrent.atomic.AtomicInteger();
         for (int i = 0; i < 11; i++) {
             var request = new MockHttpServletRequest("POST", "/api/auth/password-reset/request");
@@ -449,7 +449,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void forwardedPrefixMustNotBypassStrictAuthenticationGate() throws Exception {
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
         var request = new MockHttpServletRequest("POST", "/api/auth/login");
@@ -462,7 +462,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void strictGateCoversEverySensitivePostAndLeavesPreflightAvailable() throws Exception {
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         for (String path : new String[]{"/api/auth/login", "/api/auth/signup", "/api/auth/google",
                 "/api/auth/password-reset/request", "/api/auth/password-reset/complete",
@@ -480,7 +480,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void rotatingForwardedPrefixesCannotResetOptionalModeQuota() throws Exception {
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
         var reached = new java.util.concurrent.atomic.AtomicInteger();
         for (int i = 0; i < 11; i++) {
@@ -498,7 +498,7 @@ class AuthRateLimitFilterTest {
 
     @Test void duplicateAttestationFailsAtDispatchBeforeController() throws Exception {
         String secret = "this-is-a-long-test-secret-over-32-characters";
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()), secret, true);
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()), secret, true);
         for (String header : new String[]{"X-Ttalkak-Proxy-Secret", "X-Ttalkak-Client-IP"}) {
             var request = new MockHttpServletRequest("POST", "/api/auth/login");
             request.addHeader("X-Ttalkak-Proxy-Secret", secret);
@@ -511,7 +511,7 @@ class AuthRateLimitFilterTest {
     }
 
     @Test void strictGateUsesBackendPathInsideServletContext() throws Exception {
-        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+        var limiter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
                 "this-is-a-long-test-secret-over-32-characters", true);
         var request = new MockHttpServletRequest("POST", "/backend/api/auth/login");
         request.setContextPath("/backend");

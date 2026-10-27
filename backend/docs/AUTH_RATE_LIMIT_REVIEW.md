@@ -33,8 +33,8 @@ with the same DB and JWT key does not restore its allowance.
 The existing JWT secret supplies a domain-separated HMAC key; raw IPs are not
 persisted. All replicas must already share this stable key for JWT verification.
 Intentional key rotation changes limiter identities and must be considered during
-rollout; routine restart does not. The isolated constructors used in filter unit
-tests have an exact in-memory fixture and are never a runtime store-error fallback.
+rollout; routine restart does not. The isolated TestAuthRateLimitFilter exists only under test sources and is never
+packaged in the application. Production has no in-memory limiter or fallback.
 
 Each state row holds at most thirty timestamps (VARCHAR 1024). Indexed cleanup
 removes up to 500 logically expired rows every five seconds per running instance.

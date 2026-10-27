@@ -30,21 +30,6 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final String trustedProxySecret;
     private final boolean trustedProxyRequired;
 
-    public AuthRateLimitFilter(ApiErrorWriter errors) { this(errors, "", false); }
-
-    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret) {
-        this(errors, trustedProxySecret, false);
-    }
-
-    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret, boolean trustedProxyRequired) {
-        this(errors, trustedProxySecret, trustedProxyRequired, socketPeerServerProperties());
-    }
-
-    public AuthRateLimitFilter(ApiErrorWriter errors, String trustedProxySecret, boolean trustedProxyRequired,
-                               ServerProperties serverProperties) {
-        this(errors, trustedProxySecret, trustedProxyRequired, serverProperties, new IsolatedLimiter());
-    }
-
     @Autowired
     public AuthRateLimitFilter(ApiErrorWriter errors,
                                @Value("${ttalkak.auth.trusted-proxy-secret:}") String trustedProxySecret,
@@ -73,12 +58,6 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             throw new IllegalStateException("Invalid authentication proxy configuration");
         }
     }
-    private static ServerProperties socketPeerServerProperties() {
-        var properties = new ServerProperties();
-        properties.setForwardHeadersStrategy(ServerProperties.ForwardHeadersStrategy.NONE);
-        return properties;
-    }
-
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
@@ -189,22 +168,4 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         return ip;
     }
 
-    // Non-managed constructors and the explicit clock are isolated filter fixtures.
-    // Spring always injects SharedAuthRequestLimiter; store errors never use this map.
-    boolean allow(String address, String path, long now) {
-        if (!(limiter instanceof IsolatedLimiter isolated)) throw new IllegalStateException("Shared limiter uses database time");
-        return isolated.allowAt(address, path, now);
-    }
-
-    private static final class IsolatedLimiter implements AuthRequestLimiter {
-        private final java.util.Map<String, java.util.ArrayDeque<Long>> histories = new java.util.HashMap<>();
-        public boolean allow(String address, String path) { return allowAt(address, path, System.currentTimeMillis()); }
-        synchronized boolean allowAt(String address, String path, long now) {
-            var history = histories.computeIfAbsent(address + "\0" + path, key -> new java.util.ArrayDeque<>());
-            history.removeIf(time -> time <= now - 60_000);
-            if (history.size() >= AuthRequestLimiter.limit(path)) return false;
-            history.addLast(now);
-            return true;
-        }
-    }
 }

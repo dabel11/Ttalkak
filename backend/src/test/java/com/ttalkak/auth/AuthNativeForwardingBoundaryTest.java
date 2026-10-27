@@ -79,7 +79,7 @@ class AuthNativeForwardingBoundaryTest {
         valve.setRemoteIpHeader("x-forwarded-for");
         valve.setInternalProxies("127\\.0\\.0\\.1");
         tomcat.getEngine().getPipeline().addValve(valve);
-        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper()));
+        var filter = new TestAuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper()));
         Tomcat.addServlet(servletContext, "probe", new HttpServlet() {
             @Override protected void doPost(HttpServletRequest request, HttpServletResponse response)
                     throws IOException {
