@@ -2,6 +2,8 @@ package com.ttalkak.auth;
 
 import com.ttalkak.common.exception.ApiErrorWriter;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletRequestWrapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,7 +28,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws IOException, ServletException {
         if ("POST".equals(request.getMethod()) && PATHS.contains(request.getRequestURI())
-                && !allow(request.getRemoteAddr(), request.getRequestURI(), System.currentTimeMillis())) {
+                && !allow(unforwardedPeerAddress(request), request.getRequestURI(), System.currentTimeMillis())) {
             response.setHeader("Retry-After", "60");
             errors.write(request, response, HttpStatus.TOO_MANY_REQUESTS, "AUTH_RATE_LIMITED",
                     "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
@@ -34,6 +36,20 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         }
         chain.doFilter(request, response);
     }
+    // Derive the socket peer from the innermost servlet request. Spring's
+    // ForwardedHeaderFilter can replace getRemoteAddr() on outer wrappers,
+    // even if an upstream proxy accidentally preserved client-supplied XFF.
+    static String unforwardedPeerAddress(HttpServletRequest request) {
+        ServletRequest original = request;
+        int unwrapCount = 0;
+        while (original instanceof ServletRequestWrapper wrapper && unwrapCount++ < 32) {
+            ServletRequest delegate = wrapper.getRequest();
+            if (delegate == original) break;
+            original = delegate;
+        }
+        return original.getRemoteAddr();
+    }
+
     synchronized boolean allow(String address, String path, long now) {
         // Avoid a full map scan on every incoming request, especially under key-flood traffic.
         if (lastCleanupAt == Long.MIN_VALUE || now < lastCleanupAt || now - lastCleanupAt >= 1_000) {
