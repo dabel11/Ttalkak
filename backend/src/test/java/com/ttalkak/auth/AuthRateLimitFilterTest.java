@@ -402,4 +402,35 @@ class AuthRateLimitFilterTest {
         assertEquals(10, reached.get(), "Untrusted X-Forwarded-For must not bypass a direct filter instance");
     }
 
+    @Test void forwardedPrefixMustNotBypassStrictAuthenticationGate() throws Exception {
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
+        var request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr("198.51.100.100");
+        request.addHeader("X-Forwarded-Prefix", "/attacker");
+        var response = new MockHttpServletResponse();
+        forwarding.doFilter(request, response,
+                (req, resp) -> limiter.doFilter(req, resp, (a, b) -> fail("prefix must not bypass strict gate")));
+        assertEquals(503, response.getStatus());
+    }
+
+    @Test void strictGateCoversEverySensitivePostAndLeavesPreflightAvailable() throws Exception {
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        for (String path : new String[]{"/api/auth/login", "/api/auth/signup", "/api/auth/google",
+                "/api/auth/password-reset/request", "/api/auth/password-reset/complete",
+                "/api/auth/password/change", "/api/auth/id-recovery/request", "/api/auth/find-id"}) {
+            var request = new MockHttpServletRequest("POST", path);
+            var response = new MockHttpServletResponse();
+            limiter.doFilter(request, response, (a, b) -> fail("unattested POST reached dispatcher: " + path));
+            assertEquals(503, response.getStatus(), path);
+            assertTrue(response.getContentAsString().contains("AUTH_PROXY_REQUIRED"));
+            var preflight = new MockHttpServletRequest("OPTIONS", path);
+            var passed = new java.util.concurrent.atomic.AtomicBoolean();
+            limiter.doFilter(preflight, new MockHttpServletResponse(), (a, b) -> passed.set(true));
+            assertTrue(passed.get(), path);
+        }
+    }
+
 }
