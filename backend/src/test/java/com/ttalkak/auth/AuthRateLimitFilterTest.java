@@ -86,6 +86,25 @@ class AuthRateLimitFilterTest {
                 "expired windows eventually release capacity");
     }
 
+    @Test void forwardedHeaderWrappingCanChangeTheObservedRateLimitKey() throws Exception {
+        // Isolated reproduction of the trust-boundary risk, NOT proof of Railway behavior.
+        // Spring's ForwardedHeaderFilter processes untrusted X-Forwarded-For
+        // before the auth limiter sees getRemoteAddr().
+        var limiter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        var forwarding = new org.springframework.web.filter.ForwardedHeaderFilter();
+        var accepted = new java.util.concurrent.atomic.AtomicInteger();
+        for (int i = 0; i < 11; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/id-recovery/request");
+            request.setRemoteAddr("198.51.100.100");
+            request.addHeader("X-Forwarded-For", "203.0.113." + i + ", 198.51.100.100");
+            var response = new MockHttpServletResponse();
+            forwarding.doFilter(request, response,
+                    (req, resp) -> limiter.doFilter(req, resp, (a, b) -> accepted.incrementAndGet()));
+        }
+        assertEquals(11, accepted.get(),
+                "Demonstrates that trusting spoofed forwarded addresses bypasses IP bucketing");
+    }
+
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.
