@@ -125,6 +125,17 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void allSketchRowsShareTheSameFixedMinuteBoundary() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String path = "/api/auth/id-recovery/request";
+        // Start near the boundary. Counts must be uniform across the four rows,
+        // rather than each colliding slot expiring at an unrelated time.
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 59_900));
+        assertFalse(filter.allow("192.0.2.90", path, 59_999));
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("192.0.2.90", path, 60_000));
+        assertFalse(filter.allow("192.0.2.90", path, 60_001));
+    }
+
     @Test void highChurnAcrossMinuteBoundaryDoesNotCarryOldSketchCounts() {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         var endpoint = "/api/auth/id-recovery/request";
