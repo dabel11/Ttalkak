@@ -125,6 +125,19 @@ class AuthRateLimitFilterTest {
         assertTrue(reached.get());
     }
 
+    @Test void javaStringHashCollisionDoesNotShareIdentityBudget() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String path = "/api/auth/id-recovery/request";
+        assertEquals("Aa".hashCode(), "BB".hashCode(), "fixture is a known Java String hash collision");
+        for (int i = 0; i < 10; i++) assertTrue(filter.allow("Aa", path, 1_000));
+        assertFalse(filter.allow("Aa", path, 1_000));
+        for (int i = 0; i < 10; i++) {
+            assertTrue(filter.allow("BB", path, 1_000),
+                    "keyed hash must not correlate user quotas by String.hashCode()");
+        }
+        assertFalse(filter.allow("BB", path, 1_000));
+    }
+
     @Test void concurrentHostileIdentityChurnDoesNotResetLegitimateClientQuota() throws Exception {
         var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
         String path = "/api/auth/id-recovery/request";
