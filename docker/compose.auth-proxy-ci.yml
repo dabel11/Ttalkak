@@ -1,0 +1,10 @@
+# Disposable authentication proxy trust E2E override.
+# Used only after the regular CI smoke completes. Never use in Railway.
+services:
+  backend:
+    environment:
+      TTALKAK_AUTH_PROXY_SECRET: ci_proxy_fixtures_only_0123456789abcdef0123456789
+      TTALKAK_AUTH_PROXY_REQUIRED: 'true'
+  web:
+    environment:
+      TTALKAK_AUTH_PROXY_SECRET: ci_proxy_fixtures_only_0123456789abcdef0123456789
