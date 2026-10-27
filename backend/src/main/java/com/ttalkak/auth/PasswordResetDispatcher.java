@@ -89,7 +89,7 @@ public class PasswordResetDispatcher {
     private static String recoveryRequestKey(String name, String email) {
         try {
             byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(
-                    (name.trim() + "\\u0000" + email.trim().toLowerCase(java.util.Locale.ROOT))
+                    (name.trim().length() + ":" + name.trim() + ":" + email.trim().toLowerCase(java.util.Locale.ROOT))
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException error) {
