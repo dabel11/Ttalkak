@@ -2,6 +2,12 @@ import { useState } from "react";
 import { Eye, EyeOff, Plus, X } from "lucide-react";
 import { PRIVACY_POLICY_URL, TERMS_URL } from "../constants";
 import { ACCOUNT_WITHDRAWAL_NOTICE } from "../policies/account-withdrawal-policy.mjs";
+import {
+  ID_RECOVERY_ACCEPTED_NOTICE,
+  ID_RECOVERY_GOOGLE_NOTICE,
+  ID_RECOVERY_HELP,
+  getIdRecoveryErrorMessage,
+} from "../policies/id-recovery-policy.mjs";
 import { useModalFocus } from "../hooks/useModalFocus";
 
 const INITIAL_FORM = {
@@ -88,7 +94,7 @@ export function AuthModal({
   const description = isSignup
     ? "웹사이트와 동일한 계정 정보로 가입합니다."
     : isFindId
-      ? "이름과 이메일로 아이디 찾기를 요청합니다. 전화번호는 선택입니다."
+      ? ID_RECOVERY_HELP
       : isFindPassword
         ? "아이디와 이메일로 비밀번호 재설정을 요청합니다."
         : isWithdraw
@@ -199,10 +205,6 @@ export function AuthModal({
         setResult("이메일 형식을 확인해주세요.");
         return;
       }
-      if (phone && !isValidPhone(phone)) {
-        setResult("전화번호 형식을 확인해주세요.");
-        return;
-      }
     } else if (isFindPassword) {
       if (!userId || !email) {
         setResult("아이디와 이메일을 입력해주세요.");
@@ -242,9 +244,8 @@ export function AuthModal({
     setIsSubmitting(true);
     try {
       if (isFindId) {
-        const response = await onFindId({ method: "email", name: form.name.trim(), email, phone });
-        const maskedUserId = response?.maskedUserId || response?.data?.maskedUserId || "";
-        setResult(maskedUserId ? `찾은 아이디: ${maskedUserId}` : "일치하는 아이디가 없습니다.");
+        await onFindId({ name: form.name.trim(), email });
+        setResult(ID_RECOVERY_ACCEPTED_NOTICE);
         return;
       }
       if (isFindPassword) {
@@ -273,7 +274,7 @@ export function AuthModal({
       }
       await onLogin({ userId, password: form.password });
     } catch (error) {
-      setResult(error?.message || "요청 처리에 실패했습니다.");
+      setResult(isFindId ? getIdRecoveryErrorMessage(error) : error?.message || "요청 처리에 실패했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -327,12 +328,13 @@ export function AuthModal({
               <input value={form.email} onChange={(e) => updateField("email", e.target.value)} placeholder="이메일" type="email" autoComplete="email" required />
             </label>
           )}
-          {(isSignup || isFindId || isFindPassword) && (
+          {(isSignup || isFindPassword) && (
             <label>
               전화번호 <span className="optional-label">(선택)</span>
               <input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="010-0000-0000" autoComplete="tel" />
             </label>
           )}
+          {isFindId && <p className="auth-helper">{ID_RECOVERY_GOOGLE_NOTICE}</p>}
           {isSignup && (
             <label>
               생년월일 <span className="optional-label">(선택)</span>
@@ -379,7 +381,7 @@ export function AuthModal({
           )}
           {result && <p className="auth-result" role="alert">{result}</p>}
           <button className={`auth-submit ${isWithdraw ? "danger" : ""}`} type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "처리 중..." : isFindId ? "아이디 찾기" : isFindPassword ? "비밀번호 재설정 요청" : isSignup ? "가입하기" : isWithdraw ? "회원탈퇴" : "로그인"}
+            {isSubmitting ? "처리 중..." : isFindId ? "이메일로 아이디 받기" : isFindPassword ? "비밀번호 재설정 요청" : isSignup ? "가입하기" : isWithdraw ? "회원탈퇴" : "로그인"}
           </button>
         </form>
         {isSignup || isFindId || isFindPassword || isWithdraw ? (

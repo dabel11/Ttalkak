@@ -19,10 +19,11 @@ export function createAuthApi({ request }) {
           body: JSON.stringify({ credential, ...consent }),
         });
       },
-      findId(payload) {
-        return request("/api/auth/find-id", {
+      /** @param {{ name?: string, email?: string, [key: string]: unknown }} [payload] */
+      requestIdRecovery({ name, email } = {}) {
+        return request("/api/auth/id-recovery/request", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ name, email }),
         });
       },
       requestPasswordReset(payload) {

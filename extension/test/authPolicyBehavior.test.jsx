@@ -35,6 +35,13 @@ import { ConfirmModal } from "../src/components/ConfirmModal";
 import { Header } from "../src/components/Header";
 import { useAuth } from "../src/hooks/useAuth";
 import { STORAGE } from "../src/constants";
+import {
+  ID_RECOVERY_ACCEPTED_NOTICE,
+  ID_RECOVERY_GOOGLE_NOTICE,
+  ID_RECOVERY_HELP,
+  ID_RECOVERY_RATE_LIMIT_NOTICE,
+  ID_RECOVERY_UNAVAILABLE_NOTICE,
+} from "../src/policies/id-recovery-policy.mjs";
 
 afterEach(() => {
   cleanup();
@@ -57,6 +64,30 @@ function renderSignup(overrides = {}) {
   };
   render(createElement(AuthModal, props));
   return props;
+}
+
+function renderFindId(overrides = {}) {
+  const props = {
+    mode: "findId",
+    setMode: vi.fn(),
+    onClose: vi.fn(),
+    onLogin: vi.fn(),
+    onSignup: vi.fn(),
+    onFindId: vi.fn(),
+    onPasswordReset: vi.fn(),
+    onWithdraw: vi.fn(),
+    onCheckDuplicate: vi.fn(),
+    isLoggedIn: false,
+    ...overrides,
+  };
+  render(createElement(AuthModal, props));
+  return props;
+}
+
+async function submitFindId() {
+  fireEvent.change(screen.getByLabelText("이름"), { target: { value: "Member" } });
+  fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "member@example.com" } });
+  fireEvent.click(screen.getByRole("button", { name: "이메일로 아이디 받기" }));
 }
 
 test("extension dialogs trap keyboard focus, close with Escape, and restore the opener", async () => {
@@ -91,6 +122,49 @@ test("extension dialogs trap keyboard focus, close with Escape, and restore the 
   view.unmount();
   await waitFor(() => expect(opener).toBe(globalThis.document.activeElement));
   opener.remove();
+});
+
+describe("email ID recovery privacy policy", () => {
+  test("uses name and email only and always shows the same accepted notice", async () => {
+    for (const response of [{ ok: true }, {}, { maskedUserId: "m***r" }]) {
+      cleanup();
+      const onFindId = vi.fn(async () => response);
+      renderFindId({ onFindId });
+      expect(screen.getByText(ID_RECOVERY_HELP)).toBeTruthy();
+      expect(screen.getByText(ID_RECOVERY_GOOGLE_NOTICE)).toBeTruthy();
+      expect(screen.queryByLabelText(/전화번호/)).toBeNull();
+      await submitFindId();
+      expect((await screen.findByRole("alert")).textContent).toBe(ID_RECOVERY_ACCEPTED_NOTICE);
+      expect(onFindId).toHaveBeenCalledWith({
+        name: "Member",
+        email: "member@example.com",
+      });
+    }
+  });
+
+  test("validates email before sending", async () => {
+    const props = renderFindId();
+    fireEvent.change(screen.getByLabelText("이름"), { target: { value: "Member" } });
+    fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "invalid" } });
+    fireEvent.submit(screen.getByRole("button", { name: "이메일로 아이디 받기" }).closest("form"));
+    expect((await screen.findByRole("alert")).textContent).toBe("이메일 형식을 확인해주세요.");
+    expect(props.onFindId).not.toHaveBeenCalled();
+  });
+
+  test("maps rate limits and unavailable mail without exposing backend details", async () => {
+    for (const [error, expected] of [
+      [Object.assign(new Error("private rate detail"), { status: 429, code: "AUTH_RATE_LIMITED" }), ID_RECOVERY_RATE_LIMIT_NOTICE],
+      [Object.assign(new Error("private mail detail"), { status: 503, code: "PASSWORD_RESET_UNAVAILABLE" }), ID_RECOVERY_UNAVAILABLE_NOTICE],
+    ]) {
+      cleanup();
+      renderFindId({ onFindId: vi.fn(async () => { throw error; }) });
+      await submitFindId();
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toBe(expected);
+      expect(alert.textContent).not.toContain(error.message);
+      expect(screen.getByRole("button", { name: "이메일로 아이디 받기" }).disabled).toBe(false);
+    }
+  });
 });
 
 describe("account menu accessibility and usage status", () => {

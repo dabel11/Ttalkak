@@ -67,6 +67,42 @@ test("login accepts a valid auth contract and rejects a malformed response", asy
   await expect(page.locator("[data-auth-form]")).toBeVisible();
 });
 
+test("ID recovery sends name and email without exposing match results", async ({ page }) => {
+  let submittedBody = null;
+  let legacyCalls = 0;
+  await seed(page);
+  await mockBackend(page, async (route, request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/auth/find-id") {
+      legacyCalls += 1;
+      return false;
+    }
+    if (pathname !== "/api/auth/id-recovery/request") return false;
+    submittedBody = request.postDataJSON();
+    await route.fulfill({
+      status: 200,
+      headers: HEADERS,
+      body: JSON.stringify({ ok: true, maskedUserId: "must-not-render" }),
+    });
+    return true;
+  });
+
+  await gotoApp(page);
+  await page.locator('[data-open-auth="login"]').click();
+  await page.locator('[data-open-auth="find-id"]').click();
+  const form = page.locator("[data-auth-form]");
+  await expect(form.locator('input[name="phone"]')).toHaveCount(0);
+  await expect(form).toContainText("Google로 가입한 경우 Google 로그인을 이용해 주세요.");
+  await form.locator('input[name="name"]').fill("Member");
+  await form.locator('input[name="email"]').fill("member@example.com");
+  await form.getByRole("button", { name: "이메일로 아이디 받기" }).click();
+
+  await expect(page.locator(".toast")).toContainText("등록된 이메일로 아이디 안내를 보내드립니다.");
+  await expect(page.locator("body")).not.toContainText("must-not-render");
+  expect(submittedBody).toEqual({ name: "Member", email: "member@example.com" });
+  expect(legacyCalls).toBe(0);
+});
+
 test("an expired authenticated session returns to the login state", async ({ page }) => {
   await seed(page, { isLoggedIn: true, currentUser: "Expired User", currentUserId: "9", authToken: "expired", token: "expired" }, "expired", [{ id: 88, title: "Fixture", text: "Fixture", source: "community", isShared: true }]);
   await mockBackend(page, async (route, request) => {

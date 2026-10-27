@@ -1,3 +1,5 @@
+import { ID_RECOVERY_GOOGLE_NOTICE, ID_RECOVERY_HELP } from "../policies/id-recovery-policy.mjs";
+
   "use strict";
 
   function AuthModalView(ctx, data) {
@@ -48,7 +50,7 @@
               <h2 id="auth-title">${title}</h2>
               <button class="ghost-icon" type="button" data-close-auth aria-label="닫기">${icons.close}</button>
             </div>
-            <p class="auth-helper">가입한 계정 정보를 입력해 주세요.</p>
+            <p class="auth-helper">${escapeHtml(isFindId ? ID_RECOVERY_HELP : "가입한 계정 정보를 입력해 주세요.")}</p>
             ${authError ? `<p class="auth-form-error" role="alert" data-auth-error>${authError}</p>` : ""}
             ${
               isFindId
@@ -57,8 +59,10 @@
                    <p class="auth-field-warning" data-user-id-warning>${escapeHtml(authUserIdWarning || "")}</p>`
             }
             <input name="email" type="email" placeholder="이메일" autocomplete="email" />
-            <input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" />
-            <button class="primary-button full" type="submit">${isFindId ? "아이디 찾기" : "비밀번호 재설정 요청"}</button>
+            ${isFindId
+              ? `<p class="auth-helper">${escapeHtml(ID_RECOVERY_GOOGLE_NOTICE)}</p>`
+              : '<input name="phone" placeholder="전화번호 (선택)" autocomplete="tel" />'}
+            <button class="primary-button full" type="submit">${isFindId ? "이메일로 아이디 받기" : "비밀번호 재설정 요청"}</button>
             <div class="auth-link-row">
               <button class="text-button inline" type="button" data-open-auth="login">로그인으로 돌아가기</button>
               <button class="text-button inline" type="button" data-open-auth="${isFindId ? "find-password" : "find-id"}">${isFindId ? "비밀번호 찾기" : "아이디 찾기"}</button>

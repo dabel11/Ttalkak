@@ -1,5 +1,5 @@
-import { fetchWithTimeout, getBackendBaseUrl } from "./client";
-import { getApiErrorMessage } from "../utils/apiErrors";
+import { fetchWithTimeout, getBackendBaseUrl } from "./client.js";
+import { getApiErrorMessage } from "../utils/apiErrors.js";
 
 /** @typedef {{ method?: string, body?: any, accessToken?: string }} JsonRequestOptions */
 
@@ -57,8 +57,10 @@ export async function requestSignup(config, payload) {
   return normalizeAuthSession(responseBody);
 }
 
-export async function requestFindId(config, payload) {
-  return requestJson(config, "/api/auth/find-id", { body: payload });
+/** @param {{ name?: string, email?: string, [key: string]: unknown }} [payload] */
+export async function requestFindId(config, payload = {}) {
+  const { name, email } = payload;
+  return requestJson(config, "/api/auth/id-recovery/request", { body: { name, email } });
 }
 
 export async function requestPasswordReset(config, payload) {

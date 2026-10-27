@@ -246,7 +246,7 @@ interface TtalkakApi {
   signup(payload: TtalkakPayload): Promise<unknown>;
   googleConfig(): Promise<{ clientId: string }>;
   googleLogin(credential: string, consent?: { agreeTerms: boolean; agreePrivacy: boolean }): Promise<unknown>;
-  findId(payload: TtalkakPayload): Promise<unknown>;
+  requestIdRecovery(payload: { name: string; email: string }): Promise<unknown>;
   requestPasswordReset(payload: TtalkakPayload): Promise<unknown>;
   withdrawAccount(payload: TtalkakPayload, token: TtalkakToken): Promise<unknown>;
   checkUserId(userId: string): Promise<unknown>;
