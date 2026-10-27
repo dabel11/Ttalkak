@@ -33,7 +33,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final int ROWS = 4;
     private static final int SLOTS = 1 << 16;
     private static final int MASK = SLOTS - 1;
-    private final Window[][][] counters = new Window[2][ROWS][SLOTS];
+    private static final int BUCKETS = 12;
+    private static final long BUCKET_MS = 5_000L;
+    // Twelve 5-second buckets give a bounded sliding lookback (quantized to 5s).
+    private final Window[][][] counters = new Window[BUCKETS][ROWS][SLOTS];
     private final SecretKeySpec sketchHashKey = createSketchKey();
     private final ApiErrorWriter errors;
     private final String trustedProxySecret;
@@ -146,27 +149,35 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         int limit = path.contains("password-reset") || path.contains("recovery")
                 || path.endsWith("find-id") ? 10 : 30;
         int[] indices = indices(key);
-        int[] minimum = {Integer.MAX_VALUE, Integer.MAX_VALUE};
-        // Two staggered fixed windows close the full-minute boundary burst.
-        // The shifted window crosses the other boundary at its midpoint.
-        long[] epochs = {Math.floorDiv(now, 60_000L),
-                Math.floorDiv(now - 30_000L, 60_000L)};
-        for (int plane = 0; plane < 2; plane++) {
+        long bucketEpoch = Math.floorDiv(now, BUCKET_MS);
+        // Read only active buckets. An expired slot must not retain a quota
+        // from a previous revolution of the circular buffer.
+        long count = 0;
+        for (int age = 0; age < BUCKETS; age++) {
+            long epoch = bucketEpoch - age;
+            int slotIndex = (int) Math.floorMod(epoch, BUCKETS);
+            int minimum = Integer.MAX_VALUE;
             for (int row = 0; row < ROWS; row++) {
-                Window slot = counters[plane][row][indices[row]];
-                if (slot == null || slot.startedAt != epochs[plane]) {
-                    slot = new Window(epochs[plane]);
-                    counters[plane][row][indices[row]] = slot;
-                }
-                minimum[plane] = Math.min(minimum[plane], slot.count);
+                Window slot = counters[slotIndex][row][indices[row]];
+                int value = slot != null && slot.startedAt == epoch ? slot.count : 0;
+                minimum = Math.min(minimum, value);
             }
-            if (minimum[plane] >= limit) return false;
+            count += minimum;
         }
-        for (int plane = 0; plane < 2; plane++) {
-            for (int row = 0; row < ROWS; row++) {
-                Window slot = counters[plane][row][indices[row]];
-                if (slot.count == minimum[plane]) slot.count++;
+        if (count >= limit) return false;
+        int target = (int) Math.floorMod(bucketEpoch, BUCKETS);
+        int minimum = Integer.MAX_VALUE;
+        for (int row = 0; row < ROWS; row++) {
+            Window slot = counters[target][row][indices[row]];
+            if (slot == null || slot.startedAt != bucketEpoch) {
+                slot = new Window(bucketEpoch);
+                counters[target][row][indices[row]] = slot;
             }
+            minimum = Math.min(minimum, slot.count);
+        }
+        for (int row = 0; row < ROWS; row++) {
+            Window slot = counters[target][row][indices[row]];
+            if (slot.count == minimum) slot.count++;
         }
         return true;
     }
