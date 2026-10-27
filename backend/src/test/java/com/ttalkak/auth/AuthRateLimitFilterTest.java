@@ -189,6 +189,43 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void proxyRequiredModeFailsStartupWithoutStrongSecret() {
+        var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
+        assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "", true));
+        assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "short", true));
+        assertThrows(IllegalStateException.class, () ->
+                new AuthRateLimitFilter(writer, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\";", true));
+    }
+
+    @Test void proxyRequiredModeRejectsUnauthenticatedDirectAuthRequests() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        for (String forgedIp : new String[]{ "203.0.113.1", "198.51.100.8" }) {
+            var request = new MockHttpServletRequest("POST", "/api/auth/login");
+            request.setRemoteAddr("198.51.100.100");
+            request.addHeader("X-Forwarded-For", forgedIp);
+            request.addHeader("X-Ttalkak-Client-IP", forgedIp);
+            request.addHeader("X-Ttalkak-Proxy-Secret", "wrong");
+            var response = new MockHttpServletResponse();
+            filter.doFilter(request, response, (a, b) -> fail("untrusted requests must not reach auth"));
+            assertEquals(503, response.getStatus());
+            assertTrue(response.getContentAsString().contains("AUTH_PROXY_REQUIRED"));
+        }
+    }
+
+    @Test void proxyRequiredModeAllowsAuthenticatedProxyWithValidIp() throws Exception {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters", true);
+        var request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr("10.0.0.20");
+        request.addHeader("X-Ttalkak-Client-IP", "203.0.113.1");
+        request.addHeader("X-Ttalkak-Proxy-Secret", "this-is-a-long-test-secret-over-32-characters");
+        var response = new MockHttpServletResponse();
+        var passed = new java.util.concurrent.atomic.AtomicBoolean();
+        filter.doFilter(request, response, (a, b) -> passed.set(true));
+        assertTrue(passed.get());
+    }
+
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.
