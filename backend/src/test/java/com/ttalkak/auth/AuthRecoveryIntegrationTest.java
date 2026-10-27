@@ -278,6 +278,142 @@ class AuthRecoveryIntegrationTest {
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
+
+
+    @Test void legacyFindIdAmbiguousEmailReturnsEmptyMaskedIdInsteadOfServerError() throws Exception {
+        members.saveAndFlush(new Member(
+                "duplicate_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "duplicate-" + UUID.randomUUID(),
+                "Name", null, null, member.getEmail()));
+
+        mvc.perform(isolatedFindIdPost("192.0.2.31")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdAmbiguousPhoneReturnsEmptyMaskedIdInsteadOfServerError() throws Exception {
+        String phone = "01098765432";
+        members.saveAndFlush(new Member(
+                "phone_a_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "phone-a-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "phone-a-" + UUID.randomUUID() + "@example.com"));
+        members.saveAndFlush(new Member(
+                "phone_b_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "phone-b-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "phone-b-" + UUID.randomUUID() + "@example.com"));
+
+        mvc.perform(isolatedFindIdPost("192.0.2.32")
+                        .content("{\"method\":\"phone\",\"name\":\"Phone Name\",\"phone\":\"01098765432\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId").value(""));
+    }
+
+    @Test void legacyFindIdSkipsBlockedDuplicateAndKeepsUniqueEligibleLocalMatch() throws Exception {
+        Member blocked = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "blocked-" + UUID.randomUUID(),
+                "Name", null, null, member.getEmail()));
+        blocked.block("test");
+        members.saveAndFlush(blocked);
+        String id = member.getUserId();
+
+        mvc.perform(isolatedFindIdPost("192.0.2.33")
+                        .content("{\"method\":\"email\",\"name\":\"Name\",\"email\":\"user@example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
+    @Test void legacyFindIdIgnoresWithdrawnAndGoogleMatches() throws Exception {
+        String email = "shared-" + UUID.randomUUID() + "@example.com";
+        String name = "Shared Name";
+        Member eligible = members.saveAndFlush(new Member(
+                "eligible_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "eligible-" + UUID.randomUUID(),
+                name, null, null, email));
+        Member withdrawn = members.saveAndFlush(new Member(
+                "old_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "old-" + UUID.randomUUID(),
+                name, null, null, email));
+        withdrawn.withdraw();
+        members.saveAndFlush(withdrawn);
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"), "google-" + UUID.randomUUID(),
+                name, email, "subject-" + UUID.randomUUID()));
+
+        String id = eligible.getUserId();
+        mvc.perform(isolatedFindIdPost("192.0.2.35")
+                        .content("{\"method\":\"email\",\"name\":\"" + name + "\",\"email\":\"" + email + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
+    @Test void legacyFindIdOnePhoneMatchStillReturnsMaskedId() throws Exception {
+        String phone = "01012349876";
+        Member local = members.saveAndFlush(new Member(
+                "single_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"), "single-" + UUID.randomUUID(),
+                "Phone Name", null, phone, "single-" + UUID.randomUUID() + "@example.com"));
+        String id = local.getUserId();
+        mvc.perform(isolatedFindIdPost("192.0.2.34")
+                        .content("{\"method\":\"phone\",\"name\":\"Phone Name\",\"phone\":\"01012349876\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedUserId")
+                        .value(id.charAt(0) + "***" + id.charAt(id.length() - 1)));
+    }
+
+    @Test void idRecoveryWithDuplicateContactMailsOnlyEligibleLocalIds() {
+        String email = member.getEmail();
+        Member anotherLocal = members.saveAndFlush(new Member(
+                "local_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "local-" + UUID.randomUUID(),
+                "Name", null, null, email));
+
+        Member blockedLocal = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "blocked-" + UUID.randomUUID(),
+                "Name", null, null, email));
+        blockedLocal.block("test restriction");
+        members.saveAndFlush(blockedLocal);
+
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"),
+                "google-" + UUID.randomUUID(),
+                "Name", email, "google-subject-" + UUID.randomUUID()));
+
+        recovery.recoverUserId("Name", email);
+
+        String expectedIds = java.util.stream.Stream.of(member.getUserId(), anotherLocal.getUserId())
+                .sorted().collect(java.util.stream.Collectors.joining(", "));
+        verify(mailer, times(1)).sendUserId(eq(email), eq(expectedIds));
+        verifyNoMoreInteractions(mailer);
+    }
+
+    @Test void idRecoveryDoesNotMailWhenOnlyBlockedOrGoogleAccountsMatch() {
+        String email = "unavailable-" + UUID.randomUUID() + "@example.com";
+        Member blockedLocal = members.saveAndFlush(new Member(
+                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("password-123"),
+                "blocked-" + UUID.randomUUID(),
+                "Name", null, null, email));
+        blockedLocal.block("test restriction");
+        members.saveAndFlush(blockedLocal);
+        members.saveAndFlush(Member.createGoogle(
+                "google_" + UUID.randomUUID().toString().substring(0, 8),
+                encoder.encode("unused-password"),
+                "google-" + UUID.randomUUID(),
+                "Name", email, "google-subject-" + UUID.randomUUID()));
+
+        recovery.recoverUserId("Name", email);
+        verify(mailer, never()).sendUserId(anyString(), anyString());
+    }
+
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
