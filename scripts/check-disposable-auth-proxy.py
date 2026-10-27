@@ -100,9 +100,21 @@ def main():
     code, body = send(mapped[1], 99)
     assert code == 429 and body["code"] == "AUTH_RATE_LIMITED", (
         "mapped IPv6 must share the plain IPv4 allowance", code, body)
+    # Persisted quota must survive an actual backend process restart, not merely
+    # construction of another Java limiter object in the same process.
+    for i in range(10):
+        code, body = send("198.51.100.24", i)
+        assert code == 200, ("restart fixture must initially have quota", i, code, body)
+    restart_started = time.monotonic()
+    subprocess.run(COMPOSE + ["restart", "backend"], check=True)
+    wait_ready()
+    assert time.monotonic() - restart_started < 55, "restart exceeded the useful 60s quota observation window"
+    code, body = send("198.51.100.24", 99)
+    assert code == 429 and body["code"] == "AUTH_RATE_LIMITED", (
+        "backend process restart must not replenish persisted client quota", code, body)
     direct_untrusted_cannot_bypass()
     print("PASS: real nginx/Spring strict proxy attestation, per-client quotas, "
-          "forged XFF ignored, direct backend denied (disposable only)")
+          "forged XFF ignored, quota survives backend restart, direct backend denied (disposable only)")
 
 
 if __name__ == "__main__":

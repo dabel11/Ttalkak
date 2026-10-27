@@ -66,6 +66,9 @@ actual traffic sizing is a rollout check, not a CI performance claim.
 - Explicitly gated disposable MySQL test validates real InnoDB locking and epoch
   clock across separate limiter instances. H2 tests are not its substitute.
 - Filter test proves shared-store failure never dispatches or falls back locally.
+- Disposable nginx/Spring smoke exhausts an attested quota, restarts the actual
+  backend process, and verifies 429 persists. The restart must finish within the
+  60-second observation window; a slow restart is an inconclusive timing failure.
 - Existing prefix, forged/duplicate header, strict, mapped-IP and native-Tomcat
   regressions remain. Disposable nginx/Spring and browser checks must pass at the
   exact current PR HEAD; the PR body records the final run IDs and result.
