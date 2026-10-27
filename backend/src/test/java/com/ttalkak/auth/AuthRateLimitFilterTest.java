@@ -70,6 +70,22 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void keyCapacityExhaustionRejectsNewClientsUntilTheWindowExpires() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()));
+        String endpoint = "/api/auth/id-recovery/request";
+        for (int i = 0; i < 10_000; i++) {
+            assertTrue(filter.allow("198.51." + (i / 256) + "." + (i % 256),
+                    endpoint, 1000), "fixture should fill exactly 10,000 windows");
+        }
+        // Documents the existing availability risk; this is not a security fix.
+        assertFalse(filter.allow("203.0.113.5", endpoint, 1000),
+                "previously unseen legitimate client is denied at capacity");
+        assertTrue(filter.allow("198.51.0.0", endpoint, 1000),
+                "existing clients continue within their quota");
+        assertTrue(filter.allow("203.0.113.5", endpoint, 61_000),
+                "expired windows eventually release capacity");
+    }
+
     @Test void spoofedForwardedForHeaderDoesNotResetDirectFilterRateLimit() throws Exception {
         // This tests only the filter's direct request handling. It does not
         // prove that Railway / Spring proxy configuration provides true client IPs.
