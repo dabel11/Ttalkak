@@ -189,6 +189,20 @@ class AuthRateLimitFilterTest {
         }
     }
 
+    @Test void canonicalIpv6AttestationCannotSplitRateLimitBuckets() {
+        var filter = new AuthRateLimitFilter(new ApiErrorWriter(new ObjectMapper().findAndRegisterModules()),
+                "this-is-a-long-test-secret-over-32-characters");
+        var first = new MockHttpServletRequest("POST", "/api/auth/login");
+        first.setRemoteAddr("10.0.0.20");
+        first.addHeader("X-Ttalkak-Proxy-Secret", "this-is-a-long-test-secret-over-32-characters");
+        first.addHeader("X-Ttalkak-Client-IP", "2001:db8::1");
+        var alternate = new MockHttpServletRequest("POST", "/api/auth/login");
+        alternate.setRemoteAddr("10.0.0.20");
+        alternate.addHeader("X-Ttalkak-Proxy-Secret", "this-is-a-long-test-secret-over-32-characters");
+        alternate.addHeader("X-Ttalkak-Client-IP", "2001:0DB8:0000:0:0:0:0:1");
+        assertEquals(filter.clientKey(first), filter.clientKey(alternate));
+    }
+
     @Test void proxyRequiredModeFailsStartupWithoutStrongSecret() {
         var writer = new ApiErrorWriter(new ObjectMapper().findAndRegisterModules());
         assertThrows(IllegalStateException.class, () -> new AuthRateLimitFilter(writer, "", true));
