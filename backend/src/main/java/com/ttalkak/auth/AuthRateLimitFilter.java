@@ -144,7 +144,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             if (!ip.matches("[0-9a-fA-F:.]+")) return null;
             try {
                 String canonical = InetAddress.getByName(ip).getHostAddress();
-                return canonical.contains(":") ? canonical.toLowerCase(java.util.Locale.ROOT) : null;
+                // InetAddress normalizes IPv4-mapped IPv6 to IPv4. Accept that
+                // canonical form so valid proxy clients are neither rejected in
+                // strict mode nor given a second quota for the mapped spelling.
+                return canonical.toLowerCase(java.util.Locale.ROOT);
             } catch (java.net.UnknownHostException ex) {
                 return null;
             }

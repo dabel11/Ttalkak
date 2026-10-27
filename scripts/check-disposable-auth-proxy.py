@@ -91,6 +91,15 @@ def main():
 
     code, body = send("198.51.100.22", 99)
     assert code == 200, ("independent attested client must retain quota", code, body)
+    # Mapped IPv6 emitted by a trusted edge is the same client as plain IPv4.
+    # Alternate dotted and hexadecimal tails to verify canonical quota identity.
+    mapped = ("198.51.100.23", "::ffff:198.51.100.23", "::FFFF:C633:6417")
+    for i in range(10):
+        code, body = send(mapped[i % len(mapped)], i)
+        assert code == 200, ("valid mapped IPv6 must not be rejected", i, code, body)
+    code, body = send(mapped[1], 99)
+    assert code == 429 and body["code"] == "AUTH_RATE_LIMITED", (
+        "mapped IPv6 must share the plain IPv4 allowance", code, body)
     direct_untrusted_cannot_bypass()
     print("PASS: real nginx/Spring strict proxy attestation, per-client quotas, "
           "forged XFF ignored, direct backend denied (disposable only)")
