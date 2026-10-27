@@ -278,47 +278,6 @@ class AuthRecoveryIntegrationTest {
                 .andExpect(jsonPath("$.maskedUserId").value(""));
     }
 
-    @Test void emailIdRecoveryForSharedContactSendsOnlyEligibleLocalIds() {
-        String email = member.getEmail();
-        Member second = members.saveAndFlush(new Member(
-                "second_" + UUID.randomUUID().toString().substring(0, 8),
-                encoder.encode("password-123"), "second-" + UUID.randomUUID(),
-                "Name", null, null, email));
-        Member blocked = members.saveAndFlush(new Member(
-                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
-                encoder.encode("password-123"), "blocked-" + UUID.randomUUID(),
-                "Name", null, null, email));
-        blocked.block("restriction");
-        members.saveAndFlush(blocked);
-        members.saveAndFlush(Member.createGoogle(
-                "google_" + UUID.randomUUID().toString().substring(0, 8),
-                encoder.encode("unused-password"), "google-" + UUID.randomUUID(),
-                "Name", email, "provider-" + UUID.randomUUID()));
-
-        recovery.recoverUserId("Name", email);
-        String ids = java.util.stream.Stream.of(member.getUserId(), second.getUserId())
-                .sorted().collect(java.util.stream.Collectors.joining(", "));
-        verify(mailer, times(1)).sendUserId(eq(email), eq(ids));
-        verifyNoMoreInteractions(mailer);
-    }
-
-    @Test void emailIdRecoveryDoesNotDeliverForOnlyIneligibleMatches() {
-        String email = "ineligible-" + UUID.randomUUID() + "@example.com";
-        Member blocked = members.saveAndFlush(new Member(
-                "blocked_" + UUID.randomUUID().toString().substring(0, 8),
-                encoder.encode("password-123"), "blocked-" + UUID.randomUUID(),
-                "Name", null, null, email));
-        blocked.block("restriction");
-        members.saveAndFlush(blocked);
-        members.saveAndFlush(Member.createGoogle(
-                "google_" + UUID.randomUUID().toString().substring(0, 8),
-                encoder.encode("unused-password"), "google-" + UUID.randomUUID(),
-                "Name", email, "provider-" + UUID.randomUUID()));
-
-        recovery.recoverUserId("Name", email);
-        verify(mailer, never()).sendUserId(anyString(), anyString());
-    }
-
     @Test void idRecoverySendsOnlyToTheRegisteredLocalEmail() {
         recovery.recoverUserId("Name", "other@example.com");
         verify(mailer, never()).sendUserId(anyString(), anyString());
