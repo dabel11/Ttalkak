@@ -89,8 +89,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         if (trustedProxySecret.length() >= 32) {
             String presented = request.getHeader("X-Ttalkak-Proxy-Secret");
             String ip = request.getHeader("X-Ttalkak-Client-IP");
-            if (presented != null && constantTimeEqual(trustedProxySecret, presented) && isIpLiteral(ip)) {
-                return ip;
+            String canonical = canonicalIpLiteral(ip);
+            if (presented != null && constantTimeEqual(trustedProxySecret, presented) && canonical != null) {
+                return canonical;
             }
         }
         return trustedProxyRequired ? null : unforwardedPeerAddress(request);
@@ -101,25 +102,26 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 actual.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static boolean isIpLiteral(String ip) {
+    private static String canonicalIpLiteral(String ip) {
         if (ip == null || ip.isBlank() || ip.length() > 45 || !ip.equals(ip.trim())
-                || ip.indexOf(',') >= 0 || ip.indexOf('%') >= 0) return false;
+                || ip.indexOf(',') >= 0 || ip.indexOf('%') >= 0) return null;
         if (ip.indexOf(':') >= 0) {
-            if (!ip.matches("[0-9a-fA-F:.]+")) return false;
+            if (!ip.matches("[0-9a-fA-F:.]+")) return null;
             try {
-                return InetAddress.getByName(ip).getHostAddress().contains(":");
+                String canonical = InetAddress.getByName(ip).getHostAddress();
+                return canonical.contains(":") ? canonical.toLowerCase(java.util.Locale.ROOT) : null;
             } catch (java.net.UnknownHostException ex) {
-                return false;
+                return null;
             }
         }
         String[] parts = ip.split("\\.", -1);
-        if (parts.length != 4) return false;
+        if (parts.length != 4) return null;
         for (String part : parts) {
-            if (part.isEmpty() || part.length() > 3 || (part.length() > 1 && part.charAt(0) == '0')) return false;
-            for (int i = 0; i < part.length(); i++) if (!Character.isDigit(part.charAt(i))) return false;
-            if (Integer.parseInt(part) > 255) return false;
+            if (part.isEmpty() || part.length() > 3 || (part.length() > 1 && part.charAt(0) == '0')) return null;
+            for (int i = 0; i < part.length(); i++) if (part.charAt(i) < '0' || part.charAt(i) > '9') return null;
+            if (Integer.parseInt(part) > 255) return null;
         }
-        return true;
+        return ip;
     }
 
     synchronized boolean allow(String address, String path, long now) {
