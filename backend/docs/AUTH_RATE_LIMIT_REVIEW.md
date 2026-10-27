@@ -7,8 +7,9 @@ that were subsequently removed. Code review readiness is separate from rollout a
 ## Request flow and failure behavior
 
 1. Only the eight sensitive authentication POST routes are limited. OPTIONS and
-   other routes retain their existing handling. The original servlet URI/context
-   prevents X-Forwarded-Prefix from changing the selected route.
+   other routes retain their existing handling. The original container-decoded
+   servlet path/path info selects the same route as MVC, including encoded letters
+   and servlet mapping prefixes. ForwardedHeaderFilter wrappers cannot change it.
 2. Without an authenticated internal proxy, optional mode uses the socket peer.
    Strict mode returns 503 AUTH_PROXY_REQUIRED before controller dispatch.
 3. A valid internal secret and single canonical IP header identify a proxy client.
@@ -69,6 +70,9 @@ actual traffic sizing is a rollout check, not a CI performance claim.
 - Disposable nginx/Spring smoke exhausts an attested quota, restarts the actual
   backend process, and verifies 429 persists. The restart must finish within the
   60-second observation window; a slow restart is an inconclusive timing failure.
+- A real Tomcat probe checks encoded route letters and servlet mapping prefixes
+  cannot bypass strict enforcement. nginx/Spring alternates encoded and plain
+  routes to verify a shared quota and rejects both on untrusted direct ingress.
 - Existing prefix, forged/duplicate header, strict, mapped-IP and native-Tomcat
   regressions remain. Disposable nginx/Spring and browser checks must pass at the
   exact current PR HEAD; the PR body records the final run IDs and result.

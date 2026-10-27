@@ -19,7 +19,7 @@ PAYLOAD = json.dumps({"method": "email", "name": "Nobody Fixture",
                       "email": "nobody@example.invalid"}).encode()
 
 
-def send(ip, spoof_index):
+def send(ip, spoof_index, path="/api/auth/find-id"):
     headers = {
         "Content-Type": "application/json",
         "X-Real-IP": ip,  # Simulated verified Railway edge, NOT attacker-controlled in public ingress.
@@ -29,7 +29,7 @@ def send(ip, spoof_index):
         "X-Ttalkak-Proxy-Secret": "forged-untrusted-client-header",
         "X-Ttalkak-Client-IP": "192.0.2.250",
     }
-    request = urllib.request.Request(URL + "/api/auth/find-id", data=PAYLOAD,
+    request = urllib.request.Request(URL + path, data=PAYLOAD,
                                      method="POST", headers=headers)
     try:
         response = HTTP.open(request, timeout=15)
@@ -55,7 +55,8 @@ def wait_ready():
 def direct_untrusted_cannot_bypass():
     js = """
 const req = async () => {
-  const r = await fetch('http://backend:18080/api/auth/find-id', {
+  for (const path of ['/api/auth/find-id', '/api/auth/%66ind-id']) {
+  const r = await fetch('http://backend:18080' + path, {
     method: 'POST', headers: {
       'Content-Type': 'application/json',
       'X-Real-IP': '198.51.100.99',
@@ -67,7 +68,8 @@ const req = async () => {
   });
   const body = await r.json();
   if (r.status !== 503 || body.code !== 'AUTH_PROXY_REQUIRED') {
-    throw new Error('direct authentication bypass: ' + r.status + ':' + JSON.stringify(body));
+    throw new Error('direct authentication bypass ' + path + ': ' + r.status + ':' + JSON.stringify(body));
+  }
   }
 };
 req().catch(err => { console.error(err.message); process.exit(1); });
@@ -83,11 +85,12 @@ def main():
     subprocess.run(COMPOSE + ["exec", "-T", "web", "nginx", "-t"], check=True)
 
     for i in range(10):
-        code, body = send("198.51.100.21", i)
+        route = "/api/auth/%66ind-id" if i % 2 else "/api/auth/find-id"
+        code, body = send("198.51.100.21", i, route)
         assert code == 200, ("expected valid authenticated proxy route", i, code, body)
-    code, body = send("198.51.100.21", 99)
+    code, body = send("198.51.100.21", 99, "/api/auth/%66ind-id")
     assert code == 429 and body["code"] == "AUTH_RATE_LIMITED", (
-        "spoofed XFF/Forwarded must not reset verified client-IP quota", code, body)
+        "forwarded headers or encoded routes must not reset verified client-IP quota", code, body)
 
     code, body = send("198.51.100.22", 99)
     assert code == 200, ("independent attested client must retain quota", code, body)
@@ -114,7 +117,7 @@ def main():
         "backend process restart must not replenish persisted client quota", code, body)
     direct_untrusted_cannot_bypass()
     print("PASS: real nginx/Spring strict proxy attestation, per-client quotas, "
-          "forged XFF ignored, quota survives backend restart, direct backend denied (disposable only)")
+          "forged XFF ignored, encoded routes normalized, quota survives backend restart, direct backend denied (disposable only)")
 
 
 if __name__ == "__main__":

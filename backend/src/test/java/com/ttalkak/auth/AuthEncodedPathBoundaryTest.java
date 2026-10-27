@@ -40,11 +40,13 @@ class AuthEncodedPathBoundaryTest {
             }
         });
         context.addServletMappingDecoded("/*", "probe");
+        context.addServletMappingDecoded("/app/*", "probe");
         try {
             tomcat.start();
             var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
             String origin = "http://127.0.0.1:" + tomcat.getConnector().getLocalPort();
-            for (String path : new String[]{"/api/auth/%66ind-id", "/%61pi/auth/find-id", "/api/auth/%6cogin"}) {
+            for (String path : new String[]{"/api/auth/%66ind-id", "/%61pi/auth/find-id", "/api/auth/%6cogin",
+                    "/app/api/auth/%66ind-id", "/app/api/auth/login"}) {
                 var request = HttpRequest.newBuilder(URI.create(origin + path)).timeout(Duration.ofSeconds(5))
                         .POST(HttpRequest.BodyPublishers.noBody()).build();
                 var response = client.send(request, HttpResponse.BodyHandlers.ofString());

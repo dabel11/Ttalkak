@@ -98,9 +98,20 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         HttpServletRequest http = original instanceof HttpServletRequest raw ? raw : request;
         // ForwardedHeaderFilter also rewrites URI/contextPath via X-Forwarded-Prefix.
         // Match the backend route, never an externally supplied public prefix.
+        // The container decodes route characters before MVC mapping. Raw URI
+        // comparison would miss /api/auth/%66ind-id even though MVC sees find-id.
+        String servletPath = http.getServletPath();
+        String pathInfo = http.getPathInfo();
+        // With a DispatcherServlet prefix mapping, pathInfo is the MVC path
+        // within that servlet; the configured mapping prefix is not a route.
+        if (pathInfo != null) return pathInfo;
+        if (!servletPath.isEmpty()) return servletPath;
+        // Isolated request fixtures (or a root mapping) may omit servlet fields.
+        // Decode exactly once, as the container does; malformed escapes fail closed.
         String uri = http.getRequestURI();
         String context = http.getContextPath();
-        return !context.isEmpty() && uri.startsWith(context + "/") ? uri.substring(context.length()) : uri;
+        String path = !context.isEmpty() && uri.startsWith(context + "/") ? uri.substring(context.length()) : uri;
+        return org.springframework.web.util.UriUtils.decode(path, StandardCharsets.UTF_8);
     }
 
     private static ServletRequest unforwardedRequest(HttpServletRequest request) {
