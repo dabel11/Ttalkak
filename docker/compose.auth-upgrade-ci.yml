@@ -1,0 +1,51 @@
+# Disposable upgrade rehearsal only. No production URL or volume is accepted.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ci-upgrade-only-password
+      MYSQL_DATABASE: ttalkak_upgrade
+    healthcheck:
+      test: [CMD-SHELL, 'mysqladmin ping -h 127.0.0.1 -pci-upgrade-only-password --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  rag-stub:
+    image: node:24-alpine
+    environment:
+      TTALKAK_STUB_RAG_HOST: 0.0.0.0
+    volumes:
+      - ../scripts/stub-rag-server.cjs:/app/stub.cjs:ro
+    command: [node, /app/stub.cjs]
+  backend:
+    image: ${AUTH_UPGRADE_BACKEND_IMAGE:-ttalkak-auth-upgrade-old-backend}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: '18080'
+      FORWARD_HEADERS_STRATEGY: ${AUTH_UPGRADE_FORWARD_STRATEGY:-framework}
+      DB_URL: jdbc:mysql://mysql:3306/ttalkak_upgrade?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: ci-upgrade-only-password
+      JWT_SECRET_BASE64: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      RAG_SERVER_URL: http://rag-stub:8000
+      JPA_DDL_AUTO: update
+      JPA_SHOW_SQL: 'false'
+      ADMIN_SEED_ENABLED: ${AUTH_UPGRADE_ADMIN_SEED_ENABLED:-true}
+      ADMIN_USER_ID: ci_upgrade_admin
+      ADMIN_PASSWORD: CI-admin-upgrade-123!
+      MERCHANT_REVIEW_ACCOUNT_ENABLED: ${AUTH_UPGRADE_REVIEW_SEED_ENABLED:-true}
+      MERCHANT_REVIEW_ACCOUNT_PASSWORD: CI-review-upgrade-456!
+      PASSWORD_RESET_ENABLED: 'false'
+      TTALKAK_AUTH_PROXY_REQUIRED: 'false'
+      CORS_ALLOWED_ORIGIN_PATTERNS: http://127.0.0.1:18174
+    ports:
+      - '127.0.0.1:18175:18080'
+  web:
+    image: ttalkak-auth-upgrade-old-web
+    environment:
+      PORT: '18081'
+      BACKEND_UPSTREAM: backend:18080
+    ports:
+      - '127.0.0.1:18174:18081'

@@ -25,6 +25,8 @@ class SharedAuthRequestLimiterMySqlTest {
                         new org.springframework.core.io.FileSystemResource("docs/sql/20261028_auth_rate_limit_state.sql"));
             }
             var first = new SharedAuthRequestLimiter(source, new DataSourceTransactionManager(source), SharedAuthRequestLimiterTest.SECRET);
+            first.validateStoreBeforeServing();
+            assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM auth_rate_limit_state", Long.class));
             var second = new SharedAuthRequestLimiter(source, new DataSourceTransactionManager(source), SharedAuthRequestLimiterTest.SECRET);
             var pool = Executors.newFixedThreadPool(8);
             var start = new CountDownLatch(1);

@@ -46,3 +46,16 @@ jobs:
       - name: Remove disposable CI stack
         if: always()
         run: docker compose -p ttalkak-ci -f docker/compose.ci.yml down -v
+
+  auth-upgrade:
+    name: Observed live auth upgrade and rollback rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Upgrade observed live schema and preserve existing accounts
+        env:
+          TTALKAK_AUTH_UPGRADE_CI: '1'
+        run: python3 scripts/check-disposable-auth-upgrade.py

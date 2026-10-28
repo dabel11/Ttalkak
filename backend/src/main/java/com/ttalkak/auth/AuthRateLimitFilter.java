@@ -57,6 +57,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 || (trustedProxyRequired && this.trustedProxySecret.isEmpty())) {
             throw new IllegalStateException("Invalid authentication proxy configuration");
         }
+        // Observable rollout contract without exposing any secret or client IP.
+        org.slf4j.LoggerFactory.getLogger(AuthRateLimitFilter.class)
+                .info("AUTH_INGRESS_CONFIG strategy={} strict={} proxy_attestation={}",
+                        strategy, trustedProxyRequired, !this.trustedProxySecret.isEmpty());
     }
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,

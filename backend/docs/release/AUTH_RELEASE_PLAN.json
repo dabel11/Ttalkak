@@ -1,0 +1,72 @@
+{
+  "status": "PREPARED_NOT_EXECUTED",
+  "scope": "COMPATIBLE_FIRST_DEPLOY_NO_STRICT_ACTIVATION",
+  "projectId": "d399acc4-853a-42f1-ac39-6fdbbd8b5733",
+  "environmentId": "01660dfb-36d8-4474-bc16-d499d0224895",
+  "repository": "dabel11/Ttalkak",
+  "pullRequest": 81,
+  "targetBranch": "develop",
+  "observedLiveCommit": "95c1f1cb79ac1fbc817f43e5a6183df8dbf54a01",
+  "requireExactApprovedCandidateSha": true,
+  "requireNoUnrelatedStagedChanges": true,
+  "preserveDatabaseServiceAndVolumes": true,
+  "preserveJwtAndAllExistingCredentials": true,
+  "preservePublicDomainsAndClientBaseUrls": true,
+  "services": {
+    "backend": {
+      "serviceId": "bf6e5602-8974-4d20-9c64-3af7a227b3dc",
+      "observedDeploymentId": "f896d532-9998-4d79-8bb8-afe7f46de3f8",
+      "observedSnapshotId": "64866e49-1344-4ebc-9eab-446fc6988f2d",
+      "variables": {
+        "PORT": "8080",
+        "FORWARD_HEADERS_STRATEGY": "framework",
+        "JPA_DDL_AUTO": "update",
+        "TTALKAK_AUTH_PROXY_REQUIRED": "false",
+        "TTALKAK_AUTH_PROXY_SECRET": "",
+        "ADMIN_SEED_ENABLED": "false",
+        "MERCHANT_REVIEW_ACCOUNT_ENABLED": "false"
+      },
+      "config": {
+        "healthcheckPath": "/api/auth/config",
+        "healthcheckTimeout": 180,
+        "overlapSeconds": 0,
+        "drainingSeconds": 0
+      },
+      "requiredStartupLogMarkers": [
+        "AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back",
+        "AUTH_INGRESS_CONFIG strategy=FRAMEWORK strict=false proxy_attestation=false"
+      ]
+    },
+    "web": {
+      "serviceId": "3319d167-4858-45a5-9c26-6cdacee5e9df",
+      "observedDeploymentId": "4a30f91d-2695-4010-aabd-16028f3f872a",
+      "observedSnapshotId": "f5dedf99-9cfa-43fa-92ab-aaa476648712",
+      "variables": {
+        "PORT": "8080",
+        "BACKEND_UPSTREAM": "${{backend.RAILWAY_PRIVATE_DOMAIN}}:8080",
+        "RAILWAY_DOCKERFILE_PATH": "docker/web.Dockerfile",
+        "TTALKAK_AUTH_PROXY_SECRET": ""
+      },
+      "config": {
+        "healthcheckPath": "/healthz",
+        "healthcheckTimeout": 180
+      }
+    }
+  },
+  "boundedPostDeployAuthProbe": {
+    "requiresExecutionApproval": true,
+    "maxRequests": 2,
+    "paths": [
+      "/api/auth/find-id",
+      "/api/auth/%66ind-id"
+    ],
+    "identity": "random nonexistent fixture using example.invalid",
+    "expectedStatus": 200,
+    "expectedMaskedUserId": "",
+    "createsAccount": false,
+    "sendsMail": false,
+    "writesOnlyAuxiliaryRateLimitState": true
+  },
+  "firstCutoverCounterPolicy": "One-time first-release volatile counter reset is explicit. No old/new overlap is permitted; old memory cannot be imported. After cutover, all candidate replicas and restarts share persisted state. Zero-reset legacy continuity would require a separately enforced 60-second auth quiet period and is not claimed by this release.",
+  "strictActivation": "NOT_PART_OF_THIS_RELEASE"
+}

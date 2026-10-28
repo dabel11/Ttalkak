@@ -2,7 +2,7 @@
 
 This document describes the final implementation. The dated independent-review
 and security-gate files retain historical reproductions, including implementations
-that were subsequently removed. Code review readiness is separate from rollout approval.
+that were subsequently removed. The concrete compatible-release procedure and execution plan are in [AUTH_MERGE_DEPLOY_RUNBOOK.md](AUTH_MERGE_DEPLOY_RUNBOOK.md).
 
 ## Request flow and failure behavior
 
@@ -45,6 +45,13 @@ a guarantee against unbounded volumetric traffic or database resource exhaustion
 retain edge admission controls, capacity monitoring, and DB connection limits.
 The new auth store adds a DB transaction to each sensitive authentication request;
 actual traffic sizing is a rollout check, not a CI performance claim.
+
+## Startup gate
+
+Before becoming healthy, the store checks the expiry index and exercises its exact
+schema, clock and write privileges in a reserved transaction that is rolled back.
+Sanitized startup markers expose the actual forwarding/strict/attestation mode
+and store readiness without revealing secrets or client IPs.
 
 ## Schema and rollout
 

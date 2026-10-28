@@ -21,9 +21,25 @@ class SharedAuthRequestLimiterTest {
     SharedAuthRequestLimiterTest() {
         jdbc.execute("CREATE TABLE auth_rate_limit_state (bucket_key VARCHAR(64) PRIMARY KEY, "
                 + "accepted_at VARCHAR(1024) NOT NULL, expires_at BIGINT NOT NULL)");
+        jdbc.execute("CREATE INDEX idx_auth_limit_expiry ON auth_rate_limit_state(expires_at)");
     }
     SharedAuthRequestLimiter instance() {
         return new SharedAuthRequestLimiter(source, new DataSourceTransactionManager(source), SECRET, clock::get);
+    }
+
+    @Test void startupProbeRollsBackWithoutLeavingState() {
+        instance().validateStoreBeforeServing();
+        assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM auth_rate_limit_state", Long.class));
+    }
+
+    @Test void missingSchemaFailsStartupValidation() {
+        jdbc.execute("DROP TABLE auth_rate_limit_state");
+        assertThrows(IllegalStateException.class, () -> instance().validateStoreBeforeServing());
+    }
+
+    @Test void missingExpiryIndexFailsStartupValidation() {
+        jdbc.execute("DROP INDEX idx_auth_limit_expiry");
+        assertThrows(IllegalStateException.class, () -> instance().validateStoreBeforeServing());
     }
 
     @Test void replicasAndReplacementShareOneAtomicAllowance() throws Exception {

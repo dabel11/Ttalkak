@@ -14,7 +14,6 @@ import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.function.LongSupplier;
@@ -41,7 +40,7 @@ public class SharedAuthRequestLimiter implements AuthRequestLimiter {
         transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         transaction.setTimeout(5);
         byte[] bytes;
-        try { bytes = Base64.getDecoder().decode(secret.trim()); }
+        try { bytes = io.jsonwebtoken.io.Decoders.BASE64.decode(secret.trim()); }
         catch (RuntimeException ex) { throw new IllegalStateException("Invalid shared authentication limiter key", ex); }
         if (bytes.length < 32) throw new IllegalStateException("Invalid shared authentication limiter key");
         identityKey = new SecretKeySpec(bytes, "HmacSHA256");
@@ -55,6 +54,40 @@ public class SharedAuthRequestLimiter implements AuthRequestLimiter {
                     : "SELECT CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 AS SIGNED)";
             databaseClock = () -> jdbc.queryForObject(sql, Long.class);
         }
+    }
+
+    @jakarta.annotation.PostConstruct
+    void validateStoreBeforeServing() {
+        // Exercise the exact schema, clock and write privileges before health can
+        // become green. The reserved probe transaction is always rolled back.
+        try (var connection = jdbc.getDataSource().getConnection()) {
+            var metadata = connection.getMetaData();
+            String table = metadata.storesUpperCaseIdentifiers() ? "AUTH_RATE_LIMIT_STATE" : "auth_rate_limit_state";
+            boolean indexed = false;
+            try (var indexes = metadata.getIndexInfo(connection.getCatalog(), null, table, false, false)) {
+                while (indexes.next()) {
+                    if ("expires_at".equalsIgnoreCase(indexes.getString("COLUMN_NAME"))
+                            && indexes.getShort("ORDINAL_POSITION") == 1 && indexes.getBoolean("NON_UNIQUE")) indexed = true;
+                }
+            }
+            if (!indexed) throw new IllegalStateException("Authentication limiter schema needs its expiry index");
+        } catch (java.sql.SQLException ex) {
+            throw new IllegalStateException("Cannot validate authentication limiter schema", ex);
+        }
+        String probe = identity("startup-probe", "/_bootstrap");
+        transaction.execute(status -> {
+            jdbc.update("INSERT INTO auth_rate_limit_state (bucket_key, accepted_at, expires_at) VALUES (?, '', 0) "
+                    + "ON DUPLICATE KEY UPDATE bucket_key=bucket_key", probe);
+            jdbc.queryForObject("SELECT accepted_at FROM auth_rate_limit_state WHERE bucket_key=? FOR UPDATE", String.class, probe);
+            jdbc.queryForObject("SELECT expires_at FROM auth_rate_limit_state WHERE bucket_key=?", Long.class, probe);
+            databaseClock.getAsLong();
+            jdbc.update("UPDATE auth_rate_limit_state SET accepted_at='', expires_at=0 WHERE bucket_key=?", probe);
+            jdbc.update("DELETE FROM auth_rate_limit_state WHERE bucket_key=?", probe);
+            status.setRollbackOnly();
+            return null;
+        });
+        org.slf4j.LoggerFactory.getLogger(SharedAuthRequestLimiter.class)
+                .info("AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back");
     }
 
     @Override public boolean allow(String address, String path) {
