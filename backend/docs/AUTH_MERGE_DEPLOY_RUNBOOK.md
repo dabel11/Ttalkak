@@ -20,8 +20,10 @@ is therefore a prerequisite for a later trust activation, not a reason to block
 this compatible release. Optional mode still pools clients sharing an edge peer
 or NAT; it is not a real-client-IP guarantee. No secret is generated or rotated.
 
-Set backend forwarding to framework explicitly: native/implicit forwarding is
-unsupported. Set fixed known HTTP ports and the web's reference to the backend's
+Keep backend forwarding at explicit `none` while any old-version backend can serve
+requests. Only AFTER the new version is serving and verified with `none`, switch to
+explicit `framework` in a separate configuration rollout. Native/implicit forwarding
+is unsupported. Set fixed known HTTP ports and the web's reference to the backend's
 Railway-provided private domain. Leave CORS, Google, mail, billing, DB credentials,
 JWT secret and account passwords untouched. Turn off admin/review startup seeders
 so existing test accounts are not recreated or resynchronized during rollout.
@@ -48,33 +50,56 @@ so existing test accounts are not recreated or resynchronized during rollout.
 
 ## Approved execution sequence
 
-1. Re-read current develop SHA, both live deployment IDs, both service configs and
-   pending environment changes. Stop on drift from the observed baseline or any
-   unrelated pending patch. Confirm the approved exact candidate still contains
-   current develop and all checks are green. Record current configuration and
-   deployment/snapshot IDs for recovery without printing credential values.
-2. After approval, stage only the two listed services' plan values and healthcheck
-   settings. Read the staged patch back; reject unrelated/destructive changes.
-   Commit the patch, which can restart the current-version services. Wait for both
-   terminal SUCCESS and repeat read-only HTTP checks BEFORE merging code. Stop if
-   configuration-only rollout fails. No MySQL service/volume is changed.
-3. Merge the approved PR into develop. Both services follow develop and may deploy
-   automatically; record the actual resulting merge commit, not just the PR SHA.
-   Do not start duplicate deployments. Follow both deployments to terminal SUCCESS
-   and verify both runtime commit hashes equal that merge commit.
-4. On startup, JPA update adds only auth_rate_limit_state and its expiry index.
-   The reserved store validation transaction is rolled back. Existing account,
-   password, token, conversation and billing rows are not migration targets.
-   Read the two sanitized startup markers from the NEW backend deployment. Expected:
-   FRAMEWORK, strict=false, proxy_attestation=false, store/index/probe success.
-   Never treat a queued deployment or HTTP 200 alone as completion.
-5. Run the existing read-only HTTP/security checker again. If separately included
-   in the approval, send at most the two specified nonexistent find-ID probes;
-   these consume auxiliary quota only and must return 200 with an empty masked ID.
-   Do not log in using uncertain credentials, create accounts, send email, run AI
-   generation, mutate billing, or exhaust production quota as a smoke test.
-6. Record deployed merge commit, service deployment IDs, terminal states, sanitized
-   startup results and HTTP results. Only then mark this first deployment complete.
+**Security invariant:** never run the old auth limiter with
+`FORWARD_HEADERS_STRATEGY=framework`. The old filter can trust forged forwarded
+IP headers in that configuration. A deploy or rollback that could start old code
+must have effective forwarding `none` **before** old code can serve traffic.
+Do not make the final `framework` value part of any pre-merge variable patch.
+
+1. Re-read current develop SHA, live deployment IDs, service configs, effective
+   forwarding strategy, and staged Railway patches. Stop on drift, unexpected
+   settings or unrelated pending changes. Verify the old backend's *effective*
+   strategy is `none` before any rollout; if it is not, stop and safely restore
+   `none` before proceeding. Capture sanitized snapshots and the candidate
+   SHA without printing secrets.
+2. PRE-MERGE SAFE CONFIG: stage only the listed compatible non-forwarding service
+   variables/healthcheck settings and keep/explicitly set backend
+   `FORWARD_HEADERS_STRATEGY=none`. Read back the patch and reject any
+   `framework`/native value or unrelated change. Commit, let the old release
+   settle at terminal SUCCESS, and repeat read-only health/security checks.
+   Do not touch the MySQL service, volumes, JWT or credentials.
+3. Merge the approved candidate into develop. Follow both automatic deployments
+   to terminal SUCCESS. Pin and verify the actual merge SHA for both running
+   services. The NEW backend must initially start with `none`; do not assume
+   a queued deploy, HTTP 200 or the old image constitutes success.
+4. Verify NEW-backend startup markers under `NONE`, including schema, expiry
+   index and rolled-back write probe, and re-run read-only HTTP/security checks
+   on both web and direct API. Confirm old backend replicas are drained and can
+   no longer serve traffic. On failure, stop; do not switch to `framework`.
+5. POST-CODE CONFIG: only now stage the backend-only
+   `FORWARD_HEADERS_STRATEGY=framework` setting; confirm the deployment is using
+   the verified NEW merge SHA, no rollback or old replica is active, and no
+   unrelated patch is pending. Commit the setting, wait for terminal SUCCESS,
+   and verify effective `FRAMEWORK` startup marker, strict=false,
+   proxy_attestation=false, plus healthy shared store.
+6. Re-run the read-only HTTP/security checks after the switch. If independently
+   approved, run at most the two specified nonexistent find-ID probes (only
+   auxiliary quota writes, empty masked ID). Do not create accounts, send mail,
+   log in with uncertain passwords, mutate billing or exhaust live quotas.
+7. Record both transition deployment IDs, actual SHA, effective configurations,
+   sanitized startup markers and results. Complete only after both phases pass.
+
+## Expected sanitized startup markers by phase
+
+- Old-version pre-merge: effective forwarding `none`; do NOT expect the new
+  `AUTH_INGRESS_CONFIG` or shared-store marker from old code.
+- New backend before setting switch: `AUTH_INGRESS_CONFIG strategy=NONE strict=false proxy_attestation=false`
+  and `AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back`.
+- New backend after switch: `AUTH_INGRESS_CONFIG strategy=FRAMEWORK strict=false proxy_attestation=false`
+  and `AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back`.
+- Reject native/implicit or Tomcat remoteip header overrides in every phase.
+  Verify these markers in the deployment running the pinned merge SHA, not
+  merely in historical logs.
 
 ## First transition and recovery
 
@@ -93,10 +118,16 @@ If a new build/startup/store check fails, healthcheck gating must keep the previ
 healthy deployment serving. Stop before additional changes. Never delete the new
 auxiliary table or restore a backup over the existing database as normal rollback.
 The rehearsed old-version fallback requires forwarding=none (framework on the old
-filter trusts forwarded client IP). Inspect actual effective values when selecting
-any old deployment: selecting a historical build does not justify assuming current
-configuration was preserved. Prefer a corrected candidate/roll-forward while auth
-fails closed; do not restore known vulnerable settings as a shortcut. Previous
+filter trusts forged forwarded client IP). **Before** selecting or enabling any old
+image, stage/confirm effective `none` and verify it, then perform the old-image
+rollback. If already in the post-code `framework` phase, first revert forwarding
+to `none` while NEW code is still serving, verify that setting, and only then
+activate the old image. Never activate the old image with `framework`, even
+momentarily. Inspect effective values after every rollback; historical deployment
+selection alone does not restore previous environment variables. If safe ordered
+rollback cannot be established, keep the new version fail-closed and escalate
+rather than serving known-vulnerable old code. Do not delete the auxiliary table,
+roll back the production DB, or rotate credentials as ordinary recovery. Previous
 Railway deployment/snapshot IDs remain available for controlled recovery.
 
 ## Later strict activation
