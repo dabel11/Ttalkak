@@ -19,7 +19,7 @@
       "observedSnapshotId": "64866e49-1344-4ebc-9eab-446fc6988f2d",
       "variables": {
         "PORT": "8080",
-        "FORWARD_HEADERS_STRATEGY": "framework",
+        "FORWARD_HEADERS_STRATEGY": "none",
         "JPA_DDL_AUTO": "update",
         "TTALKAK_AUTH_PROXY_REQUIRED": "false",
         "TTALKAK_AUTH_PROXY_SECRET": "",
@@ -34,7 +34,7 @@
       },
       "requiredStartupLogMarkers": [
         "AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back",
-        "AUTH_INGRESS_CONFIG strategy=FRAMEWORK strict=false proxy_attestation=false"
+        "AUTH_INGRESS_CONFIG strategy=NONE strict=false proxy_attestation=false"
       ]
     },
     "web": {
@@ -68,5 +68,48 @@
     "writesOnlyAuxiliaryRateLimitState": true
   },
   "firstCutoverCounterPolicy": "One-time first-release volatile counter reset is explicit. No old/new overlap is permitted; old memory cannot be imported. After cutover, all candidate replicas and restarts share persisted state. Zero-reset legacy continuity would require a separately enforced 60-second auth quiet period and is not claimed by this release.",
-  "strictActivation": "NOT_PART_OF_THIS_RELEASE"
+  "strictActivation": "NOT_PART_OF_THIS_RELEASE",
+  "deploymentPhases": [
+    {
+      "name": "PRE_MERGE_SAFE_CONFIG",
+      "code": "observed live old version",
+      "backendForwarding": "none",
+      "allowedChanges": "compatible non-forwarding variables and healthchecks only",
+      "gate": "verify effective none; old services terminal SUCCESS; read-only checks"
+    },
+    {
+      "name": "NEW_CODE_FIRST_DEPLOY",
+      "code": "approved merge SHA",
+      "backendForwarding": "none",
+      "gate": "both new deployments terminal SUCCESS, exact SHA; store and NONE startup markers; read-only checks; no old replicas serving"
+    },
+    {
+      "name": "POST_CODE_FRAMEWORK_SWITCH",
+      "code": "verified new merge SHA only",
+      "backendForwarding": "framework",
+      "gate": "backend-only config update after new code verified; FRAMEWORK startup marker and store readiness; read-only security rechecks"
+    }
+  ],
+  "postCodeConfigChange": {
+    "service": "backend",
+    "variable": "FORWARD_HEADERS_STRATEGY",
+    "value": "framework",
+    "preconditions": [
+      "New backend is live and verified with none",
+      "Old backend replicas have stopped serving",
+      "Pinned new merge SHA verified",
+      "No unrelated staged changes"
+    ],
+    "requiredStartupLogMarkers": [
+      "AUTH_RATE_LIMIT_STORE_READY schema=true expiry_index=true write_probe=rolled_back",
+      "AUTH_INGRESS_CONFIG strategy=FRAMEWORK strict=false proxy_attestation=false"
+    ]
+  },
+  "rollbackSequence": [
+    "If new code fails while none: leave framework disabled; select previously healthy old deployment only with effective none.",
+    "If framework switch fails: restore none while new code remains active; verify healthy new version.",
+    "Before ever starting old code after framework phase: change effective forwarding back to none and verify it BEFORE old image activation.",
+    "Never run old code with framework or native; do not delete auxiliary table or restore database/rotate credentials."
+  ],
+  "securityInvariant": "Old limiter must NEVER serve while effective forwarding strategy is framework; framework only after new code is live and verified, and reverted to none before any old-code rollback."
 }
