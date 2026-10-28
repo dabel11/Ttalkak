@@ -95,7 +95,7 @@ def main():
         run(COMPOSE + ["up", "-d"])
         ready()
         for _ in range(50):
-            if mysql("SELECT COUNT(*) FROM member WHERE user_id IN ('ci_upgrade_admin','ttalkak_review')").strip() == "2":
+            if mysql("SELECT COUNT(*) FROM members WHERE user_id IN ('ci_upgrade_admin','ttalkak_review')").strip() == "2":
                 break
             time.sleep(0.2)
         else:
