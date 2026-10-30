@@ -1,6 +1,7 @@
 package com.ttalkak.billing;
 
 import com.ttalkak.auth.AuthService;
+import com.ttalkak.auth.AccountWithdrawalService;
 import com.ttalkak.common.exception.ApiException;
 import com.ttalkak.member.Member;
 import com.ttalkak.member.MemberRepository;
@@ -11,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -33,6 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class BillingServiceIntegrationTest {
     @Autowired BillingService billing;
+    @Autowired AccountWithdrawalService withdrawal;
+    @Autowired PasswordEncoder passwordEncoder;
     @Autowired BillingChargeRepository charges;
     @Autowired BillingSubscriptionRepository subscriptions;
     @Autowired org.springframework.transaction.support.TransactionTemplate transactions;
@@ -334,6 +338,46 @@ class BillingServiceIntegrationTest {
         billing.charge(memberId);
         assertEquals(0, charges.countByMemberId(memberId));
         verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
+    void withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("race_" + suffix, passwordEncoder.encode(password),
+                "race_" + suffix, "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        transactions.executeWithoutResult(tx ->
+                subscriptions.lockByMemberId(memberId).orElseThrow().register("mock-only-billing-key"));
+
+        when(gateway.charge(anyString(), anyString(), anyString(), eq(3900), anyString()))
+                .thenAnswer(invocation -> {
+                    String orderId = invocation.getArgument(2);
+                    // The preparation transaction already committed. Exercise the real
+                    // withdrawal path while the fake provider call is in flight.
+                    withdrawal.withdraw(member, password, null);
+                    return new BillingGateway.Payment("mock-paid-" + orderId,
+                            orderId, "DONE", "BILLING", 3900);
+                });
+
+        billing.charge(memberId);
+
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew(),
+                "a delayed provider approval must not restart renewal after withdrawal");
+        assertEquals(1, charges.countByMemberId(memberId));
+        assertEquals("DONE", charges.findFirstByMemberIdOrderByIdDesc(memberId)
+                .orElseThrow().getStatus(),
+                "a provider-approved in-flight order still needs a durable reconciliation record");
+        assertFalse(subscriptions.dueMemberIds(now, "test:legacy").contains(memberId));
+
+        billing.charge(memberId);
+        billing.chargeDue();
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
         verify(gateway, never()).lookup(anyString());
     }
 
