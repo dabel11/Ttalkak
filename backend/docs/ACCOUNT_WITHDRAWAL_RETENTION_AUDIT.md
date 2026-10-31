@@ -94,9 +94,9 @@ python3 scripts/test-withdrawal-inventory-output.py
 
 **인수 기준:** 위 경합 중 공급자 호출이 시작된 경우에는 외부 승인 결과를 DB 성공/실패만으로 단정하지 않는다. 새 주문 생성이나 무조건 재시도를 금지하고 동일 주문 ID로 조회·대사한다. 청구 경합 재현 테스트는 폐기 가능한 DB에서 `BILLING_MODE=test`·가짜 테스트 키·외부 네트워크 없는 모의 `BillingGateway`로 실행해야 한다. 기존 탈퇴 JWT 차단 테스트의 `BILLING_MODE=disabled` 설정만으로는 공급자 호출 경합을 검증할 수 없다. **실결제·운영 DB·Railway 변수 변경 없이** 검증한다. 정확한 합격 판정은 별도의 동시성 테스트와 승인된 운영 절차가 있어야 가능하다.
 
-**추가 회귀 시험 초안 (2026-10-30, 아직 미실행):** `BillingServiceIntegrationTest.withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()`를 기존 `docs/merge-evidence-status-20261028` 작업 브랜치에 작성했다. 이 테스트는 `BILLING_MODE=test`와 **모의 `BillingGateway`**를 사용해, 청구 준비 직후 공급자 응답 전에 실제 `AccountWithdrawalService.withdraw()`를 호출하고, 이후 승인 응답을 반환하는 순서를 강제로 재현한다. 검증하려는 불변식은 (1) 회원 비활성, (2) 자동갱신 재개 금지, (3) 승인된 주문의 `DONE` 대사 기록 단 한 건 유지, (4) 후속 스케줄러/직접 청구가 새 공급자 호출을 만들지 않음이다. **실제 PG 호출, 승인 후 자동 환불, 운영 환경 보호 보장을 증명하지 않는다.** 새 테스트에 대한 CI 성공 결과가 확인되기 전에는 합격 근거로 인용하지 않는다.
+**추가 회귀 시험 (2026-10-31, MySQL 8.4 백엔드 CI 통과):** `BillingServiceIntegrationTest.withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()`를 기존 `docs/merge-evidence-status-20261028` 작업 브랜치에 작성했다. 이 테스트는 `BILLING_MODE=test`와 **모의 `BillingGateway`**를 사용해, 청구 준비 직후 공급자 응답 전에 실제 `AccountWithdrawalService.withdraw()`를 호출하고, 이후 승인 응답을 반환하는 순서를 강제로 재현한다. 검증하려는 불변식은 (1) 회원 비활성, (2) 자동갱신 재개 금지, (3) 승인된 주문의 `DONE` 대사 기록 단 한 건 유지, (4) 후속 스케줄러/직접 청구가 새 공급자 호출을 만들지 않음이다. **실제 PG 호출, 승인 후 자동 환불, 운영 환경 보호 보장을 증명하지 않는다.** 새 테스트에 대한 CI 성공 결과가 확인되기 전에는 합격 근거로 인용하지 않는다.
 
-**검증 범위:** [develop CI #40601959108](https://github.com/dabel11/Ttalkak/actions/runs/40601959108)은 HEAD `95c1f1c`의 6개 작업 성공 기록이지만, 위 동시성 시나리오의 실증이나 운영 배포·DB 복원·환불 완료를 입증하지 않는다. 본 표는 **추가 테스트가 필요한 안전성 검토 결과**이다.
+**검증 범위:** [develop CI #40601959108](https://github.com/dabel11/Ttalkak/actions/runs/40601959108)은 이전 HEAD `95c1f1c`의 6개 작업 성공 기록이며 새 동시성 시나리오의 증거가 아니다. 신규 [PR #83의 CI #41203551304](https://github.com/dabel11/Ttalkak/actions/runs/41203551304)의 **Backend tests** 작업은 2026-10-31 PR head `97e873c`를 포함한 시험용 병합에서 성공했다. 이 작업은 MySQL 8.4와 모의 `BillingGateway`의 **한정된 순서 재현 회귀 테스트**만 입증한다. 진짜 병렬 요청 간 경쟁, 실제 PG의 승인·환불·대사, 운영 배포 및 운영 DB 복원 완료를 입증하지 않는다.
 
 ## 7. 완료 판정
 
