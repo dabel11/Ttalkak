@@ -12,3 +12,18 @@ resolver="${DNS_RESOLVER:-$(awk '/^nameserver / {print $2; exit}' /etc/resolv.co
 case "$resolver" in ''|*[!a-zA-Z0-9.:%\[\]-]*) echo 'Invalid DNS resolver' >&2; exit 1;; esac
 case "$resolver" in *:*) case "$resolver" in \[*\]) ;; *) resolver="[$resolver]";; esac;; esac
 export DNS_RESOLVER="$resolver"
+
+# Ensure the nginx template substitutes an empty value when the secret is not configured.
+# Do not log or print the secret.
+export TTALKAK_AUTH_PROXY_SECRET="${TTALKAK_AUTH_PROXY_SECRET:-}"
+if [ -n "$TTALKAK_AUTH_PROXY_SECRET" ] && [ "${#TTALKAK_AUTH_PROXY_SECRET}" -lt 32 ]; then
+    echo 'TTALKAK_AUTH_PROXY_SECRET must contain at least 32 characters' >&2
+    exit 1
+fi
+
+case "$TTALKAK_AUTH_PROXY_SECRET" in
+    *[!a-zA-Z0-9_-]*)
+        echo 'TTALKAK_AUTH_PROXY_SECRET must use URL-safe ASCII characters only' >&2
+        exit 1
+        ;;
+esac

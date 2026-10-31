@@ -14,7 +14,7 @@ RUN node -e 'const fs = require("node:fs"); const path = "prompt-hub-web-fronten
 
 FROM nginx:stable-alpine
 ENV PORT=80 BACKEND_UPSTREAM=backend:8080 PROXY_READ_TIMEOUT=90s
-ENV NGINX_ENVSUBST_FILTER="^(PORT|BACKEND_UPSTREAM|PROXY_READ_TIMEOUT|DNS_RESOLVER)$"
+ENV NGINX_ENVSUBST_FILTER="^(PORT|BACKEND_UPSTREAM|PROXY_READ_TIMEOUT|DNS_RESOLVER|TTALKAK_AUTH_PROXY_SECRET)$"
 COPY docker/nginx-server.conf /etc/nginx/templates/default.conf.template
 COPY docker/19-server-env.envsh /docker-entrypoint.d/19-server-env.envsh
 RUN chmod +x /docker-entrypoint.d/19-server-env.envsh
