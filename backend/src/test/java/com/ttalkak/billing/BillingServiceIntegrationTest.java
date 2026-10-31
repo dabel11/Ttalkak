@@ -382,6 +382,40 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawalDuringInflightProviderDeclineLeavesFailedOrderWithoutRenewal() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("decline_" + suffix, passwordEncoder.encode(password),
+                "decline_" + suffix, "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        transactions.executeWithoutResult(tx ->
+                subscriptions.lockByMemberId(memberId).orElseThrow().register("mock-only-billing-key"));
+
+        when(gateway.charge(anyString(), anyString(), anyString(), eq(3900), anyString()))
+                .thenAnswer(invocation -> {
+                    // Provider call began before withdrawal. A late definitive decline
+                    // must not reactivate the withdrawn subscriber or spawn a retry.
+                    withdrawal.withdraw(member, password, null);
+                    throw new BillingDeclinedException();
+                });
+
+        ApiException failure = assertThrows(ApiException.class, () -> billing.charge(memberId));
+        assertEquals("BILLING_PAYMENT_FAILED", failure.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals(1, charges.countByMemberId(memberId));
+        assertEquals("FAILED", charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow().getStatus());
+
+        billing.charge(memberId);
+        billing.chargeDue();
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
         Long id = newMember().getId();
         var setup = billing.setup(id, "STANDARD");
