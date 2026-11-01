@@ -80,7 +80,7 @@ python3 scripts/test-withdrawal-inventory-output.py
 
 운영 DB에서 인가된 조사를 실행하더라도 GitHub Actions/PR/일반 이슈에는 **집계 건수 및 재현 가능한 비민감 오류 코드만** 공유한다. 결제 상태 조회·갱신 차단·삭제·환불은 거래 중복 방지 및 오프사이트 백업/격리 복구 가능성을 확인하고 승인된 운영 절차로 분리한다.
 
-## 6. 탈퇴·결제 동시성 경계 검토 (2026-10-29 코드 검토, 실행 검증 아님)
+## 6. 탈퇴·결제 동시성 경계 검토 및 모의 회귀 검증 (2026-11-01 근거 갱신)
 
 `BillingService.charge()`의 **청구 준비 단계**는 `lockActiveByMemberId()`로 활성 회원 여부를 확인하고, `AccountWithdrawalService.withdraw()`는 구독을 잠가 `autoRenew=false`로 변경한다. 그러나 청구 준비 트랜잭션이 종료된 후 실제 공급자 호출은 DB 잠금 밖에서 수행된다. 따라서 **준비 이후 탈퇴가 완료되었더라도** 이미 준비된 주문의 공급자 청구 요청이 시작되거나 결과가 뒤늦게 도착할 수 있다. 이는 운영에서 실제 발생했다고 확인한 사례가 아니라 **코드상의 가능한 경합**이다.
 
@@ -94,9 +94,15 @@ python3 scripts/test-withdrawal-inventory-output.py
 
 **인수 기준:** 위 경합 중 공급자 호출이 시작된 경우에는 외부 승인 결과를 DB 성공/실패만으로 단정하지 않는다. 새 주문 생성이나 무조건 재시도를 금지하고 동일 주문 ID로 조회·대사한다. 청구 경합 재현 테스트는 폐기 가능한 DB에서 `BILLING_MODE=test`·가짜 테스트 키·외부 네트워크 없는 모의 `BillingGateway`로 실행해야 한다. 기존 탈퇴 JWT 차단 테스트의 `BILLING_MODE=disabled` 설정만으로는 공급자 호출 경합을 검증할 수 없다. **실결제·운영 DB·Railway 변수 변경 없이** 검증한다. 정확한 합격 판정은 별도의 동시성 테스트와 승인된 운영 절차가 있어야 가능하다.
 
-**추가 회귀 시험 (2026-10-31, MySQL 8.4 백엔드 CI 통과):** `BillingServiceIntegrationTest.withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()`를 기존 `docs/merge-evidence-status-20261028` 작업 브랜치에 작성했다. 이 테스트는 `BILLING_MODE=test`와 **모의 `BillingGateway`**를 사용해, 청구 준비 직후 공급자 응답 전에 실제 `AccountWithdrawalService.withdraw()`를 호출하고, 이후 승인 응답을 반환하는 순서를 강제로 재현한다. 검증하려는 불변식은 (1) 회원 비활성, (2) 자동갱신 재개 금지, (3) 승인된 주문의 `DONE` 대사 기록 단 한 건 유지, (4) 후속 스케줄러/직접 청구가 새 공급자 호출을 만들지 않음이다. **실제 PG 호출, 승인 후 자동 환불, 운영 환경 보호 보장을 증명하지 않는다.** 새 테스트에 대한 CI 성공 결과가 확인되기 전에는 합격 근거로 인용하지 않는다.
+**추가 회귀 시험 (PR #83, 검증 대상 HEAD `a82628de`):** `BillingServiceIntegrationTest`에서 `BILLING_MODE=test`, 폐기 가능한 MySQL 8.4 테스트 DB, 외부 네트워크를 사용하지 않는 **모의 `BillingGateway`**로 두 가지 결제·탈퇴 경합을 결정론적으로 재현한다. 실제 `AccountWithdrawalService.withdraw()`를 모의 공급자 호출 처리 중에 실행하므로, 청구 준비 뒤 공급자 응답이 늦게 도착하는 순서를 검증한다.
 
-**검증 범위:** [develop CI #40601959108](https://github.com/dabel11/Ttalkak/actions/runs/40601959108)은 이전 HEAD `95c1f1c`의 6개 작업 성공 기록이며 새 동시성 시나리오의 증거가 아니다. 신규 [PR #83의 CI #41203551304](https://github.com/dabel11/Ttalkak/actions/runs/41203551304)의 **Backend tests** 작업은 2026-10-31 PR head `97e873c`를 포함한 시험용 병합에서 성공했다. 이 작업은 MySQL 8.4와 모의 `BillingGateway`의 **한정된 순서 재현 회귀 테스트**만 입증한다. 진짜 병렬 요청 간 경쟁, 실제 PG의 승인·환불·대사, 운영 배포 및 운영 DB 복원 완료를 입증하지 않는다.
+- **지연 승인:** `withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()` — 회원 `active=false`, 구독 `autoRenew=false`, 기존 주문의 `DONE` 증빙 **정확히 1건**, 탈퇴 후 스케줄러 대상 제외 및 직접·스케줄러 청구 재시도 시 추가 공급자 청구 호출이 없음을 확인한다.
+- **지연 거절:** `withdrawalDuringInflightProviderDeclineLeavesFailedOrderWithoutRenewal()` — `BILLING_PAYMENT_FAILED` 응답과 함께 회원 `active=false`, 구독 `autoRenew=false`, 기존 주문의 `FAILED` 증빙 **정확히 1건**, 후속 직접·스케줄러 청구 시 추가 공급자 청구 호출이 없음을 확인한다.
+- 두 시나리오 모두 결제사 모의 호출은 **1회**만 기록되고 `lookup()` 재조회는 호출되지 않음을 검증한다. 이는 로컬 상태 기록과 후속 청구 억제의 회귀 근거이며, 실제 결제사 청구 취소나 대사 완료의 근거가 아니다.
+
+**검증 실행 근거 (2026-11-01):** [PR #83 CI #642](https://github.com/dabel11/Ttalkak/actions/runs/41209711779)의 **6개 잡 모두 SUCCESS**(Backend tests 포함), [Server container smoke #369](https://github.com/dabel11/Ttalkak/actions/runs/41209711790)의 **2개 잡 모두 SUCCESS**를 확인했다. 두 실행 모두 검증 대상 커밋 `a82628de2dcb58a476972b06663ec082677a9aec`에 연결된다. 이전 HEAD `97e873c` 및 과거 CI는 이번 **승인·거절 두 시나리오** 전체의 최신 증거로 사용하지 않는다.
+
+**검증의 한계:** 위 테스트는 **단일 프로세스에서 공급자 응답 시점을 강제로 제어한 순차 재현(mocked in-process ordering)**이다. 실제 병렬 스레드·분산 인스턴스 간 경쟁, Toss 등 실제 PG 네트워크 승인/거절, 환불/취소/대사, 승인된 스테이징 E2E, Railway 운영 배포 및 운영 DB 백업·복원 성공을 입증하지 않는다. 이미 시작된 실제 청구의 결과는 주문 ID 기반으로 별도 조회·대사하고, 운영 변경은 사전 승인 후 실시해야 한다.
 
 ## 7. 완료 판정
 
