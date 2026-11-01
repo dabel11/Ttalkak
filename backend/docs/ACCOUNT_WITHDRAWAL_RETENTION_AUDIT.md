@@ -102,6 +102,8 @@ python3 scripts/test-withdrawal-inventory-output.py
 
 **검증 실행 근거 (2026-11-01):** [PR #83 CI #642](https://github.com/dabel11/Ttalkak/actions/runs/41209711779)의 **6개 잡 모두 SUCCESS**(Backend tests 포함), [Server container smoke #369](https://github.com/dabel11/Ttalkak/actions/runs/41209711790)의 **2개 잡 모두 SUCCESS**를 확인했다. 두 실행 모두 검증 대상 커밋 `a82628de2dcb58a476972b06663ec082677a9aec`에 연결된다. 이전 HEAD `97e873c` 및 과거 CI는 이번 **승인·거절 두 시나리오** 전체의 최신 증거로 사용하지 않는다.
 
+**추가 경계 회귀 (2026-11-01):** `withdrawalDuringUncertainProviderResultPreservesPendingOrderWithoutRetry()`는 실제 탈퇴 경로가 커밋된 직후 모의 공급자가 `BILLING_UNCERTAIN`(응답 유실)을 던지도록 구성한다. 기존 주문은 **동일 주문 ID의 `PENDING` 1건**으로 남고, 계정 비활성화·자동갱신 해제·유료 이용권 미부여를 확인한다. 탈퇴 뒤 직접 청구·스케줄러 호출은 공급자에 새 `charge()`나 자동 `lookup()`을 보내지 않아야 한다. 이는 **외부 승인 여부 미확정 상태를 보존**하는 동작만 검증하며, 실제 결제 성공·취소·환불 판단의 근거가 아니다. 미확정 주문은 승인된 운영 절차에서 동일 주문 ID로 **조회 전용 대사**해야 하며, 승인 전에는 새 청구나 임의 환불을 실행하지 않는다. 신규 테스트의 CI 통과 여부는 해당 변경 커밋의 Actions 결과로 별도 판단한다.
+
 **검증의 한계:** 위 테스트는 **단일 프로세스에서 공급자 응답 시점을 강제로 제어한 순차 재현(mocked in-process ordering)**이다. 실제 병렬 스레드·분산 인스턴스 간 경쟁, Toss 등 실제 PG 네트워크 승인/거절, 환불/취소/대사, 승인된 스테이징 E2E, Railway 운영 배포 및 운영 DB 백업·복원 성공을 입증하지 않는다. 이미 시작된 실제 청구의 결과는 주문 ID 기반으로 별도 조회·대사하고, 운영 변경은 사전 승인 후 실시해야 한다.
 
 ## 7. 완료 판정
