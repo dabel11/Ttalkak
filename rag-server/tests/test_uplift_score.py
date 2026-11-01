@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from eval.requirement_judge import build_questions, build_user_message, parse_answers, rates
 from eval.uplift_stats import bootstrap_ci, paired, sign_test_p, wilson, within_spread
 
@@ -61,6 +63,35 @@ def test_parse_answers_flags_missing_and_illegal_na():
     assert p["answers"]["r1"]["verdict"] == "yes" and p["answers"]["g1"]["verdict"] == "na"
     assert p["errors"] == ["r2: 조건부가 아닌데 na"]
     assert parse_answers("엉망", qs)["errors"] == ["r1: 답 없음/형식 오류", "r2: 답 없음/형식 오류", "g1: 답 없음/형식 오류"]
+
+
+def test_parse_answers_salvages_broken_json():
+    # Groq json_object 400 의 failed_generation 재현 — 중복 evidence 키로 json.loads 실패.
+    # id→verdict 는 통제어휘라 정규식으로 건져야 전량이 죽지 않는다(2026-09-22 trackA 중단 원인).
+    qs = [{"id": "r1", "conditional": False}, {"id": "r2", "conditional": False},
+          {"id": "g1", "conditional": True}]
+    broken = ('{"answers":[{"id":"r1","verdict":"yes","evidence":"result.append(item)"},'
+              '"evidence":"if item not in seen:"},{"id":"r2","verdict":"no"},'
+              '{"id":"g1","verdict":"na"}]}')
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(broken)                     # 전제: 정말 깨진 JSON이다
+    p = parse_answers(broken, qs)
+    assert {k: v["verdict"] for k, v in p["answers"].items()} == {"r1": "yes", "r2": "no", "g1": "na"}
+    assert p["errors"] == []
+
+
+def test_json_validate_failed_detection_and_extraction():
+    from eval.uplift_eval import failed_generation_text, is_json_validate_failed
+
+    class JVF(Exception):
+        body = {"error": {"code": "json_validate_failed", "failed_generation": '{"answers":[]}'}}
+
+    class RateLimit(Exception):
+        body = {"error": {"code": "rate_limit_exceeded"}}
+
+    assert is_json_validate_failed(JVF()) and failed_generation_text(JVF()) == '{"answers":[]}'
+    assert not is_json_validate_failed(RateLimit())        # 429 는 구제 대상 아님 → call_patiently 로
+    assert failed_generation_text(RateLimit()) is None
 
 
 def test_rates_exclude_subjective_na_and_errors():

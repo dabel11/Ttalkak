@@ -182,6 +182,30 @@ def _loads_loose(s: str) -> dict:
         return {}
 
 
+# ── json_object 모드 400 구제 ────────────────────────────────
+# Groq `response_format=json_object` 는 모델이 깨진 JSON(예: code 를 evidence 로 인용하다
+# 중복 "evidence" 키 생성)을 뱉으면 **본문 대신 400 json_validate_failed 를 던진다**.
+# 그러면 create() 가 예외라 judge 가 파싱 전에 죽는다(2026-09-22 trackA 중단 원인).
+# generator.py 는 이미 이 실패를 _BudgetShort 로 다루지만 eval judge 3곳은 무방비였다.
+# 서버는 에러 본문에 모델이 실제로 생성한 텍스트를 `failed_generation` 으로 돌려주므로,
+# 그걸 꺼내 관대 파서(_loads_loose·parse_answers)로 구제한다 — 한 문항 때문에 전량이 죽지 않게.
+def is_json_validate_failed(exc: Exception) -> bool:
+    body = getattr(exc, "body", None)
+    code = (body.get("error") or {}).get("code") if isinstance(body, dict) else None
+    return code == "json_validate_failed" or "json_validate_failed" in str(exc)
+
+
+def failed_generation_text(exc: Exception) -> str | None:
+    """400 json_validate_failed 에러에서 모델이 생성한 (깨진) 본문을 꺼낸다. 없으면 None."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        fg = (body.get("error") or {}).get("failed_generation")
+        if isinstance(fg, str) and fg.strip():
+            return fg
+    m = re.search(r"['\"]failed_generation['\"]\s*:\s*'(.*)'\s*\}\s*\}\s*$", str(exc), re.S)
+    return m.group(1) if m else None
+
+
 # ── Judge ────────────────────────────────────────────────────
 _JUDGE_SYSTEM = """너는 두 AI 결과물의 품질을 비교하는 엄격하고 공정한 평가자다.
 같은 사용자 요청에 대한 두 결과물 [1]과 [2]를 받는다. 어느 쪽이 딸각/AI가 만든

@@ -70,9 +70,18 @@ def _chat(client, model: str, system: str, user: str, max_tokens: int,
     kw = {"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}
     if json_mode:
         kw["response_format"] = {"type": "json_object"}
-    r = client.chat.completions.create(
-        model=model, messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        max_tokens=max_tokens, temperature=temperature, **kw)
+    try:
+        r = client.chat.completions.create(
+            model=model, messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            max_tokens=max_tokens, temperature=temperature, **kw)
+    except Exception as e:
+        # json_object 400 → 모델이 생성한 (깨진) 본문을 구제(_loads_loose 가 관대 파싱).
+        # 그 외 에러(429 등)는 그대로 올려 call_patiently 가 처리.
+        from eval.uplift_eval import failed_generation_text, is_json_validate_failed
+        fg = failed_generation_text(e) if json_mode and is_json_validate_failed(e) else None
+        if fg is None:
+            raise
+        return {"text": fg.strip(), "finish": "json_validate_salvaged", "usage": None}
     c = r.choices[0]
     return {"text": (c.message.content or "").strip(), "finish": c.finish_reason,
             "usage": r.usage.total_tokens if r.usage else None}

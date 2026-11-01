@@ -66,6 +66,13 @@ def parse_answers(raw: str, questions: list[dict]) -> dict:
     for a in data.get("answers", []) if isinstance(data, dict) else []:
         if isinstance(a, dict) and a.get("id") is not None:
             by_id[str(a["id"]).strip().rstrip(".")] = a
+    # 구제: json_object 400 의 failed_generation 처럼 **깨진 JSON**(중복 evidence 키 등)이면
+    # 위 파싱이 answers 를 못 채운다. id→verdict 는 객체마다 이 순서로 나오고 verdict 는
+    # 통제어휘(yes/no/na)라 정규식으로 안전하게 건진다(evidence 는 감사용이라 생략 가능).
+    if not by_id:
+        for aid, v in re.findall(r'"id"\s*:\s*"([^"]+)"\s*,\s*"verdict"\s*:\s*"(yes|no|na)"',
+                                 raw or "", re.I):
+            by_id.setdefault(aid.strip().rstrip("."), {"id": aid, "verdict": v})
     answers, errors = {}, []
     for q in questions:
         a = by_id.get(q["id"])
@@ -83,17 +90,27 @@ def parse_answers(raw: str, questions: list[dict]) -> dict:
 def judge_requirements(client, model: str, item: dict, output: str,
                        reasoning_effort: str = "low", max_tokens: int = 1500) -> dict:
     """judge 1회 호출. 반환: {answers, errors, questions, version}."""
+    from eval.uplift_eval import failed_generation_text, is_json_validate_failed
     questions = build_questions(item)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "system", "content": _SYSTEM},
-                  {"role": "user", "content": build_user_message(item, output, questions)}],
-        max_tokens=max_tokens,
-        reasoning_effort=reasoning_effort,
-        response_format={"type": "json_object"},
-        temperature=0.0,
-    )
-    parsed = parse_answers(resp.choices[0].message.content or "", questions)
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": _SYSTEM},
+                      {"role": "user", "content": build_user_message(item, output, questions)}],
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+            response_format={"type": "json_object"},
+            temperature=0.0,
+        )
+        content = resp.choices[0].message.content or ""
+    except Exception as e:
+        # json_object 400 → 모델이 생성한 (깨진) 본문을 꺼내 구제. 그 외 에러(429 등)는
+        # 그대로 올려 call_patiently 가 처리하게 둔다.
+        fg = failed_generation_text(e) if is_json_validate_failed(e) else None
+        if fg is None:
+            raise
+        content = fg
+    parsed = parse_answers(content, questions)
     return {**parsed, "questions": questions, "version": JUDGE_VERSION}
 
 

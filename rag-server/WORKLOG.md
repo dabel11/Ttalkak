@@ -4117,3 +4117,38 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: CI 동일 venv ruff + pytest 289 passed.
 **결정·근거**: 코드 안전장치 + 운영 완화책 병행 권장. 운영: `prompt_examples` 적재 전까지
   `RAG_GATE_MIN_SCORE=0`(게이트 '기법 0건' 폴백)으로도 회피 가능. 근본은 코퍼스 적재.
+
+## [2026-11-01] uplift judge json_object 400 구제 + 커버리지셋 공백 4기법 보강
+**목적**: B(실효용) 측정의 두 공백. ①`uplift_score` 가 2026-09-22 trackA 에서 judge 의
+  Groq `response_format=json_object` **400 json_validate_failed** 로 채점 0건에서 통째로 죽어 있었다
+  (코드 결과물의 evidence 에 중복 키가 끼어 서버가 본문 대신 400 을 던짐 — pairs=0). ②검색 커버리지셋
+  (`qa_set_coverage`)이 신규 user_instruction 기법 일부를 안 겨냥(3셋 결합 119/123).
+**Before**
+- judge 3곳(`requirement_judge.judge_requirements`·`uplift_score._chat`→defect·pair) 모두 `create()` 가
+  400 을 그대로 올려 `call_patiently`(429 전용)도 못 잡고 실행 전량 종료. generator.py 는 이미
+  이 실패를 `_BudgetShort` 로 다루지만 eval judge 는 무방비였다.
+- `qa_set_coverage` 57문항 → user_instruction 4기법(Instruction Conflict Resolution·
+  Avoid Over-Incentivization·Context-Aware Delimiters·Diff/Patch Format Standardization) 미커버.
+**After**
+- `eval/uplift_eval.py`: `is_json_validate_failed`·`failed_generation_text` 추가 — 400 에러 본문의
+  `failed_generation`(모델이 실제 생성한 깨진 JSON)을 꺼낸다. 429 등은 해당 없음 → 그대로 올려 재시도.
+- `requirement_judge.parse_answers`: json.loads 가 못 채우면 `"id"→"verdict"`(통제어휘) 정규식으로
+  구제. 깨진 JSON(중복 evidence 키)도 id·verdict 는 건진다. evidence 는 감사용이라 생략 허용.
+- `requirement_judge.judge_requirements`·`uplift_score._chat`: json_object 400 이면 failed_generation 을
+  꺼내 관대 파서로 넘긴다(그 외 에러는 재전파).
+- `qa_set_coverage.json`: 위 4기법 문항 추가(사용자 말투·leak 0.08~0.18, 전부 <0.35). 57→**61**.
+**검증**
+- 유닛: `tests/test_uplift_score.py` +2(깨진 JSON 구제·400 판별/추출). **pytest 291 passed**
+  (종전 289 + 2). ⚠️ ruff 는 호스트 venv 미설치 — 커밋 전 CI 동일 venv 필요.
+- 라이브 슬라이스(up_12·up_29 코드 + up_01·up_04, raw/rewrite/ttalkak, 반복1): **종전 crash 지점인
+  코드 문항 포함 12건 전원 채점 완료**(크래시 0). judge 구제가 라이브에서 작동 확인.
+- 커버리지 재측정(61문항, fetch_k=50): dense Hit@1 0.131 · R@5 0.328 · NDCG@5 0.232
+  (57문항 0.140/0.333 과 일치 — 재현성 OK). 추가 4문항 리랭커 top5 정답 회수 rank 3/1/1/3.
+  rerank(61문항): Hit@1 0.328 · R@5 **0.492** · NDCG@5 0.418 (dense 대비 +16.4pp — 커버리지셋에서
+  리랭커 이득이 특히 큼, realistic 셋보다 어려운 구간이라 2026-09-13 '어려울수록 이득' 재확인).
+**변경 파일**: eval/uplift_eval.py · eval/requirement_judge.py · eval/uplift_score.py ·
+  tests/test_uplift_score.py · eval/qa_set_coverage.json
+**결정·근거**: judge 한 문항 실패로 전량이 죽지 않게 '구제 후 집계'가 맞다(채점은 다수결/비율이라
+  한 건 결손 허용). 전체 uplift 재측정(48×3×반복)은 무료 TPD 200k 로 6.4일+ → **쿼터 제약으로
+  이 세션 완주 불가**, 라이브 슬라이스로 수정만 검증. 커버리지셋은 LLM 생성 분포라 사람 라벨과
+  부호가 갈린 이력(2026-09-19) — 공백 보강은 '측정 가능 대상'을 늘릴 뿐, 신뢰성은 사람 라벨이 전제.
