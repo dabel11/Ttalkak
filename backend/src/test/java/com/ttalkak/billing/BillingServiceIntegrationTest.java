@@ -416,6 +416,49 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawalDuringUncertainProviderResultPreservesPendingOrderWithoutRetry() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("uncertain_" + suffix, passwordEncoder.encode(password),
+                "uncertain_" + suffix, "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        transactions.executeWithoutResult(tx ->
+                subscriptions.lockByMemberId(memberId).orElseThrow().register("mock-only-billing-key"));
+
+        when(gateway.charge(anyString(), anyString(), anyString(), eq(3900), anyString()))
+                .thenAnswer(invocation -> {
+                    // The provider may have received the payment, but its response
+                    // is lost after the real withdrawal path has committed.
+                    withdrawal.withdraw(member, password, null);
+                    throw new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                            "BILLING_UNCERTAIN", "synthetic provider timeout");
+                });
+
+        ApiException uncertain = assertThrows(ApiException.class, () -> billing.charge(memberId));
+        assertEquals("BILLING_UNCERTAIN", uncertain.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals(1, charges.countByMemberId(memberId));
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String originalOrderId = pending.getOrderId();
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
+
+        // No new charge and no automated provider lookup after withdrawal:
+        // the retained order must be reconciled separately using its ID.
+        billing.charge(memberId);
+        billing.chargeDue();
+        assertEquals(1, charges.countByMemberId(memberId));
+        assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow().getOrderId());
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void selectedStandardSetupRejectsUnknownPlanWithoutCharging() {
         Long id = newMember().getId();
         var setup = billing.setup(id, "STANDARD");
