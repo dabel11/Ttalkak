@@ -106,6 +106,18 @@ python3 scripts/test-withdrawal-inventory-output.py
 
 **검증의 한계:** 위 테스트는 **단일 프로세스에서 공급자 응답 시점을 강제로 제어한 순차 재현(mocked in-process ordering)**이다. 실제 병렬 스레드·분산 인스턴스 간 경쟁, Toss 등 실제 PG 네트워크 승인/거절, 환불/취소/대사, 승인된 스테이징 E2E, Railway 운영 배포 및 운영 DB 백업·복원 성공을 입증하지 않는다. 이미 시작된 실제 청구의 결과는 주문 ID 기반으로 별도 조회·대사하고, 운영 변경은 사전 승인 후 실시해야 한다.
 
+### 6.1. 탈퇴 도중 카드 등록·수동 재시도 완료 경합 (2026-11-03)
+
+**추가 확인한 코드상 위험:** `BillingService.completeRegistrationWithinBudget()`은 PG에 `issueBillingKey()`를 보낸 후 별도 트랜잭션에서 `BillingSubscription.register()`를 수행했다. 외부 공급자 응답을 기다리는 사이 `AccountWithdrawalService.withdraw()`가 완료되면, 이전 코드는 탈퇴한 회원의 `autoRenew`를 다시 `true`로 설정하고 새 `billingKey`를 로컬 DB에 저장할 수 있었다. 유사하게 이미 진입한 `retryWithinBudget()`도 탈퇴 회원의 갱신을 재개할 수 있었다. 이 경합은 코드 순서로 확인한 가능성이며 실운영 발생 사례는 아니다.
+
+**이 PR의 제한된 수정:** 두 변경 경로에서 구독 행을 잠근 뒤 **회원 활성 여부를 다시 검사**하는 기존 `lockActiveByMemberId()`를 사용한다. 탈퇴가 먼저 커밋된 경우 `BILLING_ACCOUNT_INACTIVE` 오류로 등록/재시도를 거부하고, 탈퇴보다 등록이 먼저 커밋된 경우에는 탈퇴 경로가 구독의 `autoRenew=false`를 다시 적용한다. 기존 카드가 아직 등록되지 않은 계정의 재시도는 종전 `BILLING_SETUP_REQUIRED` 오류를 유지한다.
+
+**추가 회귀 대상:** 모의 `issueBillingKey()` 내부에서 실제 계정 탈퇴를 완료한 후 키를 반환하게 구성하여 (1) 비활성 회원 유지, (2) 자동갱신 재활성화 방지, (3) 반환된 키의 로컬 DB 미저장, (4) 새 청구·주문 생성 방지를 확인한다. 탈퇴 완료 후 수동 `retry()`가 자동갱신을 재개하지 않는 테스트와 카드 미등록 오류 코드 보존 테스트도 추가했다. 이는 순차적으로 경합 경계를 제어한 테스트이며 실제 병렬성·분산 처리 검증을 대체하지 못한다.
+
+**남은 운영 위험:** PG가 이미 발급한 결제수단 키는 **로컬 DB에 저장하지 않는 것만으로 PG 측에서 폐기됐다고 볼 수 없다.** 공급자의 키 해지·대사 API와 보존/폐기 정책을 확인한 후, 별도 승인된 조치로 처리해야 한다. 실제 PG 호출, 폐기, 운영 DB 조회·변경은 수행하지 않았다.
+
+**CI 증빙 구분:** 기존 미확정 응답 회귀 테스트가 포함된 `eb8f6908` 커밋의 [CI #646](https://github.com/dabel11/Ttalkak/actions/runs/41317979529) 및 [Server smoke #372](https://github.com/dabel11/Ttalkak/actions/runs/41317979541)는 모두 성공했다. 그러나 이번 신규 키 등록·재시도 수정은 그 실행에 **포함되지 않는다.** 신규 HEAD의 CI가 완료되기 전까지 새 회귀의 성공은 미확정이다.
+
 ## 7. 완료 판정
 
 | 항목 | 완료 기준 |
