@@ -342,6 +342,58 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void lateBillingKeyIssuanceCannotReactivateWithdrawnSubscription() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("late_reg_" + suffix, passwordEncoder.encode(password),
+                "late_reg_" + suffix, "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+
+        when(gateway.issueBillingKey(eq("late-registration-auth"), eq(setup.customerKey())))
+                .thenAnswer(invocation -> {
+                    // Registration went to the fake provider first; withdrawal
+                    // commits before the provider returns its newly issued key.
+                    withdrawal.withdraw(member, password, null);
+                    return "mock-key-issued-after-withdrawal";
+                });
+
+        ApiException inactive = assertThrows(ApiException.class,
+                () -> billing.completeRegistration(memberId, setup.customerKey(), "late-registration-auth"));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        BillingSubscription subscription = subscriptions.findByMemberId(memberId).orElseThrow();
+        assertFalse(subscription.isAutoRenew(), "late provider response must not restart renewal");
+        assertNull(subscription.getBillingKey(), "issued key must not be persisted for withdrawn account");
+        assertEquals(0, charges.countByMemberId(memberId));
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
+    void retryAfterWithdrawalCannotReactivateAutoRenewal() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("late_retry_" + suffix, passwordEncoder.encode(password),
+                "late_retry_" + suffix, "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        transactions.executeWithoutResult(tx ->
+                subscriptions.lockByMemberId(memberId).orElseThrow().register("mock-test-key"));
+        withdrawal.withdraw(member, password, null);
+
+        ApiException inactive = assertThrows(ApiException.class, () -> billing.retry(memberId));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals(0, charges.countByMemberId(memberId));
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
