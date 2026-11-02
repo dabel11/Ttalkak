@@ -156,9 +156,14 @@ public class BillingService {
     private Status retryWithinBudget(Long memberId) {
         configured();
         transactions.executeWithoutResult(tx -> {
-            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
-                            "탈퇴한 계정은 자동갱신을 다시 시작할 수 없습니다."));
+            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
+            if (subscription == null) {
+                if (subscriptions.findByMemberId(memberId).isEmpty()) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다.");
+                }
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
+                        "탈퇴한 계정은 자동갱신을 다시 시작할 수 없습니다.");
+            }
             context.requireScope(subscription.getBillingScope());
             ensureNoRefund(memberId);
             subscription.resume();
