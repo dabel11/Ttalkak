@@ -135,7 +135,12 @@ public class BillingService {
         if (subscription.getBillingKey() == null) {
             String billingKey = gateway.issueBillingKey(authKey, customerKey);
             transactions.executeWithoutResult(tx -> {
-                BillingSubscription locked = subscriptions.lockByMemberId(memberId).orElseThrow();
+                // Provider key issuance runs outside the DB transaction. Withdrawal
+                // may complete during that network call: never re-enable renewal
+                // or persist a newly issued billing key for an inactive member.
+                BillingSubscription locked = subscriptions.lockActiveByMemberId(memberId)
+                        .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
+                                "탈퇴한 계정에는 결제 수단을 등록할 수 없습니다."));
                 context.requireScope(locked.getBillingScope());
                 if (locked.getBillingKey() == null) locked.register(billingKey);
             });
@@ -151,8 +156,9 @@ public class BillingService {
     private Status retryWithinBudget(Long memberId) {
         configured();
         transactions.executeWithoutResult(tx -> {
-            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다."));
+            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
+                            "탈퇴한 계정은 자동갱신을 다시 시작할 수 없습니다."));
             context.requireScope(subscription.getBillingScope());
             ensureNoRefund(memberId);
             subscription.resume();
