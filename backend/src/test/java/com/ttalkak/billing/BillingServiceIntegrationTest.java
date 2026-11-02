@@ -342,6 +342,15 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void retryWithoutSubscriptionStillRequiresCardSetup() {
+        Long memberId = newMember().getId();
+        ApiException missing = assertThrows(ApiException.class, () -> billing.retry(memberId));
+        assertEquals("BILLING_SETUP_REQUIRED", missing.getCode());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void lateBillingKeyIssuanceCannotReactivateWithdrawnSubscription() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
