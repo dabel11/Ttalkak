@@ -66,12 +66,12 @@ _client_cache: dict[str, object] = {}
 
 
 def _pick_backend() -> str:
-    """GROQ 우선(generator 와 동일 규칙), 없으면 Gemini."""
-    if os.environ.get("GROQ_API_KEY"):
-        return "groq"
-    if os.environ.get("GEMINI_API_KEY"):
-        return "gemini"
-    raise EnvironmentError("GROQ_API_KEY 또는 GEMINI_API_KEY 가 필요합니다.")
+    """메인 백엔드(GEN_PRIMARY)를 따른다 — 생성이 gemini면 채점도 gemini.
+    analyzer._default_analyzer_backend·concurrency 와 같은 패턴(미설정=groq, 무회귀)."""
+    backend = "gemini" if os.environ.get("GEN_PRIMARY", "groq").strip().lower() == "gemini" else "groq"
+    if not os.environ.get(f"{backend.upper()}_API_KEY"):
+        raise EnvironmentError(f"{backend.upper()}_API_KEY 가 필요합니다 (GEN_PRIMARY={backend}).")
+    return backend
 
 
 def _get_client(backend: str):

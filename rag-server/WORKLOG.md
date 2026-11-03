@@ -4117,3 +4117,16 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **검증**: CI 동일 venv ruff + pytest 289 passed.
 **결정·근거**: 코드 안전장치 + 운영 완화책 병행 권장. 운영: `prompt_examples` 적재 전까지
   `RAG_GATE_MIN_SCORE=0`(게이트 '기법 0건' 폴백)으로도 회피 가능. 근본은 코퍼스 적재.
+
+## [2026-11-03] eval 채점 백엔드를 GEN_PRIMARY 추종으로 — Groq 고정 제거
+**목적**: 운영 생성·분석은 이미 Gemini(GEN_PRIMARY=gemini)인데 eval 채점기만 `_pick_backend`가
+  "GROQ_API_KEY 있으면 Groq"로 고정돼, 키가 남아 있으면 안 쓰는 Groq로 채점하던 것. 백엔드를 운영과
+  일치시킨다. (Groq 전용 json_object 400 구제 작업은 불필요해져 폐기 — 구 PR #84 닫음.)
+**Before**: `_pick_backend()` = GROQ_API_KEY 있으면 groq, 없으면 gemini. 운영이 gemini여도 Groq로 채점.
+**After**: `_pick_backend()` = GEN_PRIMARY 추종(gemini면 gemini, 미설정/그 외는 groq·무회귀).
+  `analyzer._default_analyzer_backend`·`concurrency` 와 동일 패턴 재사용. 선택 백엔드의 API 키 없으면 에러.
+**변경 파일**: eval/uplift_eval.py(`_pick_backend`)
+**검증**: 셀프체크 3/3(gemini/groq폴백/키없음 에러) + pytest 289 passed.
+**결정·근거**: 채점기를 Groq 무료 티어로 분리하던 이점(쿼터 분리)을 포기하는 대신 운영과 동일 백엔드로
+  일원화. 채점이 Gemini TPD를 운영과 공유하므로 대량 재측정 시 쿼터 압박 주의. `_groq()` 하드코딩
+  트랙(uplift_score.py track B)은 별개라 손대지 않음 — 필요 시 별도 전환.
