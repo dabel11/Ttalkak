@@ -4123,10 +4123,15 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
   "GROQ_API_KEY 있으면 Groq"로 고정돼, 키가 남아 있으면 안 쓰는 Groq로 채점하던 것. 백엔드를 운영과
   일치시킨다. (Groq 전용 json_object 400 구제 작업은 불필요해져 폐기 — 구 PR #84 닫음.)
 **Before**: `_pick_backend()` = GROQ_API_KEY 있으면 groq, 없으면 gemini. 운영이 gemini여도 Groq로 채점.
-**After**: `_pick_backend()` = GEN_PRIMARY 추종(gemini면 gemini, 미설정/그 외는 groq·무회귀).
-  `analyzer._default_analyzer_backend`·`concurrency` 와 동일 패턴 재사용. 선택 백엔드의 API 키 없으면 에러.
-**변경 파일**: eval/uplift_eval.py(`_pick_backend`)
-**검증**: 셀프체크 3/3(gemini/groq폴백/키없음 에러) + pytest 289 passed.
+**After**: `_pick_backend()` = GEN_PRIMARY 명시 시 그 백엔드(gemini면 gemini, 그 외 값은 groq),
+  선택 백엔드의 API 키 없으면 에러(다른 키로 몰래 채점하지 않음). 미설정이면 종전 키 기반 규칙 그대로
+  (Groq 키 있으면 groq, 없으면 gemini).
+  - 리뷰 반영(PR #86 P2): 첫 버전은 미설정을 groq로 간주해 'Gemini 키만 있는 기존 설정'이 OSError로
+    깨졌다(예전엔 gemini 선택). 미설정 경로를 종전 규칙으로 되돌림. `run_multi_turn_eval.py`·
+    `example_ab_eval.py`도 이 함수를 공유하므로 같은 회귀가 함께 해소된다.
+**변경 파일**: eval/uplift_eval.py(`_pick_backend`), tests/test_uplift_score.py(선택 규칙 회귀 7건)
+**검증**: pytest 7건(명시 gemini+양쪽 키 / 미설정+Gemini 단독 / 미설정+Groq 단독 / 미설정+양쪽 키 /
+  명시 백엔드 키 누락 2종 / 키 없음) 외부 호출 없이 통과 + rag-server 전체 296 passed.
 **결정·근거**: 채점기를 Groq 무료 티어로 분리하던 이점(쿼터 분리)을 포기하는 대신 운영과 동일 백엔드로
   일원화. 채점이 Gemini TPD를 운영과 공유하므로 대량 재측정 시 쿼터 압박 주의. `_groq()` 하드코딩
   트랙(uplift_score.py track B)은 별개라 손대지 않음 — 필요 시 별도 전환.
