@@ -32,7 +32,7 @@
 ### 특히 주의
 
 - ID-02/PR-01/PR-02는 실제 운영 DB에 **쓰기를 수행**한다. 읽기 전용 검사와 섞지 않는다.
-- PR-02의 패치는 현재 Draft PR #69에 있으므로 해당 PR을 병합·배포하기 전 운영 웹에서 이 테스트를 수행하면 비공개 데이터 노출 여부를 다시 확인해야 한다. 실제 개인정보는 절대 사용하지 않는다.
+- PR-02의 변경은 [PR #69](https://github.com/dabel11/Ttalkak/pull/69)로 **2026-10-21 `develop`에 병합**됐다. 그러나 실제 Railway 배포 SHA와 해당 변경의 운영 반영은 별도 검증 전까지 **미확인**으로 둔다. 운영 웹에서 PR-02 쓰기 테스트는 배포 커밋과 별도 테스트 계정·비용·데이터 범위의 명시적 승인 후에만 수행하며, 실제 개인정보는 절대 사용하지 않는다.
 - 기존 기록을 테스트로 생성할 경우 **삭제/비공개 처리가 완전한 DB 삭제를 뜻하지 않는다**. 테스트 데이터 보존 및 정리 정책을 사전에 협의한다.
 - Google 로그인·비밀번호 복구 메일의 최종 검증은 연결된 외부 공급자와 테스트용 메일 수신을 따로 확인해야 한다.
 
@@ -43,4 +43,4 @@
 
 최종 졸업프로젝트 통과 판정은 기능 CI, 실제 승인된 테스트 계정 E2E, AI 품질 평가의 사람 판정 근거, 격리 DB 복원 결과의 범위를 구분해 작성한다. 운영용 MySQL 9의 실제 복구 테스트 및 사업화 결제 인수인계는 이 문서에서 **SKIP/미완료**로 유지한다.
 
-관련: [검수 기준](../../docs/GRADUATION_ACCEPTANCE.md), [인수인계](GRADUATION_EVALUATION_AND_DB_READINESS.md), [보안 통합 Draft PR](https://github.com/dabel11/Ttalkak/pull/69).
+관련: [검수 기준](../../docs/GRADUATION_ACCEPTANCE.md), [인수인계](GRADUATION_EVALUATION_AND_DB_READINESS.md), [보안 통합 병합 PR](https://github.com/dabel11/Ttalkak/pull/69).
