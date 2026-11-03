@@ -37,23 +37,62 @@ def _load():
     return items, outputs
 
 
+_GUIDE = """## 답할 때 기준
+
+- **사용자 요청만 본다.** 문체가 마음에 드는지, 길이가 적당한지는 보지 않는다.
+- 결과물에 **실제로 있을 때만 '예'**. 애매하거나 일부만 있으면 '아니오'.
+- 분량·줄 수를 묻는 질문은 **머리말('다음은 ~입니다')과 맺음말 한 줄을 빼고** 센다.
+- `⟦자리표시자⟧`·`[회사명]` 같은 빈칸이 질문이 묻는 내용 자리에 있으면 '아니오'.
+- '(조건이 해당 없으면 해당없음)' 이 붙은 질문만 **해당없음**을 쓸 수 있다.
+- 헷갈렸으면 채점표의 메모 칸에 이유를 적는다 — 그 질문이 모호하다는 신호로 쓴다.
+"""
+
+_KIND = {"transform": "가공(주어진 글을 고침)", "generate": "생성(새로 씀)"}
+
+
+def _fence(text: str) -> str:
+    """결과물에 ``` 가 들어 있어도 깨지지 않게 울타리 길이를 늘린다."""
+    n = max([len(m) for m in __import__("re").findall(r"`+", text)] + [2]) + 1
+    f = "`" * n
+    return f"{f}text\n{text.rstrip()}\n{f}\n"
+
+
 def build() -> None:
     items, outputs = _load()
     _OUT.mkdir(exist_ok=True)
-    md = ["# 라벨링 대상 결과물\n",
-          "각 결과물을 읽고, 같은 번호의 채점표(csv)에서 질문에 예/아니오로 답해 주세요.\n",
-          "판단 기준은 **사용자 요청**입니다. 문체나 길이가 마음에 드는지는 보지 않습니다.\n"]
     rows = []
+    bodies = []
+    toc = ["| # | 문항 | 유형 | 분류 | 질문 수 |", "|---:|---|---|---|---:|"]
+
     for n, iid in enumerate(SAMPLE, 1):
         it, out = items[iid], outputs[iid]["output"]
-        md += [f"\n---\n\n## {n}. {iid}\n", "**사용자 요청**\n", "```\n" + it["query"] + "\n```\n",
-               "**AI 결과물**\n", "```\n" + out + "\n```\n"]
-        for q in build_questions(it):
+        qs = build_questions(it)
+        kind = _KIND.get(it["task_type"], it["task_type"])
+        toc.append(f"| {n} | {iid} | {kind.split('(')[0]} | {it['category']} | {len(qs)} |")
+
+        bodies += [f"\n---\n\n# {n} / {len(SAMPLE)}. {iid}\n",
+                   f"{kind} · {it['category']} · 질문 {len(qs)}개\n",
+                   "\n### 사용자 요청\n\n", _fence(it["query"]),
+                   "\n### AI 결과물\n\n", _fence(out),
+                   f"\n### 답할 질문 — 채점표에서 **번호 {n}** 행 {len(qs)}개\n\n",
+                   "| 질문번호 | 질문 |\n|:--:|---|\n"]
+        for q in qs:
+            text = q["text"].replace("|", "\\|")
+            tag = " **(조건이 해당 없으면 해당없음)**" if q["conditional"] else ""
+            bodies.append(f"| `{q['id']}` | {text}{tag} |\n")
             rows.append({"번호": n, "문항": iid, "질문번호": q["id"],
                          "질문": q["text"] + (" (조건이 해당 없으면 '해당없음')" if q["conditional"] else ""),
                          "답(예/아니오/해당없음)": "",
                          "메모(헷갈린 이유 등)": ""})
-    (_OUT / "outputs.md").write_text("".join(md), encoding="utf-8")
+
+    toc.append(f"| | **합계** | | | **{len(rows)}** |")
+    head = [f"# 라벨링 대상 결과물 {len(SAMPLE)}건 · 질문 {len(rows)}개\n\n",
+            "결과물을 하나씩 읽고, 각 항목 끝의 질문에 **예 / 아니오**로 답해 주세요.\n",
+            "답은 이 파일이 아니라 **채점표(`sheet_A.csv` 또는 `sheet_B.csv`)**에 적습니다.\n",
+            "두 사람이 서로 보지 않고 각자 한 부씩 채웁니다. 한 사람당 약 1시간.\n\n",
+            _GUIDE, "\n## 목차\n\n", "\n".join(toc), "\n"]
+
+    (_OUT / "outputs.md").write_text("".join(head + bodies), encoding="utf-8")
     for who in ("A", "B"):
         path = _OUT / f"sheet_{who}.csv"
         with path.open("w", encoding="utf-8-sig", newline="") as fh:
@@ -61,7 +100,7 @@ def build() -> None:
             w.writeheader()
             w.writerows(rows)
     print(f"결과물 {len(SAMPLE)}건 · 질문 {len(rows)}개")
-    print(f"  {_OUT/'outputs.md'}  ← 읽을 것")
+    print(f"  {_OUT/'outputs.md'}  ← 읽을 것(요청·결과물·질문이 한자리에)")
     print(f"  {_OUT/'sheet_A.csv'} / {_OUT/'sheet_B.csv'}  ← 두 사람이 각자 채울 것(서로 보지 말 것)")
 
 
