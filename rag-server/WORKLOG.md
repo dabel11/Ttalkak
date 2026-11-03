@@ -4135,3 +4135,29 @@ answer  … • {"name":"Checklist Prompting","reason":"…"}
 **결정·근거**: 채점기를 Groq 무료 티어로 분리하던 이점(쿼터 분리)을 포기하는 대신 운영과 동일 백엔드로
   일원화. 채점이 Gemini TPD를 운영과 공유하므로 대량 재측정 시 쿼터 압박 주의. `_groq()` 하드코딩
   트랙(uplift_score.py track B)은 별개라 손대지 않음 — 필요 시 별도 전환.
+
+## [2026-11-04] 장문 라우팅 보완 — Gemini 출력 예산을 입력에 맞춰 상향(verbatim 잘림 방지)
+**목적**: 공격적 결함 탐색에서 발견. 장문 라우팅(`_needs_long_context`)은 Groq TPM 예산으로
+  긴 원문을 verbatim 으로 못 되돌릴 때 그 요청을 Gemini 로 보낸다. 그런데 `GeminiGenerator.generate`
+  가 `max_output_tokens` 를 **고정 4096** 으로 두어, 정작 라우팅으로 넘어온 가장 긴 입력의 원문을
+  다 되돌릴 출력 예산이 모자라 **Gemini 에서도 조용히 잘렸다**(improved_prompt 원문 꼬리 누락 =
+  '원문이 빠져 작업 불가'인 바로 그 실패). 즉 라우팅이 목적을 달성하지 못함.
+**Before**:
+  - `max_output_tokens=max_tokens`(=4096 고정). 산정: SYSTEM_PROMPT 만 ~4,744tok → 무료 Groq(TPM 8k)
+    에선 원문 1,500자부터 Gemini 로 라우팅되는데, 4,000자(≈출력 4,600tok) 요청은 4096 cap 에 걸려
+    verbatim 잘림(실측 산정 2026-11-04, `_est_tokens` 기준). RAG_PIPELINE.md 는 '장문=Gemini 라우팅으로
+    해소'라고만 적어 이 cap 누락이 가려져 있었다.
+**After**:
+  - `_gemini_output_budget(query, want)` 추가 — 필요 출력 = `_est_tokens(query)+600`(`_needs_long_context`
+    와 동일 산정), `want`(4096) 아래로는 안 내림(짧은 입력 무회귀), 상한 `GEMINI_MAX_OUTPUT_TOKENS`
+    (기본 8192 — 현행 flash 계열 공통 지원; 3.x 등 더 큰 모델은 env 로 상향).
+  - `GeminiGenerator.generate` 의 `max_output_tokens` 가 이 값을 쓴다. Groq 경로·analyzer 는 불변.
+**변경 파일**: app/rag/generator.py(`_gemini_output_budget` + Gemini 호출), tests/test_token_budget.py(+6 케이스),
+  RAG_PIPELINE.md(§긴 원문 truncation 보완 기록)
+**검증**: pytest 296 passed(종전 289 + 신규 6 — 무회귀 4096 / 장문 상향 / 산정식 일치 / 상한 8192 /
+  env 상향 / 잘못된 env 기본값). ruff 는 로컬 미설치(CI 수행). 라이브 호출은 Gemini 쿼터 필요라 미실시.
+**결정·근거**: 예산 상향은 Gemini 과금이 '생성된 출력'에만 붙으므로 ceiling 을 올려도 추가 비용 없음(무해).
+  상한 8192 는 모든 현행 flash 가 지원하는 안전 하한 — 원문 ~7,500자까지 커버. 그 이상 극단 입력은
+  env 로 상향(모델 한계 초과 400 방지). 짧은 입력은 4096 유지라 기존 동작 무회귀.
+  ⚠️ 라우팅 판정기(`_needs_long_context`)가 `_fit_max_tokens` 와 다른 추정기를 쓰는 별개 이슈(§미결)는
+  이번에 건드리지 않음 — 그건 '언제 Gemini 로 보낼지', 이번 건은 '보낸 뒤 예산'이라 직교.

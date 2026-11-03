@@ -653,6 +653,29 @@ def default_model(backend: str) -> str:
     raise ValueError(f"알 수 없는 백엔드: {backend}")
 
 
+def _gemini_output_budget(query: str, want: int) -> int:
+    """Gemini `max_output_tokens` — verbatim 원문 재인용에 필요한 만큼 올린다.
+
+    🔴 장문 라우팅(`_needs_long_context`)은 Groq 출력 예산으로 긴 원문을 verbatim 으로
+    되돌릴 수 없을 때 그 요청을 Gemini 로 보낸다. 그런데 Gemini 호출이 `max_output_tokens`
+    를 고정 4096 으로 두면, **정작 라우팅으로 넘어온 가장 긴 입력**의 원문을 다 되돌릴
+    출력 예산이 모자라 조용히 잘린다(improved_prompt 에서 원문 꼬리 누락 → '원문이 빠져
+    작업 불가'인 바로 그 실패). 즉 라우팅이 목적을 달성하지 못했다. SYSTEM_PROMPT 만
+    ~4,744 토큰이라 무료 Groq(TPM 8k)에선 원문 1,500자부터 Gemini 로 라우팅되는데,
+    4,000자(≈출력 4,600tok) 요청은 4096 cap 에 걸려 잘렸다(실측 산정 2026-11-04).
+
+    `_needs_long_context` 와 같은 산정식(원문 토큰 + 600 오버헤드)으로 필요 출력을 잡고,
+    `want`(기본 4096) 아래로는 내리지 않는다(짧은 입력 무회귀). 상한은
+    `GEMINI_MAX_OUTPUT_TOKENS`(기본 8192 — 현행 flash 계열 공통 지원; 3.x 등 더 큰 모델은
+    env 로 올린다)."""
+    try:
+        cap = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "8192"))
+    except ValueError:
+        cap = 8192
+    need = _est_tokens(query) + 600          # _needs_long_context 와 동일한 verbatim+오버헤드 산정
+    return max(want, min(need, cap))
+
+
 class GeminiGenerator:
     """Gemini API 사용 (무료 티어 모델·쿼터는 _resolve_gemini_model 참고)"""
 
@@ -695,7 +718,9 @@ class GeminiGenerator:
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,        # 시스템 지시는 정식 채널로
-                        max_output_tokens=max_tokens,
+                        # 장문 라우팅으로 넘어온 긴 원문을 verbatim 으로 다 되돌리도록 예산을
+                        # 입력에 맞춰 올린다(고정 4096 이면 라우팅해도 잘림 — _gemini_output_budget).
+                        max_output_tokens=_gemini_output_budget(query, max_tokens),
                         temperature=_gen_temperature(),          # Groq 경로와 동일 기본 0.7
                         response_mime_type="application/json",  # 구조화 출력 강제
                     ),

@@ -154,4 +154,30 @@ finally:
     if _saved is not None:
         os.environ["GROQ_TPM_LIMIT"] = _saved
 
+# ── _gemini_output_budget: 장문 라우팅으로 넘어온 원문을 다 되돌릴 출력 예산 ──
+# 장문은 Gemini 로 라우팅되는데, 고정 4096 이면 긴 원문 verbatim 이 잘려 라우팅이 무의미해진다.
+# 입력 길이에 맞춰 올리되(_needs_long_context 와 동일 산정), 짧은 입력은 무회귀(4096 유지).
+from app.rag.generator import _gemini_output_budget  # noqa: E402
+
+check("짧은 입력은 4096 유지(무회귀)", _gemini_output_budget("블로그 글 만들어줘", 4096) == 4096)
+# 4,000자 원문(≈4,600tok 필요)은 4096 을 넘겨 올려야 한다 — 종전엔 여기서 잘렸다.
+_long = "회의록 요약 프롬프트 만들어줘: " + "가" * 4000
+check("장문은 필요 출력(>4096)으로 상향", _gemini_output_budget(_long, 4096) > 4096,
+      f"got {_gemini_output_budget(_long, 4096)}")
+check("필요 출력 = 원문 토큰 + 600(라우팅 산정과 동일)",
+      _gemini_output_budget(_long, 4096) == _est_tokens(_long) + 600,
+      f"got {_gemini_output_budget(_long, 4096)}")
+# 상한(기본 8192) — 극단 입력도 모델 한계를 넘기지 않는다
+check("상한 8192 적용", _gemini_output_budget("가" * 20000, 4096) == 8192,
+      f"got {_gemini_output_budget('가' * 20000, 4096)}")
+os.environ["GEMINI_MAX_OUTPUT_TOKENS"] = "65536"
+try:
+    check("GEMINI_MAX_OUTPUT_TOKENS 로 상한 상향", _gemini_output_budget("가" * 20000, 4096) > 8192)
+    for bad in ("", "abc"):
+        os.environ["GEMINI_MAX_OUTPUT_TOKENS"] = bad
+        check(f"잘못된 상한값({bad!r})은 기본 8192", _gemini_output_budget("가" * 20000, 4096) == 8192)
+finally:
+    os.environ.pop("GEMINI_MAX_OUTPUT_TOKENS", None)
+
+
 print(f"\n전부 통과 ({_passed}개)")
