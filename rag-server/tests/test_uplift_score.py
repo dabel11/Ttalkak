@@ -110,3 +110,39 @@ def test_code_tasks_are_out_of_fabrication_scope():
     r = score_output(ITEMS["up_03"], "```python\nassert get_user(1) == {'name': 'Alice'}\n```", None,
                      {"verdict": {"fabrication": True, "refusal": False}})
     assert r["fabrication"] is None and r["refusal"] is False
+
+
+# ── 채점 백엔드 선택(_pick_backend) — 외부 호출 없음 ─────────────────
+import pytest
+
+
+@pytest.mark.parametrize("primary, groq, gemini, expected", [
+    ("gemini", "g", "m", "gemini"),   # 양쪽 키 + 명시 Gemini
+    (None, None, "m", "gemini"),      # 미설정 + Gemini 단독(종전 규칙 보존)
+    (None, "g", None, "groq"),        # 미설정 + Groq 단독
+    (None, "g", "m", "groq"),         # 미설정 + 양쪽 키 → 종전처럼 groq 우선
+])
+def test_pick_backend(monkeypatch, primary, groq, gemini, expected):
+    from eval.uplift_eval import _pick_backend
+    for name, value in (("GEN_PRIMARY", primary), ("GROQ_API_KEY", groq), ("GEMINI_API_KEY", gemini)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    assert _pick_backend() == expected
+
+
+@pytest.mark.parametrize("primary, groq, gemini", [
+    ("gemini", "g", None),            # 명시한 백엔드의 키 누락 → 다른 키로 몰래 채점하지 않음
+    ("groq", None, "m"),
+    (None, None, None),               # 키 없음
+])
+def test_pick_backend_missing_key(monkeypatch, primary, groq, gemini):
+    from eval.uplift_eval import _pick_backend
+    for name, value in (("GEN_PRIMARY", primary), ("GROQ_API_KEY", groq), ("GEMINI_API_KEY", gemini)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    with pytest.raises(EnvironmentError):
+        _pick_backend()
