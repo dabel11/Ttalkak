@@ -327,9 +327,17 @@ public class BillingService {
                     "추가 결제 금액을 먼저 확인해 주세요.");
         }
         PreparedUpgrade prepared = transactions.execute(tx -> {
-            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
-                            "등록된 구독이 없습니다."));
+            // A withdrawn member must not initiate a new provider charge, even if
+            // their paid usage period and billing key are retained for reconciliation.
+            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
+            if (subscription == null) {
+                if (subscriptions.findByMemberId(memberId).isEmpty()) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
+                            "등록된 구독이 없습니다.");
+                }
+                throw new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
+                        "탈퇴한 계정에서는 요금제를 업그레이드할 수 없습니다.");
+            }
             context.requireScope(subscription.getBillingScope());
             ensureNoRefund(memberId);
             if (subscription.getBillingKey() == null) {

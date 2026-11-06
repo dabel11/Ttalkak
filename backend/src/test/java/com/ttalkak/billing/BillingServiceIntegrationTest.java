@@ -317,6 +317,41 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawnMemberCannotStartNewUpgradeOrderOrProviderCharge() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("upgrade_withdraw_" + suffix,
+                passwordEncoder.encode(password), "upgrade_withdraw_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        assertTrue(quote.amount() > 0);
+        withdrawal.withdraw(member, password, null);
+        clearInvocations(gateway);
+
+        ApiException inactive = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(1, charges.countByMemberId(memberId), "withdrawal must not create a new upgrade order");
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
     void withdrawnMemberCannotBeChargedBySchedulerOrStaleCandidate() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
