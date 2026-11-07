@@ -111,11 +111,21 @@ test("desktop content remains usable at a 200 percent zoom equivalent viewport",
   expect(composerControlSizes.send).toBeGreaterThanOrEqual(44);
   await expect(page.locator(".sidebar")).toBeHidden();
   await expect(page.locator(".make-side-panel")).toBeHidden();
-  const emptyPageDimensions = await page.evaluate(() => ({
-    clientHeight: document.documentElement.clientHeight,
-    scrollHeight: document.documentElement.scrollHeight,
-  }));
-  expect(emptyPageDimensions.scrollHeight).toBeLessThanOrEqual(emptyPageDimensions.clientHeight + 1);
+  // The shared policy/contact footer intentionally appears after #app,
+  // so document scrolling is expected. Only the empty Make workspace should
+  // fit the viewport at this zoom-equivalent width without extra scrolling.
+  const emptyPageDimensions = await page.evaluate(() => {
+    const app = document.querySelector("#app");
+    const policyFooter = document.querySelector('body > footer[aria-label="서비스 정책 및 문의"]');
+    if (!app || !policyFooter) throw new Error("Missing app root or public policy footer");
+    return {
+      clientHeight: document.documentElement.clientHeight,
+      appBottom: app.getBoundingClientRect().bottom,
+      policyFooterTop: policyFooter.getBoundingClientRect().top,
+    };
+  });
+  expect(emptyPageDimensions.appBottom).toBeLessThanOrEqual(emptyPageDimensions.clientHeight + 1);
+  expect(emptyPageDimensions.policyFooterTop).toBeGreaterThanOrEqual(emptyPageDimensions.appBottom - 1);
   const drawerToggle = page.getByRole("button", { name: "대화 목록", exact: true });
   await expect(drawerToggle).toBeVisible();
   await expect(drawerToggle).toContainText("대화");
