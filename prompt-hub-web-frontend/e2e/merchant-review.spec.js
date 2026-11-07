@@ -9,7 +9,7 @@ test("reviewer can read the service, prices, delivery and refund terms anonymous
   await expect(page.getByRole("table")).toContainText("9,900원");
   await expect(page.getByText(/실물 배송은 없으며 이용기간은 결제일 기준 1개월/)).toBeVisible();
   await expect(page.getByText(/유료 구독은 판매하지 않습니다/)).toBeVisible();
-  await page.getByRole("link", { name: "구독 해지·환불 정책", exact: true }).click();
+  await page.locator("main").getByRole("link", { name: "구독 해지·환불 정책", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("구독 해지·환불 정책");
   await page.goto("/terms.html");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("이용약관");
