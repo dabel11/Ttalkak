@@ -66,8 +66,8 @@ def main():
         assert public_status == 200, (page, public_status)
         assert "text/html" in public_headers.get("content-type", "")
         assert title in public_body.decode()
-        assert 'aria-label="사업자 정보"' in public_body.decode()
-    assert 'aria-label="사업자 정보"' in index_html
+        assert 'aria-label="사업자 정보"' not in public_body.decode()
+    assert 'aria-label="사업자 정보"' not in index_html
     assert "window.TTALKAK_API_BASE_URL = window.location.origin" in index_html
     app_match = re.search(r'src="\./(assets/app-[^"]+\.js)"', index_html)
     assert app_match, "Production HTML must reference a hashed application bundle"
