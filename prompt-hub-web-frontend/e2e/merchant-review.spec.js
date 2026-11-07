@@ -21,3 +21,13 @@ test("reviewer can read the service, prices, delivery and refund terms anonymous
     }
   }
 });
+
+test("policy and contact navigation remains outside the guest/member SPA rendering root", async ({ page }) => {
+  await page.goto("/");
+  const footer = page.locator('body > footer[aria-label="서비스 정책 및 문의"]');
+  await expect(footer.getByRole("link", { name: "개인정보 처리 안내" })).toHaveAttribute("href", "/privacy-policy.html");
+  await expect(footer.getByRole("link", { name: "이용약관" })).toHaveAttribute("href", "/terms.html");
+  await expect(footer.getByRole("link", { name: "문의하기" })).toHaveAttribute("href", /^mailto:/);
+  // #app is re-rendered on route changes and authentication; the policy footer is its sibling.
+  expect(await page.evaluate(() => document.querySelector("#app")?.contains(document.querySelector('footer[aria-label="서비스 정책 및 문의"]')))).toBe(false);
+});
