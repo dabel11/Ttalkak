@@ -352,6 +352,56 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawnMemberCannotRetryUncertainUpgradeAfterAccountClosure() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("pending_upgrade_" + suffix,
+                passwordEncoder.encode(password), "pending_upgrade_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+
+        // The initial upgrade reached the fake provider but its answer was lost.
+        // The durable PENDING order must not authorize another provider call after withdrawal.
+        doThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                "BILLING_UNCERTAIN", "synthetic upgrade timeout"))
+                .when(gateway).charge(anyString(), anyString(), anyString(),
+                        eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+        assertEquals("BILLING_UNCERTAIN", assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount())).getCode());
+        BillingCharge pendingOrder = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        assertEquals("UPGRADE", pendingOrder.getChargeKind());
+        String originalOrderId = pendingOrder.getOrderId();
+        assertEquals(2, charges.countByMemberId(memberId));
+
+        withdrawal.withdraw(member, password, null);
+        clearInvocations(gateway);
+
+        ApiException inactive = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(2, charges.countByMemberId(memberId));
+        assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(
+                memberId, "PENDING").orElseThrow().getOrderId());
+        verify(gateway, never()).lookup(anyString());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    @Test
     void withdrawnMemberCannotBeChargedBySchedulerOrStaleCandidate() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
