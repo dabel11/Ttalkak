@@ -1,6 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { renderPublicMerchant } = require("../scripts/render-public-merchant.cjs");
 
 const requestedRoot = process.env.TTALKAK_PREVIEW_ROOT || ".";
 const root = path.resolve(__dirname, requestedRoot);
@@ -35,11 +36,30 @@ const server = http.createServer((request, response) => {
         return;
       }
 
+      // Fixture previews serve source HTML, while the production build injects
+      // the public policy/contact navigation at build time. Use the same
+      // renderer so browser tests exercise the actual delivered navigation.
+      // Dist previews already contain the rendered footer; do not render twice.
+      let body = content;
+      if (root === __dirname && path.extname(filePath).toLowerCase() === ".html") {
+        const html = content.toString("utf8");
+        if (html.includes("<!-- TTALKAK_PUBLIC_MERCHANT -->")) {
+          try {
+            body = renderPublicMerchant(html);
+          } catch (renderError) {
+            console.error("Preview policy navigation render failed:", renderError);
+            response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+            response.end("Preview unavailable");
+            return;
+          }
+        }
+      }
+
       response.writeHead(200, {
         "Content-Type": types[path.extname(filePath).toLowerCase()] || "application/octet-stream",
         "Cache-Control": "no-store",
       });
-      response.end(content);
+      response.end(body);
     });
   });
 
