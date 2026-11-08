@@ -420,7 +420,13 @@ public class BillingService {
                     "결제 결과를 확인할 수 없습니다. 같은 주문으로 재확인해 주세요.");
         }
         transactions.executeWithoutResult(tx -> {
-            BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
+            // Provider approval can arrive after account withdrawal. Keep the
+            // original order PENDING for manual payment/refund reconciliation;
+            // never grant a higher paid tier to a deactivated account.
+            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_GATEWAY,
+                            "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                            "탈퇴한 계정의 결제 승인 내역은 관리자 확인이 필요합니다."));
             context.requireScope(subscription.getBillingScope());
             BillingCharge charge = charges.findByOrderId(orderId).orElseThrow();
             if (!memberId.equals(charge.getMemberId()) || !"UPGRADE".equals(charge.getChargeKind())

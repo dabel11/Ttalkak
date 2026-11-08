@@ -402,6 +402,62 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void lateUpgradeApprovalAfterWithdrawalRequiresReconciliationWithoutChangingEntitlement() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("late_upgrade_" + suffix,
+                passwordEncoder.encode(password), "late_upgrade_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment",
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        clearInvocations(gateway);
+
+        // The upgrade order is prepared first. While the fake provider processes
+        // the charge, withdrawal commits before the approval response arrives.
+        doAnswer(invocation -> {
+            withdrawal.withdraw(member, password, null);
+            return new BillingGateway.Payment("late-upgrade-payment",
+                    invocation.getArgument(2), "DONE", "BILLING",
+                    ((Integer) invocation.getArgument(3)).longValue());
+        }).when(gateway).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+
+        ApiException reconciliation = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED", reconciliation.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(2, charges.countByMemberId(memberId));
+        BillingCharge pendingOrder = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        assertEquals("UPGRADE", pendingOrder.getChargeKind());
+        assertNull(pendingOrder.getPaymentKey(), "unreconciled approval must not look locally settled");
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+
+        // Even a later provider lookup must not turn a withdrawn account paid.
+        when(gateway.lookup(pendingOrder.getOrderId())).thenReturn(new BillingGateway.Payment(
+                "late-upgrade-payment", pendingOrder.getOrderId(), "DONE", "BILLING", quote.amount()));
+        ApiException retry = assertThrows(ApiException.class, () -> billing.reconcileUpgrade(memberId));
+        assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED", retry.getCode());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("PENDING", charges.findByOrderId(pendingOrder.getOrderId()).orElseThrow().getStatus());
+        assertEquals(2, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).lookup(pendingOrder.getOrderId());
+    }
+
+    @Test
     void withdrawnMemberCannotBeChargedBySchedulerOrStaleCandidate() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
