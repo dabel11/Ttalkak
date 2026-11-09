@@ -24,8 +24,8 @@
 
 ## 2026-11-09 병합 전 확인 기록 (운영 미적용)
 
-- 기준: `develop` `ae134a530349e43d6141f85875d6b33d826d970d`, 현 작업 브랜치 `209f801540fa27f4ced5699273e63844f7ded091`. 요청한 `chore/db-deployment-safety-gates` 브랜치는 GitHub에서 찾을 수 없으므로 복원하거나 대체하지 않는다.
-- GitHub compare의 공통 조상은 `415b8cacd5ac44f2e684c2342d62d7774fc33af9`. 작업 브랜치는 `develop`에 대해 **3커밋 앞서고 8커밋 뒤처져 있다**. 현재 작업 브랜치의 차이는 `BillingService.java`, `BillingServiceIntegrationTest.java`, 본 문서 세 파일이다. 공통 조상→`develop`의 변경은 웹/스크립트 등 12개 파일로 **파일 경로가 직접 겹치지 않는다**. 이는 자동 병합 가능 또는 회귀 없음의 증거가 아니며, 재동기화·테스트는 승인된 PR 단계에서 확인한다.
+- 기준(문서 기록 커밋 전): `develop` `ae134a530349e43d6141f85875d6b33d826d970d`, 점검 당시 작업 브랜치 `209f801540fa27f4ced5699273e63844f7ded091`. 요청한 `chore/db-deployment-safety-gates` 브랜치는 GitHub에서 찾을 수 없으므로 복원하거나 대체하지 않는다.
+- GitHub compare의 공통 조상은 `415b8cacd5ac44f2e684c2342d62d7774fc33af9`. 이 점검 기준 HEAD는 `develop`보다 **3커밋 앞서고 8커밋 뒤처져 있었다**(이후 문서 커밋 제외). 현재 작업 브랜치의 차이는 `BillingService.java`, `BillingServiceIntegrationTest.java`, 본 문서 세 파일이다. 공통 조상→`develop`의 변경은 웹/스크립트 등 12개 파일로 **파일 경로가 직접 겹치지 않는다**. 이는 자동 병합 가능 또는 회귀 없음의 증거가 아니며, 재동기화·테스트는 승인된 PR 단계에서 확인한다.
 - `develop` HEAD의 [CI #42444943903](https://github.com/dabel11/Ttalkak/actions/runs/42444943903)는 2026-11-08(KST) **6개 job 성공**이다. 이 브랜치의 코드·테스트는 그 CI에 포함되지 않는다. 현재 작업 브랜치 HEAD에는 GitHub Actions 실행 기록이 없다. `.github/workflows/ci.yml`은 `develop` push와 PR 이벤트로 CI를 실행한다. **이번 수정 테스트는 실행/통과 확인되지 않았다.**
 - 코드 비교로 확인한 잔여 정책 차이: `BillingService.charge()`의 **이미 전송된 RENEWAL 승인 완료 처리**는 탈퇴 후에도 `BillingCharge.DONE`과 새 `PaidUsagePeriod`를 기록할 수 있다. 기존 테스트 `withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()`은 자동갱신이 재활성화되지 않음을 검증하도록 작성됐지만, 결제 승인 후 이용권 생성 자체의 처리 정책을 검증하지 않는다. 반면 이번 브랜치의 늦은 **UPGRADE 승인**은 탈퇴 계정에 요금제 변경을 적용하지 않고 원 주문 `PENDING`을 대사 대상으로 보존하도록 작성됐다. 두 경로의 차이가 회계·보존·환불 정책에 맞는지는 **미확정 설계 검토 사항**이며, 곧바로 결함이나 환불 완료로 단정하지 않는다.
 - 후속 안전 검증: 격리된 MySQL 환경에서 신규 업그레이드 테스트 실행 → 탈퇴/승인 락 순서 점검 → 승인된 갱신/업그레이드 주문의 수동 대사·환불 정책 명확화 → 실환경과 분리된 복구 리허설. 현재 운영 PG/DB/변수·Railway·실결제 변경, 새 PR/병합/브랜치 삭제는 금지 범위이므로 수행하지 않는다.
