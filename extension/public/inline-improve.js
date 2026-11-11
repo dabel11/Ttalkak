@@ -58,6 +58,17 @@
   panel.append(title, message, text, actions);
   shadow.append(style, trigger, panel);
   const getText = (el) => el?.matches?.("textarea,input") ? el.value : (el?.innerText ?? el?.textContent ?? "");
+  // Rich-text editors render paragraph breaks differently from plain text. Only
+  // normalize those presentation differences for post-insertion verification.
+  function sameRenderedText(actual, expected) {
+    const normalize = (value) => String(value ?? "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]*\n[ \t]*/g, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+    return actual === expected || normalize(actual) === normalize(expected);
+  }
   function visible(el) {
     if (!el?.isConnected) return false;
     const r = el.getBoundingClientRect(), s = getComputedStyle(el);
@@ -174,14 +185,12 @@
       const selection = getSelection(), range = document.createRange();
       range.selectNodeContents(el);
       selection.removeAllRanges(); selection.addRange(range);
-      if (!document.execCommand("insertText", false, value) || getText(el).trim() !== value.trim()) {
-        el.replaceChildren(...value.split("\n").map((line) => {
-          const p = document.createElement("p"); p.textContent = line || "\u00a0"; return p;
-        }));
-        el.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data:value }));
-      }
+      // Let the host editor (ChatGPT/ProseMirror, Claude, Gemini) process the
+      // browser's trusted edit transaction. Direct replaceChildren() mutates the
+      // DOM without an editor transaction and can leave the input half-changed.
+      if (!document.execCommand("insertText", false, value)) return false;
     } else return false;
-    return getText(el).trim() === value.trim();
+    return sameRenderedText(getText(el), value);
   }
   trigger.addEventListener("click", () => {
     if (!enabled || busy || !input) return;
@@ -216,14 +225,17 @@
       message.textContent = "작성 중인 문장을 보호하기 위해 적용하지 않았습니다."; apply.disabled = true; return;
     }
     if (!writeValue(snapshot.source, snapshot.improved)) {
-      message.textContent = "입력창 교체에 실패했습니다."; return;
+      // Preserve the user's input and avoid unsafe follow-up overwrite.
+      apply.disabled = getText(snapshot.source) !== snapshot.original;
+      message.textContent = "입력창 교체에 실패했습니다.";
+      return;
     }
     snapshot.applied = true; apply.hidden = true; restore.hidden = false;
     message.textContent = "개선 적용 완료 · AI 전송은 직접 해 주세요.";
   });
   restore.addEventListener("click", () => {
     if (!snapshot?.applied) return;
-    if (getText(snapshot.source).trim() !== snapshot.improved.trim()) {
+    if (!sameRenderedText(getText(snapshot.source), snapshot.improved)) {
       message.textContent = "적용 후 수정된 문장은 덮어쓰지 않습니다."; return;
     }
     if (!writeValue(snapshot.source, snapshot.original)) {
