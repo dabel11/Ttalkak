@@ -29,6 +29,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
   };
 
   let writes = 0;
+  let onStorageChange;
   window.document.execCommand = (name, _ui, value) => {
     assert.equal(name, "insertText");
     writes++;
@@ -55,7 +56,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
     },
     storage: {
       local: { get(_keys, callback) { callback({ pp_inline_improve_enabled: true }); } },
-      onChanged: { addListener() {} },
+      onChanged: { addListener(listener) { onStorageChange = listener; } },
     },
   };
   window.eval(inlineSource);
@@ -65,6 +66,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
   function trigger() { shadow.getElementById("tt-button").click(); }
   return {
     dom, window, editor, shadow, trigger,
+    disable() { onStorageChange?.({ pp_inline_improve_enabled: { newValue: false } }, "local"); },
     get writes() { return writes; },
   };
 }
@@ -72,7 +74,10 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
 test("multiline ChatGPT editor keeps the native editing transaction and accepts equivalent paragraph breaks", async (t) => {
   const h = await setup();
   t.after(async () => {
-    // Flush mutation/RAF callbacks before closing the jsdom window.
+    // Disable the content script before jsdom's window teardown. The script
+    // intentionally keeps a MutationObserver alive for SPA route changes;
+    // closing the document while enabled can schedule a stale animation frame.
+    h.disable();
     await new Promise((resolve) => setTimeout(resolve, 80));
     h.dom.window.close();
   });
@@ -88,7 +93,10 @@ test("multiline ChatGPT editor keeps the native editing transaction and accepts 
 test("restore also recognizes editor paragraph markup after a successful improvement", async (t) => {
   const h = await setup();
   t.after(async () => {
-    // Flush mutation/RAF callbacks before closing the jsdom window.
+    // Disable the content script before jsdom's window teardown. The script
+    // intentionally keeps a MutationObserver alive for SPA route changes;
+    // closing the document while enabled can schedule a stale animation frame.
+    h.disable();
     await new Promise((resolve) => setTimeout(resolve, 80));
     h.dom.window.close();
   });
@@ -103,7 +111,10 @@ test("restore also recognizes editor paragraph markup after a successful improve
 test("unsupported native editor insertion does not fall back to raw DOM mutation", async (t) => {
   const h = await setup({ command: "unsupported" });
   t.after(async () => {
-    // Flush mutation/RAF callbacks before closing the jsdom window.
+    // Disable the content script before jsdom's window teardown. The script
+    // intentionally keeps a MutationObserver alive for SPA route changes;
+    // closing the document while enabled can schedule a stale animation frame.
+    h.disable();
     await new Promise((resolve) => setTimeout(resolve, 80));
     h.dom.window.close();
   });
@@ -119,7 +130,10 @@ test("unsupported native editor insertion does not fall back to raw DOM mutation
 test("partial editor insertion blocks an unsafe second overwrite", async (t) => {
   const h = await setup({ command: "partial" });
   t.after(async () => {
-    // Flush mutation/RAF callbacks before closing the jsdom window.
+    // Disable the content script before jsdom's window teardown. The script
+    // intentionally keeps a MutationObserver alive for SPA route changes;
+    // closing the document while enabled can schedule a stale animation frame.
+    h.disable();
     await new Promise((resolve) => setTimeout(resolve, 80));
     h.dom.window.close();
   });
@@ -135,7 +149,10 @@ test("partial editor insertion blocks an unsafe second overwrite", async (t) => 
 test("a real user edit after preview is never overwritten", async (t) => {
   const h = await setup();
   t.after(async () => {
-    // Flush mutation/RAF callbacks before closing the jsdom window.
+    // Disable the content script before jsdom's window teardown. The script
+    // intentionally keeps a MutationObserver alive for SPA route changes;
+    // closing the document while enabled can schedule a stale animation frame.
+    h.disable();
     await new Promise((resolve) => setTimeout(resolve, 80));
     h.dom.window.close();
   });
