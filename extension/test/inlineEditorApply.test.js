@@ -28,10 +28,6 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
     return attach.call(this, { ...init, mode: "open" });
   };
 
-  const copied = [];
-  Object.defineProperty(window.navigator, "clipboard", {
-    configurable: true, value: { writeText: async (value) => copied.push(value) },
-  });
   let writes = 0;
   window.document.execCommand = (name, _ui, value) => {
     assert.equal(name, "insertText");
@@ -68,7 +64,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
   assert.ok(shadow);
   function trigger() { shadow.getElementById("tt-button").click(); }
   return {
-    dom, window, editor, copied, shadow, trigger,
+    dom, window, editor, shadow, trigger,
     get writes() { return writes; },
   };
 }
@@ -103,11 +99,9 @@ test("unsupported native editor insertion does not fall back to raw DOM mutation
   h.shadow.getElementById("tt-apply").click();
   assert.equal(h.editor.textContent, "원본 프롬프트");
   assert.equal(h.writes, 1);
-  assert.match(h.shadow.getElementById("tt-message").textContent, /직접 붙여넣어/);
-  assert.equal(h.shadow.getElementById("tt-copy").hidden, false);
-  h.shadow.getElementById("tt-copy").click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(h.copied, ["개선 문단 하나\n개선 문단 둘"]);
+  assert.match(h.shadow.getElementById("tt-message").textContent, /입력창 교체에 실패/);
+  assert.equal(h.shadow.getElementById("tt-copy"), null);
+  assert.equal(h.shadow.querySelectorAll(".tt-actions button").length, 3);
 });
 
 test("partial editor insertion blocks an unsafe second overwrite", async (t) => {
