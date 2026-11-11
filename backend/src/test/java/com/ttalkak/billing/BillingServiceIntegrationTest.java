@@ -317,6 +317,59 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void mismatchedUpgradeProviderResponsesNeverGrantEntitlementOrTriggerSecondCharge() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment",
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        assertTrue(quote.amount() > 0);
+
+        reset(gateway);
+        doCallRealMethod().when(gateway).withinRequestBudget(any());
+
+        // An unrelated provider order is not proof that our upgrade was paid.
+        when(gateway.charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade")))
+                .thenAnswer(invocation -> new BillingGateway.Payment("unrelated-payment",
+                        "other-order-id", "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        ApiException wrongOrder = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_UNCERTAIN", wrongOrder.getCode());
+
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String originalOrderId = pending.getOrderId();
+        assertEquals("UPGRADE", pending.getChargeKind());
+        assertNull(pending.getPaymentKey());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+
+        // A later lookup for the same order with a mismatched amount is likewise
+        // uncertain. Reconciliation may only look up; it must never charge again.
+        when(gateway.lookup(originalOrderId)).thenReturn(new BillingGateway.Payment(
+                "wrong-amount-payment", originalOrderId, "DONE", "BILLING", quote.amount() + 1L));
+        ApiException wrongAmount = assertThrows(ApiException.class,
+                () -> billing.reconcileUpgrade(memberId));
+        assertEquals("BILLING_UNCERTAIN", wrongAmount.getCode());
+
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("PENDING", charges.findByOrderId(originalOrderId).orElseThrow().getStatus());
+        assertEquals(2, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+        verify(gateway, times(1)).lookup(originalOrderId);
+    }
+
+    @Test
     void withdrawnMemberCannotStartNewUpgradeOrderOrProviderCharge() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
