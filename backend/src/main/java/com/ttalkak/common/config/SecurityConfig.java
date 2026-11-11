@@ -28,6 +28,9 @@ public class SecurityConfig {
     private final com.ttalkak.auth.AuthRateLimitFilter authRateLimitFilter;
     private final ApiErrorWriter apiErrorWriter;
     private final List<String> allowedOriginPatterns;
+    // Temporary exhibition-only allowlist addition. Existing configured origins are preserved.
+    @Value("${TTALKAK_EXHIBITION_EXTENSION_ID:}")
+    private String exhibitionExtensionId = "";
 
 	public SecurityConfig(
 			JwtAuthenticationFilter jwtAuthenticationFilter,
@@ -208,6 +211,15 @@ public class SecurityConfig {
 
         if (!originPatterns.isEmpty()) {
             config.setAllowedOriginPatterns(originPatterns);
+        }
+
+        if (exhibitionExtensionId != null && !exhibitionExtensionId.isBlank()) {
+            String extensionId = exhibitionExtensionId.trim();
+            // Only one explicit Chrome extension ID: never allow wildcard extension origins.
+            if (!extensionId.matches("[a-p]{32}")) {
+                throw new IllegalStateException("Invalid exhibition Chrome extension ID");
+            }
+            config.addAllowedOrigin("chrome-extension://" + extensionId);
         }
 
         config.setAllowedMethods(List.of(

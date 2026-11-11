@@ -24,7 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 + "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
         "ttalkak.jwt.expiration-minutes=120",
         "ttalkak.jwt.issuer=ttalkak",
-        "ttalkak.admin.seed-enabled=false"
+        "ttalkak.admin.seed-enabled=false",
+        "TTALKAK_EXHIBITION_EXTENSION_ID=bnoaphfphajphbekiddnljikpfmaboch"
 })
 @AutoConfigureMockMvc
 class SecurityConfigAuthorizationTest {
@@ -51,6 +52,17 @@ class SecurityConfigAuthorizationTest {
     @Test
     void publishedChromeWebStoreExtensionCanCallImproveApiWithCorsPreflight() throws Exception {
         String origin = "chrome-extension://dgbmmjembonnhfkknohmbhlepagicnpc";
+        mockMvc.perform(options("/api/prompts/improve")
+                        .header("Origin", origin)
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "authorization,content-type,x-session-uuid"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", origin));
+    }
+
+    @Test
+    void exhibitionUnpackedExtensionIsAllowedWithoutRemovingStoreOrigin() throws Exception {
+        String origin = "chrome-extension://bnoaphfphajphbekiddnljikpfmaboch";
         mockMvc.perform(options("/api/prompts/improve")
                         .header("Origin", origin)
                         .header("Access-Control-Request-Method", "POST")
