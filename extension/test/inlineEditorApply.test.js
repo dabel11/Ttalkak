@@ -71,7 +71,11 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
 
 test("multiline ChatGPT editor keeps the native editing transaction and accepts equivalent paragraph breaks", async (t) => {
   const h = await setup();
-  t.after(() => h.dom.window.close());
+  t.after(async () => {
+    // Flush mutation/RAF callbacks before closing the jsdom window.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
   h.trigger();
   h.shadow.getElementById("tt-apply").click();
   assert.equal(h.writes, 1);
@@ -83,7 +87,11 @@ test("multiline ChatGPT editor keeps the native editing transaction and accepts 
 
 test("restore also recognizes editor paragraph markup after a successful improvement", async (t) => {
   const h = await setup();
-  t.after(() => h.dom.window.close());
+  t.after(async () => {
+    // Flush mutation/RAF callbacks before closing the jsdom window.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
   h.trigger();
   h.shadow.getElementById("tt-apply").click();
   h.shadow.getElementById("tt-restore").click();
@@ -94,7 +102,11 @@ test("restore also recognizes editor paragraph markup after a successful improve
 
 test("unsupported native editor insertion does not fall back to raw DOM mutation", async (t) => {
   const h = await setup({ command: "unsupported" });
-  t.after(() => h.dom.window.close());
+  t.after(async () => {
+    // Flush mutation/RAF callbacks before closing the jsdom window.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
   h.trigger();
   h.shadow.getElementById("tt-apply").click();
   assert.equal(h.editor.textContent, "원본 프롬프트");
@@ -106,10 +118,14 @@ test("unsupported native editor insertion does not fall back to raw DOM mutation
 
 test("partial editor insertion blocks an unsafe second overwrite", async (t) => {
   const h = await setup({ command: "partial" });
-  t.after(() => h.dom.window.close());
+  t.after(async () => {
+    // Flush mutation/RAF callbacks before closing the jsdom window.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
   h.trigger();
   h.shadow.getElementById("tt-apply").click();
-  assert.match(h.shadow.getElementById("tt-message").textContent, /일부 바뀌었을 수/);
+  assert.match(h.shadow.getElementById("tt-message").textContent, /입력창 교체에 실패/);
   assert.equal(h.shadow.getElementById("tt-apply").disabled, true);
   h.shadow.getElementById("tt-apply").click();
   assert.equal(h.writes, 1);
@@ -118,11 +134,15 @@ test("partial editor insertion blocks an unsafe second overwrite", async (t) => 
 
 test("a real user edit after preview is never overwritten", async (t) => {
   const h = await setup();
-  t.after(() => h.dom.window.close());
+  t.after(async () => {
+    // Flush mutation/RAF callbacks before closing the jsdom window.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
   h.trigger();
   h.editor.querySelector("p").textContent = "사용자가 직접 수정한 문장";
   h.shadow.getElementById("tt-apply").click();
   assert.equal(h.writes, 0);
   assert.equal(h.editor.textContent, "사용자가 직접 수정한 문장");
-  assert.match(h.shadow.getElementById("tt-message").textContent, /원문을 보호/);
+  assert.match(h.shadow.getElementById("tt-message").textContent, /문장을 보호하기 위해 적용하지 않았/);
 });
