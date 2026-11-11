@@ -29,3 +29,11 @@
 - `develop` HEAD의 [CI #42444943903](https://github.com/dabel11/Ttalkak/actions/runs/42444943903)는 2026-11-08(KST) **6개 job 성공**이다. 이 브랜치의 코드·테스트는 그 CI에 포함되지 않는다. 현재 작업 브랜치 HEAD에는 GitHub Actions 실행 기록이 없다. `.github/workflows/ci.yml`은 `develop` push와 PR 이벤트로 CI를 실행한다. **이번 수정 테스트는 실행/통과 확인되지 않았다.**
 - 코드 비교로 확인한 잔여 정책 차이: `BillingService.charge()`의 **이미 전송된 RENEWAL 승인 완료 처리**는 탈퇴 후에도 `BillingCharge.DONE`과 새 `PaidUsagePeriod`를 기록할 수 있다. 기존 테스트 `withdrawalDuringInflightProviderApprovalNeverRestartsAutoRenewal()`은 자동갱신이 재활성화되지 않음을 검증하도록 작성됐지만, 결제 승인 후 이용권 생성 자체의 처리 정책을 검증하지 않는다. 반면 이번 브랜치의 늦은 **UPGRADE 승인**은 탈퇴 계정에 요금제 변경을 적용하지 않고 원 주문 `PENDING`을 대사 대상으로 보존하도록 작성됐다. 두 경로의 차이가 회계·보존·환불 정책에 맞는지는 **미확정 설계 검토 사항**이며, 곧바로 결함이나 환불 완료로 단정하지 않는다.
 - 후속 안전 검증: 격리된 MySQL 환경에서 신규 업그레이드 테스트 실행 → 탈퇴/승인 락 순서 점검 → 승인된 갱신/업그레이드 주문의 수동 대사·환불 정책 명확화 → 실환경과 분리된 복구 리허설. 현재 운영 PG/DB/변수·Railway·실결제 변경, 새 PR/병합/브랜치 삭제는 금지 범위이므로 수행하지 않는다.
+
+## 2026-11-11 추가 회귀 경계 점검 (미실행)
+
+- 기준 `develop` HEAD: `6144068cbedb319881d5c5551c7776b642c2aba6`. 지정된 `chore/db-deployment-safety-gates` 브랜치는 GitHub에서 404였다. 테스트 추가 직전 기존 작업 브랜치는 `develop` 대비 5커밋 앞서고 17커밋 뒤처져 있었다. 이후 커밋으로 수치는 달라질 수 있으며 병합 준비 완료의 근거가 아니다.
+- 추가 테스트: `mismatchedUpgradeProviderResponsesNeverGrantEntitlementOrTriggerSecondCharge()` (커밋 `0872f10d31d848f9dd05dc2f4f5faa678925c783`). 합성 계정의 LIGHT→STANDARD 업그레이드에서 **잘못된 주문 ID**를 가진 공급자 `DONE` 응답과, 원래 주문 조회 시 **일치하지 않는 승인 금액**을 가진 `DONE` 응답을 순차 주입한다. 양쪽 모두 `BILLING_UNCERTAIN`, 기존 LIGHT 이용권/요금제, 원 주문 `PENDING`, 주문 개수 불변 및 재조회 시 추가 `charge()` 없음이 기대 결과다.
+- **새 테스트는 작성·커밋했지만 실행하지 않았다.** 작업 브랜치 HEAD에서 자동 CI가 동작한 것이 아니다. 실제 MySQL 회귀 성공, 분산락, 결제사 정산/환불, 운영 준비 완료는 검증되지 않았다.
+- `develop`의 [CI #43033273436](https://github.com/dabel11/Ttalkak/actions/runs/43033273436) 첫 실행은 2026-11-11(KST) 백엔드 테스트, MySQL 9 스키마, RAG, 프런트엔드 4개 job 성공, 브라우저 E2E 및 웹·Spring 통합 스모크 2개 job 실패였다. 실패 단계는 Playwright 의존성 설치로, 로그에 `security.ubuntu.com` 등 Ubuntu 패키지 호스트의 임시 DNS 조회 실패가 확인됐다. **E2E·통합 테스트 본문은 실행되지 않았다.** CI 자체가 녹색이라고 볼 수 없다. 실패한 두 job의 재실행을 요청했으며, 이 기록 시점에는 2차 실행이 진행 중이어서 최종 통과 여부는 미확인이다.
+- 다음 검증은 새 회귀 테스트의 격리 MySQL 실행과 기존 코드 변경의 기준 브랜치 재동기화 검토다. 승인 없이 PR, 병합, 브랜치 삭제, 운영 DB/변수, Railway 배포, 실제 PG 호출·환불은 하지 않는다.
