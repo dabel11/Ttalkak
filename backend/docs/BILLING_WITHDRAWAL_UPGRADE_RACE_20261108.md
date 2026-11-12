@@ -37,3 +37,12 @@
 - **새 테스트는 작성·커밋했지만 실행하지 않았다.** 작업 브랜치 HEAD에서 자동 CI가 동작한 것이 아니다. 실제 MySQL 회귀 성공, 분산락, 결제사 정산/환불, 운영 준비 완료는 검증되지 않았다.
 - `develop`의 [CI #43033273436](https://github.com/dabel11/Ttalkak/actions/runs/43033273436) 첫 실행은 2026-11-11(KST) 백엔드 테스트, MySQL 9 스키마, RAG, 프런트엔드 4개 job 성공, 브라우저 E2E 및 웹·Spring 통합 스모크 2개 job 실패였다. 실패 단계는 Playwright 의존성 설치로, 로그에 `security.ubuntu.com` 등 Ubuntu 패키지 호스트의 임시 DNS 조회 실패가 확인됐다. **E2E·통합 테스트 본문은 실행되지 않았다.** CI 자체가 녹색이라고 볼 수 없다. 실패한 두 job의 재실행을 요청했으며, 이 기록 시점에는 2차 실행이 진행 중이어서 최종 통과 여부는 미확인이다.
 - 다음 검증은 새 회귀 테스트의 격리 MySQL 실행과 기존 코드 변경의 기준 브랜치 재동기화 검토다. 승인 없이 PR, 병합, 브랜치 삭제, 운영 DB/변수, Railway 배포, 실제 PG 호출·환불은 하지 않는다.
+
+## 2026-11-12 갱신 결제 응답 검증 및 CI 재점검 (운영 미적용)
+
+- GitHub 브랜치 목록 기준 `develop` HEAD는 `6144068cbedb319881d5c5551c7776b642c2aba6`. `chore/db-deployment-safety-gates`는 목록에 없으며 임의 복원하지 않았다. 기존 `fix/billing-withdrawn-upgrade-guard-20261106` 작업 브랜치만 수정했다.
+- 테스트 커밋 [`cb902453`](https://github.com/dabel11/Ttalkak/commit/cb9024535733f8f06a3785110e118d7e4ed246e2): `mismatchedRenewalProviderResponsesKeepSameOrderPendingUntilVerified()` 추가. 신규 합성 LIGHT 회원의 첫 **RENEWAL** 승인에서 다른 `orderId`를 반환하는 `DONE` 응답, 동일 주문 조회에서 승인 금액이 다른 `DONE` 응답을 순차 검증한다. 두 결과 모두 `BILLING_UNCERTAIN` 및 기존 `PENDING` 주문·FREE 이용권 유지가 기대값이다. 이후 정확한 동일 주문 조회 결과로 1개 주문만 `DONE`으로 확정되고, 추가 `charge()` 호출 없이 LIGHT 이용권이 활성화되는지를 확인하도록 작성했다.
+- **이 신규 테스트는 GitHub에 커밋했으나 실행·통과를 검증하지 않았다.** 앞선 업그레이드·탈퇴 테스트 역시 이 브랜치에서 자동 CI가 실행됐다는 근거가 없다. 이 문서는 테스트 성공이나 실결제 안전성의 증빙이 아니다.
+- `develop`의 [CI #43033273436](https://github.com/dabel11/Ttalkak/actions/runs/43033273436)은 2번째 시도 후에도 최종 **failure**다. 최신 작업 중 백엔드 테스트·프런트엔드 테스트/빌드·RAG 테스트·MySQL 9 JPA 스키마 부트 4개는 성공, `Web and Spring backend integration smoke`는 실패, `Web fixture browser E2E`는 취소됐다. 스모크 실패 단계는 `Install integration browser dependencies`이며 로그에서 Ubuntu 패키지 호스트 DNS 조회 실패(`Temporary failure resolving 'security.ubuntu.com'`)를 확인했다. 브라우저 E2E의 테스트 본문은 실행되지 않았고, 통합 스모크 본문도 시작되지 않았다. **CI 전체 통과라고 판단하지 않는다.**
+- 다음 우선순위는 격리된 MySQL에서 신규 `BillingServiceIntegrationTest`를 실제 실행하여 정확한 테스트 결과와 실패 로그를 확보하는 것이다. 인프라 DNS가 회복되면 기존 `develop` CI를 다시 확인하되, CI 실패를 애플리케이션 회귀로 단정하지 않는다.
+- 실결제, PG 취소·환불, 운영 DB·변수, Railway 배포, PR 생성·병합, 브랜치 삭제와 팀원 영역 수정은 수행하지 않는다. 탈퇴 이후 이미 승인된 RENEWAL/UPGRADE 결제의 정산·보존 정책은 별도 검토 대상으로 유지한다.
