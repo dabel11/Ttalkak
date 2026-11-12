@@ -177,6 +177,51 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void mismatchedRenewalProviderResponsesKeepSameOrderPendingUntilVerified() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-renewal-key");
+
+        // A DONE response belonging to a different order must never activate a paid period.
+        when(gateway.charge(anyString(), anyString(), anyString(), eq(3900), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("unrelated-payment",
+                        "foreign-order-id", "DONE", "BILLING", 3900));
+        ApiException wrongOrder = assertThrows(ApiException.class,
+                () -> billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth"));
+        assertEquals("BILLING_UNCERTAIN", wrongOrder.getCode());
+
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String orderId = pending.getOrderId();
+        assertEquals("RENEWAL", pending.getChargeKind());
+        assertNull(pending.getPaymentKey());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("PENDING", billing.status(memberId).paymentStatus());
+        assertEquals(1, charges.countByMemberId(memberId));
+
+        // A matching order with the wrong amount is also not proof of a valid payment.
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "wrong-amount-payment", orderId, "DONE", "BILLING", 3901));
+        ApiException wrongAmount = assertThrows(ApiException.class, () -> billing.retry(memberId));
+        assertEquals("BILLING_UNCERTAIN", wrongAmount.getCode());
+        assertEquals("PENDING", charges.findByOrderId(orderId).orElseThrow().getStatus());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
+
+        // A later matching lookup can settle the same durable order, without charging again.
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "verified-renewal-payment", orderId, "DONE", "BILLING", 3900));
+        billing.retry(memberId);
+        assertEquals("DONE", charges.findByOrderId(orderId).orElseThrow().getStatus());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
+        assertEquals(1, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), eq(3900), anyString());
+        verify(gateway, times(2)).lookup(orderId);
+    }
+
+    @Test
     void registeredCardWithoutFirstChargeIsRecoveredByPoll() {
         Instant now = Instant.parse("2026-09-27T07:00:00Z");
         when(clock.instant()).thenReturn(now);
