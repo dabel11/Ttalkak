@@ -82,3 +82,11 @@ docker rm -f ttalkak-billing-regression-mysql
 \`\`\`
 
 검증 시 실제 종료 코드, 실패한 테스트 이름, \`backend/build/test-results/test/\`의 XML 결과 및 MySQL 버전을 기록한다. 중단·시간초과는 통과로 간주하지 않는다. 회귀 체크 포인트는 탈퇴 후 신규/재시도 업그레이드 차단, 승인 응답 지연과 주문 \`PENDING\` 보존, 공급자 주문 ID·승인 금액 불일치 차단, 갱신 결제의 동일 주문 조회·추가 청구 방지다. **단일 컨테이너 통합 테스트는 다중 인스턴스 경합 또는 실제 PG 정산·환불의 증거가 아니다.** Docker 또는 MySQL 초기화가 실패하면 원인을 기록하고 코드를 임의로 수정하지 않는다.
+
+
+## 2026-11-13 CI 재시도와 인증-탈퇴 회귀 경계 (운영 미적용)
+
+- 같은 \`develop\` 커밋 \`6144068cbedb319881d5c5551c7776b642c2aba6\`의 [GitHub Actions CI #43033273436](https://github.com/dabel11/Ttalkak/actions/runs/43033273436)에서 네트워크 실패 후 **failed jobs 재실행**을 요청했다. **3번째 실행은 최종 success이며 여섯 job 모두 성공**했다. 백엔드 테스트, 프런트엔드, RAG, 폐기형 MySQL 9 JPA 부팅, 웹 브라우저 E2E, 웹+Spring 통합 스모크의 GitHub 결과를 확인했다. 이전 2번째 시도의 실패 사실은 당시 기록으로 유지한다.
+- 위 성공은 **\`develop\` 전용**이며, 현재 분기된 \`fix/billing-withdrawn-upgrade-guard-20261106\` 브랜치의 신규 테스트는 여전히 미실행이다. PR·머지가 없는 상태에서 \`develop\`의 녹색 결과를 수정 브랜치 합격으로 추정하지 않는다.
+- [\`d2d2e8c\`](https://github.com/dabel11/Ttalkak/commit/d2d2e8ca4b02eee945ea10c9a9d545dc8fff35cc)에서 \`withdrawnMemberCannotReusePreviouslyValidAccessTokenForBillingEndpoints()\`를 추가했다. 탈퇴 전 유효하던 JWT로 청구 상태 조회가 정상 작동함을 먼저 확인하고, 실제 탈퇴 후에는 동일 토큰의 상태 조회·결제 수단 설정·재시도 요청이 모두 401로 거부되며 신규 청구가 없는지 검증하도록 **작성**했다. 아직 이 테스트를 실행하거나 성공한 것은 아니다.
+- 브랜치가 공통 조상에서 갈라진 상태이므로 안전성 변경을 병합할 준비가 됐다는 의미는 아니다. 실제 MySQL 8.4 대상 회귀 테스트, 기준 브랜치 동기화 및 실제 결제 승인 후 대사 정책 검토를 남겨 둔다.
