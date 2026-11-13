@@ -46,3 +46,39 @@
 - `develop`의 [CI #43033273436](https://github.com/dabel11/Ttalkak/actions/runs/43033273436)은 2번째 시도 후에도 최종 **failure**다. 최신 작업 중 백엔드 테스트·프런트엔드 테스트/빌드·RAG 테스트·MySQL 9 JPA 스키마 부트 4개는 성공, `Web and Spring backend integration smoke`는 실패, `Web fixture browser E2E`는 취소됐다. 스모크 실패 단계는 `Install integration browser dependencies`이며 로그에서 Ubuntu 패키지 호스트 DNS 조회 실패(`Temporary failure resolving 'security.ubuntu.com'`)를 확인했다. 브라우저 E2E의 테스트 본문은 실행되지 않았고, 통합 스모크 본문도 시작되지 않았다. **CI 전체 통과라고 판단하지 않는다.**
 - 다음 우선순위는 격리된 MySQL에서 신규 `BillingServiceIntegrationTest`를 실제 실행하여 정확한 테스트 결과와 실패 로그를 확보하는 것이다. 인프라 DNS가 회복되면 기존 `develop` CI를 다시 확인하되, CI 실패를 애플리케이션 회귀로 단정하지 않는다.
 - 실결제, PG 취소·환불, 운영 DB·변수, Railway 배포, PR 생성·병합, 브랜치 삭제와 팀원 영역 수정은 수행하지 않는다. 탈퇴 이후 이미 승인된 RENEWAL/UPGRADE 결제의 정산·보존 정책은 별도 검토 대상으로 유지한다.
+
+
+## 격리된 MySQL 8.4에서의 재현 절차 (작성: 2026-11-13, 실행 전)
+
+\`develop\` CI의 Backend job은 실제 MySQL 8.4를 사용하지만, 이 별도 작업 브랜치의 신규 테스트는 해당 성공 기록으로 검증할 수 없다. 아래는 **로컬/임시 실험 환경에서 실행할 수 있도록 준비한 절차**이며, 작성자가 실행하거나 성공을 확인한 명령이 아니다. 작업 브랜치를 체크아웃한 뒤 **빈 테스트 전용 DB**에만 연결한다.
+
+\`\`\`bash
+# 호스트의 운영 MySQL과 다른 포트(13306)의 폐기 가능한 컨테이너.
+docker run --rm -d --name ttalkak-billing-regression-mysql \
+  -p 127.0.0.1:13306:3306 \
+  -e MYSQL_DATABASE=ttalkak_billing_regression \
+  -e MYSQL_ROOT_PASSWORD=fixture-only \
+  mysql:8.4
+
+until docker exec ttalkak-billing-regression-mysql \
+    mysqladmin ping -h 127.0.0.1 -pfixture-only --silent; do sleep 2; done
+
+(
+  cd backend
+  DB_URL='jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true' \
+  DB_USERNAME=root \
+  DB_PASSWORD=fixture-only \
+  JWT_SECRET_BASE64='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
+  BILLING_MODE=test \
+  BILLING_STORE_SCOPE=test:legacy \
+  TOSS_TEST_CLIENT_KEY=test_ck_fixture \
+  TOSS_TEST_SECRET_KEY=test_sk_fixture \
+  BILLING_POLL_MS=3600000 \
+  ./gradlew test --tests 'com.ttalkak.billing.BillingServiceIntegrationTest' --no-daemon
+)
+
+# 실행이 종료된 뒤에만 이 테스트 컨테이너를 정리한다.
+docker rm -f ttalkak-billing-regression-mysql
+\`\`\`
+
+검증 시 실제 종료 코드, 실패한 테스트 이름, \`backend/build/test-results/test/\`의 XML 결과 및 MySQL 버전을 기록한다. 중단·시간초과는 통과로 간주하지 않는다. 회귀 체크 포인트는 탈퇴 후 신규/재시도 업그레이드 차단, 승인 응답 지연과 주문 \`PENDING\` 보존, 공급자 주문 ID·승인 금액 불일치 차단, 갱신 결제의 동일 주문 조회·추가 청구 방지다. **단일 컨테이너 통합 테스트는 다중 인스턴스 경합 또는 실제 PG 정산·환불의 증거가 아니다.** Docker 또는 MySQL 초기화가 실패하면 원인을 기록하고 코드를 임의로 수정하지 않는다.
