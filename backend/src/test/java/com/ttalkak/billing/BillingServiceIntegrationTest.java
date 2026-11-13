@@ -770,6 +770,38 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void withdrawnMemberCannotReusePreviouslyValidAccessTokenForBillingEndpoints() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("token_withdraw_" + suffix,
+                passwordEncoder.encode(password), "token_withdraw_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        String token = auth.issueAccessToken(member);
+
+        // This was a valid token before withdrawal; no login failure is being simulated.
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        withdrawal.withdraw(member, password, null);
+
+        // Endpoints must recheck the current account state, not trust a previously
+        // issued JWT. Keep financial records but deny their former owner access.
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/setup").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertEquals(0, charges.countByMemberId(memberId));
+        verify(gateway, never()).issueBillingKey(anyString(), anyString());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    @Test
     void onlySignedInMemberCanRegisterAndForeignCustomerKeyIsRejected() throws Exception {
         mvc.perform(post("/api/me/billing/setup")).andExpect(status().isUnauthorized());
         Member member = newMember();
