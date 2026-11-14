@@ -61,11 +61,27 @@ def default_models(backend: str) -> tuple[str, str]:
     m = default_model("gemini")
     return m, m
 
-_PAIR_SYSTEM = """너는 두 AI 결과물의 품질을 비교하는 엄격하고 공정한 평가자다.
+# 짝 비교 판정기. pair-v1 은 사람 선호(pref 10쌍 × 2명)와 3/10·4/9 만 같았다 — 사람은 '군더더기'로 짧은 쪽을 골랐는데
+# v1 은 긴 쪽을 골랐다(2026-11-14). v2 는 사람 평가지와 같은 순서(결과물별 의도·고칠 양·군더더기·정확성 → 비교)로 판단하게 한다.
+PAIR_JUDGE_VERSION = "pair-v2"
+_PAIR_SYSTEM = """너는 요청자 대신 두 AI 결과물 중 실제로 쓸 하나를 고르는 엄격하고 공정한 평가자다.
 같은 사용자 요청에 대한 결과물 [1]과 [2]를 받는다. 어느 쪽이 어떤 방식으로 만들어졌는지는 모른다.
-오직 '사용자 요청을 얼마나 잘 충족했는가'로 판단한다: 요청 반영, 바로 쓸 수 있는 구체성, 정확성.
-길다고 좋은 게 아니다. 결과물 속 ⟦자리표시자⟧는 나중에 채울 빈자리다. 차이가 없으면 "tie".
-반드시 아래 JSON 한 개만 출력: {"winner": "1"|"2"|"tie", "reason": "<한 줄>"}"""
+결과물 속 ⟦자리표시자⟧는 요청자가 나중에 채울 빈자리다.
+
+1) 먼저 결과물마다 따로 본다.
+ - intent(1~5): 요청자가 원한 결과물의 종류와 범위를 만들었는가. 요청에 없는 항목·단계·부록을 덧붙였으면 범위가 다른 것이다.
+ - edit(A~D): 요청자가 받아서 실제로 쓰기까지 고칠 양. A 그대로 씀 · B 이름·날짜 등 몇 군데만 채움 · C 일부 문단을 고치거나 지움 · D 대부분 다시 씀.
+ - fluff(0~100): 요청자가 지울 부분의 비율 — 서두·요청 되풀이·불필요한 해설·반복·요청하지 않은 추가 설명이나 사용 팁.
+ - accuracy: 틀린 내용이나 확인되지 않은 사실(수치·이름·사건·기능)을 단정했는가(true/false).
+2) 그다음 비교한다.
+ - 의도와 정확성이 크게 다르면 그것으로 고른다.
+ - 비슷하면 요청자가 덜 고치고 덜 지워도 되는 쪽(edit·fluff)을 고른다.
+ - 한쪽에만 있는 내용은 요청자에게 꼭 필요할 때만 장점이다. '있으면 좋은' 정도의 추가는 장점이 아니며, 그만큼 지울 분량이 늘면 단점이다.
+ - 길이·성의·꼼꼼해 보이는 인상은 점수가 아니다. 차이가 없으면 "tie".
+반드시 아래 JSON 한 개만 출력:
+{"r1": {"intent": 1-5, "edit": "A"|"B"|"C"|"D", "fluff": 0-100, "accuracy": true|false},
+ "r2": {"intent": 1-5, "edit": "A"|"B"|"C"|"D", "fluff": 0-100, "accuracy": true|false},
+ "winner": "1"|"2"|"tie", "reason": "<한 줄>"}"""
 
 
 # ── 호출 ──────────────────────────────────────────────────────
@@ -126,13 +142,16 @@ def judge_defects(client, model: str, system: str, item: dict, output: str) -> d
 def judge_pair(client, model: str, item: dict, out_a: str, out_b: str) -> dict:
     """a·b 를 순서 바꿔 2회 비교. 반환 winner ∈ {'a','b','tie'} — 두 번 모두 같은 쪽이어야 승부."""
     from eval.uplift_eval import _loads_loose
-    res = []
+    res, finish = [], []
     for first, second, a_pos in ((out_a, out_b, "1"), (out_b, out_a, "2")):
         user = f"[사용자 요청]\n{item['query']}\n\n[결과물 1]\n{mask(first)}\n\n[결과물 2]\n{mask(second)}"
-        r = _chat(client, model, _PAIR_SYSTEM, user, 1200, 0.0, json_mode=True)
+        # v2 는 결과물별 항목까지 JSON 으로 내 길다 — 1200 이면 생각 토큰과 합쳐 잘려 '무승부'로 조용히 떨어진다
+        r = _chat(client, model, _PAIR_SYSTEM, user, 4000, 0.0, json_mode=True)
         w = str(_loads_loose(r["text"]).get("winner", "")).strip()
         res.append("a" if w == a_pos else ("tie" if w in ("tie", "") else "b"))
-    return {"winner": res[0] if res[0] == res[1] else "tie", "passes": res}
+        finish.append(r["finish"])
+    return {"winner": res[0] if res[0] == res[1] else "tie", "passes": res, "finish": finish,
+            "version": PAIR_JUDGE_VERSION}
 
 
 # ── 결과물 하나 채점 ─────────────────────────────────────────

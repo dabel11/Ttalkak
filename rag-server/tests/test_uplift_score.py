@@ -192,3 +192,20 @@ def test_truncated_or_incomplete_records_are_rerun():
     assert _needs_run({"req_incomplete": False, "exec_finish": "length"})     # 출력 예산에서 잘림(2026-11-13)
     assert not _needs_run({"req_incomplete": False, "exec_finish": "stop"})
     assert not _needs_run({"asked": True})                                    # 되묻기는 다시 돌리지 않는다
+
+
+def test_judge_pair_needs_both_orders_and_records_version():
+    """순서를 바꾼 두 번이 같은 쪽일 때만 승부, 판정기 버전·종료 사유를 남긴다."""
+    from types import SimpleNamespace as NS
+    from eval.uplift_score import PAIR_JUDGE_VERSION, judge_pair
+
+    def client(answers):
+        it = iter(answers)
+        create = lambda **kw: NS(choices=[NS(message=NS(content=next(it)), finish_reason="stop")], usage=None)
+        return NS(chat=NS(completions=NS(create=create)))
+
+    item = {"query": "q"}
+    same = judge_pair(client(['{"winner": "2"}', '{"winner": "1"}']), "m", item, "a", "b")   # 두 번 다 b
+    split = judge_pair(client(['{"winner": "1"}', '{"winner": "1"}']), "m", item, "a", "b")  # 위치만 따라감
+    assert same["winner"] == "b" and split["winner"] == "tie"
+    assert same["version"] == PAIR_JUDGE_VERSION and same["finish"] == ["stop", "stop"]
