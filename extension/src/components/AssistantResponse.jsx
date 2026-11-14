@@ -46,7 +46,7 @@ export function AssistantResponse({ message, isAsk }) {
         <>
           {followUpQuestions.length > 0 && (
             <div className="assistant-details ask-details">
-              <QuestionList questions={followUpQuestions} mode="improve" />
+              <QuestionList questions={followUpQuestions} mode="improve" summary={message.summary || ""} />
             </div>
           )}
           {detailCount > 0 && (
