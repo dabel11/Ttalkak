@@ -67,3 +67,11 @@ usage 누락/0/잘못된 값이면 성공 답변은 저장하되 lease에 불확
 staging의 ddl-auto=update는 새 테이블을 생성한다. 스키마 관리 환경은
 `backend/db/manual/20261006-member-request-lease.sql`을 복구된 DB 복사본에서 검증 후 적용한다.
 전체 Flyway 도입은 기존 DB 스키마 실측과 baseline 설계 후 진행한다.
+
+## 졸업 전시회용 단일 테스트 계정 허용량
+
+- `TTALKAK_EXHIBITION_USER_ID`와 양수 `TTALKAK_EXHIBITION_REQUEST_LIMIT`를 **같이 설정**하면, 요청 횟수 한도가 활성화된 환경에서 해당 로그인 ID에만 별도 월간 요청 한도를 적용한다.
+- 다른 회원의 FREE/LIGHT/STANDARD/PRO 한도는 그대로 유지하고 기존 기록을 초기화하지 않는다. 결제 상태/구독 등급도 변경하지 않는다.
+- 해당 한도와 잔여 횟수는 일반 회원처럼 `GET /api/me/usage`에 표시된다. 요청 횟수 제한 자체가 비활성화된 환경에서는 이 특례도 적용되지 않는다.
+- 이 설정은 토큰 한도, 동시 요청 보호, RAG 공급자 한도, 사용량 불확실성 차단, 계정 보안 검사를 우회하지 않는다.
+- 전시가 끝나면 두 변수를 제거하고 재배포한다. 실사용자 계정 ID를 공개 문서에 하드코딩하지 않는다.
