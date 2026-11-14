@@ -160,15 +160,13 @@ function migratePersistedMakeState(/** @type {Record<string, *>} */ state = {}) 
 function buildImproveHistory(messages) { return migrateMakeMessages(messages).filter((message) => { const value = /** @type {Record<string, *>} */ (message); return !value.excludeFromHistory && !value.isCancelled && !value.isError && (value.role === "user" || value.role === "assistant"); }).map((message) => ({ role: message.role, content: text(message.role === "assistant" ? message.answer || message.content : message.content) })).filter((message) => message.content); }
 const NON_EXECUTABLE_PROMPT_FRAGMENTS = ["관련 프롬프트 기법 근거를 찾지 못했습니다", "관련 기법 근거 없이", "개선안을 만들 수 없"];
 const ASK_ONLY_PATTERNS = [/확인이\s*필요/i, /답변이\s*필요/i, /추가\s*정보가\s*필요/i, /정보를\s*보완해\s*주세요/i, /개선안을?\s*만들\s*수\s*없/i, /만들\s*수\s*없어/i, /아래\s*정보를\s*알려주시면/i, /어떤\s*주제/i, /무엇에\s*대한\s*글/i];
-const ACTIONABLE_TASK_PATTERN = /(?:작성|생성|요약|분석|정리|비교|제안|추천|검토|설명|구성|수정)(?:하라|하세요|하시오|해라|해(?:\s*줘|\s*주세요)?)/u;
 function isUtilityOnlyPrompt(value) { const normalized = text(value).replace(/\s+/g, " "); return !normalized || NON_EXECUTABLE_PROMPT_FRAGMENTS.some((fragment) => normalized.includes(fragment)); }
 function isAskOnlyResponse(value) {
   const normalized = text(value);
-  if (!normalized || isUtilityOnlyPrompt(normalized)) return true;
-  // An actionable prompt may *mention* missing facts. Do not mistake an
-  // instruction to write using verified facts for a request for more facts.
-  return !ACTIONABLE_TASK_PATTERN.test(normalized)
-    && ASK_ONLY_PATTERNS.some((pattern) => pattern.test(normalized));
+  // Questions require another user answer when they lead the response.
+  // Missing-fact cautions inside an actionable instruction are not ask-only.
+  return !normalized || isUtilityOnlyPrompt(normalized)
+    || ASK_ONLY_PATTERNS.some((pattern) => normalized.search(pattern) === 0);
 }
 function isExecutableMessage(message) {
   const value = migrateMakeMessage(message);
