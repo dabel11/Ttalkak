@@ -23,7 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "ttalkak.usage.quota-enabled=false",
         "ttalkak.usage.request-quota-enabled=true",
         "ttalkak.usage.free-request-limit=2",
-        "ttalkak.usage.pro-request-limit=3"
+        "ttalkak.usage.pro-request-limit=3",
+        "ttalkak.usage.exhibition-user-id=ttalkak_review",
+        "ttalkak.usage.exhibition-request-limit=100"
 })
 class MemberRequestCountQuotaIntegrationTest {
     @Autowired MemberRequestGuard guard;
@@ -80,6 +82,60 @@ class MemberRequestCountQuotaIntegrationTest {
                 .andExpect(jsonPath("$.requests").value(0))
                 .andExpect(jsonPath("$.requestLimit").value(3))
                 .andExpect(jsonPath("$.requestRemaining").value(3));
+    }
+
+    @Test
+    void exhibitionAccountKeepsUsageAndGetsHigherLimitWithoutAffectingOtherMembers() throws Exception {
+        Member review = members.saveAndFlush(new Member(
+                "ttalkak_review", "password", "exhibition_review", "Exhibition review", null, null, null));
+        for (int i = 0; i < 11; i++) {
+            usage.record(review.getId(), UUID.randomUUID().toString(),
+                    new TokenCounts(80, 20, 100), Instant.now().minusSeconds(20 - i));
+        }
+
+        var permit = guard.acquire(review.getId());
+        try {
+            assertDoesNotThrow(() -> guard.checkQuota(permit));
+        } finally {
+            guard.release(permit);
+        }
+        mvc.perform(get("/api/me/usage")
+                        .header("Authorization", "Bearer " + auth.issueAccessToken(review)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.requests").value(11))
+                .andExpect(jsonPath("$.requestLimit").value(100))
+                .andExpect(jsonPath("$.requestRemaining").value(89))
+                .andExpect(jsonPath("$.requestQuotaEnforced").value(true));
+
+        Member ordinary = member();
+        for (int i = 0; i < 2; i++) {
+            usage.record(ordinary.getId(), UUID.randomUUID().toString(),
+                    new TokenCounts(80, 20, 100), Instant.now().minusSeconds(5 - i));
+        }
+        var ordinaryPermit = guard.acquire(ordinary.getId());
+        try {
+            assertEquals("MEMBER_REQUEST_LIMIT_EXCEEDED",
+                    assertThrows(ApiException.class, () -> guard.checkQuota(ordinaryPermit)).getCode());
+        } finally {
+            guard.release(ordinaryPermit);
+        }
+        mvc.perform(get("/api/me/usage")
+                        .header("Authorization", "Bearer " + auth.issueAccessToken(ordinary)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestLimit").value(2))
+                .andExpect(jsonPath("$.requestRemaining").value(0));
+    }
+
+    @Test
+    void exhibitionAllowanceNeedsBothConfigurationValues() {
+        assertThrows(IllegalArgumentException.class, () -> new MemberQuotaPolicy(
+                false, 0, 0, true, 2, 30, 70, 150, "ttalkak_review", 0));
+        assertThrows(IllegalArgumentException.class, () -> new MemberQuotaPolicy(
+                false, 0, 0, true, 2, 30, 70, 150, "", 100));
+        assertNull(new MemberQuotaPolicy(
+                false, 0, 0, false, 2, 30, 70, 150, "ttalkak_review", 100)
+                .effectiveRequestLimit("FREE", null, "ttalkak_review"));
     }
 
     @Test
