@@ -57,11 +57,12 @@ for name, text, actual in [("한국어 문어체", _KO_FORMAL, 417), ("한국어
     check(f"사용자 입력 과소추정 없음: {name}({actual}tok)", _est_tokens(text) >= actual,
           f"got {_est_tokens(text)}")
 
-# 고정 입력용(보정) — SYSTEM_PROMPT 실측 4,153(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
+# 고정 입력용(보정) — SYSTEM_PROMPT 실측 4,999(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
 # 추정치로 대체하면 이 테스트(과소추정 금지)의 의미가 사라진다. 코퍼스 전량 검증은 token_calib --corpus.
 # 이력: llama 2,766 → 4,091(규약 v3) · gpt-oss 3,857(2026-09-20) → 4,153(2026-11-13, 범위·부수 정보 빈칸 규칙 +296 —
-# 같은 호출로 전후를 재서 차이만 더함: 3,933 → 4,229). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
-_SYSTEM_ACTUAL = 4153
+# 같은 호출로 전후를 재서 차이만 더함: 3,933 → 4,229) → 4,999(2026-11-14, v7 덧붙이기 구조 —
+# gpt-oss-20b prompt_tokens, 직전 커밋 프롬프트 3,934 → 5,076 차이 +1,142 를 3,857 에 더함). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
+_SYSTEM_ACTUAL = 4999
 check("고정 입력: SYSTEM_PROMPT 과소추정 없음", _est_known_tokens(SYSTEM_PROMPT) >= _SYSTEM_ACTUAL,
       f"got {_est_known_tokens(SYSTEM_PROMPT)}")
 check("고정 입력: SYSTEM_PROMPT 과대추정 5% 이내(예산 낭비 방지)",
@@ -138,8 +139,9 @@ from app.rag.generator import _needs_long_context  # noqa: E402
 OSS = "openai/gpt-oss-120b"
 _saved = os.environ.pop("GROQ_TPM_LIMIT", None)
 try:
-    # 운영 규모 입력(SYSTEM + 기법 5 + 예시 2 ≈ 실측 5.5k) — 무료 8k 에선 예산이 4096 에 못 미친다
-    m = msgs("임영웅 콘서트 인스타 카드뉴스 문구 만들어줘. " + "참고 기법 설명 " * 300)
+    # 운영 규모 입력 — 무료 8k 에선 예산이 4096 에 못 미친다. 2026-11-14: SYSTEM 이 v7 로 4,999 토큰이 되고
+    # 예시 주입을 멈춰, 같은 시나리오(예산이 줄지만 하한 512 위)가 되도록 덧붙인 글을 300 → 100 회로 줄였다(보수 추정 약 7k).
+    m = msgs("임영웅 콘서트 인스타 카드뉴스 문구 만들어줘. " + "참고 기법 설명 " * 100)
     free = fit(OSS, m, 4096)
     check("미설정이면 무료 표(8k) 그대로", free < 4096 and est_msgs(m) + free + 200 <= 8000, f"got {free}")
 

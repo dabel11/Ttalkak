@@ -79,6 +79,7 @@ check("추출 실패 시 기본 8초", _retry_after_seconds(fake_err("알 수 �
 # 'verbatim 재인용 가능' 경계는 SYSTEM_PROMPT 크기에 직접 좌우된다.
 # 2026-07-31: 규약 v3 추가로 SYSTEM_PROMPT가 4,091토큰이 되며 경계가 약 1,500자로 내려왔다.
 # (2,323토큰 축소본은 경계를 2,500자로 회복시켰으나 핵심 행동이 회귀해 되돌림 — WORKLOG 참조)
+# 2026-11-14: 생성 프롬프트 v7(실측 4,999토큰)로 경계가 약 1,200자로 내려왔다 — 그보다 긴 원문은 Gemini 로 간다.
 M70 = "llama-3.3-70b-versatile"   # TPM 12,000
 ctxs = [{"text": "기법 설명 " * 100} for _ in range(5)]   # 기법 5개 ≈ 3,000자
 
@@ -86,7 +87,7 @@ check("짧은 입력은 Groq 유지", not _needs_long_context("블로그 글 프
 # 30,000자 회의록 → 입력만으로 TPM 초과, verbatim 출력도 불가 → Gemini
 check("장문 원문은 Gemini 라우팅", _needs_long_context("회의록 요약해줘: " + "가" * 30000, ctxs, [], M70))
 # 경계 확인: 필요 출력(원문 재인용)이 남는 예산을 넘어서는 지점부터 라우팅
-check("1,500자 원문은 Groq 유지", not _needs_long_context("나" * 1500, ctxs, [], M70))
+check("1,100자 원문은 Groq 유지", not _needs_long_context("나" * 1100, ctxs, [], M70))
 check("2,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 2000, ctxs, [], M70))
 check("4,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 4000, ctxs, [], M70))
 

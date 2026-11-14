@@ -4568,3 +4568,15 @@ eval/TEAM_SHARE_20261114.docx(팀 공유 요약에 결과 반영)
 **검증**: 실행 잘림 0/68(finish=stop). 비용 $1.24(입력 37만·출력 26만 토큰, 226회) — 사전 견적 ₩5K 이내.
 **결정·근거**: ① 은 판정기가 사용자 정보를 보는데 raw 결과물은 그 정보를 못 받아 딸깍에 유리 → 결론은 ② 로만 낸다.
 한계: 사용자 정보는 AI 생성 가상값, 쌍마다 1회, 판정기 길이 편향은 사람 선호(pref) 대조 전.
+
+## [2026-11-14] CI 수정 — v7 프롬프트 길이 반영(토큰 실측·Groq 장문 경계) + 준비도 감사용 CSV 복원
+**목적**: PR #91 CI 실패 2건 — RAG 단위 테스트(수집 단계 2건), 프론트 잡의 `check-graduation-eval-readiness.py`(FileNotFoundError).
+**Before**: `_SYSTEM_ACTUAL=4153`(v1 시점)인데 v7 로 프롬프트가 길어져 추정 5,052 가 5% 상한을 넘음 · 장문 경계 테스트가 1,500자를 Groq 유지로 기대 ·
+무료 8k 시나리오 입력이 v7 기준으로 하한 512 에 걸림 · human_review 의 sheet_A/B.csv 를 docx 전환 때 지워 감사 스크립트가 못 읽음.
+**After**: SYSTEM_PROMPT 를 Groq gpt-oss-20b `prompt_tokens` 로 실측(사용자 승인, 무료 1회×2) — 직전 커밋 프롬프트 3,934 → 5,076(+1,142),
+본문 3,857+1,142 = **4,999**. 장문 경계는 약 1,200자로 내려옴(1,190자까지 Groq) → 테스트를 1,100자로. 무료 8k 시나리오 입력 300→100회(같은 시나리오 유지).
+sheet_A/B.csv 를 origin/develop 에서 복원(빈 양식 — 실제 라벨링은 docx 로 끝남).
+**변경 파일**: tests/test_token_budget.py, tests/test_generator_guards.py, eval/human_review/sheet_A.csv·sheet_B.csv(복원)
+**검증**: `pytest tests` 312 passed. `scripts/check-graduation-eval-readiness.py` PASS, `scripts/test-graduation-eval-readiness.py` OK.
+**결정·근거**: 경계 하락은 v7 의 대가로 받아들인다 — `GEN_PRIMARY=groq` 무료 티어에서 1,200자 넘는 원문은 Gemini 로 가고,
+Groq 무료 8k 에서 기법 카드 5장이 붙으면 출력 예산이 1k 미만으로 줄 수 있다(유료 `GROQ_TPM_LIMIT` 설정 시 해소).
