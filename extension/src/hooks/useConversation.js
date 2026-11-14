@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteMakeThread } from "../api/make";
 import { getOrCreateSessionUuid } from "../storage/extensionStorage";
 import { isAuthExpiredError } from "../utils/apiErrors";
-import { hasPromptPlaceholders } from "../utils/conversationMessages";
+import { getExecutablePrompt, hasPromptPlaceholders } from "../utils/conversationMessages";
 import { buildImproveHistory } from "../utils/conversationHistory";
 import { copyText, makePreview, makeTitle } from "../utils/promptUtils";
 import { createAssistantMessage, createImproveErrorMessage, createUserMessage } from "../conversation/conversationState";
@@ -130,12 +130,17 @@ export function useConversation({
   }
 
   async function copyMessage(message) {
-    const prompt = message.executablePrompt || "";
+    const prompt = getExecutablePrompt(message) || "";
     if (!prompt && message.role === "assistant") {
       showNotice("실행 가능한 개선 프롬프트가 아직 없습니다.");
       return;
     }
-    await copyText(prompt || message.content);
+    try {
+      await copyText(prompt || message.content);
+    } catch {
+      showNotice("프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요.");
+      return;
+    }
     setCopiedId(message.id);
     showNotice("프롬프트를 복사했습니다.");
     window.setTimeout(() => setCopiedId(""), 1100);
@@ -180,7 +185,7 @@ export function useConversation({
   }
 
   async function performExecuteMessage(message) {
-    const prompt = message.executablePrompt || "";
+    const prompt = getExecutablePrompt(message) || "";
     if (!prompt) {
       showNotice("실행 가능한 개선 프롬프트가 아직 없습니다.");
       return;
@@ -201,8 +206,12 @@ export function useConversation({
             showNotice(`${targetLabel}에 프롬프트를 입력했습니다.`);
             return;
           }
-          await copyText(prompt);
-          showNotice(`${targetLabel} 자동 입력에 실패했습니다. 복사한 프롬프트를 입력창에 붙여넣어 주세요.`);
+          try {
+            await copyText(prompt);
+            showNotice(`${targetLabel} 자동 입력에 실패했습니다. 복사한 프롬프트를 입력창에 붙여넣어 주세요.`);
+          } catch {
+            showNotice(`${targetLabel} 자동 입력과 복사에 실패했습니다. 브라우저 권한을 확인해 주세요.`);
+          }
         }
       );
       return;
@@ -213,7 +222,7 @@ export function useConversation({
   }
 
   function executeMessage(message, setConfirmAction) {
-    const prompt = message.executablePrompt || "";
+    const prompt = getExecutablePrompt(message) || "";
     if (!prompt || !hasPromptPlaceholders(prompt)) return performExecuteMessage(message);
     setConfirmAction?.({
       title: "입력할 정보가 남아 있습니다",
