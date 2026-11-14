@@ -158,11 +158,27 @@ function isRenderableMessage(message) { const value = migrateMakeMessage(message
 function migrateMakeMessages(messages) { return (Array.isArray(messages) ? messages : []).map(migrateMakeMessage).filter(isRenderableMessage); }
 function migratePersistedMakeState(/** @type {Record<string, *>} */ state = {}) { state.messages = migrateMakeMessages(state.messages); state.recentThreads = (Array.isArray(state.recentThreads) ? state.recentThreads : []).map((thread) => ({ ...thread, messages: migrateMakeMessages(thread?.messages) })); return state; }
 function buildImproveHistory(messages) { return migrateMakeMessages(messages).filter((message) => { const value = /** @type {Record<string, *>} */ (message); return !value.excludeFromHistory && !value.isCancelled && !value.isError && (value.role === "user" || value.role === "assistant"); }).map((message) => ({ role: message.role, content: text(message.role === "assistant" ? message.answer || message.content : message.content) })).filter((message) => message.content); }
-const NON_EXECUTABLE_PROMPT_FRAGMENTS = ["관련 프롬프트 기법 근거를 찾지 못했습니다", "관련 기법 근거 없이", "개선안을 만들 수 없", "확인이 필요"];
+const NON_EXECUTABLE_PROMPT_FRAGMENTS = ["관련 프롬프트 기법 근거를 찾지 못했습니다", "관련 기법 근거 없이", "개선안을 만들 수 없"];
 const ASK_ONLY_PATTERNS = [/확인이\s*필요/i, /답변이\s*필요/i, /추가\s*정보가\s*필요/i, /정보를\s*보완해\s*주세요/i, /개선안을?\s*만들\s*수\s*없/i, /만들\s*수\s*없어/i, /아래\s*정보를\s*알려주시면/i, /어떤\s*주제/i, /무엇에\s*대한\s*글/i];
 function isUtilityOnlyPrompt(value) { const normalized = text(value).replace(/\s+/g, " "); return !normalized || NON_EXECUTABLE_PROMPT_FRAGMENTS.some((fragment) => normalized.includes(fragment)); }
-function isAskOnlyResponse(value) { const normalized = text(value); return !normalized || isUtilityOnlyPrompt(normalized) || ASK_ONLY_PATTERNS.some((pattern) => pattern.test(normalized)); }
-function isExecutableMessage(message) { const value = migrateMakeMessage(message); const prompt = text(message?.executablePrompt || message?.finalPrompt || value.improvedPrompt || value.content); return !message?.isCancelled && !message?.isError && !message?.isThinking && !message?.isUnchanged && value.mode !== "ask" && !(value.questions.length && !value.improvedPrompt) && Boolean(prompt) && !isUtilityOnlyPrompt(prompt) && !isAskOnlyResponse(prompt); }
+function isAskOnlyResponse(value) {
+  const normalized = text(value);
+  // Questions require another user answer when they lead the response.
+  // Missing-fact cautions inside an actionable instruction are not ask-only.
+  return !normalized || isUtilityOnlyPrompt(normalized)
+    || ASK_ONLY_PATTERNS.some((pattern) => normalized.search(pattern) === 0);
+}
+function isExecutableMessage(message) {
+  const value = migrateMakeMessage(message);
+  const improved = text(message?.executablePrompt || message?.finalPrompt || message?.improvedPrompt || message?.improved_prompt || value.improvedPrompt);
+  const prompt = improved || text(value.content);
+  return !message?.isCancelled && !message?.isError && !message?.isThinking && !message?.isUnchanged
+    && value.mode !== "ask" && !(value.questions.length && !improved)
+    && Boolean(prompt) && !isUtilityOnlyPrompt(prompt)
+    // Both structured and legacy responses must reject question-only text.
+    // Missing-fact language is permitted only inside an actionable instruction.
+    && !isAskOnlyResponse(prompt);
+}
 function composeAskAnswers(questions, values = {}) { const normalized = normalizeQuestions(questions); const missingFields = normalized.filter((item) => item.importance === "required" && !text(values[item.field])).map((item) => item.field); const lines = normalized.map((item) => text(values[item.field]) ? `- ${item.question}: ${text(values[item.field])}` : "").filter(Boolean); return { missingFields, message: lines.length ? `추가 정보:\n${lines.join("\n")}` : "" }; }
 function classifyMakeError(error) { const status = Number(error?.status || error?.payload?.status || 0); const code = String(error?.payload?.code || error?.code || "").toUpperCase(); const result = (kind, message, retryable, requiresLogin = false) => ({ kind, code, status, message, retryable, requiresLogin }); if (["FREE_TRIAL_LIMIT_EXCEEDED", "TRIAL_LIMIT_EXCEEDED"].includes(code)) return result("guest_limit", "무료 체험 3회를 모두 사용했습니다. 로그인 후 계속 이용해주세요.", false, true); if (["MEMBER_TOKEN_LIMIT_EXCEEDED", "MONTHLY_TOKEN_LIMIT_EXCEEDED", "TOKEN_USAGE_LIMIT_EXCEEDED"].includes(code)) return result("token_limit", "이번 이용 기간의 토큰을 모두 사용했습니다. 요금제와 다음 제공일을 확인해 주세요.", false); if (code === "MEMBER_REQUEST_LIMIT_EXCEEDED") return result("request_limit", "이번 이용 기간의 AI 개선 요청 횟수를 모두 사용했습니다. 요금제와 다음 제공일을 확인해 주세요.", false); if (code === "MEMBER_REQUEST_IN_PROGRESS") return result("member_request_in_progress", "다른 개선 요청을 처리하고 있습니다. 잠시 후 결과를 다시 확인해 주세요.", true); if (code === "MEMBER_USAGE_UNAVAILABLE") return result("usage_unavailable", "사용량을 확인할 수 없어 새 요청이 일시 중단됐습니다. 요금제와 사용량 상태를 확인해 주세요.", false); if (status === 401 || code.includes("AUTH") || ["INVALID_TOKEN", "TOKEN_EXPIRED", "ACCESS_TOKEN_EXPIRED"].includes(code)) return result("auth", "로그인이 만료되었습니다. 다시 로그인해주세요.", false, true); if (code === "THREAD_CONCURRENTLY_UPDATED") return result("concurrency", "대화가 다른 요청에 의해 변경되었습니다. 최신 대화를 불러온 뒤 다시 시도해 주세요.", false); if (code === "REQUEST_ID_REUSED") return result("conflict", "요청 식별자가 다른 내용에 사용되었습니다. 서버 대화를 새로고침한 뒤 다시 요청해주세요.", false); if (code === "AI_INVALID_RESPONSE") return result("contract", "AI 응답 형식을 처리하지 못했습니다. 다시 시도해주세요.", true); if (status === 429 || code.includes("RATE_LIMIT")) return result("rate_limit", "요청이 많습니다. 잠시 후 다시 시도해주세요.", true); if (code === "REQUEST_ABORTED") return result("cancelled", "요청이 취소되었습니다.", false); if (code === "REQUEST_TIMEOUT") return result("timeout", "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", true); if (status === 503 || status === 504 || code.includes("AI_SERVICE") || code === "AI_TIMEOUT") return result("ai", "AI 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.", true); if (!status) return result("network", "백엔드에 연결할 수 없습니다. 연결 상태를 확인한 뒤 다시 시도해주세요.", true); return result("server", "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.", true); }
 

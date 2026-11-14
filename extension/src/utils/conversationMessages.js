@@ -36,7 +36,7 @@ export function hasPromptPlaceholders(text) {
 }
 
 export function getExecutablePrompt(data) {
-  const candidate = String(data?.improvedPrompt || "").trim();
+  const candidate = String(data?.executablePrompt || data?.improvedPrompt || "").trim();
   return isExecutableMessage({ ...data, executablePrompt: candidate }) ? candidate : null;
 }
 

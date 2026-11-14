@@ -14,6 +14,19 @@ export function AssistantResponse({ message, isAsk }) {
     (isAsk ? message.summary || message.answer || parsed.lead : parsed.lead || message.content);
   const questions = mergeImproveQuestions(message.questions, parsed.questions);
   const changes = mergeLists(message.changes, parsed.changes);
+  const missingFields = normalizeMessageFields(message.fields).filter((item) => item.status !== "filled");
+  // The generator may return an actionable improvement and optional questions
+  // together. Do not bury the one question that helps the user articulate intent.
+  const questionFromChanges = changes.find((item) => /[?？]/u.test(String(item || "")));
+  const followUpQuestions = questions.length
+    ? questions.slice(0, 1)
+    : questionFromChanges
+      ? [{ field: "follow_up", question: String(questionFromChanges).trim(), importance: "recommended" }]
+      : missingFields.filter((field) => field.role !== "framing").slice(0, 1).map((field) => ({
+          field: field.name,
+          question: `${field.name}에 대해 조금 더 구체적으로 설명해 주시겠어요?`,
+          importance: "recommended",
+        }));
   const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
   const detailCount = [message.fields, changes, techniques].reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
 
@@ -29,14 +42,23 @@ export function AssistantResponse({ message, isAsk }) {
         <div className="assistant-details ask-details">
           <QuestionList questions={questions} mode={message.mode} summary={message.summary} />
         </div>
-      ) : detailCount > 0 ? (
-        <details className="assistant-details response-details">
-          <summary>세부 정보 <em>{detailCount}</em></summary>
-          <FieldList fields={message.fields} />
-          <ChangeList changes={changes} />
-          <TechniqueList techniques={techniques} />
-        </details>
-      ) : null}
+      ) : (
+        <>
+          {followUpQuestions.length > 0 && (
+            <div className="assistant-details ask-details">
+              <QuestionList questions={followUpQuestions} mode="improve" summary={message.summary || ""} />
+            </div>
+          )}
+          {detailCount > 0 && (
+            <details className="assistant-details response-details">
+              <summary>세부 정보 <em>{detailCount}</em></summary>
+              <FieldList fields={message.fields} />
+              <ChangeList changes={changes} />
+              <TechniqueList techniques={techniques} />
+            </details>
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -142,7 +164,9 @@ function QuestionList({ questions, mode, summary }) {
   return (
     <div className="ask-message">
       <strong>{isAsk ? "답변이 필요한 정보" : "더 정확하게 개선하려면 아래 질문에 답해보세요."}</strong>
-      {isAsk && <p className="ask-guidance">아래 질문을 확인한 뒤 하단 입력란에 답변해 주세요.</p>}
+      <p className="ask-guidance">{isAsk
+        ? "아래 질문을 확인한 뒤 하단 입력란에 답변해 주세요."
+        : "생각을 더 구체화하고 싶다면 하단 입력란에 답변해 주세요. 기존 개선안도 그대로 사용할 수 있습니다."}</p>
       {summary && !isAsk && <p>{summary}</p>}
       <ol>
         {normalizedQuestions.map((item, index) => (

@@ -40,8 +40,11 @@ export async function copyText(text) {
     ta.value = text;
     ta.style.cssText = "position:fixed;left:-9999px";
     document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
+    try {
+      ta.select();
+      if (!document.execCommand("copy")) throw new Error("Clipboard copy was denied");
+    } finally {
+      ta.remove();
+    }
   }
 }

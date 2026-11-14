@@ -31,7 +31,7 @@ export function createAssistantMessage(prompt, data) {
     answer: data.answer || "", questions: data.questions || [], changes: data.changes || [], fields: data.fields || [],
     techniques: data.techniques || data.techniquesApplied || [], summary: data.summary || "",
     ragStatus,
-    executablePrompt, sourcePrompt: prompt, sources: data.sources || [], saved: false,
+    executablePrompt, improvedPrompt: String(data.improvedPrompt || "").trim(), sourcePrompt: prompt, sources: data.sources || [], saved: false,
     requestId: data.requestId || "", replayed: data.replayed === true,
     ...(unchangedNoEvidence ? { isUnchanged: true } : {}),
     ...(noEvidence ? { excludeFromHistory: true } : {}),
