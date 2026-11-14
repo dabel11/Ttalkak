@@ -57,10 +57,11 @@ for name, text, actual in [("한국어 문어체", _KO_FORMAL, 417), ("한국어
     check(f"사용자 입력 과소추정 없음: {name}({actual}tok)", _est_tokens(text) >= actual,
           f"got {_est_tokens(text)}")
 
-# 고정 입력용(보정) — SYSTEM_PROMPT 실측 3,857(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
+# 고정 입력용(보정) — SYSTEM_PROMPT 실측 4,153(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
 # 추정치로 대체하면 이 테스트(과소추정 금지)의 의미가 사라진다. 코퍼스 전량 검증은 token_calib --corpus.
-# 이력: llama 2,766 → 4,091(규약 v3) · gpt-oss 3,857(2026-09-20). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
-_SYSTEM_ACTUAL = 3857
+# 이력: llama 2,766 → 4,091(규약 v3) · gpt-oss 3,857(2026-09-20) → 4,153(2026-11-13, 범위·부수 정보 빈칸 규칙 +296 —
+# 같은 호출로 전후를 재서 차이만 더함: 3,933 → 4,229). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
+_SYSTEM_ACTUAL = 4153
 check("고정 입력: SYSTEM_PROMPT 과소추정 없음", _est_known_tokens(SYSTEM_PROMPT) >= _SYSTEM_ACTUAL,
       f"got {_est_known_tokens(SYSTEM_PROMPT)}")
 check("고정 입력: SYSTEM_PROMPT 과대추정 5% 이내(예산 낭비 방지)",

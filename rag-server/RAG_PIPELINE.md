@@ -112,6 +112,8 @@ QueryResponse { mode, answer, improved_prompt, sources, techniques_applied,
 ### [C] 생성 (2단계) — `generator.py`
 - **`[요청 분석]` 블록 소비**(`build_analysis_block`): filled=재료 / empty·fact=**`[항목명 입력]` 빈칸 + 질문** / empty·framing=가정 후 `changes` 명시 / **템플릿 요청의 빈 원문=`[template]` — 되묻지 말고 `[원문 붙여넣기]` 빈칸 + 개선 모드**(2026-09-19. 종전 렌더로는 분석기를 고쳐도 생성기가 "원문이 제공되지 않아" ask)
 - **환각 방지 핵심 규칙**: 사용자가 **주지 않은** 구체 사실은 창작 금지·빈칸. 사용자가 **준** 원문(회의록·코드)은 verbatim·빈칸 금지 (두 규칙이 충돌하지 않도록 SYSTEM_PROMPT에서 명시 구분)
+  - **빈칸은 핵심 사실에만**(2026-11-13): 받는 사람 이름·호칭·소속·직무·상품명처럼 없어도 글이 완결되는 **부수 정보는 빈칸 없이 그 값 없이** 쓰게 한다(지어내지도 않음). SYSTEM_PROMPT 선언 + 개선안 설명 + `[요청 분석]`의 `[fact]`·`[required]` 줄에 같은 예외를 붙였다 — 분석 블록의 명시 지시가 SYSTEM 규칙을 이겨 빈칸이 남았기 때문.
+  - **범위를 넓히지 않는다**(2026-11-13): '~만'·항목·개수·분량으로 정한 범위를 넘는 출력 항목(사유·분류·누락 정보 등)·작업 단계를 개선안에 덧붙이지 않는다. 근거: 트랙 A 측정(`eval/TRACK_A_REPORT_20261113.md`) up_20·31·35·06.
 - **백엔드 자동선택 + 요청 단위 라우팅** (`Generator`)
   - `GROQ_API_KEY` 있으면 **Groq 우선**, 없으면 Gemini (현재 `.env`엔 Groq만 → Groq)
   - **장문 라우팅** (`_needs_long_context`): Groq TPM 예산으로 verbatim 원문 출력이 불가능한 긴 입력은 **Gemini로 라우팅** — 두 키가 모두 설정된 경우에만 작동(2026-07-23)
