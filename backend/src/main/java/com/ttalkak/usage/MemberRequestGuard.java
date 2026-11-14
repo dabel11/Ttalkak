@@ -83,12 +83,19 @@ public class MemberRequestGuard {
         }
         // Only one active member lease can pass this check. Successful metered
         // invocations are counted once by the (memberId, requestKey) unique key.
-        Long countLimit = snapshot.requestLimitOverride() != null
-                ? snapshot.requestLimitOverride() : policy.requestLimit(snapshot.plan());
+        Long countLimit = effectiveRequestLimit(permit.memberId(), snapshot);
         if (policy.requestQuotaEnabled() && snapshot.requests() >= countLimit) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "MEMBER_REQUEST_LIMIT_EXCEEDED",
                     "현재 이용 기간의 AI 요청 횟수를 모두 사용했습니다.");
         }
+    }
+
+    /** Shared limit calculation for enforcement and the member usage response. */
+    public Long effectiveRequestLimit(Long memberId, UsagePeriodService.Snapshot snapshot) {
+        if (!policy.requestQuotaEnabled()) return null;
+        var member = members.findById(memberId).orElseThrow(() -> new ApiException(
+                HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "로그인이 필요합니다."));
+        return policy.effectiveRequestLimit(snapshot.plan(), snapshot.requestLimitOverride(), member.getUserId());
     }
 
     public void usageMissing(Permit permit) {
