@@ -1,82 +1,112 @@
 [
  {
   "n": 1,
-  "item": "up_48",
+  "item": "up_14",
   "rep": 0,
-  "judge": "ttalkak",
+  "filled": false,
+  "type": "원문 다듬기·변환",
+  "judge": "raw",
   "ttalkak_first": false,
-  "longer": 2
+  "longer": 2,
+  "longer_is_ttalkak": true
  },
  {
   "n": 2,
-  "item": "up_44",
-  "rep": 1,
+  "item": "up_10",
+  "rep": 2,
+  "filled": true,
+  "type": "짧은 창작·공지",
   "judge": "ttalkak",
-  "ttalkak_first": false,
-  "longer": 2
+  "ttalkak_first": true,
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 3,
-  "item": "up_45",
+  "item": "up_43",
   "rep": 0,
+  "filled": true,
+  "type": "짧은 창작·공지",
   "judge": "ttalkak",
   "ttalkak_first": true,
-  "longer": 1
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 4,
-  "item": "up_21",
-  "rep": 2,
+  "item": "up_36",
+  "rep": 0,
+  "filled": false,
+  "type": "원문 다듬기·변환",
   "judge": "raw",
   "ttalkak_first": false,
-  "longer": 1
+  "longer": 2,
+  "longer_is_ttalkak": true
  },
  {
   "n": 5,
-  "item": "up_14",
-  "rep": 0,
+  "item": "up_22",
+  "rep": 2,
+  "filled": true,
+  "type": "추천·계획",
   "judge": "raw",
   "ttalkak_first": true,
-  "longer": 1
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 6,
-  "item": "up_22",
-  "rep": 3,
-  "judge": "ttalkak",
+  "item": "up_45",
+  "rep": 0,
+  "filled": true,
+  "type": "짧은 창작·공지",
+  "judge": "raw",
   "ttalkak_first": true,
-  "longer": 1
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 7,
-  "item": "up_16",
-  "rep": 2,
+  "item": "up_46",
+  "rep": 0,
+  "filled": false,
+  "type": "짧은 창작·공지",
   "judge": "raw",
-  "ttalkak_first": true,
-  "longer": 1
+  "ttalkak_first": false,
+  "longer": 2,
+  "longer_is_ttalkak": true
  },
  {
   "n": 8,
-  "item": "up_16",
+  "item": "up_44",
   "rep": 1,
+  "filled": true,
+  "type": "코드",
   "judge": "ttalkak",
-  "ttalkak_first": false,
-  "longer": 2
+  "ttalkak_first": true,
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 9,
-  "item": "up_46",
-  "rep": 1,
-  "judge": "raw",
+  "item": "up_26",
+  "rep": 0,
+  "filled": true,
+  "type": "추천·계획",
+  "judge": "ttalkak",
   "ttalkak_first": true,
-  "longer": 2
+  "longer": 1,
+  "longer_is_ttalkak": true
  },
  {
   "n": 10,
-  "item": "up_10",
+  "item": "up_47",
   "rep": 1,
-  "judge": "raw",
-  "ttalkak_first": false,
-  "longer": 2
+  "filled": false,
+  "type": "원문 다듬기·변환",
+  "judge": "ttalkak",
+  "ttalkak_first": true,
+  "longer": 1,
+  "longer_is_ttalkak": true
  }
 ]

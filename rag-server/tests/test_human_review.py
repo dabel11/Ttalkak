@@ -121,35 +121,40 @@ def test_ac1_survives_skewed_answers_where_kappa_collapses():
     assert gwet_ac1(mixed_a, mixed_b) == pytest.approx(cohen_kappa(mixed_a, mixed_b), abs=0.01)  # 고르면 κ 와 같다
 
 
-def test_pref_pick_balances_judge_verdicts_and_hides_order():
-    from eval.pref_materials import pick
-    pairs = {f"up_{i:02d}|pair_raw_vs_ttalkak|0": {"winner": "b" if i % 2 else "a"} for i in range(1, 21)}
-    pairs["up_01|pair_rewrite_vs_ttalkak|0"] = {"winner": "b"}       # rewrite 비교는 고르지 않는다
-    out = pick({"pairs": pairs})
-    assert [p["judge"] for p in out].count("ttalkak") == 5 and [p["judge"] for p in out].count("raw") == 5
-    assert len({p["item"] for p in out}) == 10                          # 문항 중복 없음
-    assert pick({"pairs": pairs}) == out                                 # 시드 고정 — 다시 만들어도 같다
+def test_pref_pick_fills_strata_with_must_items_and_is_stable():
+    from eval.pref_materials import MUST, STRATA, pick
+    types = {"원문 다듬기·변환", "짧은 창작·공지", "추천·계획", "코드"}
+    cands = [{"item": f"up_{i:02d}", "rep": r, "filled": False, "type": t, "judge": j}
+             for i, t in enumerate(sorted(types) * 6) for r in range(2) for j in ("raw", "ttalkak")]
+    cands += [{"item": m, "rep": 0, "filled": False, "type": "원문 다듬기·변환", "judge": j}
+              for m in MUST for j in ("ttalkak", "raw")]
+    out = pick(cands)
+    assert len(out) == sum(STRATA.values()) == 10 and len({p["item"] for p in out}) == 10   # 요청 중복 없음
+    assert [p["judge"] for p in out].count("raw") == 5
+    assert {p["item"]: p["judge"] for p in out if p["item"] in MUST} == {m: "raw" for m in MUST}  # 지는 쪽으로 반드시
+    assert pick(cands) == out                                                                   # 시드 고정
 
 
-_V7 = Path(__file__).parent.parent / "eval/results/uplift_trackB_v7_20261114.json"
+_FILL = Path(__file__).parent.parent / "eval/results/uplift_trackB_v7_filled_20261114.json"
 
 
-@pytest.mark.skipif(not _V7.exists(), reason="트랙 B v7 결과 파일이 로컬에만 있다")
+@pytest.mark.skipif(not _FILL.exists(), reason="빈칸 채움 결과 파일이 없다")
 def test_pref_sheet_answers_read_back_per_pair(tmp_path, monkeypatch):
-    """결과물마다 A~E, 비교 F~I 를 채우면 read_answers 가 쌍 번호별로 그대로 돌려준다."""
+    """결과물마다 P1~P7, 비교 C1~C5 를 채우면 read_answers 가 쌍 번호별로 그대로 돌려준다."""
     from docx import Document
     import eval.pref_materials as pm
     monkeypatch.setattr(pm, "_OUT", tmp_path)
-    key = pm.build(str(_V7))
-    assert all(k["longer"] in (1, 2) and "texts" not in k for k in key)
+    key = pm.build()
+    assert all(k["longer"] in (1, 2) and "shown" not in k for k in key)
+    assert (tmp_path / "pref_guide.docx").exists()
     doc = Document(tmp_path / "pref_A.docx")
     for t in doc.tables[2:]:
         for r in t.rows[1:]:
             if len(r.cells) == 5:
-                r.cells[2].text, r.cells[3].text = "예", "아니오"
+                r.cells[2].text, r.cells[3].text = "4", "B"
             else:
                 r.cells[2].text = "2"
     doc.save(tmp_path / "filled.docx")
     ans = pm.read_answers(tmp_path / "filled.docx")
     assert len(ans) == len(key)
-    assert ans[1]["D"] == ("예", "아니오") and ans[len(key)]["G"] == "2"
+    assert ans[1]["P4"] == ("4", "B") and ans[len(key)]["C4"] == "2"
