@@ -10,7 +10,7 @@ eval/uplift_score.py
 세 조건 모두 같은 실행 모델·같은 중립 시스템 프롬프트로 결과물을 만든다.
 
 결과물마다 매기는 것(uplift_set_v2.json 정의):
-  - 요구사항 충족률·정확성       : judge (eval/requirement_judge.py)  ⚠️ 사람 대조 검증 전 — 잠정
+  - 요구사항 충족률·정확성       : judge (eval/requirement_judge.py) — 사람 대조 통과(2026-11-13, 객관 AC1 0.94~0.97, gemini-3.6-flash)
   - 코드 판정(형식·정보 보존)     : 코드 (eval/code_checks.py)
   - 결함: 자리표시자            : 코드
           지어내기(생성, entity) : 코드 (eval/value_check.py)
@@ -48,7 +48,18 @@ NEUTRAL_SYSTEM = "너는 유능한 한국어 AI 어시스턴트다. 사용자의
 
 # 토큰 추정(1회 호출, 입력+출력) — --dry-run 용 어림값. 실행 결과 파일의 usage 로 보정할 것.
 EST_TOKENS = {"generate": 10000, "execute": 2500, "req_judge": 2500, "defect_judge": 2200, "pair_judge": 3500}
-TPD_FREE = 200_000
+TPD_FREE = 200_000          # Groq 무료 하루 토큰 한도. Gemini 무료는 '요청 수' 기준이라 환산하지 않는다
+
+# 백엔드별 (결과물 실행 모델, 판정 모델). --target-model/--judge-model 로 덮어쓸 수 있다.
+# Groq 무료 한도로는 트랙 A 3조건×3반복이 19일이 걸린다 → Gemini 로도 돌 수 있어야 한다(2026-11-11).
+# Gemini 는 모델명을 적지 않는다 — 계정마다 무료로 부를 수 있는 모델이 달라 generator.default_model 이
+# 단일 출처다(gemini-2.0-flash 는 이 계정에서 호출 불가 목록에 있다).
+def default_models(backend: str) -> tuple[str, str]:
+    if backend == "groq":
+        return "openai/gpt-oss-20b", "openai/gpt-oss-120b"
+    from app.rag.generator import default_model
+    m = default_model("gemini")
+    return m, m
 
 _PAIR_SYSTEM = """너는 두 AI 결과물의 품질을 비교하는 엄격하고 공정한 평가자다.
 같은 사용자 요청에 대한 결과물 [1]과 [2]를 받는다. 어느 쪽이 어떤 방식으로 만들어졌는지는 모른다.
@@ -58,11 +69,20 @@ _PAIR_SYSTEM = """너는 두 AI 결과물의 품질을 비교하는 엄격하고
 
 
 # ── 호출 ──────────────────────────────────────────────────────
-def _groq(timeout: float = 90):
+def _client(backend: str, timeout: float = 90):
+    """결과물 실행·판정용 클라이언트. Gemini 는 **OpenAI 호환 엔드포인트**로 붙인다 —
+    판정기(`requirement_judge`)·`judge_defects`·`judge_pair` 가 모두
+    `client.chat.completions.create(...)` 모양이라, 그 호출부를 하나도 건드리지 않고 백엔드만 바꾼다.
+    (생성 쪽 app/rag/generator 는 google-genai 를 쓴다 — 이 파일은 판정 경로만 담당한다.)"""
+    import os
     from dotenv import load_dotenv
-    from groq import Groq
     load_dotenv()
-    return Groq(timeout=timeout)
+    if backend == "groq":
+        from groq import Groq
+        return Groq(timeout=timeout)
+    from openai import OpenAI
+    return OpenAI(api_key=os.environ["GEMINI_API_KEY"], timeout=timeout,
+                  base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
 
 
 def _chat(client, model: str, system: str, user: str, max_tokens: int,
@@ -133,8 +153,11 @@ def score_output(item: dict, output: str, req: dict | None, defect: dict | None)
         fabrication = bool(code["invented_values"])
     else:
         fabrication = None                     # 일반 지식·코드·계획 생성 문항 — 측정 범위 밖
+    # 일부 질문만 답한 판정(errors)으로는 비율을 내지 않는다 — 답한 질문만으로 계산돼 수치가 흔들린다
+    # (2026-11-06 팀원 지적 ②). None 이면 짝 비교·평균에서 자동으로 빠진다.
+    usable = req and not req.get("errors")
     return {
-        **(rates(req) if req else {"requirement_rate": None, "subjective_rate": None, "gold_rate": None}),
+        **(rates(req) if usable else {"requirement_rate": None, "subjective_rate": None, "gold_rate": None}),
         "check_rate": {b: sum(v2) / len(v2) for b, v2 in by_basis.items()},
         "preserve_ok": all(by_basis.get("preserve", [True])),
         "placeholder_defect": code["placeholder_defect"],
@@ -180,8 +203,18 @@ def estimate(items: list[dict], conditions: list[str], repeats: int) -> dict:
     return {"calls": per, "tokens": tokens, "total_tokens": sum(tokens.values())}
 
 
+# 결과물 실행 출력 예산. 3000 이던 때(2026-11-13 트랙 A) Gemini 는 생각 토큰까지 이 예산에서 써서 279건 중 31건이
+# 잘렸다(raw 5 · rewrite 13 · ttalkak 13) — 긴 프롬프트 쪽이 더 잘려 '개수 채우기' 질문에서 불리했다. 실제 사용자 화면엔 이런 상한이 없다.
+EXEC_MAX_TOKENS = 16000
+
+
+def _needs_run(old: dict | None) -> bool:
+    """다시 돌릴 기록인가 — 없음, 판정 미완성(11-06 지적 ②), 실행이 출력 예산에서 잘림(11-13)."""
+    return not old or bool(old.get("req_incomplete")) or old.get("exec_finish") == "length"
+
+
 def run(args, items: list[dict], data: dict, out: Path) -> None:
-    client = _groq()
+    client = _client(args.backend)
     defect_system = build_defect_system(json.loads((_DIR / "uplift_set_v2.json").read_text(encoding="utf-8"))["defects"])
     from eval.requirement_judge import judge_requirements
     recs = data["records"]
@@ -193,20 +226,28 @@ def run(args, items: list[dict], data: dict, out: Path) -> None:
             for cond in args.conditions:
                 n += 1
                 key = f"{it['id']}|{cond}|{rep}"
-                if key in recs:
+                old = recs.get(key)
+                if not _needs_run(old):
                     continue
                 t0 = time.time()
-                p = patient(lambda: make_prompt(cond, it, args.gen_model))
+                # 잘린 기록은 프롬프트를 새로 뽑지 않고 그대로 다시 실행한다 — 긴 결과물을 부른 프롬프트만 골라 바꾸면 치우친다
+                p = ({k: old[k] for k in ("prompt", "mode", "n_contexts", "questions") if k in old}
+                     if old and old.get("exec_finish") == "length" else patient(lambda: make_prompt(cond, it, args.gen_model)))
                 rec = {"item": it["id"], "condition": cond, "repeat": rep, **{k: p[k] for k in p if k != "prompt"},
                        "prompt": p["prompt"]}
                 if p["prompt"] is None:
                     rec["asked"] = True
                 else:
-                    ex = patient(lambda: _chat(client, args.target_model, NEUTRAL_SYSTEM, p["prompt"], 3000, 0.7))
+                    ex = patient(lambda: _chat(client, args.target_model, NEUTRAL_SYSTEM, p["prompt"], EXEC_MAX_TOKENS, 0.7))
                     rec.update(output=ex["text"], exec_finish=ex["finish"], exec_usage=ex["usage"])
                     req = patient(lambda: judge_requirements(client, args.judge_model, it, ex["text"]))
+                    if req["errors"]:                     # 빠진 답·허용 안 된 na — 한 번 더 물어 더 온전한 쪽을 쓴다
+                        again = patient(lambda: judge_requirements(client, args.judge_model, it, ex["text"]))
+                        req = again if len(again["errors"]) < len(req["errors"]) else req
                     dj = patient(lambda: judge_defects(client, args.judge_model, defect_system, it, ex["text"]))
                     rec.update(req_judge={k: req[k] for k in ("answers", "errors", "version")},
+                               req_incomplete=bool(req["errors"]),
+                               judge_model=args.judge_model,    # 판정 모델이 섞이면 수치를 합칠 수 없다 — report 가 경고
                                defect_judge=dj, score=score_output(it, ex["text"], req, dj))
                 rec["seconds"] = round(time.time() - t0, 1)
                 recs[key] = rec
@@ -214,7 +255,8 @@ def run(args, items: list[dict], data: dict, out: Path) -> None:
                 s = rec.get("score") or {}
                 print(f"[{n:>3}/{total}] {it['id']} {cond:<8} #{rep}  "
                       + ("되묻기" if rec.get("asked") else
-                         f"요구 {s.get('requirement_rate')} · 결함 지어내기={s.get('fabrication')} 거부={s.get('refusal')}"),
+                         f"요구 {s.get('requirement_rate')} · 결함 지어내기={s.get('fabrication')} 거부={s.get('refusal')}"
+                         + (f"  ⚠️판정 미완성({len(rec['req_judge']['errors'])}개)" if rec.get("req_incomplete") else "")),
                       flush=True)
     # 트랙 B 쌍대 선호
     if "ttalkak" in args.conditions and not args.skip_pairwise:
@@ -249,8 +291,8 @@ def per_item(data: dict, metric) -> dict:
 
 def report(data: dict, items_by_id: dict) -> dict:
     metrics = {
-        "요구사항 충족률(주관 제외) ⚠️잠정": lambda s: s["requirement_rate"],
-        "정확성(gold) ⚠️잠정": lambda s: s["gold_rate"],
+        "요구사항 충족률(주관 제외)": lambda s: s["requirement_rate"],
+        "정확성(gold)": lambda s: s["gold_rate"],
         "정보 보존(코드)": lambda s: s["check_rate"].get("preserve"),
         "형식 제약(코드)": lambda s: s["check_rate"].get("request"),
         "지어내기 비율(낮을수록 좋음)": lambda s: None if s["fabrication"] is None else float(s["fabrication"]),
@@ -258,7 +300,13 @@ def report(data: dict, items_by_id: dict) -> dict:
         "자리표시자 결함(낮을수록 좋음)": lambda s: float(s["placeholder_defect"]),
         "자리표시자 개수(참고·낮을수록 바로 쓰기 쉬움)": lambda s: float(s.get("placeholder_count", 0)),
     }
-    out = {"comparisons": {}, "ask_rate": {}, "within_spread": {}, "pairwise": {}}
+    out = {"comparisons": {}, "ask_rate": {}, "within_spread": {}, "pairwise": {},
+           # 요구사항 판정이 일부 질문만 돌아온 기록 — 충족률·정확성 집계에서 빠진다(다시 돌리면 재채점)
+           "req_incomplete": sorted(k for k, r in data["records"].items() if r.get("req_incomplete")),
+           "judge_versions": sorted({(r.get("req_judge") or {}).get("version") for r in data["records"].values()
+                                     if r.get("req_judge")}),
+           # 판정 모델이 섞인 결과 파일 — Groq 판정과 Gemini 판정을 한 표에 합치면 안 된다(2026-11-11)
+           "judge_models": sorted({r["judge_model"] for r in data["records"].values() if r.get("judge_model")})}
     for cond in CONDITIONS:
         rs = [r for r in data["records"].values() if r["condition"] == cond]
         if rs:
@@ -287,6 +335,15 @@ def print_report(rep: dict) -> None:
     print("\n" + "═" * 72)
     print("  되묻기(결과물 없음) 비율: " + ", ".join(
         f"{c} {v['asked']}/{v['n']}" for c, v in rep["ask_rate"].items()))
+    if rep.get("req_incomplete"):
+        print(f"  ⚠️ 요구사항 판정 미완성 {len(rep['req_incomplete'])}건 — 충족률·정확성 집계에서 제외"
+              f"(다시 돌리면 재채점): {', '.join(rep['req_incomplete'][:5])}"
+              + (" …" if len(rep["req_incomplete"]) > 5 else ""))
+    if len(rep.get("judge_versions") or []) > 1:
+        print(f"  ⚠️ 판정 프롬프트 버전이 섞였다: {', '.join(rep['judge_versions'])} — 같은 버전으로 다시 채점할 것")
+    if len(rep.get("judge_models") or []) > 1:
+        print(f"  ⚠️ 판정 모델이 섞였다: {', '.join(rep['judge_models'])} — 모델이 다르면 충족률을 한 표에 합칠 수 없다"
+              f"(한 모델로 다시 채점하거나 파일을 나눌 것)")
     for name, comps in rep["comparisons"].items():
         print(f"\n  ■ {name}")
         for label, s in comps.items():
@@ -314,8 +371,10 @@ def main():
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--gen-model", default="gemini-2.0-flash",
                     help="딸각 생성기 모델 별칭 — 운영 /query 기본값과 같게(Groq 에선 gpt-oss-120b 로 매핑)")
-    ap.add_argument("--target-model", default="openai/gpt-oss-20b", help="결과물 실행 모델(세 조건 공통, Groq)")
-    ap.add_argument("--judge-model", default="openai/gpt-oss-120b", help="판정 모델 — 결함 판정을 검증한 모델")
+    ap.add_argument("--backend", default="", choices=["", "groq", "gemini"],
+                    help="결과물 실행·판정 백엔드(비우면 GEN_PRIMARY 를 따른다 — uplift_eval._pick_backend)")
+    ap.add_argument("--target-model", default="", help="결과물 실행 모델(세 조건 공통). 비우면 백엔드 기본값")
+    ap.add_argument("--judge-model", default="", help="판정 모델. 비우면 백엔드 기본값(Groq=결함 판정을 검증한 gpt-oss-120b)")
     ap.add_argument("--skip-pairwise", action="store_true")
     ap.add_argument("--max-wait", type=float, default=6 * 3600, help="429 누적 대기 상한(초)")
     ap.add_argument("--out", default="", help="결과 파일(기본 eval/results/uplift_<날짜>.json)")
@@ -324,6 +383,14 @@ def main():
     args = ap.parse_args()
     args.conditions = [c for c in args.conditions.split(",") if c]
     assert set(args.conditions) <= set(CONDITIONS), args.conditions
+    if not args.report:
+        from dotenv import load_dotenv
+        from eval.uplift_eval import _pick_backend
+        load_dotenv()
+        args.backend = args.backend or _pick_backend()
+        target, judge = default_models(args.backend)
+        args.target_model = args.target_model or target
+        args.judge_model = args.judge_model or judge
 
     items_all = json.loads((_DIR / args.set).read_text(encoding="utf-8"))["items"]
     by_id = {it["id"]: it for it in items_all}
@@ -338,8 +405,13 @@ def main():
     est = estimate(items, args.conditions, args.repeats)
     print(f"문항 {len(items)} × 조건 {len(args.conditions)} × 반복 {args.repeats}")
     print("  호출 수: " + ", ".join(f"{k} {v}" for k, v in est["calls"].items()))
-    print(f"  토큰 추정: 약 {est['total_tokens']:,} (무료 하루 한도 {TPD_FREE:,} 기준 약 "
-          f"{est['total_tokens'] / TPD_FREE:.1f}일 — 생성·판정이 같은 모델이면)")
+    print(f"  백엔드 {args.backend} · 실행 {args.target_model} · 판정 {args.judge_model}")
+    if args.backend == "groq":
+        print(f"  토큰 추정: 약 {est['total_tokens']:,} (무료 하루 한도 {TPD_FREE:,} 기준 약 "
+              f"{est['total_tokens'] / TPD_FREE:.1f}일 — 생성·판정이 같은 모델이면)")
+    else:      # Gemini 무료 한도는 분당·일당 '요청 수'라 토큰→일수 환산이 맞지 않는다
+        print(f"  토큰 추정: 약 {est['total_tokens']:,} · 요청 수 {sum(est['calls'].values()):,}회"
+              f" — Gemini 한도는 요청 수 기준(AI Studio 의 모델별 RPM·RPD 를 확인할 것)")
     if args.dry_run:
         return
 

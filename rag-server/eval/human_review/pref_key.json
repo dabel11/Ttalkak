@@ -1,0 +1,82 @@
+[
+ {
+  "n": 1,
+  "item": "up_48",
+  "rep": 0,
+  "judge": "ttalkak",
+  "ttalkak_first": false,
+  "longer": 2
+ },
+ {
+  "n": 2,
+  "item": "up_44",
+  "rep": 1,
+  "judge": "ttalkak",
+  "ttalkak_first": false,
+  "longer": 2
+ },
+ {
+  "n": 3,
+  "item": "up_45",
+  "rep": 0,
+  "judge": "ttalkak",
+  "ttalkak_first": true,
+  "longer": 1
+ },
+ {
+  "n": 4,
+  "item": "up_21",
+  "rep": 2,
+  "judge": "raw",
+  "ttalkak_first": false,
+  "longer": 1
+ },
+ {
+  "n": 5,
+  "item": "up_14",
+  "rep": 0,
+  "judge": "raw",
+  "ttalkak_first": true,
+  "longer": 1
+ },
+ {
+  "n": 6,
+  "item": "up_22",
+  "rep": 3,
+  "judge": "ttalkak",
+  "ttalkak_first": true,
+  "longer": 1
+ },
+ {
+  "n": 7,
+  "item": "up_16",
+  "rep": 2,
+  "judge": "raw",
+  "ttalkak_first": true,
+  "longer": 1
+ },
+ {
+  "n": 8,
+  "item": "up_16",
+  "rep": 1,
+  "judge": "ttalkak",
+  "ttalkak_first": false,
+  "longer": 2
+ },
+ {
+  "n": 9,
+  "item": "up_46",
+  "rep": 1,
+  "judge": "raw",
+  "ttalkak_first": true,
+  "longer": 2
+ },
+ {
+  "n": 10,
+  "item": "up_10",
+  "rep": 1,
+  "judge": "raw",
+  "ttalkak_first": false,
+  "longer": 2
+ }
+]

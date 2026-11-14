@@ -1,0 +1,138 @@
+{
+  "_model": "gemini-3.6-flash",
+  "up_04": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "g1": "yes",
+    "g2": "yes",
+    "g3": "yes"
+  },
+  "up_08": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "g1": "yes",
+    "g2": "yes",
+    "g3": "yes"
+  },
+  "up_15": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "g1": "yes",
+    "g2": "yes",
+    "g3": "yes",
+    "g4": "yes"
+  },
+  "up_16": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes"
+  },
+  "up_17": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "g1": "yes",
+    "g2": "yes",
+    "g3": "yes",
+    "g4": "yes"
+  },
+  "up_19": {
+    "r1": "yes",
+    "r2": "yes",
+    "g1": "yes"
+  },
+  "up_20": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes"
+  },
+  "up_30": {
+    "r1": "yes",
+    "r2": "yes",
+    "g1": "yes",
+    "g2": "yes"
+  },
+  "up_35": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "g1": "yes"
+  },
+  "up_36": {
+    "r1": "yes",
+    "r2": "no"
+  },
+  "up_01": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes",
+    "r6": "yes",
+    "r7": "yes",
+    "r8": "yes"
+  },
+  "up_02": {
+    "r1": "no",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes",
+    "r6": "yes",
+    "r7": "yes"
+  },
+  "up_06": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes",
+    "r6": "yes"
+  },
+  "up_09": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes"
+  },
+  "up_11": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes"
+  },
+  "up_25": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes"
+  },
+  "up_38": {
+    "r1": "yes",
+    "r2": "yes",
+    "r3": "yes",
+    "r4": "yes",
+    "r5": "yes",
+    "r6": "yes",
+    "r7": "yes"
+  },
+  "up_41": {
+    "r1": "yes",
+    "r2": "yes"
+  },
+  "up_45": {
+    "r1": "yes"
+  },
+  "up_46": {
+    "r1": "yes",
+    "r2": "yes"
+  }
+}
