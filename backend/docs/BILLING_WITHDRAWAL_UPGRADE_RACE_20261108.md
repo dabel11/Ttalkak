@@ -50,7 +50,7 @@
 
 ## 격리된 MySQL 8.4에서의 재현 절차 (작성: 2026-11-13, 실행 전)
 
-\`develop\` CI의 Backend job은 실제 MySQL 8.4를 사용하지만, 이 별도 작업 브랜치의 신규 테스트는 해당 성공 기록으로 검증할 수 없다. 아래는 **로컬/임시 실험 환경에서 실행할 수 있도록 준비한 절차**이며, 작성자가 실행하거나 성공을 확인한 명령이 아니다. 작업 브랜치를 체크아웃한 뒤 **빈 테스트 전용 DB**에만 연결한다.
+\`develop\` CI의 Backend job은 MySQL 8.4 서비스 컨테이너를 띄우지만, `backend/build.gradle`의 `test` 기본 프로필은 `test`이고 `application-test.yml`은 H2 URL·드라이버·방언을 지정한다. **`DB_URL`만 전달한 Gradle 테스트를 MySQL 연결 테스트라고 볼 수 없다.** 따라서 해당 CI의 `Backend tests` 성공은 실제 MySQL 8.4 통합 테스트 통과의 근거가 아니며, 이 별도 작업 브랜치의 신규 테스트 역시 아직 실행되지 않았다. 아래는 **로컬/임시 실험 환경에서 실행할 수 있도록 준비한 절차**이며, 작성자가 실행하거나 성공을 확인한 명령이 아니다. 작업 브랜치를 체크아웃한 뒤 **빈 테스트 전용 DB**에만 연결한다.
 
 \`\`\`bash
 # 호스트의 운영 MySQL과 다른 포트(13306)의 폐기 가능한 컨테이너.
@@ -65,9 +65,12 @@ until docker exec ttalkak-billing-regression-mysql \
 
 (
   cd backend
-  DB_URL='jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true' \
-  DB_USERNAME=root \
-  DB_PASSWORD=fixture-only \
+  SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true' \
+  SPRING_DATASOURCE_USERNAME=root \
+  SPRING_DATASOURCE_PASSWORD=fixture-only \
+  SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver \
+  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQLDialect \
+  TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1 \
   JWT_SECRET_BASE64='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   BILLING_MODE=test \
   BILLING_STORE_SCOPE=test:legacy \
@@ -90,3 +93,11 @@ docker rm -f ttalkak-billing-regression-mysql
 - 위 성공은 **\`develop\` 전용**이며, 현재 분기된 \`fix/billing-withdrawn-upgrade-guard-20261106\` 브랜치의 신규 테스트는 여전히 미실행이다. PR·머지가 없는 상태에서 \`develop\`의 녹색 결과를 수정 브랜치 합격으로 추정하지 않는다.
 - [\`d2d2e8c\`](https://github.com/dabel11/Ttalkak/commit/d2d2e8ca4b02eee945ea10c9a9d545dc8fff35cc)에서 \`withdrawnMemberCannotReusePreviouslyValidAccessTokenForBillingEndpoints()\`를 추가했다. 탈퇴 전 유효하던 JWT로 청구 상태 조회가 정상 작동함을 먼저 확인하고, 실제 탈퇴 후에는 동일 토큰의 상태 조회·결제 수단 설정·재시도 요청이 모두 401로 거부되며 신규 청구가 없는지 검증하도록 **작성**했다. 아직 이 테스트를 실행하거나 성공한 것은 아니다.
 - 브랜치가 공통 조상에서 갈라진 상태이므로 안전성 변경을 병합할 준비가 됐다는 의미는 아니다. 실제 MySQL 8.4 대상 회귀 테스트, 기준 브랜치 동기화 및 실제 결제 승인 후 대사 정책 검토를 남겨 둔다.
+
+## 2026-11-14 테스트 DB 연결 증빙 보강 (운영 미적용)
+
+- `develop` HEAD `a9780b6108813ba80fc47343a89f31cbce066592`의 [CI #43603288525](https://github.com/dabel11/Ttalkak/actions/runs/43603288525)는 6/6 성공이다. 단, `Backend tests`는 `build.gradle`의 기본 `test` 프로필에서 `application-test.yml`의 H2를 사용하도록 구성된다. **MySQL 8.4 서비스 컨테이너의 존재만으로 그 테스트가 MySQL에 연결했다고 단정하면 안 된다.** `Web and Spring backend integration smoke`의 `bootRun`은 별도 통합 과정이며 여기의 새 결제 회귀 테스트를 실행했다는 증거가 아니다.
+- 해당 기존 브랜치는 `develop`과 분기된 상태(`develop` 대비 12 ahead / 44 behind, 이번 커밋 전)다. 요청한 `chore/db-deployment-safety-gates` 브랜치는 확인되지 않아 복원하지 않았다.
+- 위 격리 테스트 명령에서 `DB_URL` 대신 **높은 우선순위의 `SPRING_DATASOURCE_*` 환경 변수**와 MySQL 방언을 지정한다. `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`을 함께 설정하면 `isolatedBillingRegressionMustActuallyConnectToMysqlWhenRequested()`가 JDBC 데이터베이스 제품명이 MySQL인지 검사한다. 해당 플래그를 주지 않은 보통 H2 테스트 성공은 MySQL 연결 검증을 의미하지 않는다.
+- **주의:** 제품명 검사는 Spring 테스트 컨텍스트 시작 뒤 수행되므로 잘못된 DB 접속을 사전에 막는 보호장치가 아니다. `ddl-auto=create-drop`으로 인한 데이터 변경 위험 때문에 반드시 폐기 가능한 빈 테스트 전용 컨테이너에만 연결한다. 운영 DB나 공유 DB에는 절대 실행하지 않는다.
+- **새 연결 검증 테스트는 작성만 했으며 이 브랜치의 Gradle 실행·MySQL 결과를 확인하지 않았다.** 운영 환경·PG·PR·병합·브랜치 삭제는 그대로 둔다.

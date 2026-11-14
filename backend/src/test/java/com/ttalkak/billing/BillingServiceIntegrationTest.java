@@ -44,6 +44,7 @@ class BillingServiceIntegrationTest {
     @Autowired MemberRepository members;
     @Autowired AuthService auth;
     @Autowired MockMvc mvc;
+    @Autowired javax.sql.DataSource dataSource;
     @MockitoBean BillingGateway gateway;
     @MockitoBean Clock clock;
 
@@ -799,6 +800,21 @@ class BillingServiceIntegrationTest {
         assertEquals(0, charges.countByMemberId(memberId));
         verify(gateway, never()).issueBillingKey(anyString(), anyString());
         verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    /**
+     * A disposable MySQL billing run must fail if Spring's test profile silently
+     * selects the H2 datasource. The normal H2 test suite does not claim MySQL coverage.
+     */
+    @Test
+    void isolatedBillingRegressionMustActuallyConnectToMysqlWhenRequested() throws Exception {
+        if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) {
+            return;
+        }
+        try (var connection = dataSource.getConnection()) {
+            assertEquals("MySQL", connection.getMetaData().getDatabaseProductName(),
+                    "The isolated billing regression must use MySQL, not application-test.yml H2");
+        }
     }
 
     @Test
