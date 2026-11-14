@@ -1,0 +1,42 @@
+[
+ {
+  "n": 1,
+  "source": "trial_v10_20261114.json",
+  "item": "up_22",
+  "rep": 1,
+  "judge_v2": "a",
+  "judge_v1": "b",
+  "ttalkak_first": true,
+  "longer": 1
+ },
+ {
+  "n": 2,
+  "source": "trial_v10_20261114.json",
+  "item": "up_45",
+  "rep": 1,
+  "judge_v2": "b",
+  "judge_v1": "a",
+  "ttalkak_first": false,
+  "longer": 1
+ },
+ {
+  "n": 3,
+  "source": "trial_v10_20261114.json",
+  "item": "up_14",
+  "rep": 1,
+  "judge_v2": "a",
+  "judge_v1": "b",
+  "ttalkak_first": false,
+  "longer": 2
+ },
+ {
+  "n": 4,
+  "source": "trial_v10_20261114.json",
+  "item": "up_36",
+  "rep": 1,
+  "judge_v2": "b",
+  "judge_v1": "tie",
+  "ttalkak_first": true,
+  "longer": 1
+ }
+]

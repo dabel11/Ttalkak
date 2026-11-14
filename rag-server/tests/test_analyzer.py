@@ -280,7 +280,7 @@ def test_non_template_render_unchanged() -> None:
                      {"taskType": "번역", "fields": fields, "templateRequest": False}):
         block = build_analysis_block(analysis)
         assert "[template]" not in block
-        assert "- 원문 [fact] = (없음 → 지어내지 말고 [원문 입력] 빈칸 + 질문)" in block
+        assert "- 원문 [fact] = (없음 → 지어내지 말고 [원문 입력] 빈칸 + 질문." in block
 
 
 def test_template_flag_only_in_analysis_not_fields() -> None:

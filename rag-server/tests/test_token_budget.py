@@ -57,10 +57,13 @@ for name, text, actual in [("한국어 문어체", _KO_FORMAL, 417), ("한국어
     check(f"사용자 입력 과소추정 없음: {name}({actual}tok)", _est_tokens(text) >= actual,
           f"got {_est_tokens(text)}")
 
-# 고정 입력용(보정) — SYSTEM_PROMPT 실측 3,857(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
+# 고정 입력용(보정) — SYSTEM_PROMPT 실측 5,296(본문). ⚠️ 프롬프트를 고치면 다시 재고 갱신할 것 —
 # 추정치로 대체하면 이 테스트(과소추정 금지)의 의미가 사라진다. 코퍼스 전량 검증은 token_calib --corpus.
-# 이력: llama 2,766 → 4,091(규약 v3) · gpt-oss 3,857(2026-09-20). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
-_SYSTEM_ACTUAL = 3857
+# 이력: llama 2,766 → 4,091(규약 v3) · gpt-oss 3,857(2026-09-20) → 4,153(2026-11-13, 범위·부수 정보 빈칸 규칙 +296 —
+# 같은 호출로 전후를 재서 차이만 더함: 3,933 → 4,229) → 4,999(2026-11-14, v7 덧붙이기 구조 —
+# gpt-oss-20b prompt_tokens, 직전 커밋 프롬프트 3,934 → 5,076 차이 +1,142 를 3,857 에 더함)
+# → 5,296(2026-11-15, v10 간결·개수 금지 규칙 — 같은 방법으로 3,934 → 5,373, +1,439). ⚠️ 축소 시도(−43%)는 회귀로 되돌렸다.
+_SYSTEM_ACTUAL = 5296
 check("고정 입력: SYSTEM_PROMPT 과소추정 없음", _est_known_tokens(SYSTEM_PROMPT) >= _SYSTEM_ACTUAL,
       f"got {_est_known_tokens(SYSTEM_PROMPT)}")
 check("고정 입력: SYSTEM_PROMPT 과대추정 5% 이내(예산 낭비 방지)",
@@ -105,8 +108,9 @@ def msgs(text: str):
 # 짧은 입력 → 요청값 그대로 (SYSTEM ~3.3k + 짧은 질의로도 12k 예산에 4096 여유)
 check("70b 짧은 입력은 4096 유지", fit(M70, msgs("블로그 글 프롬프트 만들어줘"), 4096) == 4096)
 
-# 70b + 한국어 원문 5,000자 → 예산 내 축소, 하한 위
-m = msgs("회의록 요약: " + "가" * 5000)
+# 70b + 한국어 장문 → 예산 내 축소, 하한 위. 2026-11-15: SYSTEM 이 v10 으로 길어져(실측 5,296) 5,000자는 하한 512 에 걸린다 —
+# 같은 시나리오(줄지만 하한 위)가 되도록 3,000자로. 그보다 긴 원문은 _needs_long_context 가 Gemini 로 보낸다(경계 약 1,000자).
+m = msgs("회의록 요약: " + "가" * 3000)
 v = fit(M70, m, 4096)
 check("70b 한국어 장문은 예산 내 축소", 512 <= v < 4096, f"got {v}")
 check("70b: 추정입력+예약이 TPM 이하", est_msgs(m) + v + 200 <= 12000, f"got {v}")
@@ -137,8 +141,10 @@ from app.rag.generator import _needs_long_context  # noqa: E402
 OSS = "openai/gpt-oss-120b"
 _saved = os.environ.pop("GROQ_TPM_LIMIT", None)
 try:
-    # 운영 규모 입력(SYSTEM + 기법 5 + 예시 2 ≈ 실측 5.5k) — 무료 8k 에선 예산이 4096 에 못 미친다
-    m = msgs("임영웅 콘서트 인스타 카드뉴스 문구 만들어줘. " + "참고 기법 설명 " * 300)
+    # 운영 규모 입력 — 무료 8k 에선 예산이 4096 에 못 미친다. 2026-11-14: SYSTEM 이 v7 로 4,999 토큰이 되고
+    # 예시 주입을 멈춰, 같은 시나리오(예산이 줄지만 하한 512 위)가 되도록 덧붙인 글을 300 → 100 회로 줄였다(보수 추정 약 7k).
+    # 2026-11-15: v10(실측 5,296)으로 다시 100 → 60 회(같은 시나리오, 보수 추정 약 7.1k).
+    m = msgs("임영웅 콘서트 인스타 카드뉴스 문구 만들어줘. " + "참고 기법 설명 " * 60)
     free = fit(OSS, m, 4096)
     check("미설정이면 무료 표(8k) 그대로", free < 4096 and est_msgs(m) + free + 200 <= 8000, f"got {free}")
 
@@ -153,5 +159,31 @@ finally:
     os.environ.pop("GROQ_TPM_LIMIT", None)
     if _saved is not None:
         os.environ["GROQ_TPM_LIMIT"] = _saved
+
+# ── _gemini_output_budget: 장문 라우팅으로 넘어온 원문을 다 되돌릴 출력 예산 ──
+# 장문은 Gemini 로 라우팅되는데, 고정 4096 이면 긴 원문 verbatim 이 잘려 라우팅이 무의미해진다.
+# 입력 길이에 맞춰 올리되(_needs_long_context 와 동일 산정), 짧은 입력은 무회귀(4096 유지).
+from app.rag.generator import _gemini_output_budget  # noqa: E402
+
+check("짧은 입력은 4096 유지(무회귀)", _gemini_output_budget("블로그 글 만들어줘", 4096) == 4096)
+# 4,000자 원문(≈4,600tok 필요)은 4096 을 넘겨 올려야 한다 — 종전엔 여기서 잘렸다.
+_long = "회의록 요약 프롬프트 만들어줘: " + "가" * 4000
+check("장문은 필요 출력(>4096)으로 상향", _gemini_output_budget(_long, 4096) > 4096,
+      f"got {_gemini_output_budget(_long, 4096)}")
+check("필요 출력 = 원문 토큰 + 600(라우팅 산정과 동일)",
+      _gemini_output_budget(_long, 4096) == _est_tokens(_long) + 600,
+      f"got {_gemini_output_budget(_long, 4096)}")
+# 상한(기본 8192) — 극단 입력도 모델 한계를 넘기지 않는다
+check("상한 8192 적용", _gemini_output_budget("가" * 20000, 4096) == 8192,
+      f"got {_gemini_output_budget('가' * 20000, 4096)}")
+os.environ["GEMINI_MAX_OUTPUT_TOKENS"] = "65536"
+try:
+    check("GEMINI_MAX_OUTPUT_TOKENS 로 상한 상향", _gemini_output_budget("가" * 20000, 4096) > 8192)
+    for bad in ("", "abc"):
+        os.environ["GEMINI_MAX_OUTPUT_TOKENS"] = bad
+        check(f"잘못된 상한값({bad!r})은 기본 8192", _gemini_output_budget("가" * 20000, 4096) == 8192)
+finally:
+    os.environ.pop("GEMINI_MAX_OUTPUT_TOKENS", None)
+
 
 print(f"\n전부 통과 ({_passed}개)")
