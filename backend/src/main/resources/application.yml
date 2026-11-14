@@ -44,6 +44,9 @@ ttalkak:
     light-request-limit: ${LIGHT_REQUEST_LIMIT:30}
     standard-request-limit: ${STANDARD_REQUEST_LIMIT:70}
     pro-request-limit: ${PRO_REQUEST_LIMIT:150}
+    # Temporary, single-account allowance for graduation exhibition demos.
+    exhibition-user-id: "${TTALKAK_EXHIBITION_USER_ID:}"
+    exhibition-request-limit: ${TTALKAK_EXHIBITION_REQUEST_LIMIT:0}
   auth:
     password-reset-enabled: ${PASSWORD_RESET_ENABLED:false}
     # Authenticate client-IP attestations from the internally controlled nginx hop.
