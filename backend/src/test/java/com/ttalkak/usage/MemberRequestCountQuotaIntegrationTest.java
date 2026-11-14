@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "ttalkak.usage.free-request-limit=2",
         "ttalkak.usage.pro-request-limit=3",
         "ttalkak.usage.exhibition-user-id=ttalkak_review",
-        "ttalkak.usage.exhibition-request-limit=100"
+        "ttalkak.usage.exhibition-request-limit=500"
 })
 class MemberRequestCountQuotaIntegrationTest {
     @Autowired MemberRequestGuard guard;
@@ -104,8 +104,8 @@ class MemberRequestCountQuotaIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.plan").value("FREE"))
                 .andExpect(jsonPath("$.requests").value(11))
-                .andExpect(jsonPath("$.requestLimit").value(100))
-                .andExpect(jsonPath("$.requestRemaining").value(89))
+                .andExpect(jsonPath("$.requestLimit").value(500))
+                .andExpect(jsonPath("$.requestRemaining").value(489))
                 .andExpect(jsonPath("$.requestQuotaEnforced").value(true));
 
         Member ordinary = member();
