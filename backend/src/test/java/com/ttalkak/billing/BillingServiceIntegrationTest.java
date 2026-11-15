@@ -26,6 +26,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @AutoConfigureMockMvc
+@org.springframework.test.context.ContextConfiguration(
+        initializers = BillingServiceIntegrationTest.IsolatedMysqlDatasourcePreflight.class)
 @SpringBootTest(properties = {
         "BILLING_MODE=test",
         "JWT_SECRET_BASE64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
@@ -34,6 +36,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "BILLING_POLL_MS=3600000"
 })
 class BillingServiceIntegrationTest {
+    /**
+     * Stops the opt-in, destructive create-drop MySQL regression before JPA
+     * creates a schema if the configured URL is not the disposable local fixture.
+     * Ordinary H2 test runs remain unchanged.
+     */
+    public static class IsolatedMysqlDatasourcePreflight
+            implements org.springframework.context.ApplicationContextInitializer<
+                    org.springframework.context.ConfigurableApplicationContext> {
+        @Override
+        public void initialize(org.springframework.context.ConfigurableApplicationContext context) {
+            if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) {
+                return;
+            }
+            String expected = "jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression";
+            String configured = context.getEnvironment().getProperty("spring.datasource.url", "");
+            if (!(configured.equals(expected) || configured.startsWith(expected + "?"))) {
+                throw new IllegalStateException(
+                        "Destructive billing regression requires the disposable local MySQL fixture on port 13306");
+            }
+            if (!"com.mysql.cj.jdbc.Driver".equals(
+                    context.getEnvironment().getProperty("spring.datasource.driver-class-name", ""))) {
+                throw new IllegalStateException(
+                        "Destructive billing regression requires the explicit MySQL JDBC driver");
+            }
+        }
+    }
     @Autowired BillingService billing;
     @Autowired AccountWithdrawalService withdrawal;
     @Autowired PasswordEncoder passwordEncoder;
