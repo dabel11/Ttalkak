@@ -101,3 +101,11 @@ docker rm -f ttalkak-billing-regression-mysql
 - 위 격리 테스트 명령에서 `DB_URL` 대신 **높은 우선순위의 `SPRING_DATASOURCE_*` 환경 변수**와 MySQL 방언을 지정한다. `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`을 함께 설정하면 `isolatedBillingRegressionMustActuallyConnectToMysqlWhenRequested()`가 JDBC 데이터베이스 제품명이 MySQL인지 검사한다. 해당 플래그를 주지 않은 보통 H2 테스트 성공은 MySQL 연결 검증을 의미하지 않는다.
 - **주의:** 제품명 검사는 Spring 테스트 컨텍스트 시작 뒤 수행되므로 잘못된 DB 접속을 사전에 막는 보호장치가 아니다. `ddl-auto=create-drop`으로 인한 데이터 변경 위험 때문에 반드시 폐기 가능한 빈 테스트 전용 컨테이너에만 연결한다. 운영 DB나 공유 DB에는 절대 실행하지 않는다.
 - **새 연결 검증 테스트는 작성만 했으며 이 브랜치의 Gradle 실행·MySQL 결과를 확인하지 않았다.** 운영 환경·PG·PR·병합·브랜치 삭제는 그대로 둔다.
+
+## 2026-11-15 MySQL 테스트 대상 사전 차단 (미실행)
+
+- 격리 MySQL 회귀 실행은 `spring.jpa.hibernate.ddl-auto=create-drop` 설정을 사용하므로 **연결 대상 확인이 끝나기 전에 Hibernate가 스키마를 바꾸는 위험**이 있다.
+- `BillingServiceIntegrationTest`에 Spring 테스트 컨텍스트 초기화기를 추가했다. `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`일 때 실제 데이터소스 생성 이전에 Spring이 해석한 `spring.datasource.url`이 `jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression`(또는 해당 URL에 쿼리 파라미터만 추가된 형태)인지, 드라이버가 `com.mysql.cj.jdbc.Driver`인지 검증한다. 다르면 예외로 컨텍스트 초기화를 중단하도록 **작성**했다.
+- 기존 JDBC 제품명 확인 테스트는 그대로 유지한다. 사전 검사로 설정 대상을 제한하고, JDBC 메타데이터 검사로 실제 MySQL 연결 여부를 확인하는 **서로 다른 방어선**이다. 환경변수 플래그가 없는 기존 H2 CI 테스트 동작은 변경하지 않도록 설계했다.
+- **이 변경은 작성·커밋만 했다.** 현재 작업 브랜치의 Gradle 컴파일·회귀 테스트 또는 MySQL 8.4 실제 실행·통과는 확인하지 못했다. URL 확인은 로컬 포트가 실제로 폐기형 MySQL을 가리킨다는 것을 보증하지 않으므로, 테스트 전 사용자/운영 DB와 완전히 분리됐는지 별도 확인해야 한다.
+- `develop`과의 분기를 유지하며, PR/병합/브랜치 삭제/운영 DB·환경변수/Railway/PG 호출은 하지 않는다.
