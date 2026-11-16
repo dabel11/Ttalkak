@@ -808,6 +808,11 @@ class BillingServiceIntegrationTest {
         assertEquals(1, charges.countByMemberId(memberId));
         assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
                 .orElseThrow().getOrderId());
+        // Provider response was unknown: do not fabricate a DONE/refund, but expose the
+        // unsettled payment to the administrator separately from the refund queue.
+        assertTrue(refunds.pendingPayments().stream().anyMatch(c ->
+                originalOrderId.equals(c.orderId()) && "PENDING".equals(c.status())
+                && "NONE".equals(c.refundState())));
         verify(gateway, times(1)).charge(eq("mock-only-billing-key"), anyString(),
                 eq(originalOrderId), eq(3900), anyString());
         verify(gateway, never()).lookup(anyString());
