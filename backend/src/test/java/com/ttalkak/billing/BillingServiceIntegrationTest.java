@@ -63,6 +63,7 @@ class BillingServiceIntegrationTest {
         }
     }
     @Autowired BillingService billing;
+    @Autowired BillingRefundService refunds;
     @Autowired AccountWithdrawalService withdrawal;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired BillingChargeRepository charges;
@@ -570,22 +571,31 @@ class BillingServiceIntegrationTest {
         assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
         assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(2, charges.countByMemberId(memberId));
-        BillingCharge pendingOrder = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
-                .orElseThrow();
-        assertEquals("UPGRADE", pendingOrder.getChargeKind());
-        assertNull(pendingOrder.getPaymentKey(), "unreconciled approval must not look locally settled");
+        BillingCharge reviewOrder = charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow();
+        assertEquals("UPGRADE", reviewOrder.getChargeKind());
+        assertEquals("DONE", reviewOrder.getStatus());
+        assertEquals("late-upgrade-payment", reviewOrder.getPaymentKey());
+        assertEquals("REQUESTED", reviewOrder.getRefundState());
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(c -> c.orderId().equals(reviewOrder.getOrderId())));
+        assertTrue(charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isEmpty());
         verify(gateway, times(1)).charge(anyString(), anyString(), anyString(),
                 eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
 
-        // Even a later provider lookup must not turn a withdrawn account paid.
-        when(gateway.lookup(pendingOrder.getOrderId())).thenReturn(new BillingGateway.Payment(
-                "late-upgrade-payment", pendingOrder.getOrderId(), "DONE", "BILLING", quote.amount()));
-        ApiException retry = assertThrows(ApiException.class, () -> billing.reconcileUpgrade(memberId));
-        assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED", retry.getCode());
+        // This account cannot receive a higher tier even after an additional reconciliation attempt.
+        billing.reconcileUpgrade(memberId);
         assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
-        assertEquals("PENDING", charges.findByOrderId(pendingOrder.getOrderId()).orElseThrow().getStatus());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("REQUESTED", charges.findByOrderId(reviewOrder.getOrderId()).orElseThrow().getRefundState());
         assertEquals(2, charges.countByMemberId(memberId));
-        verify(gateway, times(1)).lookup(pendingOrder.getOrderId());
+        verify(gateway, never()).lookup(reviewOrder.getOrderId());
+
+        // A settled but manual-review upgrade must no longer block the original renewal refund.
+        BillingCharge firstCharge = charges.scopedCharges(memberId, "test:legacy", "DONE",
+                org.springframework.data.domain.PageRequest.of(0, 5)).stream()
+                .filter(c -> "RENEWAL".equals(c.getChargeKind())).findFirst().orElseThrow();
+        assertEquals("REQUESTED", refunds.request(memberId, firstCharge.getOrderId(),
+                "초기 결제 환불 검토").refundState());
     }
 
     @Test
@@ -703,14 +713,20 @@ class BillingServiceIntegrationTest {
         assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew(),
                 "a delayed provider approval must not restart renewal after withdrawal");
         assertEquals(1, charges.countByMemberId(memberId));
-        assertEquals("DONE", charges.findFirstByMemberIdOrderByIdDesc(memberId)
-                .orElseThrow().getStatus(),
+        BillingCharge reviewOrder = charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow();
+        assertEquals("DONE", reviewOrder.getStatus(),
                 "a provider-approved in-flight order still needs a durable reconciliation record");
+        assertEquals("REQUESTED", reviewOrder.getRefundState());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan(),
+                "approval after withdrawal must not create a new entitlement");
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(c -> c.orderId().equals(reviewOrder.getOrderId())));
         assertFalse(subscriptions.dueMemberIds(now, "test:legacy").contains(memberId));
 
         billing.charge(memberId);
         billing.chargeDue();
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, times(1)).charge(eq("mock-only-billing-key"), anyString(),
+                eq(reviewOrder.getOrderId()), eq(3900), anyString());
         verify(gateway, never()).lookup(anyString());
     }
 
