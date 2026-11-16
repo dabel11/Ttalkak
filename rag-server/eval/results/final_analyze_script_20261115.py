@@ -3,7 +3,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
-from statistics import mean, median
+from statistics import median
 
 from scipy.stats import beta, fisher_exact
 

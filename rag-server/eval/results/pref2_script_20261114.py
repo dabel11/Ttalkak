@@ -1,7 +1,6 @@
 """v10 사람 확인용 평가지(4쌍) — 1차 평가지와 같은 질문·형식. (rag-server 에서, PYTHONPATH=.)"""
 import json
 import random
-from pathlib import Path
 import eval.pref_materials as pm
 
 SRC = "trial_v10_20261114.json"

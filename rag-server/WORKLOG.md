@@ -4713,3 +4713,9 @@ eval/TTALKAK_EVAL_REPORT_20261115.docx(심사·발표용)와 eval/TTALKAK_PR_SUM
 **변경 파일**: app/rag/generator.py(v10), eval/uplift_score.py(pair-v2), eval/pref_materials.py, tests/test_token_budget.py,
 tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eval/results·human_review 신규 파일, 보고서 docx
 **검증**: `pytest tests` 313 passed, scripts/check-graduation-eval-readiness.py PASS.
+
+## [2026-11-16] CI 수정 — eval/results 스크립트 사본의 미사용 import
+**목적**: PR #91 CI 'RAG server unit tests' 실패 — `ruff check --select F821,F401,F811,E9 app eval ingestion tests` 가 eval/results 아래 사본도 검사.
+**Before**: F401 3건 — final_analyze_script(statistics.mean), pref2_script(pathlib.Path), report_data_script(collections.Counter).
+**After**: 세 import 제거(동작 변화 없음).
+**검증**: 로컬에 ruff 가 없어 py_compile + ast 로 eval/ 전체 미사용 import 0건 확인, `pytest tests` 통과.

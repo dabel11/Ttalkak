@@ -1,6 +1,5 @@
 """심사·발표용 보고서 숫자·차트 — 최종 측정(v7 대 v10)에서 다시 계산. (rag-server 에서, PYTHONPATH=.)"""
 import json
-from collections import Counter
 from pathlib import Path
 
 import matplotlib
