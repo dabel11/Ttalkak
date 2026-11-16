@@ -1,6 +1,8 @@
 package com.ttalkak.billing;
 
 import com.ttalkak.common.exception.ApiException;
+import com.ttalkak.member.Member;
+import com.ttalkak.member.MemberRepository;
 import com.ttalkak.usage.PaidUsagePeriod;
 import com.ttalkak.usage.PaidUsagePeriodRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,12 +31,14 @@ public class BillingService {
     private final int amount;
     private final Clock clock;
     private final BillingContext context;
+    private final MemberRepository members;
 
     public BillingService(BillingSubscriptionRepository subscriptions, BillingChargeRepository charges,
             PaidUsagePeriodRepository periods, BillingGateway gateway, TransactionTemplate transactions,
             @Value("${ttalkak.billing.toss-client-key:}") String clientKey,
             @Value("${ttalkak.billing.toss-secret-key:}") String secretKey,
-            @Value("${ttalkak.billing.monthly-price-krw:9900}") int amount, Clock clock, BillingContext context) {
+            @Value("${ttalkak.billing.monthly-price-krw:9900}") int amount, Clock clock, BillingContext context,
+            MemberRepository members) {
         this.subscriptions = subscriptions;
         this.charges = charges;
         this.periods = periods;
@@ -45,6 +49,7 @@ public class BillingService {
         this.amount = amount;
         this.clock = clock;
         this.context = context;
+        this.members = members;
     }
 
     private void configured() {
@@ -138,9 +143,13 @@ public class BillingService {
                 // Provider key issuance runs outside the DB transaction. Withdrawal
                 // may complete during that network call: never re-enable renewal
                 // or persist a newly issued billing key for an inactive member.
-                BillingSubscription locked = subscriptions.lockActiveByMemberId(memberId)
-                        .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
-                                "탈퇴한 계정에는 결제 수단을 등록할 수 없습니다."));
+                BillingSubscription locked = subscriptions.lockByMemberId(memberId).orElseThrow();
+                // Lock order: subscription then member, matching the withdrawal path.
+                // An EXISTS predicate in a locking query is not a safe post-wait liveness check.
+                if (!lockMemberActive(memberId)) {
+                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
+                            "탈퇴한 계정에는 결제 수단을 등록할 수 없습니다.");
+                }
                 context.requireScope(locked.getBillingScope());
                 if (locked.getBillingKey() == null) locked.register(billingKey);
             });
@@ -156,11 +165,10 @@ public class BillingService {
     private Status retryWithinBudget(Long memberId) {
         configured();
         transactions.executeWithoutResult(tx -> {
-            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
-            if (subscription == null) {
-                if (subscriptions.findByMemberId(memberId).isEmpty()) {
-                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED", "등록된 카드가 없습니다.");
-                }
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
+                            "등록된 카드가 없습니다."));
+            if (!lockMemberActive(memberId)) {
                 throw new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
                         "탈퇴한 계정은 자동갱신을 다시 시작할 수 없습니다.");
             }
@@ -201,9 +209,10 @@ public class BillingService {
         Prepared prepared = transactions.execute(tx -> {
             // The scheduler's due-member list may be stale by the time this
             // lock is acquired. Reject withdrawn accounts here as well.
-            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElse(null);
             if (subscription == null) return null;
             context.requireScope(subscription.getBillingScope());
+            if (!lockMemberActive(memberId)) return null;
             if (charges.openRefunds(memberId, context.scope()) > 0) return null;
             if (!subscription.isAutoRenew() || subscription.getBillingKey() == null) return null;
             Instant now = clock.instant();
@@ -256,6 +265,13 @@ public class BillingService {
             BillingCharge attempt = charges.findByOrderId(prepared.orderId()).orElseThrow();
             if (attempt.getStatus().equals("DONE")) return;
             if (!attempt.getStatus().equals("PENDING")) throw new IllegalStateException("Charge is not pending");
+            if (!lockMemberActive(memberId)) {
+                // Provider confirmed a payment after withdrawal: keep an auditable order
+                // and queue MANUAL review without granting a new paid period.
+                attempt.complete(confirmedPayment.paymentKey());
+                attempt.requestRefund("탈퇴 후 승인 - 관리자 확인 필요");
+                return;
+            }
             periods.saveAndFlush(new PaidUsagePeriod(memberId, confirmedPayment.paymentKey(),
                     attempt.getPeriodStart(), attempt.getPeriodEnd(), attempt.getPlan().name(), context.scope()));
             attempt.complete(confirmedPayment.paymentKey());
@@ -329,12 +345,10 @@ public class BillingService {
         PreparedUpgrade prepared = transactions.execute(tx -> {
             // A withdrawn member must not initiate a new provider charge, even if
             // their paid usage period and billing key are retained for reconciliation.
-            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId).orElse(null);
-            if (subscription == null) {
-                if (subscriptions.findByMemberId(memberId).isEmpty()) {
-                    throw new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
-                            "등록된 구독이 없습니다.");
-                }
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "BILLING_SETUP_REQUIRED",
+                            "등록된 구독이 없습니다."));
+            if (!lockMemberActive(memberId)) {
                 throw new ApiException(HttpStatus.CONFLICT, "BILLING_ACCOUNT_INACTIVE",
                         "탈퇴한 계정에서는 요금제를 업그레이드할 수 없습니다.");
             }
@@ -419,25 +433,30 @@ public class BillingService {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UNCERTAIN",
                     "결제 결과를 확인할 수 없습니다. 같은 주문으로 재확인해 주세요.");
         }
-        transactions.executeWithoutResult(tx -> {
-            // Provider approval can arrive after account withdrawal. Keep the
-            // original order PENDING for manual payment/refund reconciliation;
-            // never grant a higher paid tier to a deactivated account.
-            BillingSubscription subscription = subscriptions.lockActiveByMemberId(memberId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_GATEWAY,
-                            "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
-                            "탈퇴한 계정의 결제 승인 내역은 관리자 확인이 필요합니다."));
+        boolean queuedForReview = Boolean.TRUE.equals(transactions.execute(tx -> {
+            // Use a subscription row lock first and a fresh member row lock second.
+            // Never rely on an unlocked EXISTS subquery after waiting for withdrawal.
+            BillingSubscription subscription = subscriptions.lockByMemberId(memberId).orElseThrow();
             context.requireScope(subscription.getBillingScope());
+            boolean activeMember = lockMemberActive(memberId);
             BillingCharge charge = charges.findByOrderId(orderId).orElseThrow();
             if (!memberId.equals(charge.getMemberId()) || !"UPGRADE".equals(charge.getChargeKind())
                     || charge.getAmount() != expectedAmount) {
                 throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
                         "현재 계정의 업그레이드 주문이 아닙니다.");
             }
-            if ("DONE".equals(charge.getStatus())) return;
+            if ("DONE".equals(charge.getStatus())) return !activeMember && "REQUESTED".equals(charge.getRefundState());
             if (!"PENDING".equals(charge.getStatus())) {
                 throw new ApiException(HttpStatus.CONFLICT, "BILLING_PAYMENT_PENDING",
                         "업그레이드 주문 상태가 변경됐습니다.");
+            }
+            if (!activeMember) {
+                // Approval is real, but entitlement is forbidden after withdrawal.
+                // Persist before reporting the error: throwing INSIDE the transaction
+                // would roll back the order and keep it invisible to the admin queue.
+                charge.complete(payment.paymentKey());
+                charge.requestRefund("탈퇴 후 승인 - 관리자 확인 필요");
+                return true;
             }
             Instant now = clock.instant();
             var active = activePeriod(memberId, now).orElseThrow(() -> new ApiException(
@@ -450,7 +469,20 @@ public class BillingService {
             active.upgradeTo(charge.getPlan().name(), charge.getUpgradeRequestLimit());
             subscription.selectPlan(charge.getPlan());
             charge.complete(payment.paymentKey());
-        });
+            return false;
+        }));
+        if (queuedForReview) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                    "승인된 결제를 관리자 검토 대상으로 등록했습니다. 별도 환불 확인이 필요합니다.");
+        }
+    }
+
+    /**
+     * Must be called after taking the subscription lock. PESSIMISTIC_WRITE is a
+     * current row read in MySQL, unlike EXISTS in the subscription lock predicate.
+     */
+    private boolean lockMemberActive(Long memberId) {
+        return members.lockById(memberId).map(Member::isActive).orElse(false);
     }
 
     private java.util.Optional<BillingCharge> pending(Long memberId) {
