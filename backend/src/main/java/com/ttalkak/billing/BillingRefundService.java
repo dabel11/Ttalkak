@@ -53,10 +53,13 @@ public class BillingRefundService {
     public ChargeView request(Long memberId, String orderId, String reason) {
         String reviewedReason = reason(reason);
         return transactions.execute(tx -> {
-            // Consistent lock order: subscription -> member across billing, refund and withdrawal.
+            // Verify order ownership BEFORE locking subscription so an unrelated order
+            // keeps returning 404 instead of leaking the absence of a subscription (500).
+            // This lookup is read-only and takes no row lock.
+            BillingCharge charge = owned(memberId, orderId);
+            // All actual row locks follow subscription -> member.
             BillingSubscription subscription = lockSubscription(memberId);
             lockMember(memberId);
-            BillingCharge charge = owned(memberId, orderId);
             if (!"NONE".equals(charge.getRefundState())) return view(charge);
             if (!"DONE".equals(charge.getStatus()) || charge.getPaymentKey() == null) {
                 throw error(HttpStatus.CONFLICT, "BILLING_REFUND_REQUIRES_PAYMENT", "승인이 확인된 결제만 환불을 요청할 수 있습니다.");
