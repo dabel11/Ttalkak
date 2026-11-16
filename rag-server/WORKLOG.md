@@ -4732,3 +4732,11 @@ tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eva
 라우팅 경계 '약 1,000자'는 테스트 조건(70b 12k·기법 5장) 값이며 운영 기본 gpt-oss 8k 에 그대로 적용되지 않음을 명시. 보고서 향후 과제에 새 요청 세트 재확인 추가.
 **검증**: `pytest tests` 323 passed. 패치 전 코드에 새 테스트만 두면 test_uplift_score 9 실패 · 라우팅 검증 실패 → 패치 후 모두 통과(직접 재현).
 최종 트랙 B 수치는 별도 재판정 스크립트로 냈으므로 ② 의 캐시 오류와 무관(리뷰어도 같은 판단).
+
+## [2026-11-16] PR #91 재리뷰 반영 — 짝 비교 캐시에 판정 모델 확인
+**목적**: 재리뷰(trytur, COMMENTED) — 앞의 2건은 해결 확인, 새 P2 1건: 판정 모델을 바꿔 다시 돌려도 pair 캐시가 재사용됨.
+**Before**: `judge_pair()` 반환값에 `version` 만 있고, `run()` 은 `version == PAIR_JUDGE_VERSION` 만 보고 재사용 → `--judge-model` 을 바꿔도 옛 모델의 승패가 남음.
+**After**: `judge_pair()` 가 `judge_model` 을 기록, `run()` 은 `version` 과 `judge_model` 이 모두 현재 실행과 같을 때만 재사용(모델 기록이 없는 옛 캐시는 다시 판정).
+테스트: 같은 버전·같은 모델 → 재사용 / 모델 바뀜 → 다시 판정 / 모델 없음(옛 캐시) → 다시 판정, judge_pair 가 모델을 기록하는지. 기존 캐시 테스트의 가짜 캐시·판정에도 모델을 넣음.
+**검증**: `pytest tests` 326 passed. 수정 전 코드에 새 테스트를 두면 3건 실패 → 수정 후 통과(직접 재현).
+**결정·근거**: 리뷰의 참고 의견대로 PR 제목의 74% → 31% 를 '평가셋 기준'으로 한정(판정기 사람 일치 53%, 개선에 참고한 요청 세트로 측정).

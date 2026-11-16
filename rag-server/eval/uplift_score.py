@@ -151,7 +151,7 @@ def judge_pair(client, model: str, item: dict, out_a: str, out_b: str) -> dict:
         res.append("a" if w == a_pos else ("tie" if w in ("tie", "") else "b"))
         finish.append(r["finish"])
     return {"winner": res[0] if res[0] == res[1] else "tie", "passes": res, "finish": finish,
-            "version": PAIR_JUDGE_VERSION}
+            "version": PAIR_JUDGE_VERSION, "judge_model": model}
 
 
 # ── 결과물 하나 채점 ─────────────────────────────────────────
@@ -295,7 +295,10 @@ def run(args, items: list[dict], data: dict, out: Path) -> None:
                     cached = data["pairs"].get(key)
                     if not t.get("output") or not o.get("output"):
                         continue
-                    if cached and cached.get("version") == PAIR_JUDGE_VERSION:
+                    # 판정 프롬프트 버전과 판정 모델이 모두 같을 때만 재사용 — 모델을 바꿔 다시 돌리면 다시 판정한다.
+                    # 모델 기록이 없는 옛 캐시는 어느 모델이 냈는지 모르므로 다시 판정하는 쪽이 안전하다.
+                    if (cached and cached.get("version") == PAIR_JUDGE_VERSION
+                            and cached.get("judge_model") == args.judge_model):
                         continue
                     data["pairs"][key] = patient(lambda: judge_pair(client, args.judge_model, it, o["output"], t["output"]))
                     out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

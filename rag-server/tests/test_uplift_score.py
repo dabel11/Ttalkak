@@ -208,7 +208,7 @@ def test_judge_pair_needs_both_orders_and_records_version():
     same = judge_pair(client(['{"winner": "2"}', '{"winner": "1"}']), "m", item, "a", "b")   # 두 번 다 b
     split = judge_pair(client(['{"winner": "1"}', '{"winner": "1"}']), "m", item, "a", "b")  # 위치만 따라감
     assert same["winner"] == "b" and split["winner"] == "tie"
-    assert same["version"] == PAIR_JUDGE_VERSION and same["finish"] == ["stop", "stop"]
+    assert same["version"] == PAIR_JUDGE_VERSION and same["finish"] == ["stop", "stop"] and same["judge_model"] == "m"
 
 
 @pytest.fixture
@@ -224,7 +224,7 @@ def resumed_eval(monkeypatch, tmp_path):
     records = {f"up_mock|{c}|0": {"item": "up_mock", "condition": c, "repeat": 0,
                                 "prompt": f"prompt:{c}", "output": f"old:{c}", "exec_finish": "stop"}
                for c in args.conditions}
-    valid = {"winner": "a", "version": us.PAIR_JUDGE_VERSION}
+    valid = {"winner": "a", "version": us.PAIR_JUDGE_VERSION, "judge_model": args.judge_model}
     pairs = {f"up_mock|pair_{c}_vs_ttalkak|0": dict(valid) for c in ("raw", "rewrite")}
     # 다른 문항·회차의 판정까지 지우지 않아야 한다.
     pairs["up_other|pair_raw_vs_ttalkak|0"] = dict(valid)
@@ -238,7 +238,7 @@ def resumed_eval(monkeypatch, tmp_path):
 
     def compare(client, model, it, a, b):
         comparisons.append((a, b))
-        return {"winner": "b", "version": us.PAIR_JUDGE_VERSION}
+        return {"winner": "b", "version": us.PAIR_JUDGE_VERSION, "judge_model": model}
 
     monkeypatch.setattr(us, "_client", lambda backend: object())
     monkeypatch.setattr(us, "call_patiently", lambda fn, wait: fn())
@@ -296,12 +296,31 @@ def test_incomplete_rerun_to_question_removes_old_pairs(resumed_eval, monkeypatc
 def test_pair_cache_uses_only_current_judge_version(resumed_eval, version):
     e = resumed_eval
     key = "up_mock|pair_raw_vs_ttalkak|0"
-    e.data["pairs"][key] = {"winner": "a", **({"version": version} if version else {})}
+    e.data["pairs"][key] = {"winner": "a", "judge_model": e.args.judge_model, **({"version": version} if version else {})}
     e.us.run(e.args, [e.item], e.data, e.out)
 
     stale = version != e.us.PAIR_JUDGE_VERSION
     assert not e.executions
     assert e.comparisons == ([("old:raw", "old:ttalkak")] if stale else [])
-    assert e.data["pairs"][key] == {"winner": "b" if stale else "a", "version": e.us.PAIR_JUDGE_VERSION}
+    assert e.data["pairs"][key] == {"winner": "b" if stale else "a", "version": e.us.PAIR_JUDGE_VERSION,
+                                    "judge_model": e.args.judge_model}
     if stale:
         assert json.loads(e.out.read_text(encoding="utf-8")) == e.data
+
+
+@pytest.mark.parametrize("cached_model, reused", [("m", True), ("other-model", False), (None, False)])
+def test_pair_cache_requires_same_judge_model(resumed_eval, cached_model, reused):
+    """같은 판정 버전이어도 판정 모델이 다르거나 기록이 없으면(옛 캐시) 다시 판정한다."""
+    e = resumed_eval
+    key = "up_mock|pair_raw_vs_ttalkak|0"
+    e.data["pairs"][key] = {"winner": "a", "version": e.us.PAIR_JUDGE_VERSION,
+                            **({"judge_model": cached_model} if cached_model else {})}
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    assert not e.executions
+    assert e.comparisons == ([] if reused else [("old:raw", "old:ttalkak")])
+    expected = ({"winner": "a", "version": e.us.PAIR_JUDGE_VERSION, "judge_model": "m"} if reused
+                else {"winner": "b", "version": e.us.PAIR_JUDGE_VERSION, "judge_model": e.args.judge_model})
+    assert e.data["pairs"][key] == expected
+    if not reused:                                   # 재사용하면 바뀐 것이 없어 저장하지 않는다
+        assert json.loads(e.out.read_text(encoding="utf-8"))["pairs"][key] == expected
