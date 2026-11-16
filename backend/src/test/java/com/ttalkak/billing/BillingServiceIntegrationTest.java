@@ -202,7 +202,10 @@ class BillingServiceIntegrationTest {
         assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(1, charges.countByMemberId(memberId));
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        // chargeDue() scans other due members in the shared test database.
+        // Verify this member/order was not charged again, rather than counting unrelated calls.
+        verify(gateway, times(1)).charge(eq("billing-timeout"), eq(setup.customerKey()),
+                eq(orderId), eq(9900), anyString());
     }
 
     @Test
@@ -267,7 +270,8 @@ class BillingServiceIntegrationTest {
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(1, charges.countByMemberId(memberId));
         billing.chargeDue();
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, times(1)).charge(eq("billing-before-crash"), eq(setup.customerKey()),
+                anyString(), eq(9900), anyString());
     }
 
     @Test
@@ -398,7 +402,7 @@ class BillingServiceIntegrationTest {
         var setup = billing.setup(memberId, "LIGHT");
         when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
         when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
-                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment",
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment-" + invocation.getArgument(2),
                         invocation.getArgument(2), "DONE", "BILLING",
                         ((Integer) invocation.getArgument(3)).longValue()));
         billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
@@ -541,7 +545,7 @@ class BillingServiceIntegrationTest {
         var setup = billing.setup(memberId, "LIGHT");
         when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
         when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
-                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment",
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment-" + invocation.getArgument(2),
                         invocation.getArgument(2), "DONE", "BILLING",
                         ((Integer) invocation.getArgument(3)).longValue()));
         billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
@@ -783,7 +787,8 @@ class BillingServiceIntegrationTest {
         assertEquals(1, charges.countByMemberId(memberId));
         assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
                 .orElseThrow().getOrderId());
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, times(1)).charge(eq("mock-only-billing-key"), anyString(),
+                eq(originalOrderId), eq(3900), anyString());
         verify(gateway, never()).lookup(anyString());
     }
 
