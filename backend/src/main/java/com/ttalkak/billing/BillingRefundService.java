@@ -50,6 +50,12 @@ public class BillingRefundService {
         return charges.refundQueue(context.scope(), state, PageRequest.of(0, 50)).stream().map(this::view).toList();
     }
 
+    /** Read-only admin reconciliation queue for provider outcomes not yet verified. No PG calls. */
+    public List<ChargeView> pendingPayments() {
+        return charges.pendingPaymentQueue(context.scope(), PageRequest.of(0, 50))
+                .stream().map(this::view).toList();
+    }
+
     public ChargeView request(Long memberId, String orderId, String reason) {
         String reviewedReason = reason(reason);
         return transactions.execute(tx -> {
