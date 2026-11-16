@@ -11,7 +11,7 @@ judge 결함 판정(uplift_set_v2.json 의 defects 중 by=judge — 가공 작�
 표본: eval/defect_canary_set.json — 조정용(pos 5 · neg 4) / eval/defect_holdout_set.json — 별도 검증용
 기준: 같은 표본을 --repeats 회 반복해 **판정이 매번 기대와 같은가**를 본다.
 
-사용법 (rag-server/ 에서, GROQ_API_KEY 필요):
+사용법 (rag-server/ 에서, GEN_PRIMARY 백엔드의 키 필요 — --backend 로 고정 가능):
     python3 -m eval.defect_canary
     python3 -m eval.defect_canary --repeats 1 --show
 """
@@ -58,18 +58,19 @@ def build_system(defects: dict) -> str:
   "refusal": true|false, "reason": "<한두 문장 근거>"}}"""
 
 
-def judge(client, system: str, case: dict) -> dict:
+def judge(client, system: str, case: dict, model: str = _JUDGE_MODEL) -> dict:
     user = (f"[작업 유형]\n{case['task_type']}\n\n"
             f"[사용자 요청]\n{case['query']}\n\n"
             f"[결과물]\n{mask(case['output'])}")
     resp = client.chat.completions.create(
-        model=_JUDGE_MODEL,
+        model=model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
         max_tokens=_MAX_TOKENS,
-        reasoning_effort=_REASONING_EFFORT,
         response_format={"type": "json_object"},
         temperature=0.0,
+        # reasoning_effort 는 gpt-oss 전용 — Gemini(OpenAI 호환)에 보내면 의미가 다르다
+        **({"reasoning_effort": _REASONING_EFFORT} if model.startswith("openai/gpt-oss") else {}),
     )
     return _loads_loose(resp.choices[0].message.content or "")
 
@@ -143,12 +144,18 @@ def main():
     ap.add_argument("--out", default="", help="원시 판정 JSON 저장 경로(호출마다 갱신)")
     ap.add_argument("--set", default="defect_canary_set.json", help="표본 파일(eval/ 기준)")
     ap.add_argument("--cases", default="", help="이 표본만 실행(쉼표 구분 id) — 중단된 실행 이어가기용")
+    ap.add_argument("--backend", default="", choices=["", "groq", "gemini"],
+                    help="판정 백엔드(비우면 GEN_PRIMARY) — 본 측정(uplift_score)과 같은 판정기를 검증해야 한다")
     args = ap.parse_args()
 
     from dotenv import load_dotenv
-    from groq import Groq
+    from eval.uplift_eval import _pick_backend
+    from eval.uplift_score import _client, default_models
     load_dotenv()
-    client = Groq(timeout=GEN_SECONDS)
+    backend = args.backend or _pick_backend()
+    model = default_models(backend)[1]
+    client = _client(backend, timeout=GEN_SECONDS)
+    print(f"판정기: {backend} · {model}")
 
     defects = json.loads((_DIR / "uplift_set_v2.json").read_text(encoding="utf-8"))["defects"]
     cases = json.loads((_DIR / args.set).read_text(encoding="utf-8"))["cases"]
@@ -171,7 +178,7 @@ def main():
         results = []
         for r in range(args.repeats):
             n += 1
-            v = call_patiently(lambda: judge(client, system, case), args.max_wait)
+            v = call_patiently(lambda: judge(client, system, case, model), args.max_wait)
             errs = grade(case, v)
             results.append((v, errs))
             raw.setdefault(case["id"], []).append(v)

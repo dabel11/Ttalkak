@@ -17,16 +17,28 @@ from eval.placeholders import find_placeholders
 from eval.value_check import invented_values, normalize_spaces
 
 # max_chars 는 결과물 '본문'만 센다 — 앞뒤 메타 문장은 사용자가 요청한 분량이 아니다
-_META_LINE = re.compile(r"(?:다음은|아래는).{0,40}(?:입니다|이다)[.:]?\s*$|(?:드리겠습니다|드립니다|했습니다)[.:]?\s*$|:\s*$")
+_META_LINE = re.compile(r"(?:다음은|아래는).{0,40}(?:입니다|이다)[.:]?\s*$|:\s*$")
+# 맺음말은 '본문과 별개인 짧은 인사'일 때만 뗀다. 길이 제한이 없었을 때, 한 줄로 끝나는 문자·메일이
+# '…부탁드립니다.' 로 끝나면 본문 전체가 맺음말로 떨어져 **0자**로 세어 분량 제한을 통과했다
+# (2026-11-06 팀원 지적, 127자 문자가 90자 판정 통과). 그래서 ① 짧은 줄만 ② 본문이 남을 때만 뗀다.
+_META_TAIL = re.compile(r"(?:드리겠습니다|드립니다|했습니다)[.:!]?\s*$")
+_META_TAIL_MAX = 40
 _TABLE = re.compile(r"^\s*\|.*\|\s*$\n^\s*\|[\s:|-]+\|\s*$", re.M)
 
 
+def _meta_edge(line: str) -> bool:
+    """맨 앞·맨 뒤에서 떼도 되는 줄인가 — 빈 줄·구분선·머리말·짧은 인사말."""
+    s = line.strip()
+    return (not s or set(s) <= set("-*_=") or bool(_META_LINE.search(s))
+            or (len(s) <= _META_TAIL_MAX and bool(_META_TAIL.search(s))))
+
+
 def body_text(output: str) -> str:
-    """앞뒤 메타 줄(머리말·맺음말)과 구분선을 뗀 본문."""
-    lines = [l for l in output.strip().splitlines()]
-    while lines and (not lines[0].strip() or _META_LINE.search(lines[0]) or set(lines[0].strip()) <= set("-*_=")):
+    """앞뒤 메타 줄(머리말·맺음말)과 구분선을 뗀 본문. 본문을 다 떼지는 않는다 — 한 줄이 남으면 멈춘다."""
+    lines = output.strip().splitlines()
+    while len(lines) > 1 and _meta_edge(lines[0]):
         lines.pop(0)
-    while lines and (not lines[-1].strip() or _META_LINE.search(lines[-1]) or set(lines[-1].strip()) <= set("-*_=")):
+    while len(lines) > 1 and _meta_edge(lines[-1]):
         lines.pop()
     return "\n".join(lines).strip()
 

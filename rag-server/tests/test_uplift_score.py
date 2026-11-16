@@ -99,9 +99,22 @@ def test_report_pairs_conditions_per_item():
             rec("up_09", "raw", 0, 1.0), rec("up_09", "ttalkak", 0, None, asked=True)]
     data = {"records": {f"{r['item']}|{r['condition']}|{r['repeat']}": r for r in recs}, "pairs": {}}
     rep = report(data, ITEMS)
-    c = rep["comparisons"]["요구사항 충족률(주관 제외) ⚠️잠정"]["ttalkak − raw"]
+    c = rep["comparisons"]["요구사항 충족률(주관 제외)"]["ttalkak − raw"]
     assert c["n"] == 1 and c["mean_diff"] == 0.5        # 되묻기로 빠진 up_09 는 짝 비교에서 제외
     assert rep["ask_rate"]["ttalkak"]["asked"] == 1
+
+
+def test_partial_judge_is_not_scored():
+    """일부 질문만 답한 판정으로 충족률을 내면 답한 질문만으로 계산돼 수치가 흔들린다(2026-11-06 팀원 지적 ②)."""
+    from eval.uplift_score import score_output
+    it = ITEMS["up_04"]
+    qs = build_questions(it)
+    full = {"questions": qs, "errors": [], "answers": {q["id"]: {"verdict": "yes"} for q in qs}}
+    part = {**full, "answers": {qs[0]["id"]: {"verdict": "yes"}}, "errors": ["r2: 답 없음/형식 오류"]}
+    assert score_output(it, "1. A\n2. B\n3. C", full, None)["requirement_rate"] == 1.0
+    s = score_output(it, "1. A\n2. B\n3. C", part, None)
+    assert s["requirement_rate"] is None and s["gold_rate"] is None     # 짝 비교·평균에서 자동 제외
+    assert s["judge_errors"] == ["r2: 답 없음/형식 오류"]
 
 
 def test_code_tasks_are_out_of_fabrication_scope():
@@ -146,3 +159,168 @@ def test_pick_backend_missing_key(monkeypatch, primary, groq, gemini):
             monkeypatch.setenv(name, value)
     with pytest.raises(EnvironmentError):
         _pick_backend()
+
+
+def test_report_warns_when_judge_models_mix(capsys):
+    """Groq 로 채점한 파일을 Gemini 로 이어 돌리면 판정 모델이 섞인다 — 한 표에 합치면 안 된다(2026-11-11)."""
+    from eval.uplift_score import print_report, report
+    def rec(item, judge):
+        return {"item": item, "condition": "raw", "repeat": 0, "judge_model": judge,
+                "score": {"requirement_rate": 1.0, "gold_rate": None, "check_rate": {},
+                          "fabrication": None, "refusal": False, "placeholder_defect": False}}
+    data = {"records": {"up_04|raw|0": rec("up_04", "openai/gpt-oss-120b"),
+                        "up_09|raw|0": rec("up_09", "gemini-3.6-flash")}, "pairs": {}}
+    rep = report(data, ITEMS)
+    assert rep["judge_models"] == ["gemini-3.6-flash", "openai/gpt-oss-120b"]
+    print_report(rep)
+    assert "판정 모델이 섞였다" in capsys.readouterr().out
+
+
+def test_gemini_models_come_from_generator(monkeypatch):
+    """Gemini 모델명을 이 파일에 적지 않는다 — gemini-2.0-flash 는 이 계정에서 호출 불가였다."""
+    from app.rag.generator import default_model
+    from eval.uplift_score import default_models
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    assert default_models("gemini") == (default_model("gemini"),) * 2
+    assert default_models("groq") == ("openai/gpt-oss-20b", "openai/gpt-oss-120b")
+
+
+def test_truncated_or_incomplete_records_are_rerun():
+    from eval.uplift_score import _needs_run
+    assert _needs_run(None)
+    assert _needs_run({"req_incomplete": True, "exec_finish": "stop"})
+    assert _needs_run({"req_incomplete": False, "exec_finish": "length"})     # 출력 예산에서 잘림(2026-11-13)
+    assert not _needs_run({"req_incomplete": False, "exec_finish": "stop"})
+    assert not _needs_run({"asked": True})                                    # 되묻기는 다시 돌리지 않는다
+
+
+def test_judge_pair_needs_both_orders_and_records_version():
+    """순서를 바꾼 두 번이 같은 쪽일 때만 승부, 판정기 버전·종료 사유를 남긴다."""
+    from types import SimpleNamespace as NS
+    from eval.uplift_score import PAIR_JUDGE_VERSION, judge_pair
+
+    def client(answers):
+        it = iter(answers)
+        create = lambda **kw: NS(choices=[NS(message=NS(content=next(it)), finish_reason="stop")], usage=None)
+        return NS(chat=NS(completions=NS(create=create)))
+
+    item = {"query": "q"}
+    same = judge_pair(client(['{"winner": "2"}', '{"winner": "1"}']), "m", item, "a", "b")   # 두 번 다 b
+    split = judge_pair(client(['{"winner": "1"}', '{"winner": "1"}']), "m", item, "a", "b")  # 위치만 따라감
+    assert same["winner"] == "b" and split["winner"] == "tie"
+    assert same["version"] == PAIR_JUDGE_VERSION and same["finish"] == ["stop", "stop"] and same["judge_model"] == "m"
+
+
+@pytest.fixture
+def resumed_eval(monkeypatch, tmp_path):
+    """완료 기록을 이어 평가하는 경로. 모든 LLM 호출을 가짜로 바꿔 캐시·저장 동작만 본다."""
+    from types import SimpleNamespace as NS
+    import eval.requirement_judge as rj
+    import eval.uplift_score as us
+
+    item = {"id": "up_mock", "track": "B", "query": "요청"}
+    args = NS(backend="gemini", max_wait=0, conditions=["raw", "rewrite", "ttalkak"], repeats=1,
+              gen_model="g", target_model="m", judge_model="m", skip_pairwise=False)
+    records = {f"up_mock|{c}|0": {"item": "up_mock", "condition": c, "repeat": 0,
+                                "prompt": f"prompt:{c}", "output": f"old:{c}", "exec_finish": "stop"}
+               for c in args.conditions}
+    valid = {"winner": "a", "version": us.PAIR_JUDGE_VERSION, "judge_model": args.judge_model}
+    pairs = {f"up_mock|pair_{c}_vs_ttalkak|0": dict(valid) for c in ("raw", "rewrite")}
+    # 다른 문항·회차의 판정까지 지우지 않아야 한다.
+    pairs["up_other|pair_raw_vs_ttalkak|0"] = dict(valid)
+    pairs["up_mock|pair_raw_vs_ttalkak|1"] = dict(valid)
+    data = {"records": records, "pairs": pairs}
+    executions, comparisons = [], []
+
+    def execute(client, model, system, prompt, max_tokens, temperature):
+        executions.append(prompt)
+        return {"text": f"new:{prompt}", "finish": "stop", "usage": None}
+
+    def compare(client, model, it, a, b):
+        comparisons.append((a, b))
+        return {"winner": "b", "version": us.PAIR_JUDGE_VERSION, "judge_model": model}
+
+    monkeypatch.setattr(us, "_client", lambda backend: object())
+    monkeypatch.setattr(us, "call_patiently", lambda fn, wait: fn())
+    monkeypatch.setattr(us, "_chat", execute)
+    monkeypatch.setattr(rj, "judge_requirements", lambda *a: {"answers": {}, "errors": [], "version": "req-v2"})
+    monkeypatch.setattr(us, "judge_defects", lambda *a: {})
+    monkeypatch.setattr(us, "score_output", lambda *a: {})
+    monkeypatch.setattr(us, "judge_pair", compare)
+    return NS(us=us, item=item, args=args, data=data, out=tmp_path / "resume.json",
+              executions=executions, comparisons=comparisons)
+
+
+@pytest.mark.parametrize("condition", ["raw", "rewrite", "ttalkak"])
+@pytest.mark.parametrize("skip_pairwise", [False, True])
+def test_rerun_replaces_only_dependent_pair_judgments(resumed_eval, condition, skip_pairwise):
+    e = resumed_eval
+    e.args.skip_pairwise = skip_pairwise
+    e.data["records"][f"up_mock|{condition}|0"]["exec_finish"] = "length"
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    assert e.executions == [f"prompt:{condition}"]
+    saved = json.loads(e.out.read_text(encoding="utf-8"))
+    assert saved == e.data
+    assert saved["records"][f"up_mock|{condition}|0"]["output"] == f"new:prompt:{condition}"
+    affected = [c for c in ("raw", "rewrite") if condition in (c, "ttalkak")]
+    for other in ("raw", "rewrite"):
+        key = f"up_mock|pair_{other}_vs_ttalkak|0"
+        if other in affected:
+            if skip_pairwise:
+                assert key not in saved["pairs"]
+            else:
+                assert saved["pairs"][key]["winner"] == "b"
+        else:
+            assert saved["pairs"][key]["winner"] == "a"
+    assert saved["pairs"]["up_other|pair_raw_vs_ttalkak|0"]["winner"] == "a"
+    assert saved["pairs"]["up_mock|pair_raw_vs_ttalkak|1"]["winner"] == "a"
+    assert len(e.comparisons) == (0 if skip_pairwise else len(affected))
+    assert all(f"new:prompt:{condition}" in pair for pair in e.comparisons)
+
+
+def test_incomplete_rerun_to_question_removes_old_pairs(resumed_eval, monkeypatch):
+    e = resumed_eval
+    e.data["records"]["up_mock|ttalkak|0"]["req_incomplete"] = True
+    monkeypatch.setattr(e.us, "make_prompt", lambda *a: {"prompt": None, "mode": "NEEDS_INFO"})
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    saved = json.loads(e.out.read_text(encoding="utf-8"))
+    assert saved["records"]["up_mock|ttalkak|0"]["asked"] is True
+    assert "up_mock|pair_raw_vs_ttalkak|0" not in saved["pairs"]
+    assert "up_mock|pair_rewrite_vs_ttalkak|0" not in saved["pairs"]
+    assert not e.executions and not e.comparisons
+
+
+@pytest.mark.parametrize("version", [None, "pair-v1", "pair-v2"])
+def test_pair_cache_uses_only_current_judge_version(resumed_eval, version):
+    e = resumed_eval
+    key = "up_mock|pair_raw_vs_ttalkak|0"
+    e.data["pairs"][key] = {"winner": "a", "judge_model": e.args.judge_model, **({"version": version} if version else {})}
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    stale = version != e.us.PAIR_JUDGE_VERSION
+    assert not e.executions
+    assert e.comparisons == ([("old:raw", "old:ttalkak")] if stale else [])
+    assert e.data["pairs"][key] == {"winner": "b" if stale else "a", "version": e.us.PAIR_JUDGE_VERSION,
+                                    "judge_model": e.args.judge_model}
+    if stale:
+        assert json.loads(e.out.read_text(encoding="utf-8")) == e.data
+
+
+@pytest.mark.parametrize("cached_model, reused", [("m", True), ("other-model", False), (None, False)])
+def test_pair_cache_requires_same_judge_model(resumed_eval, cached_model, reused):
+    """같은 판정 버전이어도 판정 모델이 다르거나 기록이 없으면(옛 캐시) 다시 판정한다."""
+    e = resumed_eval
+    key = "up_mock|pair_raw_vs_ttalkak|0"
+    e.data["pairs"][key] = {"winner": "a", "version": e.us.PAIR_JUDGE_VERSION,
+                            **({"judge_model": cached_model} if cached_model else {})}
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    assert not e.executions
+    assert e.comparisons == ([] if reused else [("old:raw", "old:ttalkak")])
+    expected = ({"winner": "a", "version": e.us.PAIR_JUDGE_VERSION, "judge_model": "m"} if reused
+                else {"winner": "b", "version": e.us.PAIR_JUDGE_VERSION, "judge_model": e.args.judge_model})
+    assert e.data["pairs"][key] == expected
+    if not reused:                                   # 재사용하면 바뀐 것이 없어 저장하지 않는다
+        assert json.loads(e.out.read_text(encoding="utf-8"))["pairs"][key] == expected

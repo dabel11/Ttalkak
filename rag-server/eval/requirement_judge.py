@@ -16,15 +16,18 @@ import re
 
 from eval.placeholders import PLACEHOLDER_MASK, mask
 
-JUDGE_VERSION = "req-v1"      # 프롬프트를 고치면 올린다 — 캐시·결과 파일이 옛 판정을 섞지 않게
+JUDGE_VERSION = "req-v2"      # 프롬프트를 고치면 올린다 — 캐시·결과 파일이 옛 판정을 섞지 않게
 
 _SYSTEM = f"""너는 AI 결과물이 사용자 요청을 충족했는지 판정하는 엄격하고 공정한 평가자다.
 번호 붙은 질문마다 결과물을 보고 yes / no / na 로 답한다.
 
 규칙:
 - 질문이 묻는 것만 본다. 문체·길이·완성도 같은 다른 품질로 답을 바꾸지 않는다. 길다고 yes 가 아니다.
+- 문체·길이는 질문이 **명시적으로 요구했을 때만** 본다. 요구가 없으면 판단에 넣지 않는다.
 - yes 는 결과물에 그 내용이 **실제로 있을 때만**. 애매하거나 일부만 있으면 no.
 - 분량·줄 수·문장 수를 묻는 질문은 머리말('다음은 ~입니다')과 맺음말 한 줄을 세지 않는다.
+  글자 수는 **공백 포함**으로 세고, 줄 수는 **줄바꿈 기준**으로 센다.
+- 한 항목에 **서로 모순되는 값**이 둘 이상 있으면 no(예: 제출일이 '9월 22일'과 '9월 21일'로 함께 적힘).
 - na 는 질문에 '(조건부)' 표시가 있고 그 조건이 결과물에 해당하지 않을 때만 쓴다. 그 밖에는 쓰지 않는다.
 - 결과물 속 {PLACEHOLDER_MASK} 는 나중에 채우라고 남긴 빈자리다. 그 자리에 들어가야 할 내용을 묻는 질문이면 no.
 - evidence 에는 판단 근거가 된 결과물 부분을 짧게(30자 이내) 그대로 인용한다. 없으면 "없음".
@@ -84,15 +87,26 @@ def judge_requirements(client, model: str, item: dict, output: str,
                        reasoning_effort: str = "low", max_tokens: int = 1500) -> dict:
     """judge 1회 호출. 반환: {answers, errors, questions, version}."""
     questions = build_questions(item)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "system", "content": _SYSTEM},
-                  {"role": "user", "content": build_user_message(item, output, questions)}],
-        max_tokens=max_tokens,
-        reasoning_effort=reasoning_effort,
-        response_format={"type": "json_object"},
-        temperature=0.0,
-    )
+
+    def call(strict: bool):
+        return client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": _SYSTEM},
+                      {"role": "user", "content": build_user_message(item, output, questions)}],
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+            temperature=0.0,
+            **({"response_format": {"type": "json_object"}} if strict else {}),
+        )
+
+    try:
+        resp = call(True)
+    except Exception as e:
+        # 서버가 JSON 강제에 실패하면 400 json_validate_failed 로 답이 아예 안 온다 — 2026-10-09
+        # 트랙 A 실행이 18/62 에서 이걸로 통째로 죽었다. JSON 강제를 풀고 한 번 더(파싱은 정규식이라 무관).
+        if "json_validate_failed" not in str(e):
+            raise
+        resp = call(False)
     parsed = parse_answers(resp.choices[0].message.content or "", questions)
     return {**parsed, "questions": questions, "version": JUDGE_VERSION}
 

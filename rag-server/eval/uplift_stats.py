@@ -92,3 +92,18 @@ def cohen_kappa(a: list[str], b: list[str]) -> float | None:
     po = sum(x == y for x, y in pairs) / n
     pe = sum((sum(x == l for x, _ in pairs) / n) * (sum(y == l for _, y in pairs) / n) for l in labels)
     return None if pe == 1 else (po - pe) / (1 - pe)
+
+
+def gwet_ac1(a: list[str], b: list[str]) -> float | None:
+    """Gwet AC1 (2008) — 답이 한쪽('예')으로 쏠려도 무너지지 않는 일치도. 합격 기준은 이 값으로 본다.
+    κ 는 쏠림이 클수록 우연 일치를 크게 잡아, 97% 일치해도 0 이 된다(2026-11-12 사람 A 시트: 객관 71개 전부 '예').
+    범주 수는 관측된 값 수(최소 2 — 예/아니오가 기본 척도). 모두 같은 값이면 정의상 우연 일치 0."""
+    pairs = [(x, y) for x, y in zip(a, b) if x and y]
+    if not pairs:
+        return None
+    n = len(pairs)
+    labels = sorted({v for p in pairs for v in p})
+    po = sum(x == y for x, y in pairs) / n
+    pi = [sum((x == l) + (y == l) for x, y in pairs) / (2 * n) for l in labels]
+    pe = sum(p * (1 - p) for p in pi) / (max(len(labels), 2) - 1)
+    return (po - pe) / (1 - pe)

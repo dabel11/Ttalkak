@@ -113,6 +113,18 @@ def test_given_times_and_month_end_are_not_invented():
 
 
 # ── 코드 판정 ────────────────────────────────────────────────
+def test_body_text_keeps_a_one_line_message():
+    """본문이 '…부탁드립니다.' 로 끝나는 한 줄 문자를 통째로 맺음말로 떼어 0자로 세고 90자 제한을
+    통과시켰다(2026-11-06 팀원 지적 ①). 맺음말은 짧은 줄 + 본문이 남을 때만 뗀다."""
+    msg = ("고객님 안녕하세요. 주문하신 상품의 배송이 예상보다 지연되어 정말 죄송합니다. 현재 물류 사정으로 "
+           "이틀 정도 더 소요될 예정이며, 도착 즉시 문자로 안내드리겠습니다. 불편을 드려 죄송하며 조금만 더 "
+           "기다려 주시기를 부탁드립니다.")
+    assert len(body_text(msg)) == len(msg)
+    assert not run_check({"type": "max_chars", "n": 90}, msg)
+    # 머리말·맺음말이 따로 있는 경우는 그대로 뗀다
+    assert body_text(f"다음은 요청하신 문자입니다.\n\n{msg}\n\n필요하시면 수정해 드리겠습니다.") == msg
+
+
 def test_body_text_drops_meta_lines():
     out = "다음은 3줄 요약본이다.\n- A\n- B\n- C"
     assert body_text(out) == "- A\n- B\n- C"

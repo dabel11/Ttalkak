@@ -1,0 +1,749 @@
+{
+ "up_14|0": {
+  "prompt": "너는 파이썬(Python) 전문 개발자이자 튜터다. 아래 제공된 코드와 에러 메시지를 분석하여 에러의 원인을 설명하고 수정된 코드를 작성하라.\n\n<context>\n에러 메시지: TypeError: can only concatenate str (not \"int\") to str\n대상 코드:\nprint(\"나이: \" + age)  # age = 25\n</context>\n\n[더 좋은 결과를 위한 조건]\n- 초보자도 이해할 수 있도록 파이썬에서 문자열(str)과 정수(int) 간 결합이 불가능한 이유를 명확히 설명할 것.\n- 단순 수정 외에도 상황에 맞게 활용할 수 있도록 대표적인 해결 방법들(f-string 활용, str() 형변환, print 쉼표 구분 등)을 각각 나누어 제시할 me.\n- 제시된 수정 코드는 즉시 실행 가능한 형태여야 한다.\n- 서두나 인사말, 불필요한 팁 목록은 제외하고 에러 원인과 수정 코드만 간결하게 작성할 것.",
+  "mode": "improve",
+  "prompt_filled": "너는 파이썬(Python) 전문 개발자이자 튜터다. 아래 제공된 코드와 에러 메시지를 분석하여 에러의 원인을 설명하고 수정된 코드를 작성하라.\n\n<context>\n에러 메시지: TypeError: can only concatenate str (not \"int\") to str\n대상 코드:\nprint(\"나이: \" + age)  # age = 25\n</context>\n\n[더 좋은 결과를 위한 조건]\n- 초보자도 이해할 수 있도록 파이썬에서 문자열(str)과 정수(int) 간 결합이 불가능한 이유를 명확히 설명할 것.\n- 단순 수정 외에도 상황에 맞게 활용할 수 있도록 대표적인 해결 방법들(f-string 활용, str() 형변환, print 쉼표 구분 등)을 각각 나누어 제시할 me.\n- 제시된 수정 코드는 즉시 실행 가능한 형태여야 한다.\n- 서두나 인사말, 불필요한 팁 목록은 제외하고 에러 원인과 수정 코드만 간결하게 작성할 것.",
+  "query": "이 에러 왜 나는지 설명하고 고쳐줘:\nTypeError: can only concatenate str (not \"int\") to str\n코드: print(\"나이: \" + age)  # age = 25",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "### 1. 에러 원인 분석\n\n파이썬에서 `+` 연산자는 피연산자의 데이터 타입(자료형)에 따라 서로 다른 동작을 수행합니다.\n- **문자열 + 문자열**: 두 문자를 하나로 연결합니다. (예: `\"안녕\" + \"하세요\"` $\\rightarrow$ `\"안녕하세요\"`)\n- **숫자 + 숫자**: 두 숫자를 더합니다. (예: `10 + 20` $\\rightarrow$ `30`)\n\n에러가 발생한 이유는 파이썬이 **문자열(`str`)과 정수(`int`) 간의 `+` 연산(결합)을 허용하지 않기 때문**입니다. \n\n파이썬은 데이터 타입을 엄격하게 다루는 언어이므로, `\"나이: \"`라는 문자열과 `25`라는 정수형 숫자를 `+`로 연결하려 할 때 숫자를 자동으로 문자열로 바꿔주지 않습니다. 이로 인해 두 값을 덧셈해야 할지, 문자로 이어 붙여야 할지 판단할 수 없어 `TypeError`를 발생시킵니다.\n\n---\n\n### 2. 해결 방법 및 수정 코드\n\n#### 방법 1: f-string 활용 (권장)\n파이썬 3.6 이상에서 지원하는 가장 직관적이고 효율적인 방법입니다. 문자열 따옴표 앞에 `f`를 붙이고, 변수를 중괄호 `{}` 안에 넣으면 자동으로 문자열로 변환되어 삽입됩니다.\n\n```python\nage = 25\nprint(f\"나이: {age}\")\n```\n\n#### 방법 2: `str()` 형변환 활용\n정수형 변수인 `age`를 `str()` 함수를 사용해 문자열(`\"25\"`)로 명시적 변환을 한 뒤 `+` 연산자로 결합하는 방법입니다.\n\n```python\nage = 25\nprint(\"나이: \" + str(age))\n```\n\n#### 방법 3: `print()` 함수의 쉼표(`,`) 구분 활용\n`print()` 함수 내부에서 여러 값을 쉼표(`,`)로 구분하여 전달하는 방법입니다. `print()` 함수가 각 인자를 자동으로 문자열로 처리하며, 값 사이에 기본적으로 공백(한 칸)을 두고 출력합니다.\n\n```python\nage = 25\nprint(\"나이:\", age)  # 출력 결과: 나이: 25\n```",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "이 에러는 **문자열(str)과 정수(int)를 `+` 연산자로 직접 연결(합치기)하려고 했기 때문**에 발생합니다.\n\n파이썬에서는 `+` 연산자를 사용해 문자열을 이을 때, **양쪽 모두 문자열**이어야 합니다. 하지만 `\"나이: \"`는 문자열(str)이고 `age`에 들어있는 `25`는 숫자(int)이기 때문에 파이썬이 이를 자동으로 합쳐주지 않고 에러를 냅니다.\n\n---\n\n### 고친 코드 (상황에 맞게 선택하세요)\n\n 가장 추천하는 방법은 **1번(f-string)**입니다.\n\n#### 1. f-string 사용 (가장 추천하는 현대적인 방법)\n문자열 앞에 `f`를 붙이고 변수를 `{}`(중괄호)로 감싸면 타입 변환 없이 바로 사용할 수 있습니다.\n```python\nage = 25\nprint(f\"나이: {age}\")\n```\n\n#### 2. `str()` 함수로 숫자를 문자열로 변환\n숫자인 `age`를 `str(age)`를 사용해 문자열로 바꿔준 뒤 `+`로 연결합니다.\n```python\nage = 25\nprint(\"나이: \" + str(age))\n```\n\n#### 3. `print()` 함수 안에서 쉼표(`,`) 사용\n`print()` 함수 내에서 쉼표로 구분을 지으면 알아서 공백을 하나 두고 출력해 줍니다.\n```python\nage = 25\nprint(\"나이:\", age)  # 출력: 나이: 25\n```",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "tie"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "tie"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.4811046511627908,
+  "done": true
+ },
+ "up_14|1": {
+  "prompt": "너는 파이썬(Python) 전문 개발자이자 디버깅 튜터다. 아래 제공된 코드와 에러 메시지를 분석하여 오류 원인을 설명하고 수정된 코드를 제시하라.\n\n<context>\n오류 메시지:\nTypeError: can only concatenate str (not \"int\") to str\n\n대상 코드:\nprint(\"나이: \" + age)  # age = 25\n</context>\n\n[더 좋은 결과를 위한 조건]\n- 에러 분석: 오류가 발생한 근본적인 원인(문자열과 정수형 간의 이하기 연산 문제)을 입문자도 이해하기 쉽게 설명하라.\n- 해결 방법: 단순 수정본뿐만 아니라 파이썬에서 추천하는 모범 사례(f-string 활용, str() 형변환, print 인자 전달 방식 등)를 포함하여 작성하라.\n- 코드 설명: 각 해결 방법별 코드와 함께 왜 그렇게 작동하는지 짧은 설명을 덧붙여라.\n- 인사말이나 부연 설명 없이 에러 원인 분석과 수정 코드 결과물만 깔끔하게 출력하라.",
+  "mode": "improve",
+  "prompt_filled": "너는 파이썬(Python) 전문 개발자이자 디버깅 튜터다. 아래 제공된 코드와 에러 메시지를 분석하여 오류 원인을 설명하고 수정된 코드를 제시하라.\n\n<context>\n오류 메시지:\nTypeError: can only concatenate str (not \"int\") to str\n\n대상 코드:\nprint(\"나이: \" + age)  # age = 25\n</context>\n\n[더 좋은 결과를 위한 조건]\n- 에러 분석: 오류가 발생한 근본적인 원인(문자열과 정수형 간의 이하기 연산 문제)을 입문자도 이해하기 쉽게 설명하라.\n- 해결 방법: 단순 수정본뿐만 아니라 파이썬에서 추천하는 모범 사례(f-string 활용, str() 형변환, print 인자 전달 방식 등)를 포함하여 작성하라.\n- 코드 설명: 각 해결 방법별 코드와 함께 왜 그렇게 작동하는지 짧은 설명을 덧붙여라.\n- 인사말이나 부연 설명 없이 에러 원인 분석과 수정 코드 결과물만 깔끔하게 출력하라.",
+  "query": "이 에러 왜 나는지 설명하고 고쳐줘:\nTypeError: can only concatenate str (not \"int\") to str\n코드: print(\"나이: \" + age)  # age = 25",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "### 1. 에러 원인 분석\n\n**오류 종류:** `TypeError` (타입 에러)  \n**원인:** 서로 다른 데이터 타입(문자열과 정수)을 `+` 연산자로 결합하려 했기 때문에 발생했습니다.\n\n* ` \"나이: \"`는 **문자열(str)** 타입입니다.\n* `age` 변수에 저장된 `25`는 **정수(int)** 타입입니다.\n* 파이썬에서 `+` 연산자는 문자열끼리 만났을 때는 \"문자열 이어붙이기\"로 작동합니다.하지만 **문자열(str)과 숫자(int)를 `+`로 직접 더하는 것은 허용하지 않으므로** 파이썬이 \"문자열에는 문자열만 붙일 수 있다\"는 에러를 발생시킨 것입니다.\n\n---\n\n### 2. 해결 방법 및 수정 코드\n\n#### 방법 1: f-string 활용 (가장 추천하는 모범 사례)\nPython 3.6 이상에서 권장하는 가장 직관적이고 효율적인 방식입니다. 문자열 앞에 `f`를 붙이고 중괄호 `{}` 안에 변수를 넣으면 자동으로 문자열로 변환되어 출력됩니다.\n\n```python\nage = 25\nprint(f\"나이: {age}\")\n```\n* **설명:** `{age}` 부분이 실행 시점에 문자열로 자동 변환되어 결합됩니다. 가독성이 가장 뛰어납니다.\n\n---\n\n#### 방법 2: `print()` 함수의 쉼표(,) 인자 전달 방식\n`print()` 함수 내에서 여러 값을 쉼표로 구분하여 전달하는 방식입니다.\n\n```python\nage = 25\nprint(\"나이:\", age)\n```\n* **설명:** 쉼표(`,`)를 사용하면 각 값의 데이터 타입이 달라도 `print()` 함수가 알아서 문자열로 변환하여 출력합니다. (값 사이에 공백 1칸이 기본으로 삽입됩니다.)\n\n---\n\n#### 방법 3: `str()` 함수를 통한 명시적 형변환\n정수형 변수를 `str()` 함수를 사용해 직접 문자열로 바꾼 뒤 `+` 연산자로 연결합니다.\n\n```python\nage = 25\nprint(\"나이: \" + str(age))\n```\n* **설명:** `str(25)`를 통해 숫자 `25`가 문자열 `\"25\"`로 변환되므로, `str` + `str` 연산이 되어 정상 작동합니다.\n\n---\n\n#### 방법 4: `format()` 메서드 활용\n문자열의 `.format()` 메서드를 사용하여 값을 중괄호 `{}` 위치에 대입합니다.\n\n```python\nage = 25\nprint(\"나이: {}\".format(age))\n```\n* **설명:** `{}` 위치에 `format()` 안의 인자 값이 순서대로 문자열 형식으로 변환되어 들어갑니다.",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "이 에러는 **문자열(str)**과 **정수/숫자(int)**를 `+` 연산자로 직접 합치려고 할 때 발생합니다.\n\n* `\"나이: \"`는 **문자열(str)** 타입입니다.\n* `age`는 숫자 `25`로 **정수(int)** 타입입니다.\n\n파이썬에서는 문자열끼리만 `+` 연산자로 이어 붙일 수 있으며, 문자열과 숫자를 자동으로 합쳐주지 않기 때문에 발생한 오류입니다.\n\n---\n\n### 고친 코드 (4가지 방법 중 편한 것을 사용하세요)\n\n#### 1. f-string 사용 (가장 추천하는 현대적인 방법)\n문자열 앞에 `f`를 붙이고 변수를 `{}` 감싸줍니다.\n```python\nage = 25\nprint(f\"나이: {age}\")\n```\n\n#### 2. `str()` 함수로 숫자를 문자열로 변환\n`age`를 문자열 형식인 `\"25\"`로 변환한 뒤 합칩니다.\n```python\nage = 25\nprint(\"나이: \" + str(age))\n```\n\n#### 3. `print()` 안에서 쉼표(`,`) 사용\n쉼표를 사용하면 파이썬이 자동으로 타입 상관없이 출력해주며, 사이에 공백 한 칸이 들어갑니다.\n```python\nage = 25\nprint(\"나이:\", age)\n```\n\n#### 4. `format()` 메서드 사용\n```python\nage = 25\nprint(\"나이: {}\".format(age))\n```",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.8533724340175952,
+  "done": true
+ },
+ "up_36|0": {
+  "prompt": "너는 프로젝트 관리 및 사내 소통 전문가다. 아래 제공된 프로젝트 일정표를 바탕으로 팀원들이 일정을 쉽게 확인하고 준비할 수 있도록 안내하는 공지 메시지를 작성하라.\n\n[일정 데이터]\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |\n\n[더 좋은 결과를 위한 조건]\n- 팀원들이 일정과 마일스톤을 한눈에 알아볼 수 있도록 가독성 높게 작성하라.\n- 쓰임새에 맞게 선택해 바로 사용할 수 있도록 메신저용(슬랙/잔디/카톡 형태의 간결한 공지)과 이메일용(공식 안내 형태) 버전으로 나누어 작성하라.\n- 팀원들의 마감 준수 및 발표 준비를 독려하는 친근하면서도 명확하고 프로페셔널한 톤을 유지하라.\n- 세부 시각(예: 18:00까지), 제출 방법, 발표 장소 등을 안내할 수 있는 부연 문구를 포함하라.\n- 결과물 외에 인사말, 해설, 사용 팁 등의 부연 설명은 출력하지 말고 바로 복사해서 쓸 수 있는 메시지 본문만 작성하라.",
+  "mode": "improve",
+  "prompt_filled": "너는 프로젝트 관리 및 사내 소통 전문가다. 아래 제공된 프로젝트 일정표를 바탕으로 팀원들이 일정을 쉽게 확인하고 준비할 수 있도록 안내하는 공지 메시지를 작성하라.\n\n[일정 데이터]\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |\n\n[더 좋은 결과를 위한 조건]\n- 팀원들이 일정과 마일스톤을 한눈에 알아볼 수 있도록 가독성 높게 작성하라.\n- 쓰임새에 맞게 선택해 바로 사용할 수 있도록 메신저용(슬랙/잔디/카톡 형태의 간결한 공지)과 이메일용(공식 안내 형태) 버전으로 나누어 작성하라.\n- 팀원들의 마감 준수 및 발표 준비를 독려하는 친근하면서도 명확하고 프로페셔널한 톤을 유지하라.\n- 세부 시각(예: 18:00까지), 제출 방법, 발표 장소 등을 안내할 수 있는 부연 문구를 포함하라.\n- 결과물 외에 인사말, 해설, 사용 팁 등의 부연 설명은 출력하지 말고 바로 복사해서 쓸 수 있는 메시지 본문만 작성하라.",
+  "query": "아래 일정표를 팀원들에게 보낼 공지 메시지로 바꿔줘:\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "[버전 1: 사내 메신저용 (Slack / 잔디 / 카카오톡)]\n\n📢 **[프로젝트 주요 일정 및 마일스톤 안내]**\n\n안녕하세요 팀원 여러분! \n진행 중인 프로젝트의 성공적인 완수를 위한 주요 일정과 마일스톤을 공유해 드립니다. \n아래 일정을 미리 확인하시고 차질 없이 준비해 주시기 바랍니다. 🙏\n\n---\n\n📅 **주요 프로젝트 일정**\n\n1️⃣ **9월 22일(월) | 기획안 제출** 📄\n• 마감 시간: 18:00까지\n• 제출 방법: [사내 드라이브/클라우드 공유 폴더] 업로드\n\n2️⃣ **9월 29일(월) | 중간 발표** 🎤\n• 시간: 14:00 ~ 15:00\n• 장소: [대회의실 A / 온라인 Zoom 링크]\n• 발표 자료: 발표 당일 11:00까지 사전 공유 부탁드립니다.\n\n3️⃣ **10월 13일(월) | 최종 발표** 🏆\n• 시간: 14:00 ~ 16:00\n• 장소: [대회의실 A / 온라인 Zoom 링크]\n\n---\n\n💡 **안내 사항**\n- 원활한 프로젝트 진행을 위해 **마감 시간을 엄수**해 주시기를 부탁드립니다.\n- 일정 관련 문의나 진행 중 조율이 필요한 사항은 언제든 이 채널에 편하게 남겨주세요!\n\n우리 팀의 멋진 결과를 위해 함께 힘내봅시다! 🔥\n\n---\n---\n\n[버전 2: 이메일용 (공식 안내)]\n\n**제목: [공지] 프로젝트 주요 일정 및 마일스톤 안내 (기획안 제출 / 중간 발표 / 최종 발표)**\n\n안녕하세요, 프로젝트 팀원 여러분.\n\n현재 진행 중인 프로젝트의 성공적인 목표 달성을 위해 향후 주요 일정 및 마일스톤을 안내해 드립니다. \n\n팀원 여러분께서는 아래의 단계별 일정과 세부 안내 사항을 확인하시어, 지정된 기한 내에 준비 및 제출이 완료될 수 있도록 협조 부탁드립니다.\n\n---\n\n### **[프로젝트 주요 일정표]**\n\n| 구분 | 날짜 | 마일스톤 | 세부 일정 및 장소 | 제출/준비 사항 |\n| :--- | :--- | :--- | :--- | :--- |\n| **1차** | **9월 22일** | **기획안 제출** | 18:00 마감 | [공유 드라이브 경로] 업로드 |\n| **2차** | **9월 29일** | **중간 발표** | 14:00 / [발표 장소/Zoom] | 중간 점검 발표 자료 사전 제출 |\n| **3차** | **10월 13일** | **최종 발표** | 14:00 / [발표 장소/Zoom] | 최종 결과물 및 발표 자료 준비 |\n\n---\n\n### **[세부 안내 및 협조 요청 사항]**\n\n**1. 기획안 제출 (9월 22일)**\n- **제출 마감:** 9월 22일 18:00까지\n- **제출 방법:** 사내 공유 드라이브 `[폴더명]` 내 업로드\n- **비고:** 기한 내 미제출 시 전체 일정에 차질이 생길 수 있으니 제출 시각을 엄수해 주시기 바랍니다.\n\n**2. 중간 발표 (9월 29일)**\n- **일시 및 장소:** 9월 29일 14:00 / [예: 5층 대회의실]\n- **준비 사항:** 진행 상황 점검 및 피드백 수렴을 위한 발표 자료 (발표 당일 11:00까지 사전 공유)\n\n**3. 최종 발표 (10월 13일)**\n- **일시 및 장소:** 10월 13일 14:00 / [예: 5층 대회의실]\n- **준비 사항:** 프로젝트 최종 성과물 및 최종 발표 장표\n\n---\n\n프로젝트의 성공은 팀원 여러분의 일정 준수와 적극적인 참여에서 시작됩니다. 일정과 관련하여 조정이 필요하거나 논의할 사항이 있으시면 언제든지 말씀해 주시기 바랍니다.\n\n감사합니다.\n\n[보낸이 이름/직함] 드림",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "팀원들에게 보낼 공지 메시지 예시입니다. 사용하시는 채널(카카오톡, 스랙, 이메일 등)에 맞춰 선택하여 활용해 보세요!\n\n---\n\n### **[옵션 1] 메신저용 (카카오톡, 스랙, 잔디 등)**\n\n> **[공지] 주요 프로젝트 일정 안내** 📢\n> \n> 안녕하세요, 팀원 여러분!\n> 이번 프로젝트의 주요 일정을 공유해 드립니다. \n> \n> 📌 **주요 일정**\n> - **9/22 (일)** : 기획안 제출\n> - **9/29 (일)** : 중간 발표\n> - **10/13 (일)** : 최종 발표\n> \n> 각 일정에 차질이 없도록 미리 확인 부탁드리며, 일정 관련 문의나 조정이 필요하신 분은 언제든 말씀해 주세요.\n> \n> 모두 파이팅입니다! 🔥\n\n---\n\n### **[옵션 2] 이메일 / 정식 공지용**\n\n> **제목: [공지] 프로젝트 주요 일정 안내의 건**\n> \n> 팀원 여러분, 안녕하십니까.\n> \n> 향후 진행될 프로젝트의 주요 일정을 아래와 같이 안내해 드립니다.\n> \n> **■ 프로젝트 주요 일정**\n> - **9월 22일(일):** 기획안 제출\n> - **9월 29일(일):** 중간 발표\n> - **10월 13일(일):** 최종 발표\n> \n> 상기 일정을 참고하시어 담당 업무 진행에 차질이 없으시길 바랍니다. \n> 문의 사항이 있으실 경우 언제든지 연락 주시기 바랍니다.\n> \n> 감사합니다.",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 2.5365497076023393,
+  "done": true
+ },
+ "up_36|1": {
+  "prompt": "너는 사내 커뮤니케이션 전문가다. 아래 제공된 일정표를 바탕으로 팀원들에게 전달할 정중하고 명확한 공지 메시지를 작성하라.\n\n[일정표]\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |\n\n[작성 조건]\n- 제목: 메시지 상단에 직관적이고 명확한 제목을 작성할 것.\n- 톤앤매너: 정중하면서도 팀원들의 협조를 구하는 친근하고 명확한 사내 공지 톤을 유지할 것.\n- 본문 구성: 간단한 인사말, 일정 요약(가독성 높은 목록 또는 표 형식), 준비 및 기한 준수 당부 메시지, 마무리 인사 순으로 구성할 것.\n- 상황별 선택: 슬랙/카카오톡 등 업무 메신저용 간결한 버전과 이메일 전달용 상세 버전 중 대표 상황에 맞게 유연하게 작성하거나 간결하고 명확한 단일 본문으로 완성할 것.\n- 출력 제한: 인사말, 서두 해설, 작성 팁 등 메시지 외의 텍스트는 덧붙이지 말고 곧바로 복사해서 발송할 수 있는 메시지 본문만 작성할 것.",
+  "mode": "improve",
+  "prompt_filled": "너는 사내 커뮤니케이션 전문가다. 아래 제공된 일정표를 바탕으로 팀원들에게 전달할 정중하고 명확한 공지 메시지를 작성하라.\n\n[일정표]\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |\n\n[작성 조건]\n- 제목: 메시지 상단에 직관적이고 명확한 제목을 작성할 것.\n- 톤앤매너: 정중하면서도 팀원들의 협조를 구하는 친근하고 명확한 사내 공지 톤을 유지할 것.\n- 본문 구성: 간단한 인사말, 일정 요약(가독성 높은 목록 또는 표 형식), 준비 및 기한 준수 당부 메시지, 마무리 인사 순으로 구성할 것.\n- 상황별 선택: 슬랙/카카오톡 등 업무 메신저용 간결한 버전과 이메일 전달용 상세 버전 중 대표 상황에 맞게 유연하게 작성하거나 간결하고 명확한 단일 본문으로 완성할 것.\n- 출력 제한: 인사말, 서두 해설, 작성 팁 등 메시지 외의 텍스트는 덧붙이지 말고 곧바로 복사해서 발송할 수 있는 메시지 본문만 작성할 것.",
+  "query": "아래 일정표를 팀원들에게 보낼 공지 메시지로 바꿔줘:\n| 날짜 | 내용 |\n| 9/22 | 기획안 제출 |\n| 9/29 | 중간 발표 |\n| 10/13 | 최종 발표 |",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "[공지] 프로젝트 주요 일정 안내 (기획안 제출 및 발표 일정)\n\n안녕하세요, 팀원 여러분.\n\n진행 중인 프로젝트의 차질 없는 진행과 완수를 위해 향후 주요 일정을 안내해 드립니다. \n\n원활한 업무 진행을 위해 아래 일정을 확인하시고, 일정에 맞춰 준비해 주시기를 부탁드립니다.\n\n---\n■ **프로젝트 주요 일정**\n\n• **9월 22일** : 기획안 제출\n• **9월 29일** : 중간 발표\n• **10월 13일** : 최종 발표\n---\n\n성공적인 프로젝트 마무리를 위해 각 일정의 기한을 반드시 준수해 주시기 바라며, 준비 과정에서 문의 사항이나 도움이 필요한 부분이 있다면 언제든 편하게 공유해 주세요.\n\n팀원 여러분의 노고와 적극적인 협조에 늘 감사드립니다.\n\n감사합니다.",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "팀원들에게 바로 공유하실 수 있도록 정중하고 명확한 톤으로 작성한 공지 메시지입니다. \n\n상황(메신저/이메일)에 맞게 활용해 보세요.\n\n---\n\n### 📢 [공지] 주요 프로젝트 일정 안내\n\n안녕하세요, 팀원 여러분!\n\n향후 진행될 주요 프로젝트 일정을 공유해 드립니다.\n원활한 진행을 위해 아래 일정을 확인하시고, 기한 내에 준비될 수 있도록 협조 부탁드립니다.\n\n🗓 **[주요 일정]**\n- **9월 22일 (일)** : 기획안 제출\n- **9월 29일 (일)** : 중간 발표\n- **10월 13일 (일)** : 최종 발표\n\n※ 일정 관련 문의사항이나 조정이 필요하신 분은 언제든 말씀해 주세요.\n다 함께 좋은 결과 만들 수 있도록 파이팅입니다! \n\n감사합니다.",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.0241286863270778,
+  "done": true
+ },
+ "up_16|0": {
+  "prompt": "너는 비즈니스 커뮤니케이션 전문가다.\n너의 작업은 사용자가 작성한 원문 메시지를 상사에게 발송할 정중하고 공손한 메시지로 다듬는 것이다.\n\n### 원문\n\"내일 회의 못 가요. 자료는 메일로 보낼게요.\"\n\n### 다듬기 조건\n- 상사에게 보내는 메시지에 어울리도록 예의 바르고 격식 있는 어조를 사용하라.\n- 회의 불참에 대한 양해 구함과 관련 자료 제출 안내가 명확하고 자연스럽게 전달되게 구성하라.\n- 사내 메신저용(단문)과 이메일/상세 보고용(장문) 등 전달 채널에 맞춰 활용할 수 있는 버전별 메시지를 작성하라.\n- 사용자가 언급하지 않은 구체적인 사유나 정보는 임의로 지어내지 마라. 불참 사유 등을 추가할 위치가 있다면 `[사유 입력]` 형태로 남겨두되, 비어 있어도 문맥이 어색하지 않게 작성하라.\n- 인사말, 서두 해설, 작성 팁 등 메시지 외의 부가 텍스트는 출력하지 말고 바로 사용할 수 있는 메시지 본문만 출력하라.",
+  "mode": "improve",
+  "prompt_filled": "너는 비즈니스 커뮤니케이션 전문가다.\n너의 작업은 사용자가 작성한 원문 메시지를 상사에게 발송할 정중하고 공손한 메시지로 다듬는 것이다.\n\n### 원문\n\"내일 회의 못 가요. 자료는 메일로 보낼게요.\"\n\n### 다듬기 조건\n- 상사에게 보내는 메시지에 어울리도록 예의 바르고 격식 있는 어조를 사용하라.\n- 회의 불참에 대한 양해 구함과 관련 자료 제출 안내가 명확하고 자연스럽게 전달되게 구성하라.\n- 사내 메신저용(단문)과 이메일/상세 보고용(장문) 등 전달 채널에 맞춰 활용할 수 있는 버전별 메시지를 작성하라.\n- 사용자가 언급하지 않은 구체적인 사유나 정보는 임의로 지어내지 마라. 불참 사유 등을 추가할 위치가 있다면 `[사유 입력]` 형태로 남겨두되, 비어 있어도 문맥이 어색하지 않게 작성하라.\n- 인사말, 서두 해설, 작성 팁 등 메시지 외의 부가 텍스트는 출력하지 말고 바로 사용할 수 있는 메시지 본문만 출력하라.",
+  "query": "아래 문장을 상사에게 보내는 공손한 메시지로 바꿔줘: '내일 회의 못 가요. 자료는 메일로 보낼게요.'",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "[사내 메신저용 (단문)]\n팀장님, 내일 예정된 회의에 불가피하게 참석하기 어려워 양해를 구하고자 연락드립니다. [사유 입력]\n회의 관련 자료는 이메일로 송부해 드리겠습니다. 회의 진행에 불편을 드려 죄송하며, 추가로 필요하신 사항이 있으시면 언제든 말씀해 주시기 바랍니다.\n\n---\n\n[이메일/상세 보고용 (장문)]\n제목: [양해 요청] 내일 회의 불참 안내 및 관련 자료 송부의 건\n\n안녕하십니까, 팀장님.\n\n내일 예정된 회의 참석과 관련하여 사전에 양해를 구하고자 메일드립니다. \n\n[사유 입력] 사유로 인해 불가피하게 내일 회의에 참석하기 어려울 것 같습니다. 회의에 직접 참석하지 못해 죄송하다는 말씀 전합니다.\n\n회의 진행에 차질이 없으시도록 관련 자료를 본 메일에 첨부하여 송부해 드립니다. 검토해 보시고 추가 확인이나 수정이 필요한 부분이 있으시다면 언제든 말씀해 주시기 바랍니다.\n\n너른 양해에 감사드리며, 회의 불참으로 불편을 드려 다시 한번 죄송합니다.\n\n감사합니다.\n[작성자 이름] 드림",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "상황과 상사와의 관계에 따라 선택하실 수 있도록 몇 가지 버전으로 작성해 드립니다. `[직급]` 부분에 상사의 직책(팀장님, 부장님 등)을 넣어 사용해 보세요.\n\n---\n\n**1. 가장 정중하고 표준적인 표현 (추천)**\n> \"[직급]님, 죄송하지만 내일 예정된 회의에는 불가피한 사정으로 참석이 어려울 것 같습니다. 회의 관련 자료는 미리 이메일로 송부드리겠습니다. 양해 부탁드립니다.\"\n\n**2. 조금 더 간결한 표현**\n> \"[직급]님, 내일 회의는 일정상 참석하기 힘들 것 같습니다. 죄송합니다. 회의 자료는 이메일로 정리해서 바로 전달해 드리겠습니다.\"\n\n**3. 사유를 간단히 포함할 수 있는 표현**\n> \"[직급]님, 내일 [부득이한 사정/다른 업무 일정]으로 인해 회의 참석이 어려워 미리 말씀드립니다. 작성한 자료는 이메일로 공유해 두었으니(또는 보내드릴 예정이니) 검토 부탁드립니다. 죄송합니다.\"",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.1140350877192982,
+  "done": true
+ },
+ "up_16|1": {
+  "prompt": "아래 원문 문장을 상사에게 보내는 공손한 메시지로 바꿔라.\n\n### 원문\n\"내일 회의 못 가요. 자료는 메일로 보낼게요.\"\n\n[더 좋은 결과를 위한 조건]\n- 원문의 핵심 의미(회의 참석 불가 안내 및 관련 자료 메일 송부)를 정확히 유지하라.\n- 상사에게 전달하기에 적합하도록 예의 바르고 정중한 톤앤매너를 사용하라.\n- 상황에 맞춰 바로 복사해 사용할 수 있도록 [사내 메신저용(간결하고 정중한 어조)]과 [이메일/문자용(격식을 갖춘 어조)] 버전으로 각각 작성하라.\n- 결과를 출력할 때 인사말, 부연 설명, 작성 팁 등 메시지 외의 불필요한 말은 덧붙이지 말고 완정한 메시지 문구만 출력하라.",
+  "mode": "improve",
+  "prompt_filled": "아래 원문 문장을 상사에게 보내는 공손한 메시지로 바꿔라.\n\n### 원문\n\"내일 회의 못 가요. 자료는 메일로 보낼게요.\"\n\n[더 좋은 결과를 위한 조건]\n- 원문의 핵심 의미(회의 참석 불가 안내 및 관련 자료 메일 송부)를 정확히 유지하라.\n- 상사에게 전달하기에 적합하도록 예의 바르고 정중한 톤앤매너를 사용하라.\n- 상황에 맞춰 바로 복사해 사용할 수 있도록 [사내 메신저용(간결하고 정중한 어조)]과 [이메일/문자용(격식을 갖춘 어조)] 버전으로 각각 작성하라.\n- 결과를 출력할 때 인사말, 부연 설명, 작성 팁 등 메시지 외의 불필요한 말은 덧붙이지 말고 완정한 메시지 문구만 출력하라.",
+  "query": "아래 문장을 상사에게 보내는 공손한 메시지로 바꿔줘: '내일 회의 못 가요. 자료는 메일로 보낼게요.'",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "[사내 메신저용]\n팀장님, 죄송하지만 사정상 내일 회의에는 참석이 어려울 것 같습니다. 회의 관련 자료는 정리하여 메일로 먼저 보내드리겠습니다. 너그러운 양해 부탁드립니다.\n\n[이메일/문자용]\n[상사 직급/성함]님, 안녕하십니까. [본인 이름]입니다.\n\n다름이 아니라, 불가피한 일정으로 인해 내일 예정된 회의에 참석하기 어려워 죄송한 마음으로 미리 연락을 드립니다. \n\n회의 관련 자료는 이메일로 첨부하여 보내드렸으니 확인해 주시면 감사하겠습니다. \n\n미리 양해해 주셔서 감사드리며, 검토 후 추가로 필요하신 사항이 있다면 언제든 말씀해 주시기 바랍니다. \n\n감사합니다.\n[본인 이름] 드림",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "상황과 매체(메신저, 이메일 등)에 따라 선택하실 수 있도록 몇 가지 버전으로 작성해 드립니다. `[직급]` 부분에 팀장님, 부장님 등 알맞은 직급을 넣어 사용하세요.\n\n---\n\n**1. 가장 표준적이고 정중한 표현 (추천)**\n> \"[직급]님, 내일 예정된 회의에 불가피한 사정으로 참석하기 어려울 것 같습니다. 미리 말씀드리지 못해 죄송합니다. 회의 자료는 이메일로 송부해 드렸으니(또는 보낼 예정이니) 확인 부탁드립니다.\"\n\n**2. 조금 더 부드러운 뉘앙스 (메신저용)**\n> \"[직급]님, 죄송하지만 내일 회의는 사정이 생겨 참석이 힘들 것 같습니다. 양해해 주신다면 관련 자료는 이메일로 미리 정리해서 보내드리겠습니다. 불편을 드려 죄송합니다.\"\n\n**3. 간결하고 명확한 표현 (문자/슬랙 등)**\n> \"[직급]님, 내일 회의는 사정상 참석이 어렵게 되었습니다. 죄송합니다. 회의 자료는 금일 중으로 이메일 전달드리겠습니다. 감사합니다.\"",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 0.6953781512605042,
+  "done": true
+ },
+ "up_44|0": {
+  "prompt": "너는 파이썬 데이터 수집 및 웹 스크레이핑 전문가다.\n\n파이썬 크롤러 만들어줘.\n\n### [더 좋은 결과를 위한 조건]\n- 대상 웹사이트: [대상 웹사이트 URL 입력]\n- 수집 데이터 항목: [수집할 데이터 항목 입력]\n\n### [작업 및 출력 지시]\n1. 대상 사이트의 구조에 맞게 적절한 파이썬 라이브러리(requests, BeautifulSoup4, Selenium, Playwright 등)를 선택하여 크롤러 코드를 작성하라.\n2. 안정적인 수집을 위해 User-Agent 헤더 설정, 요청 실패 시 예외 처리(try-except), 타임아웃 설정을 포함하라.\n3. 추출된 데이터를 파이썬 데이터 구조(리스트, 디셔너리)로 정제하고 CSV 또는 JSON 파일로 저장하는 로직을 추가하라.\n4. `[ ]`로 표시된 항목이 채워지지 않고 비어 있다면, 추가로 질문하거나 설명하지 말고 범용 웹 크롤링 동작이 가능한 템플릿 코드로 작성하라.\n5. 코드 전후에 인사말, 해설, 주의사항 등의 추가 텍스트를 붙이지 말고 주석이 포함된 파이썬 코드만 출력하라.",
+  "mode": "improve",
+  "fill": {
+   "[대상 웹사이트 URL 입력]": "https://www.alphabooks-demo.com",
+   "[수집할 데이터 항목 입력]": "도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무"
+  },
+  "prompt_filled": "너는 파이썬 데이터 수집 및 웹 스크레이핑 전문가다.\n\n파이썬 크롤러 만들어줘.\n\n### [더 좋은 결과를 위한 조건]\n- 대상 웹사이트: https://www.alphabooks-demo.com\n- 수집 데이터 항목: 도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무\n\n### [작업 및 출력 지시]\n1. 대상 사이트의 구조에 맞게 적절한 파이썬 라이브러리(requests, BeautifulSoup4, Selenium, Playwright 등)를 선택하여 크롤러 코드를 작성하라.\n2. 안정적인 수집을 위해 User-Agent 헤더 설정, 요청 실패 시 예외 처리(try-except), 타임아웃 설정을 포함하라.\n3. 추출된 데이터를 파이썬 데이터 구조(리스트, 디셔너리)로 정제하고 CSV 또는 JSON 파일로 저장하는 로직을 추가하라.\n4. `[ ]`로 표시된 항목이 채워지지 않고 비어 있다면, 추가로 질문하거나 설명하지 말고 범용 웹 크롤링 동작이 가능한 템플릿 코드로 작성하라.\n5. 코드 전후에 인사말, 해설, 주의사항 등의 추가 텍스트를 붙이지 말고 주석이 포함된 파이썬 코드만 출력하라.",
+  "query": "파이썬 크롤러 만들어줘.\n\n(참고로 내가 아는 정보: 대상 웹사이트 URL: https://www.alphabooks-demo.com, 수집할 데이터 항목: 도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무)",
+  "n_blanks": 2,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "```python\nimport csv\nimport json\nimport logging\nimport time\nimport requests\nfrom bs4 import BeautifulSoup\n\n# 로깅 설정 (수집 과정 및 에러 관리를 위함)\nlogging.basicConfig(\n    level=logging.INFO, format=\"%(asctime)s - %(levelname)s - %(message)s\"\n)\n\n# 대상 URL 및 요청 설정\nBASE_URL = \"https://www.alphabooks-demo.com\"\nTARGET_URL = f\"{BASE_URL}/books\"\n\n# 차단 방지를 위한 User-Agent 및 헤더 설정\nHEADERS = {\n    \"User-Agent\": (\n        \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \"\n        \"(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"\n    ),\n    \"Accept\": (\n        \"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\"\n    ),\n    \"Accept-Language\": \"ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7\",\n}\n\n# 요청 타임아웃 설정 (초 단위)\nTIMEOUT = 10\n\n\ndef fetch_page_html(url: str) -> str | None:\n    \"\"\"지정한 URL의 HTML 소스를 안전하게 가져오는 함수 (예외 처리 및 타임아웃 포함)\"\"\"\n    try:\n        response = requests.get(url, headers=HEADERS, timeout=TIMEOUT)\n        response.raise_for_status()  # 200 OK가 아니면 HTTPError 발생\n        return response.text\n    except requests.exceptions.Timeout:\n        logging.error(f\"요청 시간 초과 (Timeout): {url}\")\n    except requests.exceptions.HTTPError as e:\n        logging.error(f\"HTTP 에러 발생 ({response.status_code}): {e}\")\n    except requests.exceptions.RequestException as e:\n        logging.error(f\"네트워크 요청 실패: {e}\")\n    return None\n\n\ndef parse_book_items(html_content: str) -> list[dict]:\n    \"\"\"HTML 소스에서 지정된 도서 데이터 항목들을 추출하여 리스트(디셔너리 형태)로 반환하는 함수\"\"\"\n    if not html_content:\n        return []\n\n    soup = BeautifulSoup(html_content, \"html.parser\")\n    scraped_books = []\n\n    # 일반적인 웹 쇼핑몰 구조를 고려한 범용 HTML 선택자 목록\n    # 실제 사이트 구조에 맞게 태그 및 클래스명을 수정하여 사용 가능\n    book_cards = soup.select(\".book-item, .product-card, .item-box, tr.book-row\")\n\n    for item in book_cards:\n        try:\n            # 1. 도서명 추출\n            title_node = item.select_one(\n                \".title, .book-title, .product-name, h3, a.title-link\"\n            )\n            title = (\n                title_node.get_text(strip=True) if title_node else \"정보 없음\"\n            )\n\n            # 2. ISBN 추출 (텍스트 또는 데이터 속성에서 수집)\n            isbn_node = item.select_one(\".isbn, .book-isbn, [data-isbn]\")\n            if isbn_node:\n                isbn = isbn_node.get(\"data-isbn\") or isbn_node.get_text(\n                    strip=True\n                )\n            else:\n                isbn = \"정보 없음\"\n\n            # 3. 중고 상태 등급 추출\n            grade_node = item.select_one(\n                \".condition-grade, .used-grade, .badge-grade, .status-grade\"\n            )\n            grade = (\n                grade_node.get_text(strip=True) if grade_node else \"정보 없음\"\n            )\n\n            # 4. 정가 추출\n            list_price_node = item.select_one(\n                \".list-price, .original-price, del, .price-cancel\"\n            )\n            list_price = (\n                list_price_node.get_text(strip=True)\n                if list_price_node\n                else \"정보 없음\"\n            )\n\n            # 5. 현재 판매가 추출\n            selling_price_node = item.select_one(\n                \".selling-price, .current-price, .sale-price, .price\"\n            )\n            selling_price = (\n                selling_price_node.get_text(strip=True)\n                if selling_price_node\n                else \"정보 없음\"\n            )\n\n            # 6. 재고 유무 추출\n            stock_node = item.select_one(\n                \".stock-status, .in-stock, .out-of-stock, .availability\"\n            )\n            stock_status = (\n                stock_node.get_text(strip=True) if stock_node else \"재고 확인 필요\"\n            )\n\n            # 추출된 데이터 정제 및 딕셔너리 생성\n            book_data = {\n                \"title\": title,\n                \"isbn\": isbn,\n                \"used_condition_grade\": grade,\n                \"list_price\": list_price,\n                \"selling_price\": selling_price,\n                \"stock_status\": stock_status,\n            }\n\n            scraped_books.append(book_data)\n\n        except Exception as parse_err:\n            logging.warning(\n                f\"개별 도서 항목 파싱 중 에러 발생 (건너뜀): {parse_err}\"\n            )\n            continue\n\n    return scraped_books\n\n\ndef save_to_csv(data: list[dict], filename: str = \"alphabooks_result.csv\"):\n    \"\"\"수집된 데이터를 CSV 파일로 저장하는 함수\"\"\"\n    if not data:\n        logging.warning(\"CSV로 저장할 데이터가 없습니다.\")\n        return\n\n    fieldnames = [\n        \"title\",\n        \"isbn\",\n        \"used_condition_grade\",\n        \"list_price\",\n        \"selling_price\",\n        \"stock_status\",\n    ]\n\n    try:\n        with open(filename, mode=\"w\", encoding=\"utf-8-sig\", newline=\"\") as file:\n            writer = csv.DictWriter(file, fieldnames=fieldnames)\n            writer.writeheader()\n            writer.writerows(data)\n        logging.info(f\"성공적으로 CSV 파일 저장 완료: {filename}\")\n    except IOError as e:\n        logging.error(f\"CSV 저장 중 오류 발생: {e}\")\n\n\ndef save_to_json(data: list[dict], filename: str = \"alphabooks_result.json\"):\n    \"\"\"수집된 데이터를 JSON 파일로 저장하는 함수\"\"\"\n    if not data:\n        logging.warning(\"JSON으로 저장할 데이터가 없습니다.\")\n        return\n\n    try:\n        with open(filename, mode=\"w\", encoding=\"utf-8\") as file:\n            json.dump(data, file, ensure_ascii=False, indent=4)\n        logging.info(f\"성공적으로 JSON 파일 저장 완료: {filename}\")\n    except IOError as e:\n        logging.error(f\"JSON 저장 중 오류 발생: {e}\")\n\n\ndef main():\n    \"\"\"크롤러 메인 실행 제어 함수\"\"\"\n    logging.info(\"=== 알파북스 웹 스크레이퍼 실행 ===\")\n\n    all_scraped_books = []\n    total_pages_to_scrape = 3  # 예시: 1페이지부터 3페이지까지 수집\n\n    for page_num in range(1, total_pages_to_scrape + 1):\n        target_page_url = f\"{TARGET_URL}?page={page_num}\"\n        logging.info(f\"[{page_num}/{total_pages_to_scrape}] 페이지 수집 중: {target_page_url}\")\n\n        html_content = fetch_page_html(target_page_url)\n\n        if html_content:\n            books_on_page = parse_book_items(html_content)\n            all_scraped_books.extend(books_on_page)\n            logging.info(\n                f\"페이지 {page_num}에서 {len(books_on_page)}개 항목 추출 완료.\"\n            )\n        else:\n            logging.warning(\n                f\"페이지 {page_num}의 데이터를 가져오지 못했습니다.\"\n            )\n\n        # 서버 과부하 방지를 위한 대기 시간 설정 (1초)\n        time.sleep(1)\n\n    logging.info(f\"총 {len(all_scraped_books)}개의 도서 정보 수집 완료.\")\n\n    # 추출 결과 파일 저장 (CSV 및 JSON)\n    save_to_csv(all_scraped_books)\n    save_to_json(all_scraped_books)\n\n    logging.info(\"=== 크롤링 작업 종료 ===\")\n\n\nif __name__ == \"__main__\":\n    main()\n```",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "제공해주신 대상 사이트와 요청하신 수집 항목(도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무)을 바탕으로 작성한 **파이썬 웹 크롤러 기본 코드**입니다.\n\n가장 보편적이고 가벼운 라이브러리인 `requests`와 `BeautifulSoup`을 활용했으며, 수집된 데이터를 엑셀(CSV) 파일로 저장하도록 구현했습니다.\n\n---\n\n### 1. 사전 준비 (필요한 라이브러리 설치)\n터미널(또는 명령 프롬프트)에서 아래 명령어를 실행하여 필요한 라이브러리를 설치합니다.\n\n```bash\npip install requests beautifulsoup4 pandas\n```\n\n---\n\n### 2. 파이썬 크롤러 코드\n\n> **주의 사항:** 웹사이트의 실제 HTML 구조(태그 이름 및 클래스명)에 따라 코드 내의 **선택자(CSS Selector)** 부분을 수정해야 합니다. (코드 하단 사용 방법 참조)\n\n```python\nimport time\nimport pandas as pd\nimport requests\nfrom bs4 import BeautifulSoup\n\n# 1. 크롤링 대상 URL 설정\nBASE_URL = \"https://www.alphabooks-demo.com\"\n# 만약 목록 페이지가 따로 있다면 해당 URL로 변경 (예: https://www.alphabooks-demo.com/category/all)\nTARGET_URL = BASE_URL\n\n# 2. 봇 차단을 방지하기 위한 User-Agent 설정\nHEADERS = {\n    \"User-Agent\": (\n        \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\"\n        \" (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"\n    )\n}\n\n\ndef crawl_alphabooks():\n    print(\"크롤링을 시작합니다...\")\n\n    try:\n        response = requests.get(TARGET_URL, headers=HEADERS, timeout=10)\n        response.raise_for_status()  # HTTP 에러 발생 시 예외 처리\n    except requests.exceptions.RequestException as e:\n        print(f\"페이지 요청 실패: {e}\")\n        return\n\n    soup = BeautifulSoup(response.text, \"html.parser\")\n\n    # 수집한 데이터를 저장할 리스트\n    books_data = []\n\n    # 3. 도서 목록 아이템 추출 (※ 실제 사이트의 HTML 구조에 맞춰 클래스명 수정 필요)\n    # 예시: <div class=\"book-card\"> ... </div> 구조라고 가정\n    book_items = soup.select(\".book-card\")\n\n    if not book_items:\n        print(\n            \"도서 목록을 찾을 수 없습니다. CSS 선택자를 확인해주세요.\"\n        )\n        return\n\n    for item in book_items:\n        try:\n            # 항목별 데이터 추출 (찾지 못할 경우 'N/A' 처리)\n            # ※ 아래 선택자('.title', '.isbn' 등)는 실제 사이트 구조에 맞게 변경해야 합니다.\n            title_elem = item.select_one(\".book-title\")\n            isbn_elem = item.select_one(\".isbn-code\")\n            grade_elem = item.select_one(\".used-grade\")\n            orig_price_elem = item.select_one(\".original-price\")\n            sale_price_elem = item.select_one(\".sale-price\")\n            stock_elem = item.select_one(\".stock-status\")\n\n            title = title_elem.text.strip() if title_elem else \"N/A\"\n            isbn = isbn_elem.text.strip() if isbn_elem else \"N/A\"\n            grade = grade_elem.text.strip() if grade_elem else \"N/A\"\n            orig_price = (\n                orig_price_elem.text.strip() if orig_price_elem else \"N/A\"\n            )\n            sale_price = (\n                sale_price_elem.text.strip() if sale_price_elem else \"N/A\"\n            )\n            stock = stock_elem.text.strip() if stock_elem else \"N/A\"\n\n            # 데이터 저장\n            books_data.append(\n                {\n                    \"도서명\": title,\n                    \"ISBN\": isbn,\n                    \"중고 상태 등급\": grade,\n                    \"정가\": orig_price,\n                    \"현재 판매가\": sale_price,\n                    \"재고 유무\": stock,\n                }\n            )\n\n        except Exception as e:\n            print(f\"항목 파싱 중 오류 발생: {e}\")\n            continue\n\n    # 4. 수집 데이터 Pandas DataFrame 변환 및 CSV 저장\n    df = pd.DataFrame(books_data)\n\n    # 한글 깨짐 방지를 위해 encoding='utf-8-sig' 설정\n    output_filename = \"alphabooks_result.csv\"\n    df.to_csv(output_filename, index=False, encoding=\"utf-8-sig\")\n\n    print(\n        f\"크롤링 완료! 총 {len(df)}개 도서 수집됨. 파일 저장: {output_filename}\"\n    )\n\n\nif __name__ == \"__main__\":\n    crawl_alphabooks()\n```\n\n---\n\n### 3. 실제 사이트에 적용하는 방법 (가장 중요한 단계)\n\n제시해주신 URL이 예시용(데모) URL일 경우, 실제 사이트의 HTML 클래스 이름을 확인해서 코드의 **선택자(Selector)**를 바꿔주어야 합니다.\n\n1. 크롬 브라우저에서 대상 웹사이트 접속 후 **`F12`**를 눌러 **개발자 도구**를 엽니다.\n2. 왼쪽 상단 **[자물쇠/화살표 아이콘(Inspect)]**을 클릭한 뒤, 수집하고 싶은 데이터(예: 도서명)를 클릭합니다.\n3. 해당 태그의 `class`나 `id` 이름을 확인합니다.\n4. 파이썬 코드에서 아래 부분을 수정합니다.\n   * `soup.select('.book-card')` ➔ 도서 한 권을 감싸고 있는 가장 큰 태그의 클래스명\n   * `item.select_one('.book-title')` ➔ 도서명이 위치한 태그의 클래스명\n   * `item.select_one('.isbn-code')` ➔ ISBN이 위치한 태그의 클래스명 (상세 페이지를 들어가야만 있는 경우, 상세 페이지 URL을 먼저 수집 후 2차 수집하는 로직이 필요합니다.)\n\n---\n\n### 💡 추가 참고사항 (동적 웹사이트 대응)\n만약 해당 웹사이트가 **자바스크립트(React, Vue 등)로 화면을 나중에 그리는 방식**이거나, **로그인/버튼 클릭**이 필요한 구조라면 위의 `requests` 대신 **`Selenium`**이나 **`Playwright`** 라이브러리를 사용해야 합니다.\n\n실제 웹사이트의 HTML 구조를 알려주시면 선택자(Selector)를 딱 맞게 수정해 드릴 수 있습니다!",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.516904761904762,
+  "done": true
+ },
+ "up_44|1": {
+  "prompt": "너는 파이썬 웹 크롤링 전문가이다. 아래 조건에 맞춰 완결된 파이썬 웹 크롤러 코드를 작성하라.\n\n[원문 요청]\n파이썬 크롤러 만들어줘.\n\n[더 좋은 결과를 위한 조건]\n- 수집 대상 URL: [대상 웹사이트 URL 입력]\n- 수집 대상 데이터: [추출할 데이터 항목 입력]\n- 사용 라이브러리: Requests, BeautifulSoup (정적 웹페이지 기준, 필요 시 pandas 및 json 활용)\n- 웹사이트 차단 방지를 위한 User-Agent 헤더 설정 및 요청 간 지연 시간(time.sleep) 포함\n- HTTP 요청 실패 및 파싱 예외 처리를 위한 try-except 구문 작성\n- 수집된 데이터를 CSV 또는 JSON 파일로 저장하는 로직 포함\n- 사용법 및 필요한 라이브러리 설치 안내(pip install)와 핵심 코드 주석 제공\n- 지시문 외부의 해설이나 인사말은 생략하고 코드와 필수 실행 설명만 출력할 것\n- 만약 [ ] 안의 대괄호 항목이 비어 있다면 묻지 말고 해당 위치를 빈칸 표시 그대로 둔 채 작동 가능한 범용 크롤러 템플릿 코드를 작성하라.",
+  "mode": "improve",
+  "fill": {
+   "[대상 웹사이트 URL 입력]": "https://www.alphabooks-demo.com",
+   "[추출할 데이터 항목 입력]": "도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무"
+  },
+  "prompt_filled": "너는 파이썬 웹 크롤링 전문가이다. 아래 조건에 맞춰 완결된 파이썬 웹 크롤러 코드를 작성하라.\n\n[원문 요청]\n파이썬 크롤러 만들어줘.\n\n[더 좋은 결과를 위한 조건]\n- 수집 대상 URL: https://www.alphabooks-demo.com\n- 수집 대상 데이터: 도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무\n- 사용 라이브러리: Requests, BeautifulSoup (정적 웹페이지 기준, 필요 시 pandas 및 json 활용)\n- 웹사이트 차단 방지를 위한 User-Agent 헤더 설정 및 요청 간 지연 시간(time.sleep) 포함\n- HTTP 요청 실패 및 파싱 예외 처리를 위한 try-except 구문 작성\n- 수집된 데이터를 CSV 또는 JSON 파일로 저장하는 로직 포함\n- 사용법 및 필요한 라이브러리 설치 안내(pip install)와 핵심 코드 주석 제공\n- 지시문 외부의 해설이나 인사말은 생략하고 코드와 필수 실행 설명만 출력할 것\n- 만약 [ ] 안의 대괄호 항목이 비어 있다면 묻지 말고 해당 위치를 빈칸 표시 그대로 둔 채 작동 가능한 범용 크롤러 템플릿 코드를 작성하라.",
+  "query": "파이썬 크롤러 만들어줘.\n\n(참고로 내가 아는 정보: 대상 웹사이트 URL: https://www.alphabooks-demo.com, 추출할 데이터 항목: 도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무)",
+  "n_blanks": 2,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "### 1. 필수의존성 라이브러리 설치\n\n```bash\npip install requests beautifulsoup4 pandas\n```\n\n---\n\n### 2. 크롤러 파이썬 코드 (`book_crawler.py`)\n\n```python\nimport json\nimport logging\nimport random\nimport time\nfrom typing import Dict, List, Optional\nimport pandas as pd\nimport requests\nfrom bs4 import BeautifulSoup\n\n# [설정] 로깅 설정\nlogging.basicConfig(\n    level=logging.INFO, format=\"%(asctime)s - %(levelname)s - %(message)s\"\n)\n\n# [설정] 기본 네트워크 설정\nBASE_URL = \"https://www.alphabooks-demo.com\"\nTARGET_URL = f\"{BASE_URL}/books\"  # 수집 대상 목록 페이지\n\n# 차단 방지를 위한 HTTP Request Header 설정\nHEADERS = {\n    \"User-Agent\": (\n        \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,\"\n        \" like Gecko) Chrome/122.0.0.0 Safari/537.36\"\n    ),\n    \"Accept\": (\n        \"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\"\n    ),\n    \"Accept-Language\": \"ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7\",\n    \"Referer\": BASE_URL,\n}\n\n\ndef fetch_html(url: str) -> Optional[str]:\n    \"\"\"페이지 HTML을 안전하게 가져오는 함수 (예외 처리 및 서버 부하 방지 포함)\"\"\"\n    try:\n        # 요청 간 랜덤 지연 시간 추가 (1초 ~ 2.5초) - 차단 방지\n        time.sleep(random.uniform(1.0, 2.5))\n\n        response = requests.get(url, headers=HEADERS, timeout=10)\n        response.raise_for_status()  # 200 OK가 아닌 경우 예외 발생\n        return response.text\n\n    except requests.exceptions.HTTPError as e:\n        logging.error(f\"HTTP 에러 발생 ({url}): {e}\")\n    except requests.exceptions.ConnectionError as e:\n        logging.error(f\"네트워크 연결 에러 발생 ({url}): {e}\")\n    except requests.exceptions.Timeout as e:\n        logging.error(f\"요청 시간 초과 ({url}): {e}\")\n    except requests.exceptions.RequestException as e:\n        logging.error(f\"요청 중 알 수 없는 에러 발생 ({url}): {e}\")\n\n    return None\n\n\ndef parse_book_item(item: BeautifulSoup) -> Dict[str, Optional[str]]:\n    \"\"\"단일 도서 아이템 요소에서 데이터를 추출하는 함수 (파싱 예외 처리 포함)\"\"\"\n    data = {\n        \"title\": None,  # 도서명\n        \"isbn\": None,  # ISBN\n        \"condition\": None,  # 중고 상태 등급\n        \"original_price\": None,  # 정가\n        \"current_price\": None,  # 현재 판매가\n        \"stock_status\": None,  # 재고 유무\n    }\n\n    try:\n        # 1. 도서명 추출 (.book-title 태그 기준)\n        title_elem = item.select_one(\".book-title, .title, h2.name\")\n        if title_elem:\n            data[\"title\"] = title_elem.get_text(strip=True)\n\n        # 2. ISBN 추출 (.isbn 태그 또는 data 속성 기준)\n        isbn_elem = item.select_one(\".isbn, [data-isbn]\")\n        if isbn_elem:\n            data[\"isbn\"] = (\n                isbn_elem.get(\"data-isbn\") or isbn_elem.get_text(strip=True)\n            )\n\n        # 3. 중고 상태 등급 추출 (.condition, .grade 태그 기준)\n        condition_elem = item.select_one(\".condition, .used-grade, .badge-grade\")\n        if condition_elem:\n            data[\"condition\"] = condition_elem.get_text(strip=True)\n\n        # 4. 정가 추출 (.price-original, del 태그 기준)\n        orig_price_elem = item.select_one(\".price-original, del, .original-price\")\n        if orig_price_elem:\n            data[\"original_price\"] = orig_price_elem.get_text(strip=True)\n\n        # 5. 현재 판매가 추출 (.price-current, .sale-price 기준)\n        curr_price_elem = item.select_one(\n            \".price-current, .sale-price, .price\"\n        )\n        if curr_price_elem:\n            data[\"current_price\"] = curr_price_elem.get_text(strip=True)\n\n        # 6. 재고 유무 추출 (.stock-status, .stock 태그 기준)\n        stock_elem = item.select_one(\".stock-status, .stock, .availability\")\n        if stock_elem:\n            data[\"stock_status\"] = stock_elem.get_text(strip=True)\n        else:\n            # 품절 버튼이나 특정 클래스로 재고 유무 추정\n            sold_out = item.select_one(\".sold-out, .out-of-stock\")\n            data[\"stock_status\"] = \"품절\" if sold_out else \"재고있음\"\n\n    except AttributeError as e:\n        logging.warning(f\"태그 파싱 중 AttributeError 발생: {e}\")\n    except Exception as e:\n        logging.warning(f\"데이터 추출 중 예외 발생: {e}\")\n\n    return data\n\n\ndef run_crawler(max_pages: int = 1) -> List[Dict[str, Optional[str]]]:\n    \"\"\"크롤링 메인 실행 함수\"\"\"\n    extracted_books = []\n\n    for page in range(1, max_pages + 1):\n        target_page_url = f\"{TARGET_URL}?page={page}\"\n        logging.info(f\"페이지 수집 중: {target_page_url}\")\n\n        html = fetch_html(target_page_url)\n        if not html:\n            logging.warning(f\"{page} 페이지 수집 실패. 다음 페이지로 이동합니다.\")\n            continue\n\n        soup = BeautifulSoup(html, \"html.parser\")\n\n        # 도서 목록 리스트 아이템 선택 (사이트 구조에 맞게 셀렉터 수정 가능)\n        book_items = soup.select(\n            \".book-item, .product-card, div.book-list > div\"\n        )\n\n        if not book_items:\n            logging.warning(f\"{page} 페이지에서 도서 아이템을 찾을 수 없습니다.\")\n            break\n\n        for item in book_items:\n            book_data = parse_book_item(item)\n            if book_data[\"title\"]:  # 최소한 도서명이 존재하는 경우만 추가\n                extracted_books.append(book_data)\n\n    logging.info(f\"총 {len(extracted_books)}건의 데이터 수집 완료.\")\n    return extracted_books\n\n\ndef save_data(\n    data: List[Dict[str, Optional[str]]], filename_prefix: str = \"alphabooks_result\"\n):\n    \"\"\"수집 데이터를 CSV 및 JSON으로 저장하는 함수\"\"\"\n    if not data:\n        logging.warning(\"저장할 데이터가 없습니다.\")\n        return\n\n    # DataFrame 변환\n    df = pd.DataFrame(data)\n\n    # 컬럼명 한글 매핑 (출력용)\n    column_mapping = {\n        \"title\": \"도서명\",\n        \"isbn\": \"ISBN\",\n        \"condition\": \"중고 상태 등급\",\n        \"original_price\": \"정가\",\n        \"current_price\": \"현재 판매가\",\n        \"stock_status\": \"재고 유무\",\n    }\n    df.rename(columns=column_mapping, inplace=True)\n\n    # 1. CSV 저장 (Excel 한글 깨짐 방지를 위해 utf-8-sig 사용)\n    csv_filename = f\"{filename_prefix}.csv\"\n    df.to_csv(csv_filename, index=False, encoding=\"utf-8-sig\")\n    logging.info(f\"CSV 파일 저장 완료: {csv_filename}\")\n\n    # 2. JSON 저장\n    json_filename = f\"{filename_prefix}.json\"\n    df.to_json(\n        json_filename, orient=\"records\", ensure_ascii=False, indent=4\n    )\n    logging.info(f\"JSON 파일 저장 완료: {json_filename}\")\n\n\nif __name__ == \"__main__\":\n    # 크롤러 실행 (1페이지 수집)\n    scraped_data = run_crawler(max_pages=1)\n\n    # 수집 결과 저장\n    save_data(scraped_data)\n```",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "요청하신 도서 정보(도서명, ISBN, 중고 상태 등급, 정가, 현재 판매가, 재고 유무)를 수집하여 **엑셀(Excel) 및 CSV 파일로 저장하는 파이썬 크롤러 기본 코드**입니다.\n\n웹사이트의 HTML 구조(클래스명, 태그 등)는 사이트마다 다르므로, **실제 웹사이트의 태그 구조에 맞게 선택자(Selector)를 수정해서 사용**하실 수 있도록 범용적인 구조로 작성했습니다.\n\n---\n\n### 1. 필요한 라이브러리 설치\n\n터미널(명령 프롬프트)에서 아래 명령어를 실행하여 필요한 라이브러리를 설치합니다.\n\n```bash\npip install requests beautifulsoup4 pandas openpyxl\n```\n\n---\n\n### 2. 파이썬 크롤러 코드\n\n```python\nimport time\nfrom bs4 import BeautifulSoup\nimport pandas as pd\nimport requests\n\n# 1. 대상 URL 설정\nBASE_URL = \"https://www.alphabooks-demo.com\"\n\n# 브라우저처럼 보이게 하기 위한 헤더 설정 (차단 방지)\nHEADERS = {\n    \"User-Agent\": (\n        \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,\"\n        \" like Gecko) Chrome/120.0.0.0 Safari/537.36\"\n    )\n}\n\n\ndef crawl_alphabooks(target_url):\n    print(f\"크롤링 시작: {target_url}\")\n\n    try:\n        # 웹페이지 요청\n        response = requests.get(target_url, headers=HEADERS)\n        response.raise_for_status()  # 200 OK가 아닐 경우 에러 발생\n\n        # HTML 파싱\n        soup = BeautifulSoup(response.text, \"html.parser\")\n\n        books_list = []\n\n        # TODO: 실제 사이트의 도서 목록을 감싸는 개별 아이템 태그/클래스로 수정해야 합니다.\n        # 예: <div class=\"book-card\"> ... </div>\n        items = soup.select(\".book-card\")\n\n        if not items:\n            print(\n                \"Warning: 도서 목록을 찾을 수 없습니다. HTML 선택자(.book-card)를\"\n                \" 확인해주세요.\"\n            )\n\n        for item in items:\n            # TODO: 실제 사이트의 태그 구조에 맞춰 선택자('.title', '.isbn' 등)를 수정하세요.\n            title = (\n                item.select_one(\".title\").text.strip()\n                if item.select_one(\".title\")\n                else \"N/A\"\n            )\n            isbn = (\n                item.select_one(\".isbn\").text.strip()\n                if item.select_one(\".isbn\")\n                else \"N/A\"\n            )\n            condition = (\n                item.select_one(\".condition\").text.strip()\n                if item.select_one(\".condition\")\n                else \"N/A\"\n            )\n            original_price = (\n                item.select_one(\".price-original\").text.strip()\n                if item.select_one(\".price-original\")\n                else \"N/A\"\n            )\n            sale_price = (\n                item.select_one(\".price-sale\").text.strip()\n                if item.select_one(\".price-sale\")\n                else \"N/A\"\n            )\n            stock = (\n                item.select_one(\".stock-status\").text.strip()\n                if item.select_one(\".stock-status\")\n                else \"N/A\"\n            )\n\n            # 수집된 데이터를 리스트에 추가\n            books_list.append(\n                {\n                    \"도서명\": title,\n                    \"ISBN\": isbn,\n                    \"중고 상태 등급\": condition,\n                    \"정가\": original_price,\n                    \"현재 판매가\": sale_price,\n                    \"재고 유무\": stock,\n                }\n            )\n\n        return books_list\n\n    except requests.exceptions.RequestException as e:\n        print(f\"요청 중 오류가 발생했습니다: {e}\")\n        return []\n\n\ndef save_to_file(data, filename=\"alphabooks_result\"):\n    if not data:\n        print(\"저장할 데이터가 없습니다.\")\n        return\n\n    # 데이터프레임 변환\n    df = pd.DataFrame(data)\n\n    # 1. CSV 저장\n    csv_name = f\"{filename}.csv\"\n    df.to_csv(csv_name, index=False, encoding=\"utf-8-sig\")\n    print(f\"CSV 파일 저장 완료: {csv_name}\")\n\n    # 2. Excel 저장\n    excel_name = f\"{filename}.xlsx\"\n    df.to_excel(excel_name, index=False, engine=\"openpyxl\")\n    print(f\"Excel 파일 저장 완료: {excel_name}\")\n\n\n# 실행 코드\nif __name__ == \"__main__\":\n    # 데이터 수집 실행\n    results = crawl_alphabooks(BASE_URL)\n\n    # 파일 저장\n    save_to_file(results)\n```\n\n---\n\n### 3. 코드 수정 가이드 (사용자 맞춤 설정)\n\n대상 웹사이트에서 데이터가 제대로 수집되려면 개발자 도구(`F12`)를 열어 **태그명과 클래스명(Class)을 확인 후 수정**해주셔야 합니다.\n\n1. **크롬 개발자 도구 열기**: `F12` 누르기 -> 좌상단 화살표 아이콘(요소 선택) 클릭 -> 웹페이지의 도서 요소 클릭.\n2. **반복 요소 클래스 수정**:\n   * 코드 내 `soup.select('.book-card')` 부분의 `.book-card`를 실제 도서 리스트 항목을 감싸고 있는 태그나 클래스로 변경합니다.\n3. **하위 추출 항목 클래스 수정**:\n   * `item.select_one('.title')` -> 실제 도서 제목의 클래스로 수정 (예: `item.select_one('.book-name')`)\n   * `item.select_one('.isbn')` -> 실제 ISBN 태그 클래스로 수정\n   * `item.select_one('.condition')` -> 실제 중고 상태 등급 클래스로 수정\n   * `item.select_one('.price-original')` -> 정가 클래스로 수정\n   * `item.select_one('.price-sale')` -> 현재 판매가 클래스로 수정\n   * `item.select_one('.stock-status')` -> 재고 유무 클래스로 수정\n\n---\n\n### 💡 참고 사항 (추가 동적 페이지 처리)\n만약 해당 사이트가 **자바스크립트(React, Vue 등)로 데이터를 실시간으로 불러오는 사이트**라면 `requests` 대신 **`Selenium`**이나 **`Playwright`**를 사용해야 화면의 데이터가 정상적으로 수집됩니다. \n\n실행해보신 후 데이터가 잘 들어오지 않거나 추가 도움이 필요하시면 언제든 말씀해주세요!",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.3201151971643774,
+  "done": true
+ },
+ "up_48|0": {
+  "prompt": "너는 파이썬 코드 리뷰 전문가이다. 아래 코드를 검토하고 파이썬다운(Pythonic) 관점에서의 리뷰와 개선된 코드를 제시하라.\n\n[리뷰 대상 코드]\nfor i in range(len(arr)):\n    print(arr[i])\n\n[더 좋은 결과를 위한 조건]\n- 원본 코드의 문제점(예: 인덱스 기반 직접 접근 방식의 아쉬운 점, 가독성 등)을 간단히 설명하라.\n- 가장 파이썬다운(Pythonic) 기본 개선 코드를 제시하라.\n- 상황별(단순 순회 시, 인덱스와 값이 모두 필요한 경우 등) 가장 적절한 대체 코드를 명확히 구분하여 보여주라.\n- 서두, 맺음말, 감상평 등의 말은 덧붙이지 말고 리뷰 및 개선 코드 결과만 바로 출력하라.",
+  "mode": "improve",
+  "prompt_filled": "너는 파이썬 코드 리뷰 전문가이다. 아래 코드를 검토하고 파이썬다운(Pythonic) 관점에서의 리뷰와 개선된 코드를 제시하라.\n\n[리뷰 대상 코드]\nfor i in range(len(arr)):\n    print(arr[i])\n\n[더 좋은 결과를 위한 조건]\n- 원본 코드의 문제점(예: 인덱스 기반 직접 접근 방식의 아쉬운 점, 가독성 등)을 간단히 설명하라.\n- 가장 파이썬다운(Pythonic) 기본 개선 코드를 제시하라.\n- 상황별(단순 순회 시, 인덱스와 값이 모두 필요한 경우 등) 가장 적절한 대체 코드를 명확히 구분하여 보여주라.\n- 서두, 맺음말, 감상평 등의 말은 덧붙이지 말고 리뷰 및 개선 코드 결과만 바로 출력하라.",
+  "query": "이 코드 좀 봐줘:\nfor i in range(len(arr)):\n    print(arr[i])",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "### 원본 코드의 문제점\n\n1. **비파이썬다운(Unpythonic) 스타일**: `range(len(arr))`을 사용하는 방식은 C/Java 등 다른 언어의 인덱스 기반 반복문 스타일로, 파이썬의 강점인 직관적인 이터레이터(Iterator) 메커니즘을 활용하지 못합니다.\n2. **가독성 저하**: `arr[i]`와 같이 인덱스로 요소에 접근하는 코드가 반복되면 시각적으로 복잡해지고 코드의 의도를 직관적으로 파악하기 어렵습니다.\n3. **불필요한 연산**: `len()` 함수 호출과 `range()` 객체 생성, 인덱스를 통한 요소 조회(Look-up) 과정이 추가되어 미세한 성능 저하를 유발합니다.\n\n---\n\n### 가장 파이썬다운(Pythonic) 기본 개선 코드\n\n단순히 리스트의 모든 요소를 순회하는 경우, 리스트 객체를 직접 순회하는 것이 가장 파이썬다운 방식입니다.\n\n```python\nfor item in arr:\n    print(item)\n```\n\n---\n\n### 상황별 최적의 대체 코드\n\n#### 1. 인덱스와 값이 모두 필요한 경우 (`enumerate` 활용)\n순회 중 현재 요소의 인덱스 번호도 함께 사용해야 할 때는 `range(len())` 대신 `enumerate()` 함수를 사용합니다.\n\n```python\nfor i, item in enumerate(arr):\n    print(f\"Index {i}: {item}\")\n```\n\n#### 2. 둘 이상의 리스트를 동시에 순회하는 경우 (`zip` 활용)\n여러 개의 리스트를 동일한 인덱스로 함께 순회해야 할 때는 `zip()` 함수를 사용합니다.\n\n```python\n# 예: names와 ages 리스트를 동시에 순회\nfor name, age in zip(names, ages):\n    print(f\"{name}: {age}\")\n```\n\n#### 3. 단순 출력만을 목적으로 하는 경우 (Unpacking 활용)\n반복문 내에서 별도의 로직 없이 단순히 모든 요소를 줄바꿈하여 출력하는 것이 목적이라면 언패킹(Unpacking)을 활용할 수 있습니다.\n\n```python\nprint(*arr, sep=\"\\n\")\n```",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "제시해주신 코드는 **기능적으로 문제없이 잘 동작합니다.** `arr`에 들어있는 요소를 하나씩 출력하는 코드입니다.\n\n하지만 **파이썬(Python)다운 방식(Pythonic way)**으로 작성하면 더 간결하고 가독성이 좋게 개선할 수 있습니다. 상황에 따라 아래 2가지 방법을 추천합니다.\n\n---\n\n### 1. 단순 요소 출력 (가장 권장하는 방식)\n인덱스(`i`)가 직접적으로 필요 없고 **값만 순서대로 출력**하면 되는 경우, 인덱스를 거치지 않고 리스트를 직접 순회하는 것이 좋습니다.\n\n```python\nfor item in arr:\n    print(item)\n```\n* **장점:** 코드가 훨씬 직관적이고 읽기 쉬워지며, 미세하지만 성능도 더 빠릅니다.\n\n---\n\n### 2. 인덱스(`i`)와 값 모두 필요한 경우 (`enumerate` 사용)\n만약 몇 번째 요소인지 **인덱스 번호도 같이 사용해야 하는 상황**이라면 `range(len(arr))` 대신 `enumerate()` 함수를 사용하는 것이 파이썬 표준 방식입니다.\n\n```python\nfor i, item in enumerate(arr):\n    print(i, item)  # 인덱스(i)와 값(item)을 동시에 사용 가능\n```\n\n---\n\n### 요약\n* 작성하신 `range(len(arr))` 방식은 C 언어나 Java 스타일의 접근 방식입니다.\n* 단순히 값만 출력할 때는 **`for item in arr:`** 형태로 작성하는 것을 적극 권장합니다.",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.414021164021164,
+  "done": true
+ },
+ "up_48|1": {
+  "prompt": "너는 파이썬 코드 리뷰 및 리팩토링 전문가다. 아래 파이썬 코드를 분석하고 더 파이썬다운(Pythonic) 모범 코드로 개선하라.\n\n[대상 코드]\n```python\nfor i in range(len(arr)):\n    print(arr[i])\n```\n\n[더 좋은 결과를 위한 조건]\n- 기존 코드의 작성 방식(인덱스 기반 직접 참조)이 갖는 문제점 및 비효율성을 구체적으로 지적하라.\n- 이를 대체할 최선의 파이썬다운(Pythonic) 개선 코드와, 인덱스가 필요한 경우 사용할 수 있는 대체 코드(예: enumerate 등)를 제시하라.\n- 각 개선안이 기존 코드 대비 가지는 이점(가독성, 성능, 실수 방지 등)을 설명하라.\n- 서두, 요청 되풀이, 인사말 없이 바로 문제점 분석과 개선 코드 결과물만 출력하라.",
+  "mode": "improve",
+  "prompt_filled": "너는 파이썬 코드 리뷰 및 리팩토링 전문가다. 아래 파이썬 코드를 분석하고 더 파이썬다운(Pythonic) 모범 코드로 개선하라.\n\n[대상 코드]\n```python\nfor i in range(len(arr)):\n    print(arr[i])\n```\n\n[더 좋은 결과를 위한 조건]\n- 기존 코드의 작성 방식(인덱스 기반 직접 참조)이 갖는 문제점 및 비효율성을 구체적으로 지적하라.\n- 이를 대체할 최선의 파이썬다운(Pythonic) 개선 코드와, 인덱스가 필요한 경우 사용할 수 있는 대체 코드(예: enumerate 등)를 제시하라.\n- 각 개선안이 기존 코드 대비 가지는 이점(가독성, 성능, 실수 방지 등)을 설명하라.\n- 서두, 요청 되풀이, 인사말 없이 바로 문제점 분석과 개선 코드 결과물만 출력하라.",
+  "query": "이 코드 좀 봐줘:\nfor i in range(len(arr)):\n    print(arr[i])",
+  "n_blanks": 0,
+  "n_filled": 0,
+  "ttalkak": {
+   "output": "### 1. 기존 코드의 문제점 분석\n\n* **불필요한 인덱싱 및 오버헤드:** `len(arr)`를 계산하고 `range()` 객체를 생성한 뒤, 매 반복마다 `arr[i]`로 요소에 조회 접근하는 방식은 C/Java 방식의 구문으로 파이썬에서는 불필요한 연산을 유발합니다.\n* **낮은 가독성 (Un-Pythonic):** 파이썬의 이터러블(Iterable) 순회 메커니즘을 활용하지 못하여 코드가 장황해지고 직관성이 떨어집니다.\n* **인덱스 관련 오류 위험:** 반복문 내부에서 인덱스 변수 `i`를 직접 다룰 경우, 잘못된 인덱스 참조나 순회 도중 리스트 구조 변경으로 인한 `IndexError` 발생 가능성이 커집니다.\n\n---\n\n### 2. 파이썬다운(Pythonic) 개선 코드\n\n#### [개선안 1] 요소(Element)만 순회할 때 (가장 권장되는 방식)\n```python\nfor item in arr:\n    print(item)\n```\n\n#### [개선안 2] 인덱스(Index)와 요소(Element)가 모두 필요할 때\n```python\nfor i, item in enumerate(arr):\n    print(i, item)\n```\n\n---\n\n### 3. 개선 코드의 이점\n\n1. **가독성 및 직관성 향상**\n   * `for item in arr` 구문은 \"arr에 있는 각 item에 대해 작업한다\"는 코드의 의도를 명확하게 전달합니다. 불필요한 인덱스 변수 `i`를 제거하여 코드가 간결해집니다.\n\n2. **성능 최적화 (속도 향상)**\n   * 파이썬의 `for` 문은 C 언어로 구현된 내부 이터레이터(Iterator)를 직접 사용합니다. 매 반복마다 `arr[i]` 위치를 찾아가는 인덱스 조회(Lookup) 과정을 생략하므로 실행 속도가 더 빠릅니다.\n\n3. **인덱스 에러 방지 (안전성)**\n   * 리스트의 경계(Bound)를 직접 다루지 않으므로 `IndexError`나 오프바이원 에러(Off-by-one error, 경계값 1 차이로 발생하는 에러)를 근본적으로 차단합니다.\n\n4. **`enumerate`를 통한 유연성 확보**\n   * 인덱스가 필요한 경우 `enumerate()`를 사용하면 인덱스와 요소를 튜플 형태로 안전하게 언패킹(Unpacking)받아 사용할 수 있습니다. `enumerate(arr, start=1)`과 같이 시작 인덱스를 변경하는 작업도 용이합니다.",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "제시해주신 코드는 파이썬(Python)에서 리스트 `arr`의 모든 요소를 순서대로 출력하는 **올바른 코드**이며 정상적으로 동작합니다.\n\n하지만 파이썬에서는 인덱스(`i`)를 사용해 원소에 접근하는 방식보다 **더 간결하고 파이썬다운(Pythonic) 방식**을 권장합니다. \n\n상황에 따라 아래와 같이 개선할 수 있습니다.\n\n---\n\n### 1. 단순히 요소만 출력하면 되는 경우 (가장 추천)\n인덱스를 거치지 않고 리스트의 요소를 직접 가져오는 것이 가독성이 훨씬 좋고 속도도 약간 더 빠릅니다.\n\n```python\nfor item in arr:\n    print(item)\n```\n\n---\n\n### 2. 몇 번째 인덱스인지(순서가) 함께 필요한 경우\n인덱스 번호도 같이 써야 한다면 `range(len())` 대신 `enumerate()` 함수를 사용하는 것이 좋습니다.\n\n```python\nfor i, item in enumerate(arr):\n    print(f\"{i}번째 요소: {item}\")\n```\n\n---\n\n### 요약\n* **현재 코드**: 동작은 잘 되지만 다른 언어(C, Java 등)의 스타일이 남아있는 코드입니다.\n* **개선 방향**: 특별히 인덱스 숫자가 필요한 게 아니라면 **`for item in arr:`** 형태로 작성하는 것을 추천합니다.",
+   "reused": true
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "tie",
+    "passes": [
+     "b",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.8051359516616314,
+  "done": true
+ },
+ "up_45|0": {
+  "prompt": "너는 커뮤니케이션 및 위기 관리 전문가다. 사과문 써줘.\n\n[더 좋은 결과를 위한 조건]\n- 사과 대상: [사과 대상 입력]\n- 사과 이유 및 사건 내용: [사과 이유/사건 발생 내용 입력]\n- 사과문 필수 포함 요소:\n  1. 명확한 책임 인정 및 진정성 있는 사과의 표현\n  2. 사건 발생 경위 및 원인 설명 (변명 및 책임 회피 표현 금지)\n  3. 구체적인 시정 조치 및 향후 재발 방지 대책\n  4. 피해 보상 또는 후속 대책 안내 (필요시)\n- 어조: 정중하고 진중한 격식체\n- 활용 채널에 맞춰 곧바로 쓸 수 있도록 '개인/SNS용'과 '공식/공지사항용' 버전으로 각각 작성하라.\n- `[ ]`로 표시된 빈칸 정보가 입력되면 반영하고, 비어 있더라도 묻거나 설명하지 말고 해당 표시를 둔 채 완결된 템플릿으로 바로 출력하라.\n- 서두, 요청 되풀이, 인사말, 해설 등 결과물 밖의 텍스트는 출력하지 말고 완성된 사과문 본문만 작성하라.",
+  "mode": "improve",
+  "fill": {
+   "[사과 대상 입력]": "화이트데이 한정판 수제 쿠키 4종 세트 구매 고객",
+   "[사과 이유/사건 발생 내용 입력]": "3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장으로 인한 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손"
+  },
+  "prompt_filled": "너는 커뮤니케이션 및 위기 관리 전문가다. 사과문 써줘.\n\n[더 좋은 결과를 위한 조건]\n- 사과 대상: 화이트데이 한정판 수제 쿠키 4종 세트 구매 고객\n- 사과 이유 및 사건 내용: 3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장으로 인한 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손\n- 사과문 필수 포함 요소:\n  1. 명확한 책임 인정 및 진정성 있는 사과의 표현\n  2. 사건 발생 경위 및 원인 설명 (변명 및 책임 회피 표현 금지)\n  3. 구체적인 시정 조치 및 향후 재발 방지 대책\n  4. 피해 보상 또는 후속 대책 안내 (필요시)\n- 어조: 정중하고 진중한 격식체\n- 활용 채널에 맞춰 곧바로 쓸 수 있도록 '개인/SNS용'과 '공식/공지사항용' 버전으로 각각 작성하라.\n- `[ ]`로 표시된 빈칸 정보가 입력되면 반영하고, 비어 있더라도 묻거나 설명하지 말고 해당 표시를 둔 채 완결된 템플릿으로 바로 출력하라.\n- 서두, 요청 되풀이, 인사말, 해설 등 결과물 밖의 텍스트는 출력하지 말고 완성된 사과문 본문만 작성하라.",
+  "query": "사과문 써줘.\n\n(참고로 내가 아는 정보: 사과 대상: 화이트데이 한정판 수제 쿠키 4종 세트 구매 고객, 사과 이유/사건 발생 내용: 3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장으로 인한 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손)",
+  "n_blanks": 2,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "[개인/SNS용]\n\n안녕하세요, [브랜드명]입니다.\n\n먼저 저희 '화이트데이 한정판 수제 쿠키 4종 세트'를 믿고 구매해 주신 고객님께 머리 숙여 깊이 사과드립니다. 소중한 분께 마음을 전하는 화이트데이를 앞두고 고객님께 큰 실망과 불편을 드려 죄송합니다.\n\n지난 3월 13일 오후 3시경, 저희 매장의 메인 오븐 온도 조절 장치에 갑작스러운 고장이 발생했습니다. 기기 이상 상황에서 제대로 된 대응 시스템을 갖추지 못한 저희의 미흡함으로 인해, 당일 출고 예정이었던 총 52건의 주문 중 20건의 배송이 누락되고 12건의 포장 파손 제품이 배송되는 불상사가 발생했습니다. 어떤 이유로도 고객님의 소중한 날을 망친 것에 대한 책임을 피할 수 없음을 잘 알고 있습니다.\n\n이에 [브랜드명]은 이번 사태에 대한 책임을 전적으로 통감하며, 피해를 입으신 고객님들께 다음과 같이 보상 체계를 진행하고자 합니다.\n\n1. 배송 누락 및 포장 파손 피해를 입으신 32분의 고객님께 결제 금액 100% 환불 처리해 드리겠습니다.\n2. 마음을 전하지 못하신 죄송한 마음을 담아, 희망하시는 분에 한해 제품 재제작 및 퀵 서비스 당일 배송(또는 전 상품 대상 [ ]% 할인 쿠폰 제공)을 진행하겠습니다.\n\n재발 방지를 위해 문제의 오븐 설비를 전면 교체하고, 정기 점검 프로세스 수립 및 비상 생산 대책을 마련하겠습니다. 아울러 포장 및 출고 전 전수 검사를 의무화하여 향후 동일한 문제가 결코 재발하지 않도록 조치하겠습니다.\n\n피해를 입으신 고객 한 분 한 분께 순차적으로 직접 연락을 드리고 있으나, 혹시라도 빠르게 안내를 받지 못하셨다면 [고객센터 연락처/오픈채팅 링크]로 연락 주시면 즉시 안내해 드리겠습니다.\n\n저희를 믿어주신 고객님들의 마음에 상처를 드린 점 다시 한번 진심으로 사과드립니다. 앞으로는 책임감 있는 자세로 신뢰를 회복할 수 있도록 최선을 다하겠습니다.\n\n[브랜드명] 대표 [성함/임직원 일동] 드림\n\n---\n\n[공식/공지사항용]\n\n[공지] '화이트데이 한정판 수제 쿠키 4종 세트' 배송 누락 및 포장 파손 건에 대한 사과의 말씀\n\n안녕하십니까, [브랜드명]입니다.\n\n저희 [브랜드명]의 '화이트데이 한정판 수제 쿠키 4종 세트'를 구매해 주시고 기대해 주신 고객 여러분께 심려를 끼쳐드린 점 머리 숙여 진심으로 사과드립니다.\n\n소중한 기념일을 위해 준비된 제품에서 발생한 결함과 차질은 어떠한 이유로도 정당화될 수 없으며, 이에 당사는 이번 사태의 심각성을 무겁게 받아들이고 발생 경위와 보상 대책, 재발 방지 조치를 다음과 같이 공지합니다.\n\n1. 사건 경위 및 원인\n202X년 3월 13일 15시경, 당사 메인 생산 설비인 오븐의 온도 조절 장치에 돌발 고장이 발생하였습니다. 오븐 내부 온도 이상으로 인해 제품 생산 및 포장 공정에 차질이 생겼으며, 비상 상황 조치 미흡으로 당일 접수된 총 52건의 주문 중 20건의 배송 누락과 12건의 포장 파손 제품 출고가 발생하였습니다. 예비 설비 가동 및 품질 검수 프로세스를 제대로 작동하지 못한 점은 전적으로 당사의 불찰입니다.\n\n2. 피해 보상 및 후속 대책\n당사는 이번 사건으로 피해를 입으신 총 32건의 구매 고객님을 대상으로 아래와 같은 보상 조치를 실시합니다.\n- 대상 고객: 3월 13일 생산분 배송 누락(20건) 및 포장 파손(12건) 대상자\n- 보상 내용: \n  ① 해당 주문 건 전액 환불 (결제 수단 취소 처리)\n  ② 희망 시 제품 재제작 후 전액 당사 부담 당일 퀵 배송 조치\n  ③ 모바일 사과문 전달 및 [ ]원 상당의 보상 쿠폰 지급\n- 처리 방법: 고객센터를 통해 대상 고객님께 개별 정중히 연락드린 후 절차 진행 예정 (연락을 받지 못하신 경우 [고객센터 연락처]로 문의 부탁드립니다.)\n\n3. 향후 재발 방지 대책\n- 생산 설비 점검 및 교체: 고장 발생 메인 오븐 설비를 즉시 최신 기종으로 전면 교체하고, 정기 예방 점검 주기를 단축하겠습니다.\n- 출고 전 전수 검사 강화: 3단계 품질 및 포장 검수 과정을 신설하여 미흡한 제품이 출고되지 않도록 강력히 조치하겠습니다.\n- 비상 대응 매뉴얼 구축: 정전, 기기 고장 등 돌발 상황 발생 시 즉각 대처할 수 있는 백업 생산 시스템을 구축하겠습니다.\n\n[브랜드명]을 믿고 구매해 주신 고객님들께 큰 불편과 실망을 드린 점에 대해 다시 한번 책임을 통감하며 깊이 사과드립니다. \n\n앞으로는 제품의 품질뿐만 아니라 생산 및 배송 전 과정에 걸쳐 한 치의 소홀함이 없도록 철저히 관리할 것을 약속드립니다.\n\n202X년 3월 [ ]일\n[브랜드명] 대표 [성함] 올림",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "제공해주신 정보를 바탕으로 작성한 공식 사과문입니다. \n상황의 심각성을 인지하고 진심 어린 사과와 함께 명확한 보상 및 재발 방지 대책을 담아 작성했습니다. `[ ]` 표기된 부분만 상황에 맞게 수정하여 사용하시면 됩니다.\n\n---\n\n**[사과문] 화이트데이 한정판 수제 쿠키 세트 배송 오류 및 파손에 대해 고개 숙여 사과드립니다.**\n\n안녕하세요, **[브랜드명/가게명]** 대표 **[이름]**입니다.\n\n먼저 저희 **[브랜드명]**의 '화이트데이 한정판 수제 쿠키 4종 세트'를 믿고 구매해 주신 고객 여러분께 심려와 불편을 끼쳐드려 진심으로 고개 숙여 사과드립니다.\n\n소중한 분에게 마음을 전하는 화이트데이를 앞두고 발생한 이번 사고에 대해 경위를 설명해 드리고자 합니다.\n\n지난 3월 13일 오후 3시경, 저희 매장의 메인 오븐 온도 조절 장치에 갑작스러운 고장이 발생했습니다. 이로 인해 정해진 출고 시간을 맞추기 위해 긴급 조치를 취하는 과정에서 심각한 작업 혼선이 발생하였습니다. \n\n그 결과, 당일 접수된 총 52건의 주문 중 **20건의 배송 누락**과 **12건의 포장 파손**이라는 절대 있어서는 안 될 중대한 과실이 발생하였습니다.\n\n특별하고 행복해야 할 날을 위해 저희 제품을 선택해 주신 고객님들의 기대에 부응하지 못하고, 선물하시는 분과 받으시는 분 모두에게 큰 실망과 불편을 드린 점 변명의 여지가 없는 저희의 불찰입니다.\n\n현재 저희는 피해를 입으신 고객 한 분 한 분께 개별 연락을 드리고 있으며, 다음과 같은 보상 조치를 즉시 이행하겠습니다.\n\n1. **배송 누락 고객님 (20건):** 구매 금액 **전액 환불** 조치와 함께, 원하실 경우 화이트데이 당일 **[퀵 서비스 / 당일 재배송]**을 통해 제품을 다시 전달해 드리겠습니다.\n2. **포장 파손 고객님 (12건):** 구매 금액 **전액 환불**과 함께 죄송한 마음을 담아 **[소정의 사과 선물 / 재구매 할인 쿠폰]**을 지급해 드리겠습니다.\n\n아울러 향후 이러한 일이 다시는 재발하지 않도록 매장 내 모든 제조 설비에 대한 정기 점검 프로세스를 강화하고, 비상 상황 시의 출고 및 검수 시스템을 전면 재정비하겠습니다.\n\n저희를 믿고 구매해 주신 소중한 마음을 훼손한 점에 대해 다시 한번 깊이 반성하며, 피해 입으신 모든 고객님께 진심으로 사죄드립니다. \n\n고객님의 불편을 최소화할 수 있도록 마지막 한 분까지 책임지고 소통하며 해결하겠습니다. \n\n죄송합니다.\n\n2024년 3월 [날짜]일\n**[브랜드명/가게명] 대표 [이름] 올림**\n\n---\n\n**[작성 팁 및 참고사항]**\n* **보상 내용 수정:** 괄호(`[ ]`)로 표시된 보상안(전액 환불, 퀵 배송 등)은 현재 준비하실 수 있는 실제 보상책으로 자유롭게 변경해 사용하세요.\n* **전달 채널:** 인스타그램/블로그 게시 외에도, 해당 32분의 고객에게는 문자 메시지(SMS)나 카카오톡 알림톡으로 본 사과문과 함께 개별 연락을 취하시는 것을 권장합니다.",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.5272479564032697,
+  "done": true
+ },
+ "up_45|1": {
+  "prompt": "너는 위기관리 커뮤니케이션 및 사과문 작성 전문가다. 아래 정보와 조건을 바탕으로 진정성 있는 사과문을 작성하라.\n\n[기본 정보]\n- 사과 대상: [사과 대상 입력]\n- 발생한 사건 및 경위: [발생 사건 및 경위 입력]\n\n[더 좋은 결과를 위한 조건]\n1. 사과문의 핵심 요소(명확한 사과 표명 -> 발생 사건 경위 설명 -> 명확한 책임 인정 -> 구체적 재발 방지 대책 -> 거듭된 사과)를 순서대로 갖추어 작성하라.\n2. 변명이나 책임 회피성 표현(예: '본의 아니게', '오해가 있어')을 배제하고 진정성 있고 진중한 톤앤매너를 유지하라.\n3. 사과문 외의 서두 인사, 해설, 작성 팁 등 결과물 밖의 말은 일체 출력하지 말고 사과문 본문만 제시하라.\n4. [ ] 표시된 항목의 정보가 없거나 비어 있는 경우 묻거나 설명하지 말고 표시를 그대로 유지한 채 바로 채워 쓸 수 있는 완성형 템플릿으로 작성하라.",
+  "mode": "improve",
+  "fill": {
+   "[사과 대상 입력]": "화이트데이 한정판 수제 쿠키 4종 세트 구매 고객",
+   "[발생 사건 및 경위 입력]": "3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장 및 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손"
+  },
+  "prompt_filled": "너는 위기관리 커뮤니케이션 및 사과문 작성 전문가다. 아래 정보와 조건을 바탕으로 진정성 있는 사과문을 작성하라.\n\n[기본 정보]\n- 사과 대상: 화이트데이 한정판 수제 쿠키 4종 세트 구매 고객\n- 발생한 사건 및 경위: 3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장 및 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손\n\n[더 좋은 결과를 위한 조건]\n1. 사과문의 핵심 요소(명확한 사과 표명 -> 발생 사건 경위 설명 -> 명확한 책임 인정 -> 구체적 재발 방지 대책 -> 거듭된 사과)를 순서대로 갖추어 작성하라.\n2. 변명이나 책임 회피성 표현(예: '본의 아니게', '오해가 있어')을 배제하고 진정성 있고 진중한 톤앤매너를 유지하라.\n3. 사과문 외의 서두 인사, 해설, 작성 팁 등 결과물 밖의 말은 일체 출력하지 말고 사과문 본문만 제시하라.\n4. [ ] 표시된 항목의 정보가 없거나 비어 있는 경우 묻거나 설명하지 말고 표시를 그대로 유지한 채 바로 채워 쓸 수 있는 완성형 템플릿으로 작성하라.",
+  "query": "사과문 써줘.\n\n(참고로 내가 아는 정보: 사과 대상: 화이트데이 한정판 수제 쿠키 4종 세트 구매 고객, 발생 사건 및 경위: 3월 13일 오후 3시 메인 오븐의 온도 조절 장치 갑작스러운 고장 및 총 52건의 주문 중 20건 배송 누락 및 12건 포장 파손)",
+  "n_blanks": 2,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "**[브랜드명] 화이트데이 한정판 수제 쿠키 세트 배송 오류 및 포장 파손에 대한 사과문**\n\n저희 [브랜드명]의 '화이트데이 한정판 수제 쿠키 4종 세트'를 믿고 구매해 주신 고객 여러분께 머리 숙여 깊이 사과드립니다. 화이트데이라는 소중한 날을 맞아 기대감을 안고 상품을 기다려 주셨을 고객님들께 큰 실망과 불편을 드렸습니다.\n\n이번 사건의 경위를 사실대로 말씀드리겠습니다. \n화이트데이 전날인 3월 13일 오후 3시경, 생산 과정에서 메인 오븐의 온도 조절 장치가 갑작스럽게 고장 나는 사고가 발생했습니다. 이로 인해 정해진 시간 내에 전체 주문을 정상 처리하지 못하였고, 당일 발생한 총 52건의 주문 중 20건의 배송이 누락되었으며, 12건의 상품은 급히 포장하여 배송하는 과정에서 포장이 파손된 채 전달되었음을 확인했습니다.\n\n장비의 결함으로 인해 발생한 상황이었으나, 비상 상황에 대한 대비책을 미리 마련하지 못하고 마지막 출고 검수를 소홀히 한 책임은 전적으로 저희 [브랜드명]에 있습니다. 특별한 날을 위해 저희 제품을 선택해 주신 고객님의 소중한 마음과 시간을 훼손한 점에 대해 그 어떤 변명도 하지 않겠습니다. \n\n저희는 이번 일로 피해를 입으신 고객 여러분께 책임을 다하기 위해 다음과 같은 즉각적인 조치와 재발 방지 대책을 시행하고자 합니다.\n\n1. **피해 고객 대상 전액 환불 및 추가 보상**\n배송 누락(20건) 및 포장 파손(12건) 피해를 입으신 총 32분의 고객님께는 [날짜/시간 예: 금일 내] 개별적으로 연락을 드려 구매 금액 **전액 환불**을 진행해 드리겠습니다. 이에 더해 미흡한 처리로 상처받으신 마음에 조금이나마 사죄하고자 [추가 보상 내용: 예) 새 제품 재발송 / 할인 쿠폰 제공 등]을 함께 조치해 드리겠습니다.\n\n2. **생산 설비 및 비상 관리 시스템 전면 교체**\n고장 난 메인 오븐을 포함한 모든 생산 설비의 정밀 점검 및 부품 교체를 완료하겠습니다. 또한, 향후 동일한 장비 고장이 발생하더라도 생산 차질이 없도록 예비 설비 구축 및 비상 생산 프로세스를 즉시 도입하겠습니다.\n\n3. **출고 및 포장 검수 프로세스 강화**\n제품 포장 단계를 전면 재검토하여 운송 중 파손을 완벽히 막을 수 있도록 완충 포장을 강화하고, 최종 출고 전 2중 검수 시스템을 의무화하겠습니다.\n\n고객님께서 느끼셨을 실망감과 불편함에 비하면 저희의 조치가 턱없이 부족할 수 있음을 잘 알고 있습니다. 실추된 신뢰를 회복하는 데에는 많은 시간과 노력이 필요하겠지만, 보내주신 책망을 겸허히 받아들이고 철저한 개선을 통해 발전된 모습을 보여드리겠습니다.\n\n이번 일로 상처를 받으신 모든 구매 고객님께 다시 한번 진심으로 머리 숙여 사과드립니다.\n\n\n[202X년 X월 X일]\n[브랜드명] 대표 [대표자 이름] 드림\n\n■ 본 사안 관련 전담 문의처: [고객센터 전화번호 / 이메일 주소]",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "제공해주신 정보를 바탕으로 진정성 있고 격식 있는 사과문을 작성했습니다. 상황에 맞게 상호명이나 구체적인 보상안 수치를 수정하여 사용하시기 바랍니다.\n\n---\n\n**[사과문] 화이트데이 한정판 수제 쿠키 세트 배송 지연 및 포장 파손에 대해 고개 숙여 사과드립니다.**\n\n안녕하세요, [상호명] 대표 [이름]입니다.\n\n먼저 소중한 분께 마음을 전하는 화이트데이를 앞두고, 저희 **'화이트데이 한정판 수제 쿠키 4종 세트'**를 믿고 구매해 주신 모든 고객님께 심려와 불편을 끼쳐드린 점 고개 숙여 깊이 사과드립니다.\n\n특별한 날을 더욱 특별하게 만들어 드려야 함에도 불구하고, 저희의 미흡한 준비와 관리 소홀로 인해 고객님들께 큰 실망을 안겨드렸습니다. 이에 이번 사건의 경위와 향후 조치 계획에 대해 정직하게 말씀드리고자 합니다.\n\n**1. 사건 발생 경위 및 피해 현황**\n3월 13일 오후 3시경, 제품 생산의 핵심 설비인 메인 오븐의 온도 조절 장치에 갑작스러운 고장이 발생하였습니다. 이로 인해 정해진 출고 시간을 맞추기 위해 급하게 작업을 진행하는 과정에서 엄격하게 이루어져야 할 품질 검수 및 포장 공정에 중대한 차질이 생겼습니다.\n\n이번 화이트데이 한정판 제품의 총 주문건수 52건 중, 피해 상황은 다음과 같습니다.\n*   **배송 누락 및 지연:** 총 20건\n*   **제품 포장 파손:** 총 12건\n\n**2. 후속 조치 및 보상 방안**\n기다려주신 마음과 소중한 기념일을 망친 데 대한 책임은 전적으로 저희에게 있습니다. 피해를 입으신 고객님 한 분 한 분께 다음과 같이 최우선으로 보상 조치를 진행하겠습니다.\n\n*   **배송 누락/지연 고객님 (20건):** \n    오늘(14일) 오전 중 퀵 서비스 등을 통해 즉시 전량 재배송 처리를 완료해 드리거나, 원하실 경우 **[100% 환불 처리]**를 도와드리겠습니다. 더불어 미안한 마음을 담아 다음 구매 시 사용하실 수 있는 **[모바일 기프티콘/할인 쿠폰]**을 함께 발송해 드리겠습니다.\n*   **포장 파손 피해 고객님 (12건):** \n    수령하신 제품의 포장 파손으로 불편을 겪으신 고객님께는 **[제품 금액 100% 전액 환불]** 조치를 취해드리겠습니다.\n\n*(※ 3월 14일 오전 중으로 피해를 입은 고객님들께 개별적으로 연락을 드려 원하시는 보상 방안을 확인하고 처리해 드리겠습니다.)*\n\n**3. 재발 방지 대책**\n저희 [상호명]은 이번 일을 계기로 설비 관리 프로세스를 전면 재검토하겠습니다. 메인 오븐 등 주요 생산 설비의 정기 점검 주기를 단축하고, 비상시를 대비한 예비 설비를 구축하겠습니다. 또한 물량이 집중되는 시즌에도 포장 및 검수 단계의 다중 확인 시스템을 도입하여 동일한 일이 재발하지 않도록 철저히 관리하겠습니다.\n\n고객님께서 선물에 담으려 하셨던 따뜻한 마음을 온전히 전달해 드리지 못해 마음이 매우 묵직하고 죄송할 따름입니다. 보내주신 비판과 질책은 겸허히 받아들이고, 신뢰를 회복할 수 있도록 최선을 다해 수습하겠습니다.\n\n다시 한번 이번 일로 피해를 입으신 모든 고객님께 진심으로 고개 숙여 사과드립니다.\n\n202X년 3월 14일  \n[상호명] 대표 [이름] 드림\n\n**[고객센터/문의처]**\n*   전화번호: 010-XXXX-XXXX / 02-XXX-XXXX\n*   운영 시간: 사태 수습 완료 시까지 24시간 전담 대응",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 0.8535108958837773,
+  "done": true
+ },
+ "up_10|0": {
+  "prompt": "너는 대학생 타겟의 마케팅 카피라이터다. 아래 조건과 재료를 바탕으로 대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### [원래 요청 내용]\n대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### [더 좋은 결과를 위한 조건]\n- [동아리 이름 입력]이(가) 포함된 임팩트 있는 메인 헤드카피(제목)와 부제(서브카피)를 작성하라.\n- 동아리의 성격에 따라 톤앤매너를 다르게 활용할 수 있도록, 대표적인 동아리 유형(1. 학술/자기계발, 2. 공연/예술, 3. 친목/체육 등)에 맞는 컨셉별 버전을 각각 제안하라.\n- [동아리 분야 및 주요 활동 입력], 활동 혜택, [모집 기간 및 지원 방법 입력] 항목을 포함하여 포스터 구성 요소가 직관적으로 보이도록 작성하라.\n- 대학생들의 흥미를 끌 수 있는 친근하고 호기심을 자극하는 문체를 사용하라.\n- [ ] 표기된 빈칸이 비어 있는 경우 묻거나 설명하지 말고 그 표기를 그대로 둔 채 바로 사용할 수 있는 포스터 템플릿 형태 그대로 완성하라.\n- 인사말, 서두, 사용 팁, 점검 결과 등 결과물 외의 부연 설명은 일절 출력하지 말고 포스터 문구 결과물만 출력하라.",
+  "mode": "improve",
+  "fill": {
+   "[동아리 이름 입력]": "중앙 사진 출사 동아리 '클릭(CLICK)'",
+   "[동아리 분야 및 주요 활동 입력]": "월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디",
+   "[모집 기간 및 지원 방법 입력]": "2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지, 인스타그램 프로필 링크(구글 폼) 접수"
+  },
+  "prompt_filled": "너는 대학생 타겟의 마케팅 카피라이터다. 아래 조건과 재료를 바탕으로 대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### [원래 요청 내용]\n대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### [더 좋은 결과를 위한 조건]\n- 중앙 사진 출사 동아리 '클릭(CLICK)'이(가) 포함된 임팩트 있는 메인 헤드카피(제목)와 부제(서브카피)를 작성하라.\n- 동아리의 성격에 따라 톤앤매너를 다르게 활용할 수 있도록, 대표적인 동아리 유형(1. 학술/자기계발, 2. 공연/예술, 3. 친목/체육 등)에 맞는 컨셉별 버전을 각각 제안하라.\n- 월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디, 활동 혜택, 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지, 인스타그램 프로필 링크(구글 폼) 접수 항목을 포함하여 포스터 구성 요소가 직관적으로 보이도록 작성하라.\n- 대학생들의 흥미를 끌 수 있는 친근하고 호기심을 자극하는 문체를 사용하라.\n- [ ] 표기된 빈칸이 비어 있는 경우 묻거나 설명하지 말고 그 표기를 그대로 둔 채 바로 사용할 수 있는 포스터 템플릿 형태 그대로 완성하라.\n- 인사말, 서두, 사용 팁, 점검 결과 등 결과물 외의 부연 설명은 일절 출력하지 말고 포스터 문구 결과물만 출력하라.",
+  "query": "대학교 동아리 신입 부원 모집 포스터 문구 만들어줘.\n\n(참고로 내가 아는 정보: 동아리 이름: 중앙 사진 출사 동아리 '클릭(CLICK)', 동아리 분야 및 주요 활동: 월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디, 모집 기간 및 지원 방법: 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지, 인스타그램 프로필 링크(구글 폼) 접수)",
+  "n_blanks": 4,
+  "n_filled": 3,
+  "ttalkak": {
+   "output": "# [OPTION 1. 학술/자기계발 컨셉]\n\n**카메라 몰라도 OK! 초보에서 보정 고수까지,**\n**중앙 사진 출사 동아리 ‘클릭(CLICK)’에서 내 청춘을 디벨롭(Develop)하자!**\n\n*이론부터 라이트룸 보정 스터디, 11월 정기 전시회 작가 데뷔까지!*\n*사진으로 스펙과 감성을 동시에 채울 2024 신입 부원을 모집합니다.*\n\n---\n\n### 📷 주요 활동 (WHAT WE DO)\n- **📸 월 1회 정기 출사:** 출사지 탐방 및 현장 실습 (계절별 출사 핫플 탐방!)\n- **💻 사진 보정 스터디:** 라이트룸 & 포토샵 기초부터 인스타그램 감성 보정법까지 마스터\n- **🖼️ 11월 정기 전시회:** 1년 동안 쌓은 나의 프레임을 세상에 선보이는 정기 전시 개최\n\n### 🎁 CLICK 부원 전용 혜택\n- 동아리 전용 포토북 및 필름 카메라 렌탈 지원 `[ ]`\n- 정기 전시회 개인 작품 엽서 제작 지원\n- 초보자 맞춤형 1:1 카메라 조작법 멘토링\n- 개인 포트폴리오 제작 및 프로필 사진 촬영 지원\n\n### 🗓️ 모집 안내\n- **모집 대상:** 사진 실력을 키우고 싶은 `[ ]` 대학교 재/휴학생 누구나 (카메라 없어도 OK, 폰카 환영!)\n- **모집 기간:** 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n- **면접 일정:** `[ ]`\n\n### 📝 지원 방법\n- **인스타그램 프로필 링크(구글 폼)** 접속 후 지원서 작성\n- **공식 인스타그램:** @`[ ]`\n\n### 📞 문의 사항\n- **회장:** `[ ]` (010-`[ ]`-`[ ]`)\n- **부회장:** `[ ]` (010-`[ ]`-`[ ]`)\n\n\n==================================================\n\n\n# [OPTION 2. 공연/예술 컨셉]\n\n**찰나의 순간을 영원으로 찰칵!**\n**중앙 사진 출사 동아리 ‘클릭(CLICK)’에서 당신의 낭만을 셔터에 담으세요.**\n\n*11월, 당신의 프레임이 하나의 작품이 되는 곳.*\n*렌즈 너머 세상을 시적인 감성으로 그려갈 당신을 기다립니다.*\n\n---\n\n### 📷 주요 활동 (WHAT WE DO)\n- **📸 월 1회 정기 출사:** 숨겨진 미학을 찾아 떠나는 감성 테마 출사\n- **💻 사진 보정 스터디:** 나만의 색감과 분위기를 완성하는 컬러 그래딩 & 보정 스터디\n- **🖼️ 11월 정기 전시회:** 찰나의 순간들을 모아 갤러리에 채우는 정기 전시회\n\n### 🎁 CLICK 부원 전용 혜택\n- 정기 전시회 굿즈(엽서, 포스터) 제작 및 유통 지원\n- 동아리 전용 갤러리 대관 및 전시 디렉팅 기회 제공\n- 필름 카메라 사진 스캔비 지원 `[ ]`\n- 아날로그 감성 가득한 필카 벙개 모임\n\n### 🗓️ 모집 안내\n- **모집 대상:** 자신만의 시선을 사진으로 표현하고 싶은 `[ ]` 대학교 재/휴학생 누구나\n- **모집 기간:** 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n- **면접 일정:** `[ ]`\n\n### 📝 지원 방법\n- **인스타그램 프로필 링크(구글 폼)** 접속 후 지원서 작성\n- **공식 인스타그램:** @`[ ]`\n\n### 📞 문의 사항\n- **회장:** `[ ]` (010-`[ ]`-`[ ]`)\n- **부회장:** `[ ]` (010-`[ ]`-`[ ]`)\n\n\n==================================================\n\n\n# [OPTION 3. 친목/체육 컨셉]\n\n**폰카도 OK! 멍때리던 주말은 끝, 어디로든 떠나볼까?**\n**중앙 사진 출사 동아리 ‘클릭(CLICK)’과 함께할 인싸 인생샷 맛집 구함!**\n\n*좋은 사람들과 맛집 탐방부터 낭만 가득한 월 1회 정기 출사까지!*\n*대학 생활 낭만 수치 100% 충전하고 싶다면 고민 말고 지금 바로 CLICK!*\n\n---\n\n### 📷 주요 활동 (WHAT WE DO)\n- **📸 월 1회 정기 출사:** 탁 트인 풍경으로 떠나는 여행 겸 출사 (인생샷 무한 제공!)\n- **💻 사진 보정 스터디:** SNS 피드 인싸 만드는 초간단 폰카/디카 보정 꿀팁 스터디\n- **🖼️ 11월 정기 전시회:** 1년 동안 함께 만든 추억을 기록하는 감동의 정기 전시회\n\n### 🎁 CLICK 부원 전용 혜택\n- 출사 후 맛집 탐방 & 뒷풀이 비용 지원 `[ ]`\n- 매달 베스트 '인생샷' 선정 및 기프티콘 증정\n- 엠티(MT), 벙개 모임, 친목 스포츠 활동 등 쉴 틈 없는 떡상 케미\n- 똥손 탈출! 프로 재능기부 부원들의 인생 샷 전담 마크\n\n### 🗓️ 모집 안내\n- **모집 대상:** 사진 찍고 찍히는 걸 좋아하는 `[ ]` 대학교 재/휴학생 누구나 (카메라 없어도 OK!)\n- **모집 기간:** 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n- **면접 일정:** `[ ]`\n\n### 📝 지원 방법\n- **인스타그램 프로필 링크(구글 폼)** 접속 후 지원서 작성\n- **공식 인스타그램:** @`[ ]`\n\n### 📞 문의 사항\n- **회장:** `[ ]` (010-`[ ]`-`[ ]`)\n- **부회장:** `[ ]` (010-`[ ]`-`[ ]`)",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "대학교 동아리 홍보 포스터에 활용하기 좋은 문구 조합을 **3가지 콘셉트(감성적 / 트렌디·활기찬 / 심플·핵심형)**로 준비했습니다. 동아리의 분위기에 맞는 스타일을 선택해 사용해 보세요!\n\n---\n\n### Option 1. 감성적인 콘셉트 📸\n> **\"청춘의 한 컷을 기록하다\"** (사진의 감성과 추억을 강조하는 분위기)\n\n**[메인 타이틀]**\n**찰나의 순간을 기록하다, 우리의 청춘을 '클릭'하다.**\n중앙 사진 출사 동아리 **CLICK** 2024 신입 부원 모집\n\n**[소개 문구]**\n스마트폰 갤러리에 잠들어 있는 사진이 아쉬웠다면?  \n좋은 사람들과 함께 잊지 못할 풍경을 담고 싶다면?  \n지금, **'클릭(CLICK)'**의 셔터를 함께 눌러주세요!\n\n**[주요 활동 (WHAT WE DO)]**\n* 🚌 **월 1회 정기 출사** : 계절을 느끼며 떠나는 힐링 출사 여행\n* 💻 **사진 보정 스터디** : 기초 이론부터 라이트룸/포토샵 보정까지! (왕초보 환영!)\n* 🖼️ **11월 정기 전시회** : 1년 동안 담아낸 내 작품을 사람들에게 선보이는 기회\n\n**[모집 안내]**\n* **모집 기간** : 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n* **지원 방법** : 인스타그램 **@동아리아이디** 프로필 링크 (구글 폼 작성)\n* **지원 대상** : 카메라가 없어도 OK! 스마트폰만 있어도 사진을 사랑한다면 누구나!\n\n---\n\n### Option 2. 트렌디 & 활기찬 콘셉트 ✨\n> **\"너의 대학 생활을 찰칵!\"** (친근하고 부담 없이 다가가는 분위기)\n\n**[메인 타이틀]**\n**찰칵! 📸 당신의 대학 생활에 감성을 더할 시간!**\n중앙 사진 출사 동아리 **'클릭(CLICK)'** 2024 신입부원 모집\n\n**[서브 타이틀]**\n사진을 몰라도 OK! 카메라인 척하는 스마트폰도 OK!  \n사진과 여행, 낭만을 좋아하는 여러분을 기다립니다!\n\n**[클릭에서 얻어갈 수 있는 3가지!]**\n1️⃣ **[여행]** 매월 1회! 공부에 지친 나를 위한 힐링 정기 출사 🌿  \n2️⃣ **[스킬]** '똥손'도 '금손'으로 만드는 사진 보정 스터디 🎨  \n3️⃣ **[추억]** 1년간의 기록을 한눈에! 11월 정기 전시회 개최 🏛️\n\n**[신청 방법]**\n* **접수 기간** : 3/4(월) ~ 3/15(금) 18:00 마감!\n* **접수 방법** : 인스타 프로필 상단 구글 폼 링크 클릭!\n* **문의 사항** : 인스타그램 DM (@동아리아이디) / 회장 010-XXXX-XXXX\n\n---\n\n### Option 3. 심플 & 가독성 중심 (포스터에 텍스트가 적은 버전) 🎯\n> **한눈에 정보가 들어오는 명확한 레이아웃**\n\n**[헤드카피]**\n**중앙 사진 출사 동아리 ‘클릭(CLICK)’**\n**2024 1학기 신입 부원 모집**\n\n**[ACTIVITIES]**\n* **정기 출사** | 월 1회 전국 명소 및 감성 스팟 출사\n* **보정 스터디** | 라이트룸 / 포토샵 인물·풍경 보정 팁 공유\n* **정기 전시회** | 11월 갤러리 렌탈 및 부원 작품 전시회 개최\n\n**[SCHEDULE & APPLY]**\n* **모집 기간** : 2024. 03. 04 (월) ~ 03. 15 (금) 18:00\n* **지원 방법** : 인스타그램 프로필 링크 (구글 폼 접수)\n* **문의** : Instagram @동아리아이디\n\n*(※ 카메라 미소유자 및 스마트폰 촬영자도 대환영!)*\n\n---\n\n💡 **포스터 제작 팁 (Tip)**\n1. **QR 코드 추가:** 구글 폼 링크로 바로 이동할 수 있는 QR 코드를 포스터 하단이나 인스타그램 접수 안내 옆에 넣으면 지원율이 훨씬 올라갑니다.\n2. **카메라 미소유자 안내:** 신입생들이 \"카메라가 없는데 지원해도 되나?\"라는 고민을 가장 많이 합니다. **\"스마트폰 카메라 환영 / 카메라 없어도 참여 가능\"** 문구를 강조해 주시면 좋습니다.",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "tie",
+    "passes": [
+     "a",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.306701030927835,
+  "done": true
+ },
+ "up_10|1": {
+  "prompt": "너는 대학생 대상 마케팅 카피라이터다. 아래 요청에 맞춰 대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### 작업 지시\n대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n---\n\n### 동아리 정보 및 기본 재료\n- 동아리 종류: [동아리 종류 입력]\n- 주요 활동 내용: [주요 활동 내용 입력]\n- 모집 대상 및 신청 기간: [모집 대상 및 신청 기간 입력]\n- 지원 방법/문의처: [지원 방법 및 문의처 입력]\n\n---\n\n### 더 좋은 결과를 위한 작성 조건\n1. 톤앤매너: 20대 대학생의 눈길을 사로잡는 친근하고 열정적이며 직관적인 어조로 작성할 것.\n2. 구성 요소:\n   - 헤드카피 (임팩트 있는 한 줄 카피)\n   - 서브카피 (동아리의 매력과 혜택을 강조하는 문구)\n   - 주요 활동 요약 (포인트 위주 정리)\n   - 모집 정보 및 신청 안내 (CTA)\n3. 포스터 텍스트의 특성에 맞춰 너무 길지 않게 가독성을 확보할 것.\n4. 만약 입력 정보에 `[ ]` 형태의 빈칸이 그대로 남아있더라도 추가 질문이나 설명을 하지 말고, 해당 부분을 표시 형태로 남겨둔 채 즉시 사용할 수 있는 완성형 포스터 템플릿으로 출력할 것.\n5. 인사말, 서두, 사용 팁, 주의사항 등 포스터 문구 이외의 불필요한 텍스트는 일절 출력하지 말고 포스터 본문만 생성할 것.",
+  "mode": "improve",
+  "fill": {
+   "[동아리 종류 입력]": "사진 출사 동아리",
+   "[주요 활동 내용 입력]": "월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디",
+   "[모집 대상 및 신청 기간 입력]": "모집 대상: 24학번 신입생 및 재학생 (전공·학년 무관) / 모집 기간: 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지",
+   "[지원 방법 및 문의처 입력]": "지원 방법: 인스타그램 프로필 링크(구글 폼) 접수 / 인스타그램 계정: @msu_click_official"
+  },
+  "prompt_filled": "너는 대학생 대상 마케팅 카피라이터다. 아래 요청에 맞춰 대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n### 작업 지시\n대학교 동아리 신입 부원 모집 포스터 문구를 작성하라.\n\n---\n\n### 동아리 정보 및 기본 재료\n- 동아리 종류: 사진 출사 동아리\n- 주요 활동 내용: 월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디\n- 모집 대상 및 신청 기간: 모집 대상: 24학번 신입생 및 재학생 (전공·학년 무관) / 모집 기간: 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n- 지원 방법/문의처: 지원 방법: 인스타그램 프로필 링크(구글 폼) 접수 / 인스타그램 계정: @msu_click_official\n\n---\n\n### 더 좋은 결과를 위한 작성 조건\n1. 톤앤매너: 20대 대학생의 눈길을 사로잡는 친근하고 열정적이며 직관적인 어조로 작성할 것.\n2. 구성 요소:\n   - 헤드카피 (임팩트 있는 한 줄 카피)\n   - 서브카피 (동아리의 매력과 혜택을 강조하는 문구)\n   - 주요 활동 요약 (포인트 위주 정리)\n   - 모집 정보 및 신청 안내 (CTA)\n3. 포스터 텍스트의 특성에 맞춰 너무 길지 않게 가독성을 확보할 것.\n4. 만약 입력 정보에 `[ ]` 형태의 빈칸이 그대로 남아있더라도 추가 질문이나 설명을 하지 말고, 해당 부분을 표시 형태로 남겨둔 채 즉시 사용할 수 있는 완성형 포스터 템플릿으로 출력할 것.\n5. 인사말, 서두, 사용 팁, 주의사항 등 포스터 문구 이외의 불필요한 텍스트는 일절 출력하지 말고 포스터 본문만 생성할 것.",
+  "query": "대학교 동아리 신입 부원 모집 포스터 문구 만들어줘.\n\n(참고로 내가 아는 정보: 동아리 종류: 사진 출사 동아리, 주요 활동 내용: 월 1회 정기 출사, 11월 정기 전시회, 사진 보정 스터디, 모집 대상 및 신청 기간: 모집 대상: 24학번 신입생 및 재학생 (전공·학년 무관) / 모집 기간: 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지, 지원 방법 및 문의처: 지원 방법: 인스타그램 프로필 링크(구글 폼) 접수 / 인스타그램 계정: @msu_click_official)",
+  "n_blanks": 4,
+  "n_filled": 4,
+  "ttalkak": {
+   "output": "셔터를 누르는 순간, 너의 대학 생활은 작품이 된다!\n**2024 사진 출사 동아리 신입 부원 모집**\n\n카메라가 없어도 OK! 사진을 몰라도 OK!\n스마트폰 하나로 떠나는 감성 여행, \n찰나의 순간을 함께 기록할 여러분을 기다립니다.\n\n---\n\n📸 **주요 활동**\n\n- **월 1회 정기 출사** | 답답한 캠퍼스를 벗어나 떠나는 인생샷 출사 여행!\n- **사진 보정 스터디** | 라이트룸 기초부터 꿀팁까지! '보정 똥손'도 '금손' 변신\n- **11월 정기 전시회** | 내가 찍은 사진이 갤러리에? 낭만 가득한 작가 데뷔 기회!\n\n---\n\n📌 **모집 안내**\n\n- **모집 대상**: 24학번 신입생 및 재학생 누구나 (전공·학년 무관!)\n- **모집 기간**: 2024년 3월 4일(월) ~ 3월 15일(금) 18:00 마감\n\n📱 **지원 방법 & 문의**\n\n- **지원 방법**: 인스타그램 프로필 링크(구글 폼) 접수\n- **공식 인스타그램**: @msu_click_official\n- **문의**: 인스타그램 DM으로 편하게 문의해 주세요!",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "대학 생활의 특별한 순간을 담을 **사진 출사 동아리** 신입 부원 모집 포스터 문구입니다. \n\n포스터 디자인 콘셉트에 맞춰 선택해 사용하실 수 있도록 **[감성형]**, **[직관형]**, **[카드뉴스/SNS용]** 3가지 버전을 준비했습니다.\n\n---\n\n### 📌 [버전 1] 감성형 (사진 느낌을 강조한 분위기 있는 문구)\n\n> **찰칵, 당신의 대학 생활을 한 컷의 추억으로**\n> **사진 출사 동아리 ‘CLICK’ 2024 신입 부원 모집**\n>\n> 셔터를 누르는 순간, 우리의 청춘은 작품이 됩니다.  \n> 카메라가 없어도, 사진을 잘 몰라도 괜찮아요.  \n> 좋은 사람들과 함께 풍경을 담고 추억을 남길 여러분을 기다립니다!\n>\n> **📸 주요 활동**\n> - **월 1회 정기 출사** | 계절의 예쁜 순간을 찾아 떠나는 당일치기/1박 출사\n> - **사진 보정 스터디** | 라이트룸·포토샵 기초부터! '똥손'도 '금손' 만드는 꿀팁 전수\n> - **11월 정기 전시회** | 한 해 동안 직접 찍은 사진으로 만드는 낭만적인 갤러리 전시\n>\n> **🙋‍♂️ 모집 대상**\n> - 24학번 신입생 및 재학생 누구나 (전공·학년 무관)\n> - *카메라가 없어도 스마트폰만 있다면 대환영!*\n>\n> **📅 모집 기간**\n> - 2024년 3월 4일(월) ~ 3월 15일(금) 18:00까지\n>\n> **📝 지원 방법 & 문의**\n> - **지원 방법:** 인스타그램 프로필 링크(구글 폼) 접수\n> - **인스타그램:** @msu_click_official\n> - **문의:** 인스타그램 DM\n\n---\n\n### 📌 [버전 2] 직관형 (정보 전달에 집중한 깔끔한 포스터용)\n\n> **[사진 출사 동아리] 2024 1학기 신입 부원 모집**\n>\n> **사진으로 만나는 새로운 만남, 새로운 풍경!**\n> 사진을 좋아하는 사람도, 여행과 출사를 즐기고 싶은 사람도 OK!\n>\n> ---\n>\n> **[ WHAT WE DO ]**\n> - **월 1회 정기 출사** (봄 벚꽃부터 가을 단풍까지 힐링 여행)\n> - **사진 보정 스터디** (기초 보정법 Master)\n> - **11월 정기 전시회** (내 사진이 갤러리에 걸리는 기회)\n>\n> **[ WHO ]**\n> - 모집 대상: 24학번 신입생 & 재학생 (전공/학년 무관)\n>\n> **[ WHEN ]**\n> - 모집 기간: 03.04(월) ~ 03.15(금) 18:00까지\n>\n> **[ HOW ]**\n> - 지원 방법: 인스타그램 **@msu_click_official** 프로필 상단 구글 폼 작성\n> - 기타 문의: 인스타그램 DM 문의\n\n---\n\n### 📌 [버전 3] 짧은 문구형 (SNS 홍보물 및 한눈에 들어오는 가로형 포스터용)\n\n> **\"너의 순간을 클릭해!\"**\n> **사진 출사 동아리 ‘CLICK’ 신입 부원 모집**\n> \n> 📍 **활동 내용**\n> 🍃 월 1회 힐링 정기 출사\n> 🎨 감성 폭발 사진 보정 스터디\n> 🖼 11월 정기 전시회 개최\n>\n> 📍 **모집 대상**\n> 24학번 신입생 & 재학생 (누구나 환영!)\n>\n> 📍 **모집 기간**\n> 24.03.04(월) ~ 03.15(금) 18시 마감\n>\n> 📍 **지원 방법**\n> IG: **@msu_click_official** ➡️ 프로필 링크 타고 지원서 제출!\n\n---\n\n💡 **포스터 제작 팁 (Tip)**\n* 포스터 하단에 **구글 폼으로 바로 연결되는 QR코드**를 함께 넣어두면 학생들이 훨씬 쉽게 지원할 수 있습니다!\n* \"카메라가 없는데 지원해도 되나요?\"라는 문의가 많으니, 포스터 한구석에 **\"카메라 미소지자/스마트폰 촬영자 환영!\"** 문구를 작은 포인트 요소로 첨부하는 것을 추천합니다.",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 0.29353778751369114,
+  "done": true
+ },
+ "up_22|0": {
+  "prompt": "너는 영양사이자 건강 콘텐츠 에디터다. 아래 조건을 바탕으로 사용자에게 최적화된 건강한 아침 식단을 추천하라.\n\n[요청 내용]\n건강한 아침 식단 추천해줘.\n\n[더 좋은 결과를 위한 조건]\n- 식이 목적 및 제약사항: [식이 목적 및 제약사항 입력]\n- 최대 조리/준비 시간: [최대 조리 시간 입력]\n- 추천 식단 후보들을 영양 밸런스, 준비 편의성, 섭취 지속 가능성을 기준으로 1순위부터 우선순위대로 정렬하고 각 식단의 선택 이유를 명확히 설명하라.\n- 각 식단별로 '주요 재료', '간단 조리법', '핵심 영양적 이점'을 포함하라.\n- 상황별(예: 전날 밤 미리 준비형, 5분 초간편형, 단백질 충전형 등)로 바로 활용할 수 있는 선택지를 제시하라.\n- 서두, 요청 되풀이, 인사말, 주의사항 등의 추가 텍스트 없이 추천 내용 본문만 곧바로 출력하라.\n- 만약 대괄호([ ]) 항목이 빈칸으로 남겨져 있다면, 묻거나 설명하지 말고 바쁜 현대인을 위한 표준 건강 식단 기준으로 결과를 즉시 완성하라.",
+  "mode": "improve",
+  "fill": {
+   "[식이 목적 및 제약사항 입력]": "최근 건강검진에서 공복 혈당 경계 수치를 받아 혈당 관리 필요, 땅콩 알레르기 보유, 유당불내증이 있어 일반 우유 착유 제품 섭취 불가 (아몬드유/오트유 선호), 익히지 않은 생토마토의 식감을 원치 않음",
+   "[최대 조리 시간 입력]": "출근 전 최대 15분 이내"
+  },
+  "prompt_filled": "너는 영양사이자 건강 콘텐츠 에디터다. 아래 조건을 바탕으로 사용자에게 최적화된 건강한 아침 식단을 추천하라.\n\n[요청 내용]\n건강한 아침 식단 추천해줘.\n\n[더 좋은 결과를 위한 조건]\n- 식이 목적 및 제약사항: 최근 건강검진에서 공복 혈당 경계 수치를 받아 혈당 관리 필요, 땅콩 알레르기 보유, 유당불내증이 있어 일반 우유 착유 제품 섭취 불가 (아몬드유/오트유 선호), 익히지 않은 생토마토의 식감을 원치 않음\n- 최대 조리/준비 시간: 출근 전 최대 15분 이내\n- 추천 식단 후보들을 영양 밸런스, 준비 편의성, 섭취 지속 가능성을 기준으로 1순위부터 우선순위대로 정렬하고 각 식단의 선택 이유를 명확히 설명하라.\n- 각 식단별로 '주요 재료', '간단 조리법', '핵심 영양적 이점'을 포함하라.\n- 상황별(예: 전날 밤 미리 준비형, 5분 초간편형, 단백질 충전형 등)로 바로 활용할 수 있는 선택지를 제시하라.\n- 서두, 요청 되풀이, 인사말, 주의사항 등의 추가 텍스트 없이 추천 내용 본문만 곧바로 출력하라.\n- 만약 대괄호([ ]) 항목이 빈칸으로 남겨져 있다면, 묻거나 설명하지 말고 바쁜 현대인을 위한 표준 건강 식단 기준으로 결과를 즉시 완성하라.",
+  "query": "건강한 아침 식단 추천해줘.\n\n(참고로 내가 아는 정보: 식이 목적 및 제약사항: 최근 건강검진에서 공복 혈당 경계 수치를 받아 혈당 관리 필요, 땅콩 알레르기 보유, 유당불내증이 있어 일반 우유 착유 제품 섭취 불가 (아몬드유/오트유 선호), 익히지 않은 생토마토의 식감을 원치 않음, 최대 조리 시간: 출근 전 최대 15분 이내)",
+  "n_blanks": 3,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "### **[1순위] 전날 밤 미리 준비형: 블루베리 치아시드 오버나이트 오트밀**\n\n*   **우선순위 선택 이유:** 아침 조리 시간이 0분으로 바쁜 출근길에 편의성이 가장 높습니다. 롤드오트와 치아시드의 풍부한 수용성 식이섬유가 아침 공복 상태에서 혈당이 급격히 오르는 것을 강력하게 방지하며, 아몬드유를 베이스로 하여 유당불내증 걱정 없이 섭취할 수 있습니다.\n*   **주요 재료:** 롤드오트(압착 귀리) 40g, 무당 아몬드유 150ml, 치아시드 1큰술, 냉동 블루베리 한 움큼, 호두 3~4알(분태), 계피 가루 약간\n*   **간단 조리법 (준비 시간: 전날 밤 3분 / 아침 0분):**\n    1. 전날 밤 유리용기에 롤드오트, 치아시드, 무당 아몬드유를 넣고 잘 섞습니다.\n    2. 위에 블루베리와 호두를 얹고 뚜껑을 덮어 냉장고에 보관합니다.\n    3. 아침에 냉장고에서 꺼내 계피 가루를 살짝 뿌려 바로 섭취합니다.\n*   **핵심 영양적 이점:** 귀리의 베타글루칸과 치아시드의 식이섬유가 혈당 스파이크를 억제하고 장시간 포만감을 유지합니다. 계피 가루는 인슐린 민감성을 향상시키는 데 도움을 줍니다.\n\n---\n\n### **[2순위] 5분 초간편형: 아보카도 에그 통곡물 토스트 & 사과**\n\n*   **우선순위 선택 이유:** 조리 시간이 5분에 불과하며, 탄수화물·단백질·지방의 밸런스가 매우 뛰어납니다. 생토마토 대신 아보카도와 샐러드 채소를 활용해 식감 거부감 없이 단백질과 건강한 지방을 보충할 수 있어 지속 지속성이 높습니다.\n*   **주요 재료:** 100% 통밀빵(또는 호밀빵) 1구이, 삶은 계란 1~2개(미리 삶아둔 것 활용), 아보카도 1/2개, 올리브 오일 1큰술, 소금·후추 약간, 사과 1/4개\n*   **간단 조리법 (준비 시간: 5분):**\n    1. 통밀빵을 노릇하게 토스팅합니다.\n    2. 아보카도를 으깨어 빵 위에 얇게 펴 바르고, 얇게 썬 삶은 계란을 올립니다.\n    3. 엑스트라버진 올리브 오일을 두르고 소금, 후추를 살짝 뿌립니다.\n    4. 얇게 썬 사과 1/4조각을 곁들여 함께 섭취합니다.\n*   **핵심 영양적 이점:** 아보카도와 올리브 오일의 불포화지방산이 통밀빵의 탄수화물 흡수 속도를 늦춰 공복 혈당 안정화에 기여합니다.\n\n---\n\n### **[3순위] 단백질 충전형: 따뜻한 버섯 훈제오리 볶음 & 무당 오트유**\n\n*   **우선순위 선택 이유:** 근육량 유지와 면역력 강화에 필요한 단백질을 충분히 공급합니다. 익힌 채소를 사용하여 아침 위장에 부담을 주지 않으며, 오트유를 곁들여 식이섬유와 풍부한 풍미를 동시에 챙길 수 있습니다. (팬 조리 및 설거지 시간이 필요하여 3순위 배치)\n*   **주요 재료:** 슬라이스 훈제오리(또는 닭가슴살 슬라이스) 80g, 만닥버섯/느타리버섯 한 움큼, 시금치 한 움큼, 올리브 오일 1작은술, 무당 오트유 1컵(200ml)\n*   **간단 조리법 (준비 시간: 8~10분):**\n    1. 달군 팬에 올리브 오일을 살짝 두르고 버섯과 훈제오리를 넣어 중불에서 3분간 볶습니다.\n    2. 버섯이 익으면 시금치를 넣고 30초간 가볍게 숨을 죽인 후 접시에 담습니다.\n    3. 따뜻하게 데운 무당 오트유 한 컵을 음료로 곁들입니다.\n*   **핵심 영양적 이점:** 고단백·저당질 식단으로 인슐린 분비 부담을 최소화하며, 익힌 버섯과 시금치의 풍부한 베타글루칸 및 비타민이 혈관 건강을 지원합니다.",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "공복 혈당 경계 수치를 받으셨다면 아침 식단에서 **'정제 탄수화물 줄이기', '식이섬유와 단백질, 좋은 지방 확보하기'**가 가장 중요합니다. \n\n요청하신 모든 조건(혈당 관리, 땅콩 알레르기, 유당불내증, 생토마토 제외, 15분 이내 조리)을 완벽히 충족하는 **맞춤형 아침 식단 3가지**를 추천해 드립니다.\n\n---\n\n### 🥣 식단 1: 초스피드 따뜻한 오트밀 & 삶은 계란 (조리시간: 5분)\n혈당을 천천히 올리는 오트밀과 단백질을 조합한 식단입니다.\n\n*   **재료:** 롤드오츠(구운 귀리) 3~4아빠숟갈, 무당(Unsweetened) 아몬드유 또는 오트유 150ml, 시나몬 파우더 약간, 호두/아몬드 한 주먹, 블루베리(생물 또는 냉동) 한 손, 미리 삶아둔 계란 1~2개\n*   **조리 방법:**\n    1. 볼에 롤드오츠와 무당 아몬드유(또는 오트유)를 넣고 전자레인지에 1분 30초~2분간 돌립니다.\n    2. 위에 시나몬 파우더를 톡톡 뿌리고, 호두와 블루베리를 고명으로 올립니다.\n    3. 미리 삶아둔 계란과 함께 섭취합니다.\n*   **혈당 관리 포인트:** 오트밀의 베타글루칸(식이섬유)과 계란의 단백질이 혈당 스파이크를 막아줍니다. 시나몬은 인슐린 감수성을 높이는 데 도움을 줍니다.\n\n---\n\n### 🥪 식단 2: 아보카도 에그 통밀 토스트 & 오트유 (조리시간: 10분)\n포만감이 오래 가며 점심까지 당이 덜 당기게 해주는 고급스러운 식단입니다.\n\n*   **재료:** 100% 통밀빵(또는 사워도우) 1쪽, 계란 1개, 아보카도 1/2개, 올리브유, 소금/후추 약간, 오이 몇 슬라이스, 무당 오트유 1컵\n*   **조리 방법:**\n    1. 통밀빵을 토스터기에 굽습니다.\n    2. 프라이팬에 올리브유를 두르고 계란 후라이(또는 스크램블)를 만듭니다.\n    3. 잘 익은 아보카도를 숟가락으로 으깨어 소금, 후추로 간을 합니다.\n    4. 구운 통밀빵 위에 으깬 아보카도와 계란 후라이를 올리고, 상큼한 오이 슬라이스를 곁들입니다.\n    5. 무당 오트유 한 컵을 곁들여 마십니다.\n*   **혈당 관리 포인트:** 아보카도의 불포화지방산과 통밀의 식이섬유가 탄수화물의 흡수를 지연시킵니다. (생토마토 대신 아삭한 오이로 식감을 챙겼습니다.)\n\n---\n\n### 🍲 식단 3: 따뜻한 양념 순두부 보울 & 아몬드유 (조리시간: 7분)\n가장 빠르게 준비할 수 있으며 위장에 부담이 없고 단백질이 풍부한 한식 스타일 식단입니다.\n\n*   **재료:** 순두부 1팩(약 350g), 계란 1개, 양념장(저염 간장 1큰술, 들기름/참기름 1작은술, 깨 약간), 무당 아몬드유 1컵\n*   **조리 방법:**\n    1. 전자레인지용 용기에 순두부를 넣고, 그 위에 계란 1개를 톡 깨트려 넣습니다. (노른자는 이쑤시개로 한 번 콕 질러줍니다 - 터짐 방지)\n    2. 랩을 씌워 전자레인지에 2분 30초~3분간 돌립니다.\n    3. 따뜻해진 순두부에 양념장을 뿌려 부드럽게 숟가락으로 먹습니다.\n    4. 식사 후 무당 아몬드유로 깔끔하게 마무리합니다.\n*   **혈당 관리 포인트:** 탄수화물 함량이 매우 적고 식물성/동물성 단백질이 조화를 이루어 공복 혈당 관리에 매우 탁월합니다.\n\n---\n\n### 💡 공복 혈당 관리를 위한 핵심 꿀팁!\n\n1.  **식물성 유유 선택 시 주의사항:** \n    아몬드유나 오트유를 구매하실 때 반드시 **'무당(Unsweetened)'** 제품인지 확인하세요. Original 제품은 당류가 첨가되어 있어 혈당을 올릴 수 있습니다.\n2.  **식사 순서 지키기:** \n    음식을 드실 때 **[식이섬유/단백질/지방 (계란, 아보카도, 순두부, 견과류)] → [탄수화물 (오트밀, 통밀빵)]** 순서로 드시면 혈당이 올라가는 속도를 대폭 낮출 수 있습니다.\n3.  **땅콩 절대 주의:** \n    견과류 섭취 시 아몬드, 호두, 피칸, 해바라기씨, 차아씨드 등만 활용하시고 '땅콩버터'나 '믹스넛(땅콩 포함)'은 피해주세요.",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 0.8661257606490872,
+  "done": true
+ },
+ "up_22|1": {
+  "prompt": "너는 영양 및 건강 식단 전문 에디터다. 아래 조건을 바탕으로 블로그 게시글 형태의 건강한 아침 식단 추천 글을 작성하라.\n\n[요청 본문]\n건강한 아침 식단 추천해줘.\n\n[더 좋은 결과를 위한 조건]\n- 식단 목적: [식단 목적 입력 - 예: 체중 감량, 바쁜 아침 빠른 조리, 혈당 관리, 피로 회복 등]\n- 제외할 식재료/알레르기: [알레르기 또는 제외할 식재료 입력 - 예: 유제품, 견과류, 글루텐 등]\n- 추천 식단들을 우선순위(1순위부터) 순으로 정렬하여 제시하고, 각 식단을 1순위로 추천하는 영양학적 이유 및 장점을 설명하라.\n- 바쁜 아침에도 현실적으로 실행 가능한 준비 방법과 팁을 함께 포함하라.\n- 작성 형식: 독자가 읽기 편한 블로그 포스팅 톤(친근하고 전문적인 어조)으로 작성하되, 제목·소제목·체크포인트를 구체적으로 구성하라.\n- 결과물 외의 인사말, 서두, 해설, 주의사항 목록 등 부가적인 설명은 전혀 덧붙이지 말고 완성된 글 본문만 바로 출력하라.\n- 만약 `[ ]` 표시된 입력란이 비어 있으면 이에 대해 되묻거나 설명하지 말고, 해당 빈칸은 표시 그대로 둔 채 일반적인 대중에게 유용한 범용 건강 아침 식단 추천 글을 완성하라.",
+  "mode": "improve",
+  "fill": {
+   "[식단 목적 입력 - 예: 체중 감량, 바쁜 아침 빠른 조리, 혈당 관리, 피로 회복 등]": "혈당 관리 필요",
+   "[알레르기 또는 제외할 식재료 입력 - 예: 유제품, 견과류, 글루텐 등]": "땅콩, 일반 우유 착유 제품, 생토마토"
+  },
+  "prompt_filled": "너는 영양 및 건강 식단 전문 에디터다. 아래 조건을 바탕으로 블로그 게시글 형태의 건강한 아침 식단 추천 글을 작성하라.\n\n[요청 본문]\n건강한 아침 식단 추천해줘.\n\n[더 좋은 결과를 위한 조건]\n- 식단 목적: 혈당 관리 필요\n- 제외할 식재료/알레르기: 땅콩, 일반 우유 착유 제품, 생토마토\n- 추천 식단들을 우선순위(1순위부터) 순으로 정렬하여 제시하고, 각 식단을 1순위로 추천하는 영양학적 이유 및 장점을 설명하라.\n- 바쁜 아침에도 현실적으로 실행 가능한 준비 방법과 팁을 함께 포함하라.\n- 작성 형식: 독자가 읽기 편한 블로그 포스팅 톤(친근하고 전문적인 어조)으로 작성하되, 제목·소제목·체크포인트를 구체적으로 구성하라.\n- 결과물 외의 인사말, 서두, 해설, 주의사항 목록 등 부가적인 설명은 전혀 덧붙이지 말고 완성된 글 본문만 바로 출력하라.\n- 만약 `[ ]` 표시된 입력란이 비어 있으면 이에 대해 되묻거나 설명하지 말고, 해당 빈칸은 표시 그대로 둔 채 일반적인 대중에게 유용한 범용 건강 아침 식단 추천 글을 완성하라.",
+  "query": "건강한 아침 식단 추천해줘.\n\n(참고로 내가 아는 정보: 식단 목적 - 예: 체중 감량, 바쁜 아침 빠른 조리, 혈당 관리, 피로 회복 등: 혈당 관리 필요, 알레르기 또는 제외할 식재료 - 예: 유제품, 견과류, 글루텐 등: 땅콩, 일반 우유 착유 제품, 생토마토)",
+  "n_blanks": 2,
+  "n_filled": 2,
+  "ttalkak": {
+   "output": "# [혈당 수호] 아침 혈당 스파이크 잡는 맞춤 아침 식단 TOP 3 (알레르기 안심 버전)\n\n안녕하세요! 건강한 식습관을 디자인하는 영양 에디터입니다. \n\n아침에 눈을 떠서 처음 먹는 음식은 하루 전체의 혈당 흐름과 에너지 수치를 좌우합니다. 특히 공복 상태에서 급격하게 혈당이 치솟는 **'혈당 스파이크'**를 막으려면 식이섬유, 단백질, 좋은 지방이 어우러진 식단이 필수적이죠.\n\n오늘은 **땅콩, 일반 우유, 생토마토를 전혀 사용하지 않으면서도** 바쁜 아침 5분 만에 준비할 수 있는 최고효율의 혈당 관리 아침 식단을 우선순위별로 소개해 드립니다.\n\n---\n\n## 🏆 영양 에디터 추천: 혈당 관리 아침 식단 TOP 3\n\n---\n\n### 🥇 1순위: 따뜻한 초간단 '계란 오트밀 죽'\n> **\"혈당 완충 지대를 만드는 가장 완벽하고 따뜻한 한 끼\"**\n\n* **구성:** 압착 오트밀 30g, 계란 1~2개, 물(또는 무당 아몬드 밀크), 불린 미역 약간 또는 참기름 한 방울, 소금 한 꼬집\n* **1순위 추천 영양학적 이유 및 장점:**\n  1. **수용성 식이섬유(베타글루칸)의 힘:** 오트밀의 베타글루칸은 위장에서 끈적한 점성 물질을 형성해 소화 흡수 속도를 늦춥니다. 이는 당분이 혈액으로 들어가는 속도를 지연시켜 혈당 스파이크를 완벽히 방지합니다.\n  2. **완전 단백질 계란과의 시너지:** 계란의 풍부한 단백질과 미네랄이 오트밀의 인슐린 감수성 개선 효과를 극대화하며, 포만감을 점심시간까지 길게 유지해 줍니다.\n  3. **소화 부담 제로:** 아침 공복에 차가운 음식보다 따뜻한 죽 형태의 식사는 위장에 부담을 주지 않고 대사를 활성화합니다. (유제품이나 땅콩, 생토마토 없이도 담백하고 깊은 맛을 냅니다.)\n\n⏱ **바쁜 아침 3분 준비 팁:**\n1. 내열 용기에 오트밀 30g과 물 150ml(혹은 무당 아몬드유)를 넣습니다.\n2. 계란 1개를 풀어서 위에 얹고 노른자를 이쑤시개로 한 번 콕 찔러줍니다.\n3. 전자레인지에 2분~2분 30초간 돌린 후, 참기름 한 방울과 소금 살짝 쳐서 드세요.\n\n---\n\n### 🥈 2순위: '아보카도 삶은 계란 샐러드' & 무당 식물성 음료\n> **\"탄수화물 극소화, 좋은 지방과 단백질로 채우는 은은한 에너지\"**\n\n* **구성:** 삶은 계란 2개, 아보카도 1/2개, 오이 슬라이스, 올리브오일 1큰술, 레몬즙 약간, 무당 아몬드 밀크 또는 무당 두유 1잔\n* **영양학적 장점:**\n  * 아보카도의 불포화지방산과 올리브오일은 인슐린 분비를 자극하지 않고 천천히 에너지를 냅니다.\n  * 오이의 아삭한 식감과 수분이 혈당 변화 없이 장 운동을 촉진합니다.\n  * 일반 우유 대신 무당 아몬드유나 두유를 곁들여 유당불내증이나 우유 알레르기 걱정 없이 칼슘과 단백질을 보충할 수 있습니다.\n\n⏱ **바쁜 아침 2분 준비 팁:**\n* 주말에 계란을 미리 삶아 냉장고에 넣어두세요. \n* 아침에는 삶은 계란을 껍질만 까서 듬성듬성 깎은 아보카도, 오이와 함께 접시에 담고 올리브오일만 둘러주면 끝납니다.\n\n---\n\n### 🥉 3순위: '들기름 두부구이 & 찐 브로콜리'\n> **\"식물성 단백질과 항산화 식이섬유의 담백한 조화\"**\n\n* **구성:** 부침용 두부 1/2모, 들기름 1큰술, 찌거나 데친 브로콜리 한 손 guard, 사과 1/4조각(선택)\n* **영양학적 장점:**\n  * 두부의 정제되지 않은 식물성 단백질은 혈당을 매우 안정적으로 유지시킵니다.\n  * 들기름의 식물성 오메가-3(알파리놀렌산)는 체내 염증을 줄이고 혈관 건강을 돕습니다.\n  * 찌거나 데친 브로콜리는 생토마토를 대체할 수 있는 훌륭한 비타민 C 공급원이자 훌륭한 장내 미생물의 먹이(식이섬유)가 됩니다.\n\n⏱ **바쁜 아침 5분 준비 팁:**\n* 브로콜리는 전날 밤 미리 데쳐서 밀폐용기에 보관해 둡니다.\n* 두부는 키친타월로 수분을 닦고 팬에 들기름을 둘러 약 3분간 노릇하게 구워 브로콜리와 함께 곁들여 드세요.\n\n---\n\n## 💡 바쁜 아침, 혈당 수호 체크포인트 3가지\n\n1. **식사 순서를 지키세요 (채소/단백질 ➔ 탄수화물)**\n   * 식단을 드실 때 오이, 브로콜리, 계란/두부를 먼저 드시고 오트밀이나 과일을 나중에 드세요. 순서만 바꿔도 식후 혈당 수치가 현저히 낮아집니다.\n\n2. **'무당(Unsweetened)' 문구를 반드시 확인하세요**\n   * 일반 우유 대신 식물성 음료(아몬드유, 두유 등)를 선택할 때는 당류가 1g 이하로 함유된 **'무당'** 또는 **'언스위트'** 제품인지 확인해야 혈당 스파이크를 피할 수 있습니다.\n\n3. **공복 따뜻한 물 한 잔으로 시작하세요**\n   * 기상 직후 마시는 미온수 한 잔은 밤새 끈적해진 혈액의 농도를 묽게 하고 위장관을 깨워 영양소 흡수 및 혈당 조절 메커니즘을 활성화합니다.\n\n---\n\n오늘 소개해 드린 식단은 알레르기 유발 요소를 완전히 배제하면서도, 아침 혈당을 완만하게 유지해 하루 종일 지치지 않는 에너지를 공급하도록 설계되었습니다. 내일 아침은 3분 만에 만들 수 있는 **'계란 오트밀 죽'**으로 건강하게 시작해 보는 건 어떨까요?",
+   "finish": "stop"
+  },
+  "raw": {
+   "output": "요청하신 조건(**혈당 관리**, **땅콩·일반 유제품·생토마토 제외**)에 맞춰, 아침 혈당 스파이크를 방지하면서도 영양이 풍부한 **맞춤형 아침 식단 3가지**를 추천해 드립니다.\n\n혈당 관리의 핵심은 **'식이섬유 → 단백질·지방 → 복합 탄수화물'** 순서로 섭취하여 혈당이 천천히 오르도록 하는 것입니다.\n\n---\n\n### 🥣 1. [간편형] 블루베리 아몬드 오트밀 & 삶은 계란\n아침 시간에 빠르게 준비할 수 있으며, 식이섬유와 항산화 성분이 풍부한 식단입니다.\n\n*   **구성:**\n    *   **오트밀 죽:** 압착 오트밀(Rolled Oats) 30~40g + **무당 두유 또는 아몬드 밀크** (우유 대체)\n    *   **토핑:** 블루베리 한 움큼(저GI 과일), 아몬드 또는 호두 약간 (땅콩 제외), 치아시드 1스푼\n    *   **단백질 보충:** 삶은 계란 1~2개\n*   **혈당 관리 포인트:** 오트밀의 베티글루칸(수용성 식이섬유)이 혈당의 급격한 상승을 막아줍니다. 단 맛을 내고 싶다면 설탕 대신 알룰로스나 알맞은 양의 블루베리를 활용하세요.\n\n---\n\n### 🥪 2. [양식형] 통밀 아보카도 계란 토스트 & 오이 파프리카 스틱\n건강한 지방과 단백질이 중심이 되는 식단으로 포만감이 오래 유지됩니다.\n\n*   **구성:**\n    *   **토스트:** 통밀빵 또는 통사워도우 1장 (글루텐/탄수화물 최소화)\n    *   **토핑:** 으깬 아보카도 1/2개 + 올리브유 살짝 + 계란 프라이(올리브유에 구음) 또는 수란\n    *   **사이드 야채:** **생토마토 대신** 아삭한 오이 스틱, 파프리카, 또는 루꼴라/어린잎 채소 (드레싱: 올리브유 + 발사믹 식초)\n*   **혈당 관리 포인트:** 아보카도의 불포화지방산과 통밀의 식이섬유가 탄수화물의 흡수를 늦춰줍니다.\n\n---\n\n### 🥗 3. [한식형] 따뜻한 두부 버섯 구이 & 현미밥 식단\n속을 따뜻하고 편안하게 해주며 혈당 안정에 가장 이상적인 한식 차림입니다.\n\n*   **구성:**\n    *   **주메뉴:** 들기름에 구운 부침용 두부 1/2모 + 들기름에 볶은 느타리/팽이버섯\n    *   **탄수화물:** 현미 귀리밥 1/2공기 (약 70~80g)\n    *   **반찬:** 시금치 나물 또는 브로콜리 데친 것, 구운 김(조미김 X)\n*   **혈당 관리 포인트:** 식사를 시작할 때 데친 브로콜리나 나물을 먼저 먹고, 두부(단백질)를 먹은 뒤, 마지막에 현미밥을 먹으면 혈당 스파이크를 완벽히 예방할 수 있습니다.\n\n---\n\n### 💡 혈당 관리를 위한 아침 식사 꿀팁\n1.  **식사 순서 지키기:** **채소(식이섬유) → 계란/두부(단백질·지방) → 오트밀/통밀빵/현미밥(탄수화물)** 순서로 드세요.\n2.  **모닝 커피 주의:** 식사 직후 당이 들어간 음료는 금물입니다. 커피를 드신다면 식후 30분 뒤 블랙커피로 드시는 것이 좋습니다.\n3.  **기상 직후 미온수 한 잔:** 아침에 일어나자마자 미지근한 물 한 잔을 마시면 혈액 순환과 신진대사가 활성화되어 혈당 조절에 도움이 됩니다.",
+   "finish": "stop",
+   "reused": false
+  },
+  "pair": {
+   "v2": {
+    "winner": "a",
+    "passes": [
+     "a",
+     "a"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   },
+   "v1": {
+    "winner": "b",
+    "passes": [
+     "b",
+     "b"
+    ],
+    "finish": [
+     "stop",
+     "stop"
+    ],
+    "version": "pair-v2"
+   }
+  },
+  "len_ratio": 1.639686684073107,
+  "done": true
+ }
+}
