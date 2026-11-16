@@ -109,3 +109,12 @@ docker rm -f ttalkak-billing-regression-mysql
 - 기존 JDBC 제품명 확인 테스트는 그대로 유지한다. 사전 검사로 설정 대상을 제한하고, JDBC 메타데이터 검사로 실제 MySQL 연결 여부를 확인하는 **서로 다른 방어선**이다. 환경변수 플래그가 없는 기존 H2 CI 테스트 동작은 변경하지 않도록 설계했다.
 - **이 변경은 작성·커밋만 했다.** 현재 작업 브랜치의 Gradle 컴파일·회귀 테스트 또는 MySQL 8.4 실제 실행·통과는 확인하지 못했다. URL 확인은 로컬 포트가 실제로 폐기형 MySQL을 가리킨다는 것을 보증하지 않으므로, 테스트 전 사용자/운영 DB와 완전히 분리됐는지 별도 확인해야 한다.
 - `develop`과의 분기를 유지하며, PR/병합/브랜치 삭제/운영 DB·환경변수/Railway/PG 호출은 하지 않는다.
+
+## 2026-11-16 작업 브랜치 CI 검증 기록 (운영 미적용)
+
+- GitHub 확인 기준 `develop` HEAD는 `992d44df0cbfdc06c7a16444b8aa6792fc378177`, 이 작업 브랜치 HEAD는 `42e8789455391921818bdff783720d069a4ab517`이다. 요청한 `chore/db-deployment-safety-gates`는 브랜치 목록과 직접 조회 모두에서 확인되지 않았다. compare 결과 작업 브랜치는 `develop`보다 **16커밋 앞서고 47커밋 뒤처져 있다**. 여기의 수치는 이 점검 시점의 스냅샷이다.
+- [작업 브랜치 GitHub CI #43883998793](https://github.com/dabel11/Ttalkak/actions/runs/43883998793)는 `42e8789`의 PR 실행 결과 **6개 job 모두 success**였다. `Backend tests`에서 `compileJava`, `compileTestJava`, `test`가 실행되고 `BUILD SUCCESSFUL`을 기록했다. [Server container smoke #43883998792](https://github.com/dabel11/Ttalkak/actions/runs/43883998792)도 **2개 job success**를 기록했다. 이는 이전의 '작업 브랜치 테스트 미실행' 기록보다 최신의 검증 결과다. 단, GitHub CI 결과가 실결제의 안전성이나 배포 가능성을 증명하지는 않는다.
+- 직전 커밋 `2db1666`의 [CI #43882912319](https://github.com/dabel11/Ttalkak/actions/runs/43882912319)에서 백엔드 **337 tests, 4 failed**였다(3건 Mockito의 광범위한 gateway 호출 횟수 검증, 1건 H2 유일성 제약). 이후 `42e8789`는 관련 **테스트 코드만** 수정했고 최신 CI가 성공했다. 이전 실패를 애플리케이션 결함으로 단정하지 않으며, 최신 성공을 이전 실패가 존재하지 않았던 것처럼 기술하지 않는다.
+- **중요한 연결 대상 한계:** CI의 `Backend tests`는 `./gradlew test`로 실행되며, `backend/build.gradle` 기본 프로필은 `test`, `application-test.yml`의 데이터소스는 **H2**다. MySQL 8.4 서비스 컨테이너가 함께 실행돼도 이 사실만으로 결제 통합 테스트의 MySQL 실행을 증명하지 않는다. `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`을 사용한 포트 13306의 **별도 폐기형 MySQL 8.4 회귀 테스트 및 사전 URL 차단 실패 시나리오**는 아직 실행 성공 기록이 없다. MySQL 9 JPA 스키마 부팅은 별도 job이고, 결제 경합 재현과 동등하지 않다.
+- [Draft PR #95](https://github.com/dabel11/Ttalkak/pull/95)가 이미 열려 있으며, 이 점검에서는 PR 생성·변경·병합을 하지 않았다. GitHub가 표시하는 자동 병합 가능 여부와 무관하게 최신 `develop` 재검토, 격리 MySQL 결제/탈퇴 회귀 검증, 승인 후 정산·환불 정책 검토가 병합 전 미해결이다.
+- 이번 기록은 **로그 및 소스 확인**에 한정된다. Railway·운영 DB/환경변수·실제 PG·팀원 영역을 변경하지 않는다.
