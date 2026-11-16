@@ -10,9 +10,11 @@ generator 의 운영 가드 3종 단위 테스트 (API 호출 없음).
 실행: python3 -m tests.test_generator_guards
 """
 
+import os
 from types import SimpleNamespace
 
 from app.rag.generator import (
+    GroqGenerator,
     _HISTORY_CHAR_BUDGET,
     _needs_long_context,
     _retry_after_seconds,
@@ -80,7 +82,8 @@ check("추출 실패 시 기본 8초", _retry_after_seconds(fake_err("알 수 �
 # 2026-07-31: 규약 v3 추가로 SYSTEM_PROMPT가 4,091토큰이 되며 경계가 약 1,500자로 내려왔다.
 # (2,323토큰 축소본은 경계를 2,500자로 회복시켰으나 핵심 행동이 회귀해 되돌림 — WORKLOG 참조)
 # 2026-11-14: 생성 프롬프트 v7(실측 4,999토큰)로 경계가 약 1,200자로 내려왔다 — 그보다 긴 원문은 Gemini 로 간다.
-# 2026-11-15: v10(실측 5,296토큰)으로 경계 약 1,000자(1,000자까지 Groq).
+# 2026-11-15: v10(실측 5,296토큰)에서 아래 12k·기법 5장 조건의 경계는 약 1,000자.
+# 운영 기본 gpt-oss 는 무료 8k 이므로 이 경계를 그대로 적용할 수 없다(아래 별도 검증).
 M70 = "llama-3.3-70b-versatile"   # TPM 12,000
 ctxs = [{"text": "기법 설명 " * 100} for _ in range(5)]   # 기법 5개 ≈ 3,000자
 
@@ -91,5 +94,34 @@ check("장문 원문은 Gemini 라우팅", _needs_long_context("회의록 요약
 check("900자 원문은 Groq 유지", not _needs_long_context("나" * 900, ctxs, [], M70))
 check("2,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 2000, ctxs, [], M70))
 check("4,000자 원문은 Gemini 라우팅", _needs_long_context("나" * 4000, ctxs, [], M70))
+
+# 운영 기본 8k: 생성에서 제외한 예시 카드는 같은 입력의 라우팅을 바꾸면 안 된다.
+# 종전에는 아래 요청이 예시 없이 Groq, 예시가 있으면 Gemini 로 갈렸다.
+_saved_tpm = os.environ.pop("GROQ_TPM_LIMIT", None)
+try:
+    oss = "openai/gpt-oss-120b"
+    query = "팀 회의 공지 문구를 만들어줘"
+    cards = [{"text": "기법 설명 " * 10, "metadata": {"technique": f"T{i}"}}
+             for i in range(5)]
+    examples = [{"text": "예시 내용 " * 80, "metadata": {"kind": "example"}}
+                for _ in range(2)]
+    with_examples = cards + examples
+    check("운영 기본 gpt-oss 무료 예산은 8k", GroqGenerator._tpm(oss) == 8000)
+    check("예시가 있어도 실제 생성 메시지는 동일",
+          GroqGenerator.build_messages(query, cards) == GroqGenerator.build_messages(query, with_examples))
+    check("예시가 있어도 실제 입력 예산은 동일",
+          GroqGenerator.estimate_input(query, cards) == GroqGenerator.estimate_input(query, with_examples))
+    check("8k 안에 들어가는 짧은 요청은 Groq 유지",
+          not _needs_long_context(query, cards, [], oss))
+    check("제외된 예시 때문에 Gemini 로 바뀌지 않음",
+          not _needs_long_context(query, with_examples, [], oss))
+    check("실제 긴 원문은 예시 유무와 무관하게 Gemini 라우팅",
+          all(_needs_long_context("회의록 요약해줘: " + "가" * 4000, c, [], oss)
+              for c in (cards, with_examples)))
+    check("실제 전달할 긴 기법 카드는 라우팅 예산에 포함",
+          _needs_long_context(query, cards + [{"text": "기법 설명 " * 1000}], [], oss))
+finally:
+    if _saved_tpm is not None:
+        os.environ["GROQ_TPM_LIMIT"] = _saved_tpm
 
 print(f"\n전부 통과 ({_passed}개)")

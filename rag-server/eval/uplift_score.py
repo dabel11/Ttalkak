@@ -269,6 +269,11 @@ def run(args, items: list[dict], data: dict, out: Path) -> None:
                                judge_model=args.judge_model,    # 판정 모델이 섞이면 수치를 합칠 수 없다 — report 가 경고
                                defect_judge=dj, score=score_output(it, ex["text"], req, dj))
                 rec["seconds"] = round(time.time() - t0, 1)
+                # 다시 만든 결과물(되묻기로 바뀐 경우 포함)에 이전 출력의 승패를 붙이지 않는다.
+                # 쌍대 평가를 건너뛰어도 체크포인트에는 무효화한 상태를 함께 저장해야 한다.
+                for other in ("raw", "rewrite"):
+                    if cond in (other, "ttalkak"):
+                        data["pairs"].pop(f"{it['id']}|pair_{other}_vs_ttalkak|{rep}", None)
                 recs[key] = rec
                 out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                 s = rec.get("score") or {}
@@ -287,7 +292,10 @@ def run(args, items: list[dict], data: dict, out: Path) -> None:
                 for other in ("raw", "rewrite"):
                     key = f"{it['id']}|pair_{other}_vs_ttalkak|{rep}"
                     o = recs.get(f"{it['id']}|{other}|{rep}", {})
-                    if key in data["pairs"] or not t.get("output") or not o.get("output"):
+                    cached = data["pairs"].get(key)
+                    if not t.get("output") or not o.get("output"):
+                        continue
+                    if cached and cached.get("version") == PAIR_JUDGE_VERSION:
                         continue
                     data["pairs"][key] = patient(lambda: judge_pair(client, args.judge_model, it, o["output"], t["output"]))
                     out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

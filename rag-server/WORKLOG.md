@@ -4719,3 +4719,16 @@ tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eva
 **Before**: F401 3건 — final_analyze_script(statistics.mean), pref2_script(pathlib.Path), report_data_script(collections.Counter).
 **After**: 세 import 제거(동작 변화 없음).
 **검증**: 로컬에 ruff 가 없어 py_compile + ast 로 eval/ 전체 미사용 import 0건 확인, `pytest tests` 통과.
+
+## [2026-11-16] PR #91 리뷰 반영 — 라우팅 예산에서 예시 카드 제외 · 재생성 시 쌍대 판정 무효화
+**목적**: 리뷰(trytur, CHANGES_REQUESTED) P2 2건과 설명 보완.
+**Before**: ① `_build_context_blocks` 는 예시 카드를 생성기에 넣지 않는데 `_needs_long_context` 는 예시까지 더해, 실제 메시지가 같은 요청이
+예시 검색 결과만으로 Groq → Gemini 로 바뀜(gpt-oss 8k, 짧은 기법 5장 + 예시 2장). ② `uplift_score.run` 이 잘린 출력·미완성 판정을 다시
+만들어도 `pairs` 에 키가 있으면 쌍대 판정을 건너뛰어 옛 승패(이전 판정기 버전 포함)가 남음.
+**After**: 리뷰어의 검증된 패치를 그대로 적용(직접 검토 후). ① 라우팅 예산에서 `_is_example` 카드 제외, `_gemini_output_budget` 독스트링의
+고정 수치 제거. ② 기록을 다시 만들면 그 기록에 걸린 쌍대 판정(raw→raw 쌍, rewrite→rewrite 쌍, ttalkak→둘 다)을 저장 전에 지우고,
+버전이 현재 `PAIR_JUDGE_VERSION` 과 다른 캐시는 다시 판정. 회귀 테스트 10건(평가 9 · 라우팅 1 묶음) 추가.
+설명 보완: RAG_PIPELINE.md 효과 줄에 실제 분모(61/59회)·판정기 사람 일치 53%·'대등'의 뜻·같은 요청 세트로 개선·측정한 한계,
+라우팅 경계 '약 1,000자'는 테스트 조건(70b 12k·기법 5장) 값이며 운영 기본 gpt-oss 8k 에 그대로 적용되지 않음을 명시. 보고서 향후 과제에 새 요청 세트 재확인 추가.
+**검증**: `pytest tests` 323 passed. 패치 전 코드에 새 테스트만 두면 test_uplift_score 9 실패 · 라우팅 검증 실패 → 패치 후 모두 통과(직접 재현).
+최종 트랙 B 수치는 별도 재판정 스크립트로 냈으므로 ② 의 캐시 오류와 무관(리뷰어도 같은 판단).

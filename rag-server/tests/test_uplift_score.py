@@ -209,3 +209,99 @@ def test_judge_pair_needs_both_orders_and_records_version():
     split = judge_pair(client(['{"winner": "1"}', '{"winner": "1"}']), "m", item, "a", "b")  # 위치만 따라감
     assert same["winner"] == "b" and split["winner"] == "tie"
     assert same["version"] == PAIR_JUDGE_VERSION and same["finish"] == ["stop", "stop"]
+
+
+@pytest.fixture
+def resumed_eval(monkeypatch, tmp_path):
+    """완료 기록을 이어 평가하는 경로. 모든 LLM 호출을 가짜로 바꿔 캐시·저장 동작만 본다."""
+    from types import SimpleNamespace as NS
+    import eval.requirement_judge as rj
+    import eval.uplift_score as us
+
+    item = {"id": "up_mock", "track": "B", "query": "요청"}
+    args = NS(backend="gemini", max_wait=0, conditions=["raw", "rewrite", "ttalkak"], repeats=1,
+              gen_model="g", target_model="m", judge_model="m", skip_pairwise=False)
+    records = {f"up_mock|{c}|0": {"item": "up_mock", "condition": c, "repeat": 0,
+                                "prompt": f"prompt:{c}", "output": f"old:{c}", "exec_finish": "stop"}
+               for c in args.conditions}
+    valid = {"winner": "a", "version": us.PAIR_JUDGE_VERSION}
+    pairs = {f"up_mock|pair_{c}_vs_ttalkak|0": dict(valid) for c in ("raw", "rewrite")}
+    # 다른 문항·회차의 판정까지 지우지 않아야 한다.
+    pairs["up_other|pair_raw_vs_ttalkak|0"] = dict(valid)
+    pairs["up_mock|pair_raw_vs_ttalkak|1"] = dict(valid)
+    data = {"records": records, "pairs": pairs}
+    executions, comparisons = [], []
+
+    def execute(client, model, system, prompt, max_tokens, temperature):
+        executions.append(prompt)
+        return {"text": f"new:{prompt}", "finish": "stop", "usage": None}
+
+    def compare(client, model, it, a, b):
+        comparisons.append((a, b))
+        return {"winner": "b", "version": us.PAIR_JUDGE_VERSION}
+
+    monkeypatch.setattr(us, "_client", lambda backend: object())
+    monkeypatch.setattr(us, "call_patiently", lambda fn, wait: fn())
+    monkeypatch.setattr(us, "_chat", execute)
+    monkeypatch.setattr(rj, "judge_requirements", lambda *a: {"answers": {}, "errors": [], "version": "req-v2"})
+    monkeypatch.setattr(us, "judge_defects", lambda *a: {})
+    monkeypatch.setattr(us, "score_output", lambda *a: {})
+    monkeypatch.setattr(us, "judge_pair", compare)
+    return NS(us=us, item=item, args=args, data=data, out=tmp_path / "resume.json",
+              executions=executions, comparisons=comparisons)
+
+
+@pytest.mark.parametrize("condition", ["raw", "rewrite", "ttalkak"])
+@pytest.mark.parametrize("skip_pairwise", [False, True])
+def test_rerun_replaces_only_dependent_pair_judgments(resumed_eval, condition, skip_pairwise):
+    e = resumed_eval
+    e.args.skip_pairwise = skip_pairwise
+    e.data["records"][f"up_mock|{condition}|0"]["exec_finish"] = "length"
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    assert e.executions == [f"prompt:{condition}"]
+    saved = json.loads(e.out.read_text(encoding="utf-8"))
+    assert saved == e.data
+    assert saved["records"][f"up_mock|{condition}|0"]["output"] == f"new:prompt:{condition}"
+    affected = [c for c in ("raw", "rewrite") if condition in (c, "ttalkak")]
+    for other in ("raw", "rewrite"):
+        key = f"up_mock|pair_{other}_vs_ttalkak|0"
+        if other in affected:
+            if skip_pairwise:
+                assert key not in saved["pairs"]
+            else:
+                assert saved["pairs"][key]["winner"] == "b"
+        else:
+            assert saved["pairs"][key]["winner"] == "a"
+    assert saved["pairs"]["up_other|pair_raw_vs_ttalkak|0"]["winner"] == "a"
+    assert saved["pairs"]["up_mock|pair_raw_vs_ttalkak|1"]["winner"] == "a"
+    assert len(e.comparisons) == (0 if skip_pairwise else len(affected))
+    assert all(f"new:prompt:{condition}" in pair for pair in e.comparisons)
+
+
+def test_incomplete_rerun_to_question_removes_old_pairs(resumed_eval, monkeypatch):
+    e = resumed_eval
+    e.data["records"]["up_mock|ttalkak|0"]["req_incomplete"] = True
+    monkeypatch.setattr(e.us, "make_prompt", lambda *a: {"prompt": None, "mode": "NEEDS_INFO"})
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    saved = json.loads(e.out.read_text(encoding="utf-8"))
+    assert saved["records"]["up_mock|ttalkak|0"]["asked"] is True
+    assert "up_mock|pair_raw_vs_ttalkak|0" not in saved["pairs"]
+    assert "up_mock|pair_rewrite_vs_ttalkak|0" not in saved["pairs"]
+    assert not e.executions and not e.comparisons
+
+
+@pytest.mark.parametrize("version", [None, "pair-v1", "pair-v2"])
+def test_pair_cache_uses_only_current_judge_version(resumed_eval, version):
+    e = resumed_eval
+    key = "up_mock|pair_raw_vs_ttalkak|0"
+    e.data["pairs"][key] = {"winner": "a", **({"version": version} if version else {})}
+    e.us.run(e.args, [e.item], e.data, e.out)
+
+    stale = version != e.us.PAIR_JUDGE_VERSION
+    assert not e.executions
+    assert e.comparisons == ([("old:raw", "old:ttalkak")] if stale else [])
+    assert e.data["pairs"][key] == {"winner": "b" if stale else "a", "version": e.us.PAIR_JUDGE_VERSION}
+    if stale:
+        assert json.loads(e.out.read_text(encoding="utf-8")) == e.data

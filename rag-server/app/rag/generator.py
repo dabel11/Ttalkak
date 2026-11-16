@@ -447,9 +447,8 @@ def build_analysis_block(analysis: dict | None) -> str:
 
 
 def _build_context_blocks(contexts: list[dict]) -> str:
-    """검색 컨텍스트를 '[참고 기법]' + (있으면) '[참고 예시]' 블록으로 조립.
-    예시 컨텍스트(metadata.kind=='example')가 하나도 없으면 기존과 **완전히 동일한**
-    '[참고 기법]\\n…' 문자열을 반환한다 → 개선 예시 도입 전 생성 경로 무회귀 보장."""
+    """검색 컨텍스트의 기법 카드만 '[참고 기법]' 블록으로 조립.
+    예시 카드는 생성기에 전달하지 않고 검색 단계의 무근거 게이트에만 쓴다."""
     # 예시는 생성기에 넣지 않는다(2026-11-13). 합성 예시(data/curated/synthetic_examples.jsonl)가 사용자가 정하지 않은
     # 개수·형식을 박고 사실을 지어내는 옛 방식이라, 퓨샷으로 SYSTEM 원칙을 거슬렀다 — 개발 24문항 짝 비교에서
     # 카드+예시 24승 18패 vs 카드만 29승 14패. 예시 검색은 무근거 게이트(main.retrieve_contexts)에서 계속 쓴다.
@@ -704,8 +703,8 @@ def _gemini_output_budget(query: str, want: int) -> int:
     되돌릴 수 없을 때 그 요청을 Gemini 로 보낸다. 그런데 Gemini 호출이 `max_output_tokens`
     를 고정 4096 으로 두면, **정작 라우팅으로 넘어온 가장 긴 입력**의 원문을 다 되돌릴
     출력 예산이 모자라 조용히 잘린다(improved_prompt 에서 원문 꼬리 누락 → '원문이 빠져
-    작업 불가'인 바로 그 실패). 즉 라우팅이 목적을 달성하지 못했다. SYSTEM_PROMPT 만
-    ~4,744 토큰이라 무료 Groq(TPM 8k)에선 원문 1,500자부터 Gemini 로 라우팅되는데,
+    작업 불가'인 바로 그 실패). 즉 라우팅이 목적을 달성하지 못했다. 라우팅 경계는
+    SYSTEM_PROMPT·기법 카드·대화 이력·TPM 설정에 따라 달라진다.
     4,000자(≈출력 4,600tok) 요청은 4096 cap 에 걸려 잘렸다(실측 산정 2026-11-04).
 
     `_needs_long_context` 와 같은 산정식(원문 토큰 + 600 오버헤드)으로 필요 출력을 잡고,
@@ -830,7 +829,10 @@ def _needs_long_context(query: str, contexts: list[dict] | None,
     #    위험을 맞바꾸는 결정이라 코드는 그대로 둔다(WORKLOG 2026-09-20 전수조사).
     est_in = _est_tokens(SYSTEM_PROMPT) + _est_tokens(query) + 100
     est_in += sum(_est_tokens(h["content"]) for h in _sanitize_history(history))
-    est_in += sum(_est_tokens(c.get("text") or "") + 60 for c in (contexts or []))
+    # _build_context_blocks 가 제외한 예시 카드는 실제 입력을 늘리지 않는다.
+    # 라우팅에서만 세면 같은 프롬프트도 예시 검색 결과 때문에 Gemini 쿼터를 쓴다.
+    est_in += sum(_est_tokens(c.get("text") or "") + 60
+                  for c in (contexts or []) if not _is_example(c))
     avail_out  = GroqGenerator._tpm(groq_model) - est_in - 200
     needed_out = _est_tokens(query) + 600               # 원문 재인용 + 지시문·JSON 오버헤드
     return avail_out < needed_out
