@@ -204,6 +204,33 @@ class BillingRefundIntegrationTest {
                 () -> refunds.request(owner.getId(), charge.getOrderId(), "검토 요청")).getCode());
     }
 
+    @Test void unsettledPaymentsAreReadOnlyAndAdminOnly() throws Exception {
+        Member owner = member(false), admin = member(true);
+        BillingCharge pending = charges.saveAndFlush(new BillingCharge(
+                owner.getId(), now, now.plusSeconds(86400),
+                BillingPlan.LIGHT, 3900, "RENEWAL", BillingContext.LEGACY_TEST));
+
+        // A payment with unknown provider outcome is NOT a refund request.
+        assertEquals("PENDING", pending.getStatus());
+        assertEquals("NONE", pending.getRefundState());
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .noneMatch(item -> item.orderId().equals(pending.getOrderId())));
+        assertTrue(refunds.pendingPayments().stream()
+                .anyMatch(item -> item.orderId().equals(pending.getOrderId())));
+
+        String ownerToken = "Bearer " + auth.issueAccessToken(owner);
+        String adminToken = "Bearer " + auth.issueAccessToken(admin);
+        mvc.perform(get("/api/admin/billing/refunds/pending-payments")
+                .header("Authorization", ownerToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/billing/refunds/pending-payments")
+                .header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertTrue(result.getResponse().getContentAsString()
+                        .contains(pending.getOrderId())));
+        verifyNoInteractions(gateway);  // Listing must not issue a second payment or cancellation.
+    }
+
     @Test void ownerOnlyRequestsAndOnlyAdminsApproveWithoutLeakingPaymentKeys() throws Exception {
         Member owner = member(false), stranger = member(false);
         BillingCharge charge = paidOrder(owner, BillingContext.LEGACY_TEST);
