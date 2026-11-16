@@ -17,6 +17,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -855,6 +860,97 @@ class BillingServiceIntegrationTest {
      * A disposable MySQL billing run must fail if Spring's test profile silently
      * selects the H2 datasource. The normal H2 test suite does not claim MySQL coverage.
      */
+    /**
+     * Actual MySQL transactions: withdrawal holds a subscription write lock while
+     * a confirmed UPGRADE reconciliation competes for it. On commit the losing
+     * side must re-read the member row under its own lock and must not grant a tier.
+     * The normal H2 suite skips this test; the isolated MySQL CI job enables it.
+     */
+    @Test
+    void mysqlConcurrentWithdrawalBeforeApprovalCannotGrantUpgrade() throws Exception {
+        if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) return;
+
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member owner = members.saveAndFlush(new Member("mysql_race_" + suffix,
+                passwordEncoder.encode(password), "mysql_race_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = owner.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mysql-test-billing-" + suffix);
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(inv -> new BillingGateway.Payment("init-" + inv.getArgument(2),
+                        inv.getArgument(2), "DONE", "BILLING",
+                        ((Integer) inv.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+
+        doThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                "BILLING_UNCERTAIN", "synthetic timeout")).when(gateway)
+                .charge(anyString(), anyString(), anyString(), eq(quote.amount()),
+                        eq("TTALKAK STANDARD upgrade"));
+        assertEquals("BILLING_UNCERTAIN",
+                assertThrows(ApiException.class,
+                        () -> billing.upgrade(memberId, "STANDARD", quote.amount())).getCode());
+        BillingCharge pendingUpgrade = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String orderId = pendingUpgrade.getOrderId();
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "mysql-approved-" + suffix, orderId, "DONE", "BILLING", quote.amount()));
+
+        CountDownLatch subscriptionHeld = new CountDownLatch(1);
+        CountDownLatch finishWithdrawal = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> withdrawalTask = workers.submit(() -> transactions.executeWithoutResult(tx -> {
+                // The same row lock used by the real withdrawal service.
+                subscriptions.lockByMemberId(memberId).orElseThrow();
+                subscriptionHeld.countDown();
+                try {
+                    if (!finishWithdrawal.await(15, TimeUnit.SECONDS)) {
+                        throw new AssertionError("Timed out releasing withdrawal transaction");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(interrupted);
+                }
+                withdrawal.withdraw(members.findById(memberId).orElseThrow(), password, null);
+            }));
+            assertTrue(subscriptionHeld.await(15, TimeUnit.SECONDS), "withdrawal must acquire the lock");
+            Future<String> paymentTask = workers.submit(() -> {
+                try {
+                    billing.reconcileUpgrade(memberId);
+                    return "NO_EXCEPTION";
+                } catch (ApiException error) {
+                    return error.getCode();
+                }
+            });
+            // Worker B cannot bypass the subscription lock while withdrawal owns it.
+            finishWithdrawal.countDown();
+            withdrawalTask.get(25, TimeUnit.SECONDS);
+            assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                    paymentTask.get(25, TimeUnit.SECONDS));
+        } finally {
+            finishWithdrawal.countDown();
+            workers.shutdownNow();
+            assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
+        }
+
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        BillingCharge confirmed = charges.findByOrderId(orderId).orElseThrow();
+        assertEquals("DONE", confirmed.getStatus());
+        assertEquals("mysql-approved-" + suffix, confirmed.getPaymentKey());
+        assertEquals("REQUESTED", confirmed.getRefundState());
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(item -> orderId.equals(item.orderId())));
+        assertEquals(2, charges.countByMemberId(memberId), "must not create another charge");
+    }
+
     @Test
     void isolatedBillingRegressionMustActuallyConnectToMysqlWhenRequested() throws Exception {
         if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) {
