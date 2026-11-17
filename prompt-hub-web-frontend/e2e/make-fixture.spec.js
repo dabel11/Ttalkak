@@ -1138,9 +1138,15 @@ test("an authenticated composer success clears Guest recovery even when the foll
   await loginForm.locator('input[name="password"]').fill("password123!");
   await loginForm.getByRole("button", { name: "로그인", exact: true }).click();
 
+  // Login hydrates Make threads asynchronously and re-renders the composer.
+  // Wait for that render before drafting the independent member request.
+  await expect(page.locator(".make-backend-note")).toContainText("Make API 연결됨");
   const nextPrompt = "Continue with a different member request";
-  await page.locator('[data-composer] textarea[name="prompt"]').fill(nextPrompt);
-  await page.locator('[data-composer] button[type="submit"]').click();
+  const composer = page.locator("[data-composer]");
+  await composer.locator('textarea[name="prompt"]').fill(nextPrompt);
+  await expect(composer.locator('textarea[name="prompt"]')).toHaveValue(nextPrompt);
+  await expect(composer.locator('button[type="submit"]')).toBeEnabled();
+  await composer.locator('button[type="submit"]').click();
 
   await expect(page.locator(".message.assistant").getByText("Successful member result", { exact: true })).toBeVisible();
   const successfulMessage = page.locator(".message.user").filter({ hasText: nextPrompt });
