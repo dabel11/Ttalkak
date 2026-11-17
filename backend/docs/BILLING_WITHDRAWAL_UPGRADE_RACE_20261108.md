@@ -23,8 +23,9 @@
 ## 병합 전 확인할 결정과 검증
 
 - [ ] **팀 정책 합의**: 승인됐지만 탈퇴로 인해 이용권을 부여하지 않은 금액의 대사·환불·보존·사용자 고지 담당자/절차 결정. 특히 PENDING 대사 목록은 **조회만** 지원하며 결제사 결과를 확정하지 않는다. 승인·미승인·취소를 구분하는 수동 대사 결과와 실제 PG 환불 증빙을 기록할 절차/권한이 별도로 필요하다.
-- [ ] **격리 MySQL 8.4**: 폐기형 테스트 전용 DB에서 탈퇴/승인 경합을 실제 다중 트랜잭션으로 검증 (H2 CI 성공은 MySQL REPEATABLE READ 검증이 아님)
-- [ ] 최신 GitHub CI 모두 성공, 코드 리뷰 승인. 테스트 결과 확인 전에 병합하지 않음
+- [x] **격리 MySQL 8.4 단일 경합 시나리오 검증**: 2026-11-17 코드 HEAD `d6fd966`의 [CI #44046548400](https://github.com/dabel11/Ttalkak/actions/runs/44046548400)에서 `Isolated MySQL 8.4 billing regression` 성공. 작업 로그에서 MySQL 8.4.13 서비스 컨테이너 기동, `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`, `127.0.0.1:13306/ttalkak_billing_regression` 사용 및 Gradle `BUILD SUCCESSFUL` 확인. 연결 대상 검증 테스트와 단일 탈퇴/승인 경합 회귀가 포함되나, 모든 스케줄·격리 수준·다중 인스턴스의 무결성을 입증하지는 않음.
+- [x] **해당 코드 HEAD CI**: 위 실행에서 전체 7개 작업 성공(Backend, 격리 MySQL 회귀, MySQL 9 스키마, 웹 E2E, 웹·Spring 통합, Frontend, RAG). 별도 [Server container smoke #44046548564](https://github.com/dabel11/Ttalkak/actions/runs/44046548564)도 2개 작업 성공. 이 결과는 **문서 갱신 이전 코드 SHA `d6fd966`**에 한정.
+- [ ] **병합 대상 최종 HEAD CI 및 독립 코드 리뷰 승인**: 이 문서의 후속 커밋까지 포함한 최종 HEAD 결과와 락 경합·관리자 대사 경로의 독립 검토 확인 전에는 병합하지 않음.
 
 ### 테스트 DB 안전성
 
