@@ -27,6 +27,13 @@ public interface BillingChargeRepository extends JpaRepository<BillingCharge, Lo
     long completedUpgrades(@org.springframework.data.repository.query.Param("memberId") Long memberId,
             @org.springframework.data.repository.query.Param("scope") String scope,
             @org.springframework.data.repository.query.Param("end") java.time.Instant end);
+    // Payment status PENDING != refund_state PENDING. Uncertain provider outcomes
+    // must remain visible to an administrator even if no refund was requested yet.
+    @org.springframework.data.jpa.repository.Query("select b from BillingCharge b where "
+            + "coalesce(b.billingScope, 'test:legacy') = :scope and b.status = 'PENDING' order by b.id asc")
+    java.util.List<BillingCharge> pendingPaymentQueue(
+            @org.springframework.data.repository.query.Param("scope") String scope,
+            org.springframework.data.domain.Pageable page);
     @org.springframework.data.jpa.repository.Query("select b from BillingCharge b where "
             + "coalesce(b.billingScope, 'test:legacy') = :scope and b.refundState = :state order by b.id asc")
     java.util.List<BillingCharge> refundQueue(@org.springframework.data.repository.query.Param("scope") String scope,

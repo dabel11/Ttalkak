@@ -1,0 +1,36 @@
+# 탈퇴·결제 승인 경합 처리: 검증 범위와 정책 검토
+
+> PR #95 · 범위: 테스트용 결제 모드에서 탈퇴와 RENEWAL/UPGRADE 승인 결과가 엇갈릴 때의 데이터 일관성. 운영 결제/환불 및 Railway 설정 변경 없음.
+
+## 현재 수정안 (팀 정책 검토 전, 미병합)
+
+1. **결제 시작 차단**: 탈퇴 회원이 추가 업그레이드 결제를 시작하거나 예약 갱신의 대상이 되지 않도록 한다. 구독 행을 잠근 다음 회원 행도 `PESSIMISTIC_WRITE`로 잠가 활성 여부를 확인한다.
+2. **외부 공급자 결제 승인 완료 후 탈퇴가 확인된 경우**: 결제사 응답의 주문 ID·금액·결제키·유형을 검증하고 `BillingCharge`를 `DONE`으로 기록한다. **상위 등급 변경/신규 이용권 부여는 하지 않는다.**
+3. **관리자 수동 검토 등록**: `requestRefund("탈퇴 후 승인 - 관리자 확인 필요")`로 `refundState=REQUESTED`를 남겨 `BillingRefundService.queue("REQUESTED")`에 나타나게 한다. 이 코드는 결제사 취소·환불을 **호출하지 않는다**.
+4. **UPGRADE 환불은 자동 지원되지 않음**: 현재 `BillingRefundService.approve()`의 `supported()` 조건상 업그레이드 주문은 `BILLING_REFUND_MANUAL_REVIEW` 대상이다. 관리자 큐 노출은 *환불 완료*를 뜻하지 않으며 별도 승인·대사 절차가 필요하다.
+5. **기존 결제 환불 차단 해소**: 새 승인 성공 주문을 `PENDING`으로 방치하지 않아 기존 결제에 대한 `hasPendingPayment()` 검사가 불필요하게 막히지 않도록 한다.
+6. **결과를 모르는 결제의 대사 목록**: `BillingCharge.status=PENDING`은 결제사 승인이 확인되지 않았다는 뜻으로, `refundState=PENDING`(취소 확인 중)과 다르다. 관리자 전용 `GET /api/admin/billing/refunds/pending-payments`는 결제 상태가 PENDING인 주문의 **읽기 전용** 목록을 제공한다. 이 조회는 결제사에 조회·청구·취소 요청을 보내지 않는다. 승인이 확인된 주문을 실제 처리하려면 별도의 안전한 정산 절차가 필요하다.
+7. **락 순서**: 이 변경과 환불 서비스의 잠금 순서를 구독 → 회원으로 맞춘다. 단, 실제 MySQL 다중 트랜잭션 교착·격리 수준 검증은 별도 필요하다.
+
+## 회귀 검증 대상
+
+- 탈퇴 전 시작된 **UPGRADE** 결제의 뒤늦은 승인 → `DONE` + `REQUESTED`; 이용권·요금제 변화 없음, 관리자 큐에서 확인, 추가 charge 없음
+- 같은 계정의 초기 **RENEWAL** 환불 요청이 위 주문의 잔여 `PENDING`에 의해 차단되지 않음
+- 탈퇴 전 시작된 **RENEWAL** 결제의 뒤늦은 승인 → `DONE` + `REQUESTED`; 새 이용권 발급 없음, 자동갱신 중지 유지
+- 공급자 응답이 확인 불가·주문 ID/금액 불일치 → 기존 주문 `PENDING` 유지, 임의 청구·환불·이용권 부여 금지
+- 탈퇴 이후 신규 결제 및 예전 액세스 토큰을 통한 결제 API 이용 거부
+
+## 병합 전 확인할 결정과 검증
+
+- [ ] **팀 정책 합의**: 승인됐지만 탈퇴로 인해 이용권을 부여하지 않은 금액의 대사·환불·보존·사용자 고지 담당자/절차 결정. 특히 PENDING 대사 목록은 **조회만** 지원하며 결제사 결과를 확정하지 않는다. 승인·미승인·취소를 구분하는 수동 대사 결과와 실제 PG 환불 증빙을 기록할 절차/권한이 별도로 필요하다.
+- [x] **격리 MySQL 8.4 단일 경합 시나리오 검증**: 2026-11-17 코드 HEAD `d6fd966`의 [CI #44046548400](https://github.com/dabel11/Ttalkak/actions/runs/44046548400)에서 `Isolated MySQL 8.4 billing regression` 성공. 작업 로그에서 MySQL 8.4.13 서비스 컨테이너 기동, `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`, `127.0.0.1:13306/ttalkak_billing_regression` 사용 및 Gradle `BUILD SUCCESSFUL` 확인. 연결 대상 검증 테스트와 단일 탈퇴/승인 경합 회귀가 포함되나, 모든 스케줄·격리 수준·다중 인스턴스의 무결성을 입증하지는 않음.
+- [x] **해당 코드 HEAD CI**: 위 실행에서 전체 7개 작업 성공(Backend, 격리 MySQL 회귀, MySQL 9 스키마, 웹 E2E, 웹·Spring 통합, Frontend, RAG). 별도 [Server container smoke #44046548564](https://github.com/dabel11/Ttalkak/actions/runs/44046548564)도 2개 작업 성공. 이 결과는 **문서 갱신 이전 코드 SHA `d6fd966`**에 한정.
+- [ ] **병합 대상 최종 HEAD CI 및 독립 코드 리뷰 승인**: 이 문서의 후속 커밋까지 포함한 최종 HEAD 결과와 락 경합·관리자 대사 경로의 독립 검토 확인 전에는 병합하지 않음.
+
+### 테스트 DB 안전성
+
+격리 MySQL 회귀 실행에는 `TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION=1`과 전용 로컬 URL `jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression`이 필요하다. 테스트 초기화기가 URL/드라이버를 검사하지만 **접속 대상이 실제로 폐기 가능한 컨테이너인지**도 수동 확인해야 한다. 운영 DB에 `create-drop` 테스트를 실행하면 안 된다.
+
+## 이전 검토 기록
+
+2026-11-08~16의 상세 작업 이력·테스트 미실행 당시 기록과 CI 분석은 GitHub 커밋 및 PR #95 리뷰에 보존한다. 이 문서는 현재 PR의 동작·결정사항·검증 경계만 기술한다.

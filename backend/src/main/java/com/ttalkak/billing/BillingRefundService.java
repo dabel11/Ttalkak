@@ -50,12 +50,22 @@ public class BillingRefundService {
         return charges.refundQueue(context.scope(), state, PageRequest.of(0, 50)).stream().map(this::view).toList();
     }
 
+    /** Read-only admin reconciliation queue for provider outcomes not yet verified. No PG calls. */
+    public List<ChargeView> pendingPayments() {
+        return charges.pendingPaymentQueue(context.scope(), PageRequest.of(0, 50))
+                .stream().map(this::view).toList();
+    }
+
     public ChargeView request(Long memberId, String orderId, String reason) {
         String reviewedReason = reason(reason);
         return transactions.execute(tx -> {
-            lockMember(memberId);
+            // Verify order ownership BEFORE locking subscription so an unrelated order
+            // keeps returning 404 instead of leaking the absence of a subscription (500).
+            // This lookup is read-only and takes no row lock.
             BillingCharge charge = owned(memberId, orderId);
+            // All actual row locks follow subscription -> member.
             BillingSubscription subscription = lockSubscription(memberId);
+            lockMember(memberId);
             if (!"NONE".equals(charge.getRefundState())) return view(charge);
             if (!"DONE".equals(charge.getStatus()) || charge.getPaymentKey() == null) {
                 throw error(HttpStatus.CONFLICT, "BILLING_REFUND_REQUIRES_PAYMENT", "승인이 확인된 결제만 환불을 요청할 수 있습니다.");
@@ -75,8 +85,8 @@ public class BillingRefundService {
         String approvalReason = reason(reason);
         BillingCharge seed = find(orderId);
         Prepared prepared = transactions.execute(tx -> {
-            lockMember(seed.getMemberId());
             lockSubscription(seed.getMemberId());
+            lockMember(seed.getMemberId());
             BillingCharge charge = owned(seed.getMemberId(), orderId);
             if (!reviewed || expectedAmount == null || expectedAmount != charge.getAmount()) {
                 throw error(HttpStatus.CONFLICT, "BILLING_REFUND_REVIEW_REQUIRED", "원 결제 금액과 환불 검토 확인이 필요합니다.");
@@ -132,7 +142,7 @@ public class BillingRefundService {
         String rejectedReason = reason(reason);
         BillingCharge seed = find(orderId);
         return transactions.execute(tx -> {
-            lockMember(seed.getMemberId()); lockSubscription(seed.getMemberId());
+            lockSubscription(seed.getMemberId()); lockMember(seed.getMemberId());
             BillingCharge charge = owned(seed.getMemberId(), orderId);
             if (!"REQUESTED".equals(charge.getRefundState())) throw error(HttpStatus.CONFLICT,
                     "BILLING_REFUND_CANNOT_REJECT", "취소 확인 중인 주문은 거절할 수 없습니다.");
@@ -148,8 +158,8 @@ public class BillingRefundService {
             throw error(HttpStatus.BAD_GATEWAY, "BILLING_REFUND_UNCERTAIN", "전액 취소가 확인되지 않았습니다. 기존 요청을 재확인해 주세요.");
         }
         return transactions.execute(tx -> {
-            lockMember(prepared.memberId());
             BillingSubscription subscription = lockSubscription(prepared.memberId());
+            lockMember(prepared.memberId());
             BillingCharge charge = owned(prepared.memberId(), prepared.orderId());
             if ("DONE".equals(charge.getRefundState())) return view(charge);
             if (!"PENDING".equals(charge.getRefundState())) throw error(HttpStatus.CONFLICT,

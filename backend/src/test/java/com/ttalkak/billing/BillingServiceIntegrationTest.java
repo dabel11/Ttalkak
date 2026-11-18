@@ -17,6 +17,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,6 +31,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @AutoConfigureMockMvc
+@org.springframework.test.context.ContextConfiguration(
+        initializers = BillingServiceIntegrationTest.IsolatedMysqlDatasourcePreflight.class)
 @SpringBootTest(properties = {
         "BILLING_MODE=test",
         "JWT_SECRET_BASE64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
@@ -34,7 +41,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "BILLING_POLL_MS=3600000"
 })
 class BillingServiceIntegrationTest {
+    /**
+     * Stops the opt-in, destructive create-drop MySQL regression before JPA
+     * creates a schema if the configured URL is not the disposable local fixture.
+     * Ordinary H2 test runs remain unchanged.
+     */
+    public static class IsolatedMysqlDatasourcePreflight
+            implements org.springframework.context.ApplicationContextInitializer<
+                    org.springframework.context.ConfigurableApplicationContext> {
+        @Override
+        public void initialize(org.springframework.context.ConfigurableApplicationContext context) {
+            if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) {
+                return;
+            }
+            String expected = "jdbc:mysql://127.0.0.1:13306/ttalkak_billing_regression";
+            String configured = context.getEnvironment().getProperty("spring.datasource.url", "");
+            if (!(configured.equals(expected) || configured.startsWith(expected + "?"))) {
+                throw new IllegalStateException(
+                        "Destructive billing regression requires the disposable local MySQL fixture on port 13306");
+            }
+            if (!"com.mysql.cj.jdbc.Driver".equals(
+                    context.getEnvironment().getProperty("spring.datasource.driver-class-name", ""))) {
+                throw new IllegalStateException(
+                        "Destructive billing regression requires the explicit MySQL JDBC driver");
+            }
+        }
+    }
     @Autowired BillingService billing;
+    @Autowired BillingRefundService refunds;
     @Autowired AccountWithdrawalService withdrawal;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired BillingChargeRepository charges;
@@ -44,6 +78,7 @@ class BillingServiceIntegrationTest {
     @Autowired MemberRepository members;
     @Autowired AuthService auth;
     @Autowired MockMvc mvc;
+    @Autowired javax.sql.DataSource dataSource;
     @MockitoBean BillingGateway gateway;
     @MockitoBean Clock clock;
 
@@ -173,7 +208,55 @@ class BillingServiceIntegrationTest {
         assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(1, charges.countByMemberId(memberId));
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        // chargeDue() scans other due members in the shared test database.
+        // Verify this member/order was not charged again, rather than counting unrelated calls.
+        verify(gateway, times(1)).charge(eq("billing-timeout"), eq(setup.customerKey()),
+                eq(orderId), eq(9900), anyString());
+    }
+
+    @Test
+    void mismatchedRenewalProviderResponsesKeepSameOrderPendingUntilVerified() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-renewal-key");
+
+        // A DONE response belonging to a different order must never activate a paid period.
+        when(gateway.charge(anyString(), anyString(), anyString(), eq(3900), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("unrelated-payment",
+                        "foreign-order-id", "DONE", "BILLING", 3900));
+        ApiException wrongOrder = assertThrows(ApiException.class,
+                () -> billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth"));
+        assertEquals("BILLING_UNCERTAIN", wrongOrder.getCode());
+
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String orderId = pending.getOrderId();
+        assertEquals("RENEWAL", pending.getChargeKind());
+        assertNull(pending.getPaymentKey());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("PENDING", billing.status(memberId).paymentStatus());
+        assertEquals(1, charges.countByMemberId(memberId));
+
+        // A matching order with the wrong amount is also not proof of a valid payment.
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "wrong-amount-payment", orderId, "DONE", "BILLING", 3901));
+        ApiException wrongAmount = assertThrows(ApiException.class, () -> billing.retry(memberId));
+        assertEquals("BILLING_UNCERTAIN", wrongAmount.getCode());
+        assertEquals("PENDING", charges.findByOrderId(orderId).orElseThrow().getStatus());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan());
+
+        // A later matching lookup can settle the same durable order, without charging again.
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "verified-renewal-payment", orderId, "DONE", "BILLING", 3900));
+        billing.retry(memberId);
+        assertEquals("DONE", charges.findByOrderId(orderId).orElseThrow().getStatus());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("ACTIVE", billing.status(memberId).paymentStatus());
+        assertEquals(1, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), eq(3900), anyString());
+        verify(gateway, times(2)).lookup(orderId);
     }
 
     @Test
@@ -193,7 +276,8 @@ class BillingServiceIntegrationTest {
         assertEquals("PRO", periods.at(memberId, now.plusSeconds(1)).plan());
         assertEquals(1, charges.countByMemberId(memberId));
         billing.chargeDue();
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, times(1)).charge(eq("billing-before-crash"), eq(setup.customerKey()),
+                anyString(), eq(9900), anyString());
     }
 
     @Test
@@ -317,6 +401,209 @@ class BillingServiceIntegrationTest {
     }
 
     @Test
+    void mismatchedUpgradeProviderResponsesNeverGrantEntitlementOrTriggerSecondCharge() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        Long memberId = newMember().getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        assertTrue(quote.amount() > 0);
+
+        reset(gateway);
+        doCallRealMethod().when(gateway).withinRequestBudget(any());
+
+        // An unrelated provider order is not proof that our upgrade was paid.
+        when(gateway.charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade")))
+                .thenAnswer(invocation -> new BillingGateway.Payment("unrelated-payment",
+                        "other-order-id", "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        ApiException wrongOrder = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_UNCERTAIN", wrongOrder.getCode());
+
+        BillingCharge pending = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String originalOrderId = pending.getOrderId();
+        assertEquals("UPGRADE", pending.getChargeKind());
+        assertNull(pending.getPaymentKey());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+
+        // A later lookup for the same order with a mismatched amount is likewise
+        // uncertain. Reconciliation may only look up; it must never charge again.
+        when(gateway.lookup(originalOrderId)).thenReturn(new BillingGateway.Payment(
+                "wrong-amount-payment", originalOrderId, "DONE", "BILLING", quote.amount() + 1L));
+        ApiException wrongAmount = assertThrows(ApiException.class,
+                () -> billing.reconcileUpgrade(memberId));
+        assertEquals("BILLING_UNCERTAIN", wrongAmount.getCode());
+
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("PENDING", charges.findByOrderId(originalOrderId).orElseThrow().getStatus());
+        assertEquals(2, charges.countByMemberId(memberId));
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+        verify(gateway, times(1)).lookup(originalOrderId);
+    }
+
+    @Test
+    void withdrawnMemberCannotStartNewUpgradeOrderOrProviderCharge() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("upgrade_withdraw_" + suffix,
+                passwordEncoder.encode(password), "upgrade_withdraw_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        assertTrue(quote.amount() > 0);
+        withdrawal.withdraw(member, password, null);
+        clearInvocations(gateway);
+
+        ApiException inactive = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(1, charges.countByMemberId(memberId), "withdrawal must not create a new upgrade order");
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, never()).lookup(anyString());
+    }
+
+    @Test
+    void withdrawnMemberCannotRetryUncertainUpgradeAfterAccountClosure() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("pending_upgrade_" + suffix,
+                passwordEncoder.encode(password), "pending_upgrade_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+
+        // The initial upgrade reached the fake provider but its answer was lost.
+        // The durable PENDING order must not authorize another provider call after withdrawal.
+        doThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                "BILLING_UNCERTAIN", "synthetic upgrade timeout"))
+                .when(gateway).charge(anyString(), anyString(), anyString(),
+                        eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+        assertEquals("BILLING_UNCERTAIN", assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount())).getCode());
+        BillingCharge pendingOrder = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        assertEquals("UPGRADE", pendingOrder.getChargeKind());
+        String originalOrderId = pendingOrder.getOrderId();
+        assertEquals(2, charges.countByMemberId(memberId));
+
+        withdrawal.withdraw(member, password, null);
+        clearInvocations(gateway);
+
+        ApiException inactive = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_ACCOUNT_INACTIVE", inactive.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(2, charges.countByMemberId(memberId));
+        assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(
+                memberId, "PENDING").orElseThrow().getOrderId());
+        verify(gateway, never()).lookup(anyString());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void lateUpgradeApprovalAfterWithdrawalRequiresReconciliationWithoutChangingEntitlement() {
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("late_upgrade_" + suffix,
+                passwordEncoder.encode(password), "late_upgrade_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mock-light-billing-key");
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(invocation -> new BillingGateway.Payment("initial-payment-" + invocation.getArgument(2),
+                        invocation.getArgument(2), "DONE", "BILLING",
+                        ((Integer) invocation.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+        clearInvocations(gateway);
+
+        // The upgrade order is prepared first. While the fake provider processes
+        // the charge, withdrawal commits before the approval response arrives.
+        doAnswer(invocation -> {
+            withdrawal.withdraw(member, password, null);
+            return new BillingGateway.Payment("late-upgrade-payment",
+                    invocation.getArgument(2), "DONE", "BILLING",
+                    ((Integer) invocation.getArgument(3)).longValue());
+        }).when(gateway).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+
+        ApiException reconciliation = assertThrows(ApiException.class,
+                () -> billing.upgrade(memberId, "STANDARD", quote.amount()));
+        assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED", reconciliation.getCode());
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals(2, charges.countByMemberId(memberId));
+        BillingCharge reviewOrder = charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow();
+        assertEquals("UPGRADE", reviewOrder.getChargeKind());
+        assertEquals("DONE", reviewOrder.getStatus());
+        assertEquals("late-upgrade-payment", reviewOrder.getPaymentKey());
+        assertEquals("REQUESTED", reviewOrder.getRefundState());
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(c -> c.orderId().equals(reviewOrder.getOrderId())));
+        assertTrue(charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING").isEmpty());
+        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(),
+                eq(quote.amount()), eq("TTALKAK STANDARD upgrade"));
+
+        // This account cannot receive a higher tier even after an additional reconciliation attempt.
+        billing.reconcileUpgrade(memberId);
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        assertEquals("REQUESTED", charges.findByOrderId(reviewOrder.getOrderId()).orElseThrow().getRefundState());
+        assertEquals(2, charges.countByMemberId(memberId));
+        verify(gateway, never()).lookup(reviewOrder.getOrderId());
+
+        // A settled but manual-review upgrade must no longer block the original renewal refund.
+        BillingCharge firstCharge = charges.scopedCharges(memberId, "test:legacy", "DONE",
+                org.springframework.data.domain.PageRequest.of(0, 5)).stream()
+                .filter(c -> "RENEWAL".equals(c.getChargeKind())).findFirst().orElseThrow();
+        assertEquals("REQUESTED", refunds.request(memberId, firstCharge.getOrderId(),
+                "초기 결제 환불 검토").refundState());
+    }
+
+    @Test
     void withdrawnMemberCannotBeChargedBySchedulerOrStaleCandidate() {
         Instant now = Instant.parse("2026-10-19T00:00:00Z");
         when(clock.instant()).thenReturn(now);
@@ -431,14 +718,20 @@ class BillingServiceIntegrationTest {
         assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew(),
                 "a delayed provider approval must not restart renewal after withdrawal");
         assertEquals(1, charges.countByMemberId(memberId));
-        assertEquals("DONE", charges.findFirstByMemberIdOrderByIdDesc(memberId)
-                .orElseThrow().getStatus(),
+        BillingCharge reviewOrder = charges.findFirstByMemberIdOrderByIdDesc(memberId).orElseThrow();
+        assertEquals("DONE", reviewOrder.getStatus(),
                 "a provider-approved in-flight order still needs a durable reconciliation record");
+        assertEquals("REQUESTED", reviewOrder.getRefundState());
+        assertEquals("FREE", periods.at(memberId, now.plusSeconds(1)).plan(),
+                "approval after withdrawal must not create a new entitlement");
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(c -> c.orderId().equals(reviewOrder.getOrderId())));
         assertFalse(subscriptions.dueMemberIds(now, "test:legacy").contains(memberId));
 
         billing.charge(memberId);
         billing.chargeDue();
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        verify(gateway, times(1)).charge(eq("mock-only-billing-key"), anyString(),
+                eq(reviewOrder.getOrderId()), eq(3900), anyString());
         verify(gateway, never()).lookup(anyString());
     }
 
@@ -515,7 +808,13 @@ class BillingServiceIntegrationTest {
         assertEquals(1, charges.countByMemberId(memberId));
         assertEquals(originalOrderId, charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
                 .orElseThrow().getOrderId());
-        verify(gateway, times(1)).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+        // Provider response was unknown: do not fabricate a DONE/refund, but expose the
+        // unsettled payment to the administrator separately from the refund queue.
+        assertTrue(refunds.pendingPayments().stream().anyMatch(c ->
+                originalOrderId.equals(c.orderId()) && "PENDING".equals(c.status())
+                && "NONE".equals(c.refundState())));
+        verify(gateway, times(1)).charge(eq("mock-only-billing-key"), anyString(),
+                eq(originalOrderId), eq(3900), anyString());
         verify(gateway, never()).lookup(anyString());
     }
 
@@ -528,6 +827,144 @@ class BillingServiceIntegrationTest {
         assertEquals("BILLING_PLAN_INVALID", assertThrows(ApiException.class,
                 () -> billing.setup(id, "ENTERPRISE")).getCode());
         verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void withdrawnMemberCannotReusePreviouslyValidAccessTokenForBillingEndpoints() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member member = members.saveAndFlush(new Member("token_withdraw_" + suffix,
+                passwordEncoder.encode(password), "token_withdraw_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = member.getId();
+        billing.setup(memberId, "LIGHT");
+        String token = auth.issueAccessToken(member);
+
+        // This was a valid token before withdrawal; no login failure is being simulated.
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        withdrawal.withdraw(member, password, null);
+
+        // Endpoints must recheck the current account state, not trust a previously
+        // issued JWT. Keep financial records but deny their former owner access.
+        mvc.perform(get("/api/me/billing").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/setup").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/me/billing/retry").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertEquals(0, charges.countByMemberId(memberId));
+        verify(gateway, never()).issueBillingKey(anyString(), anyString());
+        verify(gateway, never()).charge(anyString(), anyString(), anyString(), anyInt(), anyString());
+    }
+
+    /**
+     * A disposable MySQL billing run must fail if Spring's test profile silently
+     * selects the H2 datasource. The normal H2 test suite does not claim MySQL coverage.
+     */
+    /**
+     * Actual MySQL transactions: withdrawal holds a subscription write lock while
+     * a confirmed UPGRADE reconciliation competes for it. On commit the losing
+     * side must re-read the member row under its own lock and must not grant a tier.
+     * The normal H2 suite skips this test; the isolated MySQL CI job enables it.
+     */
+    @Test
+    void mysqlConcurrentWithdrawalBeforeApprovalCannotGrantUpgrade() throws Exception {
+        if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) return;
+
+        Instant now = Instant.parse("2026-10-19T00:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String password = "Withdrawal-Fixture-123!";
+        Member owner = members.saveAndFlush(new Member("mysql_race_" + suffix,
+                passwordEncoder.encode(password), "mysql_race_" + suffix,
+                "Synthetic Member", null, null, null));
+        Long memberId = owner.getId();
+        var setup = billing.setup(memberId, "LIGHT");
+        when(gateway.issueBillingKey(anyString(), anyString())).thenReturn("mysql-test-billing-" + suffix);
+        when(gateway.charge(anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenAnswer(inv -> new BillingGateway.Payment("init-" + inv.getArgument(2),
+                        inv.getArgument(2), "DONE", "BILLING",
+                        ((Integer) inv.getArgument(3)).longValue()));
+        billing.completeRegistration(memberId, setup.customerKey(), "fixture-auth");
+        var quote = billing.upgradeQuote(memberId, "STANDARD");
+
+        doThrow(new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                "BILLING_UNCERTAIN", "synthetic timeout")).when(gateway)
+                .charge(anyString(), anyString(), anyString(), eq(quote.amount()),
+                        eq("TTALKAK STANDARD upgrade"));
+        assertEquals("BILLING_UNCERTAIN",
+                assertThrows(ApiException.class,
+                        () -> billing.upgrade(memberId, "STANDARD", quote.amount())).getCode());
+        BillingCharge pendingUpgrade = charges.findFirstByMemberIdAndStatusOrderByIdDesc(memberId, "PENDING")
+                .orElseThrow();
+        String orderId = pendingUpgrade.getOrderId();
+        when(gateway.lookup(orderId)).thenReturn(new BillingGateway.Payment(
+                "mysql-approved-" + suffix, orderId, "DONE", "BILLING", quote.amount()));
+
+        CountDownLatch subscriptionHeld = new CountDownLatch(1);
+        CountDownLatch finishWithdrawal = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> withdrawalTask = workers.submit(() -> transactions.executeWithoutResult(tx -> {
+                // The same row lock used by the real withdrawal service.
+                subscriptions.lockByMemberId(memberId).orElseThrow();
+                subscriptionHeld.countDown();
+                try {
+                    if (!finishWithdrawal.await(15, TimeUnit.SECONDS)) {
+                        throw new AssertionError("Timed out releasing withdrawal transaction");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(interrupted);
+                }
+                withdrawal.withdraw(members.findById(memberId).orElseThrow(), password, null);
+            }));
+            assertTrue(subscriptionHeld.await(15, TimeUnit.SECONDS), "withdrawal must acquire the lock");
+            Future<String> paymentTask = workers.submit(() -> {
+                try {
+                    billing.reconcileUpgrade(memberId);
+                    return "NO_EXCEPTION";
+                } catch (ApiException error) {
+                    return error.getCode();
+                }
+            });
+            // Worker B cannot bypass the subscription lock while withdrawal owns it.
+            finishWithdrawal.countDown();
+            withdrawalTask.get(25, TimeUnit.SECONDS);
+            assertEquals("BILLING_UPGRADE_RECONCILIATION_REQUIRED",
+                    paymentTask.get(25, TimeUnit.SECONDS));
+        } finally {
+            finishWithdrawal.countDown();
+            workers.shutdownNow();
+            assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
+        }
+
+        assertFalse(members.findById(memberId).orElseThrow().isActive());
+        assertFalse(subscriptions.findByMemberId(memberId).orElseThrow().isAutoRenew());
+        assertEquals("LIGHT", periods.at(memberId, now.plusSeconds(1)).plan());
+        assertEquals("LIGHT", subscriptions.findByMemberId(memberId).orElseThrow().getPlan().name());
+        BillingCharge confirmed = charges.findByOrderId(orderId).orElseThrow();
+        assertEquals("DONE", confirmed.getStatus());
+        assertEquals("mysql-approved-" + suffix, confirmed.getPaymentKey());
+        assertEquals("REQUESTED", confirmed.getRefundState());
+        assertTrue(refunds.queue("REQUESTED").stream()
+                .anyMatch(item -> orderId.equals(item.orderId())));
+        assertEquals(2, charges.countByMemberId(memberId), "must not create another charge");
+    }
+
+    @Test
+    void isolatedBillingRegressionMustActuallyConnectToMysqlWhenRequested() throws Exception {
+        if (!"1".equals(System.getenv("TTALKAK_REQUIRE_MYSQL_BILLING_REGRESSION"))) {
+            return;
+        }
+        try (var connection = dataSource.getConnection()) {
+            assertEquals("MySQL", connection.getMetaData().getDatabaseProductName(),
+                    "The isolated billing regression must use MySQL, not application-test.yml H2");
+        }
     }
 
     @Test

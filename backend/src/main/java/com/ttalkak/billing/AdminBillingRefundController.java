@@ -13,6 +13,12 @@ public class AdminBillingRefundController {
     public java.util.List<BillingRefundService.ChargeView> queue(@RequestParam(defaultValue = "REQUESTED") String state) {
         return refunds.queue(state);
     }
+    /** Uncertain charges are payment-PENDING, not refund-PENDING. Read only. */
+    @GetMapping("/pending-payments")
+    public java.util.List<BillingRefundService.ChargeView> pendingPayments() {
+        return refunds.pendingPayments();
+    }
+
     @PostMapping("/{orderId}/approve")
     public BillingRefundService.ChargeView approve(@PathVariable String orderId, @RequestBody Approval request,
                                                   @AuthenticationPrincipal Member admin) {
