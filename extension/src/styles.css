@@ -748,7 +748,7 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.typing-message span {
+.typing-message > .typing-dot {
   width: 7px;
   height: 7px;
   background: var(--muted);
@@ -756,11 +756,11 @@ button:disabled {
   animation: 0.9s ease-in-out infinite typing;
 }
 
-.typing-message span:nth-child(2) {
+.typing-message > .typing-dot:nth-child(2) {
   animation-delay: 0.12s;
 }
 
-.typing-message span:nth-child(3) {
+.typing-message > .typing-dot:nth-child(3) {
   animation-delay: 0.24s;
 }
 
