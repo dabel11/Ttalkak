@@ -269,7 +269,7 @@ function TypingIndicator({ onCancel }) {
   return (
     <div className="message-row assistant">
       <div className="typing-message" role="status" aria-live="polite" aria-atomic="true">
-        <span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" />
+        <span className="typing-dot" aria-hidden="true" /><span className="typing-dot" aria-hidden="true" /><span className="typing-dot" aria-hidden="true" />
         <span className="typing-progress">{progress.label}<small>{progress.elapsedSeconds}초</small></span>
         <button className="cancel-request-button" type="button" onClick={onCancel} aria-label="요청 취소">취소</button>
       </div>
