@@ -163,3 +163,20 @@ def test_generate_for_type_retries_once_when_response_unparsable():
     llm = _Fake(["garbage", "garbage"])
     assert generate_for_type(llm, TASK_TYPES[0], 1) == []
     assert len(llm.calls) == 2
+
+
+def test_threshold_reads_dotenv_like_server_and_cli_wins(tmp_path, monkeypatch):
+    """--threshold 생략 시 .env 의 RAG_GATE_MIN_SCORE 를 읽는다(종전엔 .env 로드 전 기본값 계산 → 0.53 고정)."""
+    from eval.gate_eval import resolve_threshold
+
+    env = tmp_path / ".env"
+    env.write_text("RAG_GATE_MIN_SCORE=0.60\n", encoding="utf-8")
+    monkeypatch.delenv("RAG_GATE_MIN_SCORE", raising=False)
+    assert resolve_threshold(None, env) == 0.60
+    assert resolve_threshold(0.50, env) == 0.50          # 명시하면 CLI 우선
+
+    monkeypatch.setenv("RAG_GATE_MIN_SCORE", "0.55")      # 이미 있는 환경변수가 .env 보다 우선(서버와 동일)
+    assert resolve_threshold(None, env) == 0.55
+
+    monkeypatch.setenv("RAG_GATE_MIN_SCORE", "")          # 비었거나 잘못된 값 → 0.53
+    assert resolve_threshold(None, tmp_path / "none.env") == 0.53

@@ -4875,3 +4875,11 @@ backend 가 `sources`(기법) 0건이면 no_evidence 로 표시(PromptController
 **검증**: `pytest tests` 343 passed(+1). 인프로세스 `/query` "김치찌개 레시피 알려줘" → rag_status=ok · sources 0 · 개선안 478자.
 **배포**: rag-server 재배포 필요(운영 반영 전까지 기존 라벨 유지).
 **변경 파일**: app/core/gate.py, app/main.py, tests/test_gate.py, WORKLOG.md
+
+## [2026-11-25] gate_eval 임계치 기본값을 서버와 같은 설정에서
+**Before**: `--threshold` 기본값을 argparse 정의 시점에 `os.environ` 에서 계산 — 이때는 아직 `.env` 가 로드되지 않아(로드는 `app` import 시)
+`.env` 에만 `RAG_GATE_MIN_SCORE=0.60` 을 두면 서버는 0.60, 평가는 0.53 으로 같은 요청의 통과 여부가 달랐다.
+**After**: 기본값 `None` + `resolve_threshold()` — CLI 값이 있으면 그대로, 없으면 rag-server/.env 를 로드(기존 환경변수 우선, 서버와 동일)한 뒤
+`RAG_GATE_MIN_SCORE`, 비었거나 숫자가 아니면 0.53(`app.main._env_float` 과 같은 규칙).
+**검증**: `pytest tests` 344 passed(+1: .env 값 반영 · CLI 우선 · 환경변수 우선 · 잘못된 값 0.53). 수정 전 코드에선 새 테스트 실패 확인.
+**변경 파일**: eval/gate_eval.py, tests/test_gate_coverage.py, WORKLOG.md

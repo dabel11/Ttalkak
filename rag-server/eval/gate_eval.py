@@ -89,12 +89,26 @@ def _best(retriever, query: str, collection: str, **kw) -> float:
         return -1.0
 
 
+def resolve_threshold(cli: float | None, env_file: Path | None = None) -> float:
+    """CLI 값 우선. 없으면 서버와 같은 규칙 — rag-server/.env 를 로드(이미 있는 환경변수 우선)한 뒤
+    RAG_GATE_MIN_SCORE, 비었거나 숫자가 아니면 0.53(app.main._env_float 과 동일).
+    종전엔 .env 로드 전에 argparse 기본값을 계산해 .env 에만 둔 값이 무시됐다(서버 0.60 · 평가 0.53)."""
+    if cli is not None:
+        return cli
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=env_file or Path(__file__).resolve().parent.parent / ".env")
+    try:
+        return float(os.environ.get("RAG_GATE_MIN_SCORE", ""))
+    except ValueError:
+        return 0.53
+
+
 def main():
     ap = argparse.ArgumentParser(description="무의미 입력 게이트 평가")
-    ap.add_argument("--threshold", type=float,
-                    default=float(os.environ.get("RAG_GATE_MIN_SCORE", "0.53")),
-                    help="막힘 목록을 볼 임계치(기본 RAG_GATE_MIN_SCORE 또는 0.53)")
+    ap.add_argument("--threshold", type=float, default=None,
+                    help="막힘 목록을 볼 임계치(생략 시 서버와 같은 RAG_GATE_MIN_SCORE — .env 포함, 없으면 0.53)")
     args = ap.parse_args()
+    args.threshold = resolve_threshold(args.threshold)
 
     # 임베딩 모델·DB 는 여기서만 불러온다 — 모듈 import 만으로는 무거운 의존을 끌지 않게(테스트용).
     from app.main import retriever
