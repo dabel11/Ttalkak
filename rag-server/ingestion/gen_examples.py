@@ -23,6 +23,12 @@ gen_examples.py
                                                          # LLM 없이 JSONL 재인덱싱
     python -m ingestion.gen_examples --replace           # 컬렉션 비우고 새로
 
+    # 일부 유형만 추가 적재(기존 예시 유지) — --out 을 따로 줘야 기존 JSONL 을 덮어쓰지 않는다.
+    python -m ingestion.gen_examples --types code_write howto ... \
+        --out data/curated/examples_extra.jsonl --dry-run          # 생성·검수
+    python -m ingestion.gen_examples --from-jsonl data/curated/examples_extra.jsonl
+                                                         # 검수한 파일만 적재(--replace 금지)
+
 LLM 백엔드는 generator.py 와 동일 규칙: GROQ_API_KEY → GEMINI_API_KEY 자동 선택.
 """
 
@@ -63,6 +69,9 @@ class TaskType:
     key: str
     label: str
     needs_material: bool = False
+    # 소재 후보(쉼표 구분). 생성 시 이 중 서로 다른 소재로 before 를 만들게 해
+    # 한 유형 안에서도 분야·상황이 퍼지게 한다. 비면 LLM 이 자유롭게 고른다.
+    hint: str = ""
 
 
 TASK_TYPES: list[TaskType] = [
@@ -87,6 +96,56 @@ TASK_TYPES: list[TaskType] = [
     TaskType("extract",     "텍스트에서 정보 추출", needs_material=True),
     TaskType("classify",    "내용 분류·태깅", needs_material=True),
     TaskType("sql_query",   "SQL 쿼리 작성"),
+    # ── 3차 확장(2026-11-25): 무근거 게이트 커버리지 ──
+    # 계기: "크롤링 프로그램 작성해줘"가 404(근거 없음)로 막혀 원문 그대로 반환됨. 게이트는 예시
+    # 코퍼스 최고 유사도만 보는데(0.53), 코드 '작성' 유형이 아예 없었다. 같은 구멍이 다른 분야에도
+    # 있으므로 개발만이 아니라 업무·교육·창작·생활·상담·전문 정보까지 넓힌다.
+    # 개발·IT
+    TaskType("code_write",   "프로그램·스크립트 코드 작성",
+             hint="웹 크롤링, 업무 자동화, 파일·데이터 처리, 알고리즘 문제 풀이, 챗봇·디스코드 봇"),
+    TaskType("feature_impl", "웹·앱 기능 구현",
+             hint="로그인·회원가입, 게시판, 결제 연동, 화면 UI 컴포넌트, REST API 서버"),
+    TaskType("debug_error",  "에러·버그 원인 찾기와 해결", needs_material=True,
+             hint="에러 메시지, 결과가 이상한 코드, 빌드·설치 실패, 느린 쿼리"),
+    TaskType("howto",        "방법·절차 안내",
+             hint="깃·도커 같은 도구 사용법, 스마트폰·PC 설정, 여권·전입신고 같은 행정 절차, 이사·청소 같은 생활 절차"),
+    TaskType("spreadsheet",  "엑셀·스프레드시트 수식과 자동화",
+             hint="VLOOKUP·조건부 합계, 중복값 찾기, 조건부 서식, 구글 시트, 매크로"),
+    # 업무·비즈니스
+    TaskType("report_plan",  "보고서·기획서·제안서 작성",
+             hint="주간 업무 보고, 사업계획서, 행사 기획안, 프로젝트 제안서, 보도자료"),
+    TaskType("presentation", "발표 자료 구성·발표 대본",
+             hint="PPT 목차, 발표 대본, 투자 피칭, 학교 조별 발표"),
+    TaskType("customer_reply", "고객 응대·리뷰 답글",
+             hint="리뷰 답글, 문의 응대, 불만 사과, 자주 묻는 질문"),
+    # 교육·학습
+    TaskType("quiz_make",    "문제·퀴즈·시험 문제 만들기",
+             hint="초중고 수학·과학 문제, 영어 단어 퀴즈, 자격증 모의고사, 사내 교육 퀴즈"),
+    TaskType("assignment",   "과제·레포트·독후감 작성 도움",
+             hint="대학 레포트 목차, 독후감, 논문 서론, 실험 보고서"),
+    TaskType("language_practice", "외국어 회화·학습 연습",
+             hint="영어 회화 상대 역할, 일본어 문법 연습, 단어 암기, 발음·표현 교정"),
+    # 창작·미디어
+    TaskType("creative_writing", "소설·시·가사·시나리오 창작",
+             hint="단편 소설, 동화, 노래 가사, 웹소설·웹툰 줄거리, 짧은 시"),
+    TaskType("image_prompt", "이미지 생성 프롬프트 만들기",
+             hint="캐릭터 일러스트, 로고, 제품 사진 느낌, 유튜브 썸네일, 풍경화"),
+    TaskType("video_script", "유튜브·숏폼 영상 기획과 대본",
+             hint="유튜브 정보 영상, 릴스·쇼츠 아이디어, 브이로그 구성, 제품 리뷰 영상"),
+    # 생활
+    TaskType("lifestyle",    "운동·식단·요리·육아 같은 생활 계획",
+             hint="운동 루틴, 다이어트 식단, 요리 레시피, 육아·반려동물 돌봄, 집안일 체크리스트"),
+    TaskType("recommend_compare", "추천·비교·선택 도움",
+             hint="노트북·휴대폰 추천, 선물 추천, 보험·요금제 비교, 진로·전공 선택"),
+    TaskType("personal_message", "축하·위로·감사·사과 개인 메시지",
+             hint="생일 축하, 위로 문자, 선생님께 감사 편지, 연인·친구에게 사과, 경조사 인사"),
+    TaskType("advice",       "고민 상담·조언 요청",
+             hint="직장 인간관계, 진로 고민, 스트레스·번아웃, 연애, 가족 갈등"),
+    # 전문 정보(사실·안전 주의가 필요한 분야)
+    TaskType("expert_info",  "법률·세무·의료·금융 같은 전문 정보 질문",
+             hint="전세 계약 주의사항, 연말정산, 증상과 병원 진료과, 주식·적금 기초, 근로기준법"),
+    TaskType("document_review", "계약서·약관·공문 검토", needs_material=True,
+             hint="근로계약서, 임대차 계약서, 서비스 이용약관, 견적서·공문"),
 ]
 
 
@@ -109,6 +168,13 @@ _GEN_SYSTEM = """당신은 '딸각(Ttalkak)'의 학습용 예시를 만드는 �
 4) why(개선 이유): 무엇이 왜 좋아졌는지 한 줄.
 
 %s
+
+[before 다양성 — 실제 사용자는 이렇게 쓴다]
+- 예시가 2개 이상이면 그중 최소 하나는 소재만 던진 **아주 짧은 요청**(15자 안팎,
+  예: "크롤링 프로그램 짜줘", "운동 루틴 짜줘")으로 만든다. 나머지는 정보를 조금 담은 요청.
+- 요청 말투를 섞는다: "~해줘", "~짜줘", "~알려줘", "~어떻게 해?", "~좀", 반말·존댓말.
+- 원문 제공형이라도 요청 문구 자체는 짧고 거칠게("이거 왜 안 돼?", "검토 좀").
+- 짧게 만들어도 (A)무엇을 할지와 (B)무엇에 대한 것인지는 드러나야 한다("글 써줘"처럼 소재가 없는 요청은 금지).
 
 [엄격 규칙]
 - after 는 절대 '완성된 결과물'이 아니라 'AI에게 시키는 지시문'이다.
@@ -249,11 +315,20 @@ def _loads_loose(s: str) -> dict:
 
 
 # ── 생성 · 큐레이션 ──────────────────────────────────────────
+def build_user_message(tt: TaskType, per_type: int) -> str:
+    """유형별 생성 요청문. 소재 후보(hint)가 있으면 예시마다 다른 소재를 쓰게 한다."""
+    lines = [f"[작업 유형] {tt.label}"]
+    if tt.hint:
+        lines.append(f"[소재 후보] {tt.hint}")
+        lines.append("예시마다 위 후보 중 서로 다른 소재를 골라라(후보에 없는 비슷한 소재도 된다).")
+    lines.append(f"이 유형의 (거친 요청 → 개선된 프롬프트) 예시를 {per_type}개 만들어라.")
+    return "\n".join(lines)
+
+
 def generate_for_type(llm: _LLM, tt: TaskType, per_type: int) -> list[Example]:
     rule = _MATERIAL_RULE if tt.needs_material else _PLAIN_RULE
     system = _GEN_SYSTEM % rule
-    user = (f"[작업 유형] {tt.label}\n"
-            f"이 유형의 (거친 요청 → 개선된 프롬프트) 예시를 {per_type}개 만들어라.")
+    user = build_user_message(tt, per_type)
     raw = llm.complete(system, user)
     data = _loads_loose(raw)
     out: list[Example] = []
@@ -272,7 +347,9 @@ def generate_for_type(llm: _LLM, tt: TaskType, per_type: int) -> list[Example]:
 
 def passes_gate(e: Example) -> tuple[bool, str]:
     """예시 완결성 게이트 — 파편·형식오류 걸러냄."""
-    if len(e.before.strip()) < 8:
+    # 5자: "운동 루틴 짜줘"(8자)·"자소서 써줘"(6자) 같은 짧은 실사용 요청은 통과시키고,
+    # "글 써줘"(4자) 같은 소재 없는 파편만 거른다. 짧은 예시가 있어야 짧은 요청이 게이트를 넘는다.
+    if len(e.before.strip()) < 5:
         return False, "before 너무 짧음"
     if len(e.after.strip()) < 40:
         return False, "after(개선 프롬프트) 너무 짧음"

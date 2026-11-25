@@ -4740,3 +4740,29 @@ tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eva
 테스트: 같은 버전·같은 모델 → 재사용 / 모델 바뀜 → 다시 판정 / 모델 없음(옛 캐시) → 다시 판정, judge_pair 가 모델을 기록하는지. 기존 캐시 테스트의 가짜 캐시·판정에도 모델을 넣음.
 **검증**: `pytest tests` 326 passed. 수정 전 코드에 새 테스트를 두면 3건 실패 → 수정 후 통과(직접 재현).
 **결정·근거**: 리뷰의 참고 의견대로 PR 제목의 74% → 31% 를 '평가셋 기준'으로 한정(판정기 사람 일치 53%, 개선에 참고한 요청 세트로 측정).
+
+## [2026-11-25] 무근거 게이트 커버리지 확장 — 예시 유형 20개 추가 · 평가셋 분야별 확장
+**목적**: "크롤링 프로그램 작성해줘"가 개선되지 않고 원문 그대로 반환됨(화면: "적용할 수 있는 변경 사항을 찾지 못했습니다").
+**원인**: `/query` 첫 턴 게이트는 `prompt_examples` 최고 유사도 < `RAG_GATE_MIN_SCORE`(0.53)면 404 → 백엔드가 `ragStatus=no_evidence` 로
+원문을 그대로 돌려준다. 예시 유형 20개에 코드 '작성' 유형이 없었고(code_review·sql_query 뿐), 임계치는 양성 12건(글쓰기 위주) 최저 0.545 에
+맞춘 값이라 여유가 0.015 였다. 원본 평가셋 AUC 는 1.000 이라 이 구멍이 측정에 드러나지 않았다. 같은 구멍이 코드 밖 분야에도 있을 수 있어
+한 건만 고치지 않고 분야·상황을 넓혔다.
+**After**:
+- `ingestion/gen_examples.py`: 유형 20개 추가(총 40) — 개발·IT(code_write·feature_impl·debug_error·howto·spreadsheet), 업무(report_plan·
+  presentation·customer_reply), 교육(quiz_make·assignment·language_practice), 창작(creative_writing·image_prompt·video_script),
+  생활(lifestyle·recommend_compare·personal_message·advice), 전문 정보(expert_info·document_review). `TaskType.hint`(소재 후보)로
+  예시마다 다른 소재를 쓰게 함(`build_user_message`). 생성 프롬프트에 'before 다양성' 규칙 — 예시 중 하나는 15자 안팎의 아주 짧은 요청,
+  말투(해줘·짜줘·알려줘·어떻게 해?·반말/존댓말) 섞기. 큐레이션 최소 길이 8 → 5자("자소서 써줘" 통과, "글 써줘" 탈락).
+- `eval/gate_set.json`: 원본 24건은 그대로(rerank_bench 비교 가능), `positive_extended` 10개 분야 56건(짧은 요청·오타·구어체·질문형·
+  영어·짧은 원문 포함), `negative_extended` 14건(인사·잡담·의미 없는 입력) 추가.
+- `eval/gate_eval.py`: 확장 셋 사용, 현재 임계치(`--threshold`, 기본 RAG_GATE_MIN_SCORE)에서 **막히는 정상 요청·통과하는 무의미 입력을
+  분야별로 출력**. app.main import 를 main() 안으로 옮겨 순수 함수(load_gate_set·blocked_report)를 CI 에서 테스트.
+- `tests/test_gate_coverage.py`(+11): 평가셋 분야·상황 다양성·중복 없음, 게이트 부등호(점수<임계치=404), 유형 커버리지, hint 렌더, 짧은 예시 큐레이션.
+**검증**: `pytest tests` 337 passed, ruff(F821,F401,F811,E9) 통과. 가짜 retriever 로 gate_eval 출력 경로 확인.
+⚠️ **실제 생성·적재·측정은 미실행** — 이 작업 환경에 LLM 키·운영 MySQL·bge-m3 가 없다. 운영 반영 순서(rag-server/ 에서):
+1. `python -m ingestion.gen_examples --types code_write feature_impl debug_error howto spreadsheet report_plan presentation customer_reply quiz_make assignment language_practice creative_writing image_prompt video_script lifestyle recommend_compare personal_message advice expert_info document_review --out data/curated/examples_extra_20261125.jsonl --dry-run`
+   — `--out` 필수(기본값은 기존 synthetic_examples.jsonl 을 덮어씀). 산출 JSONL 검수.
+2. `python -m ingestion.gen_examples --from-jsonl data/curated/examples_extra_20261125.jsonl` — **`--replace` 금지**(기존 예시 삭제). chunk_id upsert 라 재실행 안전.
+3. `python -m eval.gate_eval` — 확장 양성이 0.53 을 넘는지, 무의미 입력이 새로 통과하지 않는지 확인. 막히는 분야가 남으면 그 유형을 `--per-type 3` 으로 보강하거나
+   FPR≤5% 임계치로 `RAG_GATE_MIN_SCORE` 재교정.
+**변경 파일**: ingestion/gen_examples.py, eval/gate_set.json, eval/gate_eval.py, tests/test_gate_coverage.py(신규), WORKLOG.md
