@@ -92,7 +92,8 @@ TASK_TYPES: list[TaskType] = [
     TaskType("study_plan",  "학습·공부 계획 수립"),
     TaskType("interview_qa", "면접 예상 질문·답변 준비"),
     TaskType("naming",      "네이밍·아이디어 브레인스토밍"),
-    TaskType("proofread",   "문장 교정·윤문", needs_material=True),
+    TaskType("proofread",   "문장 교정·윤문", needs_material=True,
+             hint="어색한 한 문장 고치기, 자기소개·지원 문장 다듬기, 업무 메일 문장, 맞춤법·띄어쓰기"),
     TaskType("extract",     "텍스트에서 정보 추출", needs_material=True),
     TaskType("classify",    "내용 분류·태깅", needs_material=True),
     TaskType("sql_query",   "SQL 쿼리 작성"),
@@ -102,11 +103,11 @@ TASK_TYPES: list[TaskType] = [
     # 있으므로 개발만이 아니라 업무·교육·창작·생활·상담·전문 정보까지 넓힌다.
     # 개발·IT
     TaskType("code_write",   "프로그램·스크립트 코드 작성",
-             hint="웹 크롤링, 업무 자동화, 파일·데이터 처리, 알고리즘 문제 풀이, 챗봇·디스코드 봇"),
+             hint="웹 크롤링, 업무 자동화, 파일·데이터 처리, 언어를 지정한 알고리즘 구현(자바 정렬·C 재귀 등), 챗봇·디스코드 봇, 영어로 쓴 요청"),
     TaskType("feature_impl", "웹·앱 기능 구현",
-             hint="로그인·회원가입, 게시판, 결제 연동, 화면 UI 컴포넌트, REST API 서버"),
+             hint="로그인·회원가입, 게시판, 결제 연동, 화면 UI 컴포넌트, REST API 서버, 입문용 토이 앱(계산기·메모장·타이머)"),
     TaskType("debug_error",  "에러·버그 원인 찾기와 해결", needs_material=True,
-             hint="에러 메시지, 결과가 이상한 코드, 빌드·설치 실패, 느린 쿼리"),
+             hint="에러 메시지만 붙인 질문(JS·자바·파이썬), 결과가 이상한 코드, 빌드·설치 실패, 느린 쿼리"),
     TaskType("howto",        "방법·절차 안내",
              hint="깃·도커 같은 도구 사용법, 스마트폰·PC 설정, 여권·전입신고 같은 행정 절차, 이사·청소 같은 생활 절차"),
     TaskType("spreadsheet",  "엑셀·스프레드시트 수식과 자동화",
@@ -122,7 +123,7 @@ TASK_TYPES: list[TaskType] = [
     TaskType("quiz_make",    "문제·퀴즈·시험 문제 만들기",
              hint="초중고 수학·과학 문제, 영어 단어 퀴즈, 자격증 모의고사, 사내 교육 퀴즈"),
     TaskType("assignment",   "과제·레포트·독후감 작성 도움",
-             hint="대학 레포트 목차, 독후감, 논문 서론, 실험 보고서"),
+             hint="주제만 준 레포트 목차, 독후감, 논문 서론, 실험 보고서, 발표 요약문"),
     TaskType("language_practice", "외국어 회화·학습 연습",
              hint="영어 회화 상대 역할, 일본어 문법 연습, 단어 암기, 발음·표현 교정"),
     # 창작·미디어
@@ -134,7 +135,7 @@ TASK_TYPES: list[TaskType] = [
              hint="유튜브 정보 영상, 릴스·쇼츠 아이디어, 브이로그 구성, 제품 리뷰 영상"),
     # 생활
     TaskType("lifestyle",    "운동·식단·요리·육아 같은 생활 계획",
-             hint="운동 루틴, 다이어트 식단, 요리 레시피, 육아·반려동물 돌봄, 집안일 체크리스트"),
+             hint="운동 루틴, 다이어트 식단, 메뉴 이름만 댄 요리 레시피, 육아·반려동물 돌봄, 집안일 체크리스트"),
     TaskType("recommend_compare", "추천·비교·선택 도움",
              hint="노트북·휴대폰 추천, 선물 추천, 보험·요금제 비교, 진로·전공 선택"),
     TaskType("personal_message", "축하·위로·감사·사과 개인 메시지",

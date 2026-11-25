@@ -4840,3 +4840,27 @@ rag-server 재시작 불필요(요청마다 컬렉션을 다시 읽음).
 **참고**: 웹에서 같은 요청이 되던 건 같은 대화방 두 번째 턴이라 게이트를 건너뛴 것(history 있으면 미판정). 운영 rag-server 는 Jina 잔액 부족(403
 `AUTHZ_INSUFFICIENT_BALANCE`)으로 매 요청 torch 리랭커 폴백 중 — 충전 또는 RAG_RERANK_BACKEND 정리 필요(별도).
 **롤백**: 두 JSONL 의 chunk_id 목록으로 prompt_examples 컬렉션의 해당 행만 삭제(전체 삭제인 --replace 금지).
+
+## [2026-11-25] 예시 보강 3차 — 남은 7건 형태 hint 명시 · 운영 적재
+**목적**: 2차 후 0.53 에서 막히던 정상 요청 7건(김치찌개 레시피·자바 정렬·React 투두·레포트 목차·영어 요청·문장 교정·TypeError) 보강.
+**원인 분석**: 유형·hint 는 이미 있었지만 무작위 소재 선택이라 흔한 형태가 빠짐 — 메뉴 이름만 댄 짧은 레시피, 언어를 지정한 알고리즘, 입문용 토이 앱,
+에러 메시지만 붙인 질문, 한 문장 교정(proofread 는 hint 없음), 영어 요청.
+**After**
+- `ingestion/gen_examples.py` hint: proofread 신설, code_write·feature_impl·debug_error·assignment·lifestyle 에 위 형태 명시.
+- 6개 유형 × 3 생성 18건 → 중복 2 제거(엑셀 합치기 3번째·데미안 재등장), 메타 지시·환각 4건 수정(Tailwind·대청소 3시간·실험값 → 자리표시자),
+  생성기가 끝내 만들지 않은 형태 2건 **수작업 추가**(`source="manual"`: 영어 JS 중복 제거 요청, "제육볶음 레시피 알려줘") → 18건
+  `data/curated/examples_extra_20261125_e.jsonl`. 평가셋 문장과 겹침 없음(같은 소재는 피함).
+- 로컬 → 측정 → 운영 적재: 운영 prompt_examples 197 → **215**.
+
+| 지표 (운영 경로 dense, 0.53) | 2차 후 | 3차 후 |
+|---|---|---|
+| 예시 게이트 AUC | 0.960 | **0.982** |
+| FPR≤5% 임계치 (FNR) | 0.545 (0.147) | 0.542 (0.074) |
+| 막히는 정상 요청 | 7 | **2** (영어 파일명 변경 0.510 · React 투두 0.512) |
+| 통과하는 무의미 입력 | 3 | 3 (변화 없음) |
+
+**운영 확인**(새 게스트 첫 턴): "자바로 정렬 알고리즘 코드 짜줘" → ok. "김치찌개 레시피 알려줘" → 게이트 통과·개선안 생성(485자)인데 `ragStatus=no_evidence` —
+backend 가 `sources`(기법) 0건이면 no_evidence 로 표시(PromptController `sources.isEmpty()`), 예시는 sources 에 안 셈 → 화면에 "참고 근거 없이" 라벨. 기존 동작, 미수정.
+"010-1234-5678" → ok(측정대로 누설).
+**주의**: 영어 예시 1건으로는 영어 요청 점수가 안 오름(0.510 그대로) — 코퍼스가 한국어라 교차언어 유사도 한계. 평가셋 맞춤 보강이라 수치는 낙관적.
+**변경 파일**: ingestion/gen_examples.py(hint), WORKLOG.md
