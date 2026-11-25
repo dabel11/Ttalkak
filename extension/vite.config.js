@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig, loadEnv } from "vite";
+import { build, defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { assertProductionBackendApiUrl, assertProductionWebAppUrl } from "./scripts/build-policy.mjs";
 
@@ -16,8 +16,17 @@ function extensionManifestPlugin(mode, backendApiUrl, outDir, isVerificationBuil
   assertProductionBackendApiUrl(mode, backendApiUrl, isVerificationBuild);
   return {
     name: "ttalkak-extension-manifest",
-    closeBundle() {
+    async closeBundle() {
       const root = process.cwd();
+      // Chrome loads this as a classic service worker in both manifests.
+      await build({
+        configFile: false,
+        publicDir: false,
+        build: {
+          outDir, emptyOutDir: false,
+          lib: { entry: path.resolve(root, "background.js"), formats: ["iife"], name: "TTalkakBackground", fileName: () => "background.js" },
+        },
+      });
       const sourcePath =
         mode === "production"
           ? path.resolve(root, "manifest.production.example.json")

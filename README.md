@@ -633,7 +633,7 @@ Because Chrome isolates extension storage by Extension ID, conversations and set
 - `src/main.jsx`: Side Panel React UI
 - `src/styles.css`: Side Panel styles
 - `public/manifest.json`: Chrome Extension Manifest V3 settings
-- `public/background.js`: Side Panel opening and AI-site prompt insertion logic
+- `background.js`: Side Panel opening and AI-site prompt insertion logic
 
 #### Backend Setting
 

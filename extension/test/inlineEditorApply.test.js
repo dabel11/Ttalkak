@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 const inlineSource = fs.readFileSync(new URL("../public/inline-improve.js", import.meta.url), "utf8");
 
-async function setup({ improved = "개선 문단 하나\n개선 문단 둘", command = "success" } = {}) {
+async function setup({ improved = "개선 문단 하나\n개선 문단 둘", command = "success", reply = {} } = {}) {
   const dom = new JSDOM(
     '<!doctype html><html><body><main><form><div id="prompt-textarea" contenteditable="true"><p>원본 프롬프트</p></div></form></main></body></html>',
     { url: "https://chatgpt.com/", pretendToBeVisual: true, runScripts: "outside-only" },
@@ -51,7 +51,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
   window.chrome = {
     runtime: {
       id: "test-extension",
-      sendMessage(_message, callback) { callback({ ok: true, improvedPrompt: improved }); },
+      sendMessage(message, callback) { callback({ ok: true, improvedPrompt: improved, ...(typeof reply === "function" ? reply(message) : reply) }); },
       lastError: undefined,
     },
     storage: {
@@ -162,4 +162,45 @@ test("a real user edit after preview is never overwritten", async (t) => {
   assert.equal(h.writes, 0);
   assert.equal(h.editor.textContent, "사용자가 직접 수정한 문장");
   assert.match(h.shadow.getElementById("tt-message").textContent, /문장을 보호하기 위해 적용하지 않았/);
+});
+test("unchanged no-evidence response explains why and preserves the editor", async (t) => {
+  const explanation = "관련 프롬프트 기법 근거를 찾지 못했습니다.";
+  const h = await setup({ improved: "", reply: { ragStatus: "no_evidence", explanation } });
+  t.after(async () => { h.disable(); await new Promise((resolve) => setTimeout(resolve, 80)); h.dom.window.close(); });
+  h.trigger();
+  assert.equal(h.shadow.getElementById("tt-message").textContent, explanation);
+  assert.equal(h.shadow.getElementById("tt-text").textContent, "");
+  assert.equal(h.shadow.getElementById("tt-apply").hidden, true);
+  assert.equal(h.writes, 0);
+});
+
+test("inline answers keep the editor untouched until apply and errors preserve the draft", async (t) => {
+  const calls = [];
+  const continuation = { owner: "member:7", threadId: "41" };
+  const h = await setup({ reply: (message) => {
+    calls.push(message);
+    if (calls.length === 1) return { mode: "ask", improvedPrompt: "", questions: ["독자는 누구인가요?"], continuation };
+    if (calls.length === 2) return { error: "연결 오류" };
+    return { improvedPrompt: "비전공자를 위한 안내문을 작성해 주세요.", questions: [] };
+  } });
+  t.after(async () => { h.disable(); await new Promise((resolve) => setTimeout(resolve, 80)); h.dom.window.close(); });
+  h.trigger();
+  const answer = h.shadow.getElementById("tt-answer");
+  const submit = h.shadow.getElementById("tt-submit");
+  assert.equal(answer.parentElement.hidden, false);
+  assert.equal(submit.disabled, true);
+  answer.value = "비전공자";
+  answer.dispatchEvent(new h.window.Event("input"));
+  submit.click();
+  assert.equal(answer.value, "비전공자");
+  submit.click();
+  assert.equal(calls[2].prompt, "비전공자");
+  assert.equal(calls[2].continuation.threadId, "41");
+  assert.equal(calls[2].requestId, calls[1].requestId);
+  assert.equal(answer.parentElement.hidden, true);
+  assert.equal(h.writes, 0);
+  h.shadow.getElementById("tt-apply").click();
+  assert.match(h.editor.textContent, /비전공자를 위한/);
+  h.shadow.getElementById("tt-restore").click();
+  assert.equal(h.editor.textContent, "원본 프롬프트");
 });
