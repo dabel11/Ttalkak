@@ -12,7 +12,7 @@ const [bundle] = await build({
   } },
 });
 const source = bundle.output[0].code;
-async function requestInline({ status = 200, body = { improvedPrompt: "개선안" }, token = "member" } = {}) {
+async function requestInline({ status = 200, body = { improvedPrompt: "개선안" }, token = "member", message = {} } = {}) {
   const listeners = [];
   let request;
   const context = {
@@ -21,12 +21,12 @@ async function requestInline({ status = 200, body = { improvedPrompt: "개선안
     chrome: {
       runtime: { onMessage: { addListener: (listener) => listeners.push(listener) }, getManifest: () => ({ host_permissions: ["https://chatgpt.com/*", "https://api.example/*"] }) },
       sidePanel: { setPanelBehavior() {} },
-      storage: { local: { get: async () => ({ pp_inline_improve_enabled: true, pp_auth_session: { accessToken: token }, pp_session_uuid: "guest-session" }) } },
+      storage: { local: { get: async () => ({ pp_inline_improve_enabled: true, pp_auth_session: { accessToken: token, user: { id: 7 } }, pp_session_uuid: "guest-session" }) } },
     },
     fetch: async (url, options) => { request = { url: String(url), options }; return { ok: status === 200, status, json: async () => body }; },
   };
   vm.runInNewContext(source, context);
-  const reply = await new Promise((resolve) => listeners[0]({ type: "INLINE_IMPROVE", prompt: "원본" }, {}, resolve));
+  const reply = await new Promise((resolve) => listeners[0]({ type: "INLINE_IMPROVE", prompt: "원본", ...message }, {}, resolve));
   return { reply, request };
 }
 
@@ -72,4 +72,27 @@ test("inline preserves first-turn evidence and asks without offering the source 
   assert.equal(ask.reply.improvedPrompt, "");
   assert.equal(ask.reply.mode, "ask");
   assert.equal(ask.reply.questions[0], "독자는 누구인가요?");
+});
+
+test("inline continuation uses member threads or guest history and rejects an account change", async () => {
+  const body = { result: { mode: "ask", questions: ["독자는 누구인가요?"], threadId: 41 } };
+  for (const token of ["member", ""]) {
+    const { reply } = await requestInline({ body, token });
+    const message = { prompt: "비전공자", continuation: reply.continuation, requestId: "retry-id" };
+    const next = await requestInline({ token, message });
+    const payload = JSON.parse(next.request.options.body);
+    assert.equal(payload.prompt, "비전공자");
+    if (token) {
+      assert.equal(String(payload.threadId), "41");
+      assert.equal(payload.requestId, "retry-id");
+      assert.equal(payload.history, undefined);
+    } else {
+      assert.equal(payload.threadId, undefined);
+      assert.equal(payload.history[0].content, "원본");
+      assert.match(payload.history[1].content, /독자는 누구/);
+    }
+    const switched = await requestInline({ token: token ? "" : "member", message });
+    assert.equal(switched.request, undefined);
+    assert.match(switched.reply.error, /대화가 변경/);
+  }
 });

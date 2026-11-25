@@ -21,6 +21,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       uuid = crypto.randomUUID();
       await chrome.storage.local.set({ pp_session_uuid: uuid });
     }
+    const continuation = message.continuation;
+    const owner = token ? "member:" + values.pp_auth_session?.user?.id : "guest:" + uuid;
+    if (continuation && (continuation.owner !== owner || (token && !continuation.threadId))) {
+      throw Error("대화가 변경되었습니다. 원문에서 다시 개선해 주세요.");
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
     let res;
@@ -30,7 +35,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         headers: { "Content-Type": "application/json",
           ...(token ? { Authorization: "Bearer " + token } : { "X-Session-UUID": uuid }) },
         body: JSON.stringify({ prompt, category: "prompt_techniques",
-          ...(token ? { requestId: crypto.randomUUID() } : {}) }),
+          ...(token ? { requestId: message.requestId || crypto.randomUUID() } : {}),
+          ...(continuation && token ? { threadId: continuation.threadId } : {}),
+          ...(continuation && !token ? { history: continuation.history } : {}) }),
         signal: controller.signal
       });
     } finally { clearTimeout(timeout); }
@@ -47,13 +54,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       throw Error(String(body.code || "개선 요청에 실패했습니다."));
     }
     const result = normalizeImproveResult(body, prompt);
+    const questions = result.questions.map((item) => item.question);
+    const history = token ? undefined : [
+      ...(continuation?.history || []),
+      { role: "user", content: prompt },
+      { role: "assistant", content: [result.improvedPrompt || result.answer, ...questions].filter(Boolean).join("\n") },
+    ];
     sendResponse({
       ok: true,
+      continuation: { owner, threadId: result.threadId || continuation?.threadId, history },
       improvedPrompt: result.improvedPrompt,
       mode: result.mode,
       ragStatus: result.ragStatus,
       explanation: result.ragMessage || (result.answer === "프롬프트를 개선했습니다." ? "" : result.answer),
-      questions: result.questions.map((item) => item.question),
+      questions,
     });
   })().catch((err) => sendResponse({ ok: false, error: err.name === "AbortError" ? "요청 시간이 초과되었습니다." : String(err.message || err) }));
   return true;

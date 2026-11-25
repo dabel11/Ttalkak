@@ -22,6 +22,7 @@
     ".tt-title,.tt-change{color:#2563eb}.tt-title{font-weight:700;margin:0 0 8px}.tt-change{font-weight:600}",
     "#tt-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow-y:auto}",
     "#tt-message{white-space:pre-line;font-size:12px;color:#64748b;margin:5px 0}",
+    "#tt-answer{display:block;width:100%;margin:8px 0;padding:6px;font:inherit;color:inherit;background:transparent;border:1px solid #94a3b8;border-radius:5px}#tt-submit{font:inherit;padding:4px 9px}",
     ".tt-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:12px}",
     ".tt-actions button{padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1e293b;font-size:12px}",
     "#tt-apply{background:#111827;color:white;border-color:#111827}",
@@ -55,7 +56,17 @@
   const restore = button("tt-restore", "원본 복원");
   restore.hidden = true;
   actions.append(close, restore, apply);
-  panel.append(title, message, text, actions);
+  const followup = document.createElement("div");
+  followup.hidden = true;
+  const answer = document.createElement("textarea");
+  answer.id = "tt-answer";
+  answer.rows = 2;
+  answer.maxLength = 12000;
+  answer.placeholder = "추가 질문에 답해 주세요";
+  answer.setAttribute("aria-label", "추가 질문 답변");
+  const submit = button("tt-submit", "답변으로 개선");
+  followup.append(answer, submit);
+  panel.append(title, message, text, followup, actions);
   shadow.append(style, trigger, panel);
   const getText = (el) => el?.matches?.("textarea,input") ? el.value : (el?.innerText ?? el?.textContent ?? "");
   // Rich-text editors render paragraph breaks differently from plain text. Only
@@ -90,7 +101,7 @@
     panel.style.left = Math.round(Math.max(12, Math.min(innerWidth - w - 12, r.right - w))) + "px";
     panel.style.top = Math.round(bTop + 225 < innerHeight ? bTop + 43 : Math.max(8, r.top - Math.min(245, innerHeight / 2))) + "px";
   }
-  function dismiss() { snapshot = null; panel.style.display = "none"; message.textContent = ""; }
+  function dismiss() { snapshot = null; followup.hidden = true; answer.value = ""; panel.style.display = "none"; message.textContent = ""; }
   function refresh() {
     scheduled = false;
     if (!enabled || !document.body) return;
@@ -201,15 +212,38 @@
       text.textContent = !original.trim() ? "개선할 문장을 먼저 작성해 주세요." : "12,000자 이내로 입력해 주세요.";
       apply.hidden = true; restore.hidden = true; position(); return;
     }
-    busy = true; trigger.disabled = true; trigger.textContent = "개선 중…"; dismiss();
-    chrome.runtime.sendMessage({ type:"INLINE_IMPROVE", prompt:original }, (reply) => {
-      busy = false; trigger.disabled = false; trigger.textContent = "✨ 딸깍 개선";
-      if (!enabled || !source.isConnected || source !== input) return;
-      const error = chrome.runtime.lastError?.message || reply?.error;
+    dismiss();
+    snapshot = { source, original, improved: "", applied: false };
+    requestTurn(original);
+  });
+  function requestTurn(prompt) {
+    const turn = snapshot;
+    const { source, original, continuation } = turn;
+    if (turn.lastPrompt !== prompt) {
+      turn.requestId = crypto.randomUUID();
+      turn.lastPrompt = prompt;
+    }
+    busy = true;
+    trigger.disabled = submit.disabled = answer.disabled = apply.disabled = true;
+    trigger.textContent = "개선 중…";
+    chrome.runtime.sendMessage({ type:"INLINE_IMPROVE", prompt, continuation, requestId: turn.requestId }, (reply) => {
+      busy = false; trigger.disabled = answer.disabled = false; trigger.textContent = "✨ 딸깍 개선";
+      if (snapshot !== turn || !enabled || !source.isConnected || source !== input) return;
+      const error = chrome.runtime.lastError?.message || reply?.error || (!reply && "응답을 받지 못했습니다.");
+      if (error && continuation) {
+        message.textContent = turn.notice + "\n" + String(error);
+        submit.disabled = false;
+        apply.disabled = getText(source) !== original;
+        return;
+      }
       const candidate = error ? "" : String(reply?.improvedPrompt || "").trim();
       const unchanged = candidate.replace(/\s+/g, " ").trim() === original.replace(/\s+/g, " ").trim();
-      const improved = unchanged ? "" : candidate;
-      snapshot = { source, original, improved, applied:false };
+      const improved = unchanged || sameRenderedText(candidate, prompt) ? "" : candidate;
+      turn.improved = improved;
+      turn.continuation = reply?.continuation;
+      turn.lastPrompt = null;
+      answer.value = "";
+      submit.disabled = true;
       preview(original, improved);
       const changed = getText(source) !== original;
       const questions = reply?.questions || [];
@@ -226,15 +260,29 @@
           notices.push(needsAnswer ? reply.explanation || "추가 정보가 필요합니다." : "적용할 변경 사항이 없습니다.");
         }
         if (questions.length) {
-          notices.push(needsAnswer ? "원문에 답을 덧붙인 뒤 다시 개선해 주세요." : "추가 질문 (선택)");
+          notices.push(needsAnswer ? "아래 질문에 답해 주세요." : "추가 질문 (선택)");
           notices.push(...questions.map((question, index) => (index + 1) + ". " + question));
         }
         if (improved && changed) notices.push("입력 내용이 변경되어 적용할 수 없습니다. 다시 개선해 주세요.");
       }
-      message.textContent = notices.join("\n");
+      turn.notice = notices.join("\n");
+      message.textContent = turn.notice;
+      followup.hidden = !!error || !(questions.length || needsAnswer) || !turn.continuation;
+      turn.canAnswer = !followup.hidden;
       apply.hidden = !improved; apply.disabled = changed; restore.hidden = true;
       panel.style.display = "block"; position();
     });
+  }
+  answer.addEventListener("input", () => { submit.disabled = busy || !answer.value.trim(); });
+  // Keep keystrokes inside the extension from triggering host-page shortcuts.
+  for (const event of ["keydown", "keyup", "keypress"]) answer.addEventListener(event, (e) => e.stopPropagation());
+  submit.addEventListener("click", () => {
+    if (busy || !snapshot || !answer.value.trim()) return;
+    if (getText(snapshot.source) !== snapshot.original) {
+      message.textContent = "입력 내용이 변경되었습니다. 원문에서 다시 개선해 주세요.";
+      return;
+    }
+    requestTurn(answer.value.trim());
   });
   apply.addEventListener("click", () => {
     if (!snapshot || snapshot.applied || !snapshot.improved) return;
@@ -247,7 +295,7 @@
       message.textContent = "입력창 교체에 실패했습니다.";
       return;
     }
-    snapshot.applied = true; apply.hidden = true; restore.hidden = false;
+    snapshot.applied = true; followup.hidden = true; apply.hidden = true; restore.hidden = false;
     message.textContent = "개선 적용 완료 · AI 전송은 직접 해 주세요.";
   });
   restore.addEventListener("click", () => {
@@ -258,7 +306,7 @@
     if (!writeValue(snapshot.source, snapshot.original)) {
       message.textContent = "원본 복원에 실패했습니다."; return;
     }
-    snapshot.applied = false; apply.hidden = false; apply.disabled = false; restore.hidden = true;
+    snapshot.applied = false; followup.hidden = !snapshot.canAnswer; apply.hidden = false; apply.disabled = false; restore.hidden = true;
     message.textContent = "원본 프롬프트를 복원했습니다.";
   });
   close.addEventListener("click", dismiss);
