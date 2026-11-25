@@ -4740,3 +4740,146 @@ tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eva
 테스트: 같은 버전·같은 모델 → 재사용 / 모델 바뀜 → 다시 판정 / 모델 없음(옛 캐시) → 다시 판정, judge_pair 가 모델을 기록하는지. 기존 캐시 테스트의 가짜 캐시·판정에도 모델을 넣음.
 **검증**: `pytest tests` 326 passed. 수정 전 코드에 새 테스트를 두면 3건 실패 → 수정 후 통과(직접 재현).
 **결정·근거**: 리뷰의 참고 의견대로 PR 제목의 74% → 31% 를 '평가셋 기준'으로 한정(판정기 사람 일치 53%, 개선에 참고한 요청 세트로 측정).
+
+## [2026-11-25] 무근거 게이트 커버리지 확장 — 예시 유형 20개 추가 · 평가셋 분야별 확장
+**목적**: "크롤링 프로그램 작성해줘"가 개선되지 않고 원문 그대로 반환됨(화면: "적용할 수 있는 변경 사항을 찾지 못했습니다").
+**원인**: `/query` 첫 턴 게이트는 `prompt_examples` 최고 유사도 < `RAG_GATE_MIN_SCORE`(0.53)면 404 → 백엔드가 `ragStatus=no_evidence` 로
+원문을 그대로 돌려준다. 예시 유형 20개에 코드 '작성' 유형이 없었고(code_review·sql_query 뿐), 임계치는 양성 12건(글쓰기 위주) 최저 0.545 에
+맞춘 값이라 여유가 0.015 였다. 원본 평가셋 AUC 는 1.000 이라 이 구멍이 측정에 드러나지 않았다. 같은 구멍이 코드 밖 분야에도 있을 수 있어
+한 건만 고치지 않고 분야·상황을 넓혔다.
+**After**:
+- `ingestion/gen_examples.py`: 유형 20개 추가(총 40) — 개발·IT(code_write·feature_impl·debug_error·howto·spreadsheet), 업무(report_plan·
+  presentation·customer_reply), 교육(quiz_make·assignment·language_practice), 창작(creative_writing·image_prompt·video_script),
+  생활(lifestyle·recommend_compare·personal_message·advice), 전문 정보(expert_info·document_review). `TaskType.hint`(소재 후보)로
+  예시마다 다른 소재를 쓰게 함(`build_user_message`). 생성 프롬프트에 'before 다양성' 규칙 — 예시 중 하나는 15자 안팎의 아주 짧은 요청,
+  말투(해줘·짜줘·알려줘·어떻게 해?·반말/존댓말) 섞기. 큐레이션 최소 길이 8 → 5자("자소서 써줘" 통과, "글 써줘" 탈락).
+- `eval/gate_set.json`: 원본 24건은 그대로(rerank_bench 비교 가능), `positive_extended` 10개 분야 56건(짧은 요청·오타·구어체·질문형·
+  영어·짧은 원문 포함), `negative_extended` 14건(인사·잡담·의미 없는 입력) 추가.
+- `eval/gate_eval.py`: 확장 셋 사용, 현재 임계치(`--threshold`, 기본 RAG_GATE_MIN_SCORE)에서 **막히는 정상 요청·통과하는 무의미 입력을
+  분야별로 출력**. app.main import 를 main() 안으로 옮겨 순수 함수(load_gate_set·blocked_report)를 CI 에서 테스트.
+- `tests/test_gate_coverage.py`(+11): 평가셋 분야·상황 다양성·중복 없음, 게이트 부등호(점수<임계치=404), 유형 커버리지, hint 렌더, 짧은 예시 큐레이션.
+**검증**: `pytest tests` 337 passed, ruff(F821,F401,F811,E9) 통과. 가짜 retriever 로 gate_eval 출력 경로 확인.
+⚠️ **실제 생성·적재·측정은 미실행** — 이 작업 환경에 LLM 키·운영 MySQL·bge-m3 가 없다. 운영 반영 순서(rag-server/ 에서):
+1. `python -m ingestion.gen_examples --types code_write feature_impl debug_error howto spreadsheet report_plan presentation customer_reply quiz_make assignment language_practice creative_writing image_prompt video_script lifestyle recommend_compare personal_message advice expert_info document_review --out data/curated/examples_extra_20261125.jsonl --dry-run`
+   — `--out` 필수(기본값은 기존 synthetic_examples.jsonl 을 덮어씀). 산출 JSONL 검수.
+2. `python -m ingestion.gen_examples --from-jsonl data/curated/examples_extra_20261125.jsonl` — **`--replace` 금지**(기존 예시 삭제). chunk_id upsert 라 재실행 안전.
+3. `python -m eval.gate_eval` — 확장 양성이 0.53 을 넘는지, 무의미 입력이 새로 통과하지 않는지 확인. 막히는 분야가 남으면 그 유형을 `--per-type 3` 으로 보강하거나
+   FPR≤5% 임계치로 `RAG_GATE_MIN_SCORE` 재교정.
+**변경 파일**: ingestion/gen_examples.py, eval/gate_set.json, eval/gate_eval.py, tests/test_gate_coverage.py(신규), WORKLOG.md
+
+## [2026-11-25] gen_examples 백엔드 선택을 GEN_PRIMARY 추종으로
+**목적**: 맥북에서 예시 생성 실행 시 `groq.PermissionDeniedError 403 — Access denied. Please check your network settings`(네트워크·지역 차단)로 전체 실패.
+**Before**: `_LLM` 은 GROQ_API_KEY 가 있으면 무조건 groq — 운영 `.env` 의 GEN_PRIMARY=gemini 를 무시(eval 쪽은 2026-11-03 에 이미 고침).
+**After**: `pick_backend()` — `--backend` > GEN_PRIMARY(명시 시 그 키 필수) > 종전 규칙. CLI `--backend groq|gemini` 추가.
+**검증**: `pytest tests` 341 passed(+4 백엔드 선택), ruff 통과.
+
+## [2026-11-25] 예시 코퍼스 확장 실행 — 20개 유형 40건 생성·검수·로컬 적재, 게이트 측정
+**목적**: 위 두 작업(유형 20개 추가·GEN_PRIMARY)의 실제 생성·적재·측정. "크롤링 프로그램 작성해줘" 무근거 404 해소 확인.
+**실행**: Gemini(gemini-3.6-flash)로 20개 유형 × 2 dry-run → 36건(assignment·advice 는 응답 파싱 실패로 0건, 오류 표시 없음) →
+두 유형만 재생성 4건 → 40건 `data/curated/examples_extra_20261125.jsonl`(gitignore, 로컬 보관). 큐레이션 탈락 0.
+**검수·수정**: after 는 모두 AI 지시문(완성된 결과물 아님), before 12~157자로 짧은 요청 포함, 외국 문자 노이즈 없음(일본어 조사 예시의 は/が 는 정상).
+다만 after 18건이 사용자가 말하지 않은 사실을 지어냄(주간보고의 가상 업무 목록, FAQ 의 '7일·6,000원' 규정, 노트북 '예산 100만 원·1.5kg',
+썸네일 '공포 게임·폐교' 등) → 기존 코퍼스 관례대로 `[이번 주 한 일]`·`[신청 기한·배송비 부담 기준]` 같은 자리표시자로 35곳 교체, 오타 3곳 수정.
+chunk_id 는 task_type+before 해시라 after 수정과 무관. 적재: `--from-jsonl`(--replace 없음) → **로컬 MySQL(127.0.0.1)** 40건 upsert.
+**Before → After** (`python -m eval.gate_eval`, 양성 68 · 음성 26, 임계치 0.53)
+
+| 지표 | Before | After |
+|---|---|---|
+| 예시 게이트 AUC | 0.847 | **0.930** |
+| 기법 게이트 AUC | 0.728 | 0.728 |
+| 예시 게이트 FPR≤5% 임계치 (FPR, FNR) | 0.542 (0.038, 0.412) | 0.544 (0.038, 0.206) |
+| 0.53 에서 막히는 정상 요청 | 25 | **13** |
+| 0.53 에서 통과하는 무의미 입력 | 2 | 3 (+"점심 뭐 먹지" 0.596) |
+| "크롤링 프로그램 작성해줘" | 0.505 막힘 | 통과 |
+| "크롤링 프로그램 작성해붜" | 0.485 막힘 | 통과 |
+
+분야별 막힘(Before→After): 개발·IT 8→5, 데이터·엑셀 2→0, 업무 1→0, 교육 4→3, 창작 3→1, 생활 3→2, 개인 메시지 1→0, 상담 1→1, 전문 정보 1→0, 말투 변형 1→1, 원본 0→0.
+남은 막힘 13건: 이별 노래 가사·React 투두리스트·자바 정렬·김치찌개 레시피·부모님 선물·TypeError 원인·디스코드 봇·레포트 목차(환경오염)·
+어린왕자 독후감·문장 교정·중학교 수학 문제·영어 파이썬 스크립트 요청·진로 상담(0.437~0.518).
+**주의**: ① 이 맥에서는 Jina 리랭크가 403 → 로컬 torch `bge-reranker-v2-m3` 로 폴백해 측정. 운영(Railway, Jina)과 점수 척도가 다를 수 있어 임계치는 운영에서 재확인 필요.
+② 양성 "대학생 노트북 추천해줘"는 새 예시 before 와 동일(평가셋 누설 1건). ③ "점심 뭐 먹지"는 lifestyle 예시(점심 식단)에 붙어 새로 통과 — 추천 요청으로 볼 여지도 있음.
+**결정·근거**: 임계치는 0.53 유지 — FPR≤5% 임계치 0.544 로 올려도 "점심 뭐 먹지"(0.596)는 그대로 통과하고 정상 요청만 더 막힌다(FNR 0.19→0.21).
+남은 막힘은 개발·교육·창작·생활 유형 보강(`--per-type 3`)으로 다룬다. 운영 DB 적재는 같은 JSONL 을 운영 DB 접속으로 `--from-jsonl` 실행(사용자 확인 후).
+**변경 파일**: WORKLOG.md (데이터 JSONL 은 gitignore)
+
+## [2026-11-25] 예시 보강 2차(--per-type 3) · 생성 0건 누락 버그 · gate_eval 을 운영 경로로
+**목적**: 1차 적재 후 0.53 에서 막히던 정상 요청 13건(개발·교육·창작·생활·상담) 보강, 그리고 측정 중 드러난 두 문제 수정.
+**Before**
+- `generate_for_type` 이 `complete()` 기본 `max_tokens=2200` 으로 호출 — Gemini 는 생각 토큰도 이 한도에 들어가 JSON 이 잘리면 `_loads_loose` 가
+  `{"examples": []}` 를 돌려 **유형이 오류 없이 통째로 빠짐**(1차 assignment·advice, 2차 code_write·debug_error·lifestyle·advice).
+- `gate_eval._best` 가 예시 컬렉션도 하이브리드+리랭크 top5 안의 최고점을 씀. 운영(`retrieve_contexts`)은 예시를 `use_reranker=False,
+  use_hybrid=False` dense 최고점으로 판정 → 측정 경로가 운영과 다르고 느림(로컬 Jina 403 → torch 리랭커 폴백 영향도 받음).
+**After**
+- `generate_for_type`: `max_tokens=8192` + 0건이면 경고 출력 후 1회 재시도. 테스트 +1(잘린 JSON → 재시도 성공 / 두 번 다 실패 → [] · 호출 2회).
+- `gate_eval`: 예시 게이트 점수를 운영과 같은 dense 경로로(기법 게이트는 비교용으로 종전 유지).
+- 9개 유형 × 3 생성 → 27건, 검수: 평가셋 양성과 같은 문장 1건 제거("직장인 다이어트 식단 짜줘."), 환각·메타 지시 8건 수정
+  (동화 주제·가사 '이별'·노트북 '90~120만 원·1.5kg'(요청은 100만원대)·상사 '성향 차이' → 자리표시자, "프롬프트를 만들어주세요" 같은
+  메타 지시 3건 → 직접 수행 지시, 오타) → 26건 `data/curated/examples_extra_20261125_c.jsonl` → **로컬 MySQL** 적재. prompt_examples 197행.
+
+| 지표 (양성 68 · 음성 26, 0.53) | 확장 전 | 1차(+40) | 2차(+26) 종전 경로 | 2차 운영 경로(dense) |
+|---|---|---|---|---|
+| 예시 게이트 AUC | 0.847 | 0.930 | 0.960 | **0.960** |
+| FPR≤5% 임계치 (FNR) | 0.542 (0.412) | 0.544 (0.206) | 0.544 (0.147) | 0.545 (0.147) |
+| 막히는 정상 요청 | 25 | 13 | 7 | **7** |
+| 통과하는 무의미 입력 | 2 | 3 | 3 | 3 |
+
+남은 막힘 7건(운영 경로): 김치찌개 레시피 0.472 · 자바 정렬 0.487 · React 투두 0.497 · 레포트 목차(환경오염) 0.499 · 영어 요청 0.510 ·
+문장 교정 0.511 · TypeError 원인 0.518. 통과 무의미 입력: 점심 뭐 먹지 0.596 · 010-1234-5678 0.542 · https://example.com 0.541. 크롤링 두 요청 통과 유지.
+**주의**: 2차 보강 유형은 평가셋에서 막힌 항목을 보고 골랐다(소재도 비슷 — 디스코드 봇·환갑 선물·문과→개발자 등) → 이 셋의 수치는 낙관적.
+운영 효과는 실제 `ragStatus=no_evidence` 로그로 따로 봐야 한다.
+**결정·근거**: 임계치 0.53 유지 — 0.545 로 올리면 전화번호·URL 은 막지만 "점심 뭐 먹지"는 그대로이고 정상 요청이 더 막힌다(FNR 0.10→0.15).
+운영 DB 적재 대상: `examples_extra_20261125.jsonl`(40) + `examples_extra_20261125_c.jsonl`(26), 둘 다 `--from-jsonl`(--replace 금지).
+**검증**: `pytest tests` 342 passed. 운영 경로 측정 7분 45초(종전 리랭크 경로 약 15분).
+**변경 파일**: ingestion/gen_examples.py, eval/gate_eval.py, tests/test_gate_coverage.py, WORKLOG.md
+
+## [2026-11-25] 운영(Railway) prompt_examples 적재
+**Before**: 운영 `railway` DB prompt_examples 131 · prompt_techniques 170. 운영 `/api/prompts/improve` 첫 턴 "크롤링 프로그램 작성해줘" → `ragStatus=no_evidence`.
+**After**: `examples_extra_20261125.jsonl`(40) + `examples_extra_20261125_c.jsonl`(26)을 공개 TCP 프록시로 `--from-jsonl` 적재(--replace 없음) → prompt_examples **197**.
+rag-server 재시작 불필요(요청마다 컬렉션을 다시 읽음).
+**검증**(운영, 새 게스트 세션 첫 턴): "크롤링 프로그램 작성해줘"·"크롤링 프로그램 작성해붜" → `ok`(약 21초), "ㅁㄴㅇㄹ" → `no_evidence`.
+**참고**: 웹에서 같은 요청이 되던 건 같은 대화방 두 번째 턴이라 게이트를 건너뛴 것(history 있으면 미판정). 운영 rag-server 는 Jina 잔액 부족(403
+`AUTHZ_INSUFFICIENT_BALANCE`)으로 매 요청 torch 리랭커 폴백 중 — 충전 또는 RAG_RERANK_BACKEND 정리 필요(별도).
+**롤백**: 두 JSONL 의 chunk_id 목록으로 prompt_examples 컬렉션의 해당 행만 삭제(전체 삭제인 --replace 금지).
+
+## [2026-11-25] 예시 보강 3차 — 남은 7건 형태 hint 명시 · 운영 적재
+**목적**: 2차 후 0.53 에서 막히던 정상 요청 7건(김치찌개 레시피·자바 정렬·React 투두·레포트 목차·영어 요청·문장 교정·TypeError) 보강.
+**원인 분석**: 유형·hint 는 이미 있었지만 무작위 소재 선택이라 흔한 형태가 빠짐 — 메뉴 이름만 댄 짧은 레시피, 언어를 지정한 알고리즘, 입문용 토이 앱,
+에러 메시지만 붙인 질문, 한 문장 교정(proofread 는 hint 없음), 영어 요청.
+**After**
+- `ingestion/gen_examples.py` hint: proofread 신설, code_write·feature_impl·debug_error·assignment·lifestyle 에 위 형태 명시.
+- 6개 유형 × 3 생성 18건 → 중복 2 제거(엑셀 합치기 3번째·데미안 재등장), 메타 지시·환각 4건 수정(Tailwind·대청소 3시간·실험값 → 자리표시자),
+  생성기가 끝내 만들지 않은 형태 2건 **수작업 추가**(`source="manual"`: 영어 JS 중복 제거 요청, "제육볶음 레시피 알려줘") → 18건
+  `data/curated/examples_extra_20261125_e.jsonl`. 평가셋 문장과 겹침 없음(같은 소재는 피함).
+- 로컬 → 측정 → 운영 적재: 운영 prompt_examples 197 → **215**.
+
+| 지표 (운영 경로 dense, 0.53) | 2차 후 | 3차 후 |
+|---|---|---|
+| 예시 게이트 AUC | 0.960 | **0.982** |
+| FPR≤5% 임계치 (FNR) | 0.545 (0.147) | 0.542 (0.074) |
+| 막히는 정상 요청 | 7 | **2** (영어 파일명 변경 0.510 · React 투두 0.512) |
+| 통과하는 무의미 입력 | 3 | 3 (변화 없음) |
+
+**운영 확인**(새 게스트 첫 턴): "자바로 정렬 알고리즘 코드 짜줘" → ok. "김치찌개 레시피 알려줘" → 게이트 통과·개선안 생성(485자)인데 `ragStatus=no_evidence` —
+backend 가 `sources`(기법) 0건이면 no_evidence 로 표시(PromptController `sources.isEmpty()`), 예시는 sources 에 안 셈 → 화면에 "참고 근거 없이" 라벨. 기존 동작, 미수정.
+"010-1234-5678" → ok(측정대로 누설).
+**주의**: 영어 예시 1건으로는 영어 요청 점수가 안 오름(0.510 그대로) — 코퍼스가 한국어라 교차언어 유사도 한계. 평가셋 맞춤 보강이라 수치는 낙관적.
+**변경 파일**: ingestion/gen_examples.py(hint), WORKLOG.md
+
+## [2026-11-25] /query 응답에 rag_status — 예시만 근거인 개선이 '근거 없음'으로 표시·기록 제외되던 문제
+**Before**: QueryResponse 에 상태 필드가 없어 백엔드가 `sources`(기법) 비면 `ragStatus=no_evidence`(PromptController `sources.isEmpty()`).
+게이트는 예시로 통과했는데 기법 카드가 없는 요청(예: "김치찌개 레시피 알려줘")은 개선안이 정상 생성돼도 화면에 "참고 근거 없이 기본 방식으로 다듬었습니다",
+웹·확장은 no_evidence 메시지를 `excludeFromHistory` 로 후속 턴 기록에서도 뺐다.
+**After**: `app/core/gate.rag_status(retrieved, examples)` — 기법이든 예시든 있으면 `ok`, 둘 다 없으면(게이트를 건너뛰는 후속 턴) `no_evidence`.
+`QueryResponse.rag_status` 로 내려주고, 백엔드는 이미 `firstNonBlank(..., "ragStatus", "rag_status")` 로 sources 보다 먼저 읽음 → 백엔드·프론트 수정 없음.
+예시를 sources 에 섞지 않은 이유: 화면의 '참고한 프롬프트 기법' 목록에 예시가 기법처럼 뜬다.
+**검증**: `pytest tests` 343 passed(+1). 인프로세스 `/query` "김치찌개 레시피 알려줘" → rag_status=ok · sources 0 · 개선안 478자.
+**배포**: rag-server 재배포 필요(운영 반영 전까지 기존 라벨 유지).
+**변경 파일**: app/core/gate.py, app/main.py, tests/test_gate.py, WORKLOG.md
+
+## [2026-11-25] gate_eval 임계치 기본값을 서버와 같은 설정에서
+**Before**: `--threshold` 기본값을 argparse 정의 시점에 `os.environ` 에서 계산 — 이때는 아직 `.env` 가 로드되지 않아(로드는 `app` import 시)
+`.env` 에만 `RAG_GATE_MIN_SCORE=0.60` 을 두면 서버는 0.60, 평가는 0.53 으로 같은 요청의 통과 여부가 달랐다.
+**After**: 기본값 `None` + `resolve_threshold()` — CLI 값이 있으면 그대로, 없으면 rag-server/.env 를 로드(기존 환경변수 우선, 서버와 동일)한 뒤
+`RAG_GATE_MIN_SCORE`, 비었거나 숫자가 아니면 0.53(`app.main._env_float` 과 같은 규칙).
+**검증**: `pytest tests` 344 passed(+1: .env 값 반영 · CLI 우선 · 환경변수 우선 · 잘못된 값 0.53). 수정 전 코드에선 새 테스트 실패 확인.
+**변경 파일**: eval/gate_eval.py, tests/test_gate_coverage.py, WORKLOG.md

@@ -48,3 +48,11 @@ def test_boundary_at_threshold():
     """임계치 경계: 정확히 임계치면 통과(>=), 미만이면 차단."""
     assert gate([], EX(0.53), [], 0.53) is False        # 0.53 >= 0.53 → 통과
     assert gate([], EX(0.529), [], 0.53) is True        # 미만 → 차단
+
+
+def test_rag_status_counts_examples_as_evidence():
+    """기법 0건이어도 예시가 있으면 ok — 예전엔 백엔드가 sources(기법)만 보고 no_evidence 로 표시했다."""
+    from app.core.gate import rag_status
+    assert rag_status([], [{"score": 0.6}]) == "ok"
+    assert rag_status([{"score": 0.5}], []) == "ok"
+    assert rag_status([], []) == "no_evidence"

@@ -9,7 +9,7 @@ from typing import Optional
 # .env 는 app/__init__.py 에서 로드됨
 from app.core import usage
 from app.core.concurrency import GateBusy, GateTimeout, generation_gate
-from app.core.gate import no_evidence_gate
+from app.core.gate import no_evidence_gate, rag_status
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
@@ -137,6 +137,8 @@ class QueryResponse(BaseModel):
     # 이번 요청의 LLM 토큰 사용량(선택 — 없으면 None). {summary:{...}, records:[{stage,backend,model,
     # prompt_tokens,completion_tokens,thoughts_tokens,cached_tokens,...}]}. 백엔드가 무시해도 무방.
     usage:               Optional[dict] = None
+    # 근거 상태(ok | no_evidence). 백엔드는 이 값을 sources 유무보다 먼저 쓴다 — 예시만 근거인 개선을 no_evidence 로 오표시하지 않게.
+    rag_status:          str = "ok"
 
 
 def run_generation(query: str, contexts: list[dict], model: str,
@@ -314,6 +316,7 @@ def query(req: QueryRequest):
         questions=gen["questions"],
         fields=gen.get("fields", []),
         usage=usage_payload,
+        rag_status=rag_status(retrieved, examples),
     )
 
 
