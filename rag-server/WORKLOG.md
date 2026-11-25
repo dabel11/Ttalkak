@@ -4766,3 +4766,9 @@ tests/test_generator_guards.py, tests/test_uplift_score.py, RAG_PIPELINE.md, eva
 3. `python -m eval.gate_eval` — 확장 양성이 0.53 을 넘는지, 무의미 입력이 새로 통과하지 않는지 확인. 막히는 분야가 남으면 그 유형을 `--per-type 3` 으로 보강하거나
    FPR≤5% 임계치로 `RAG_GATE_MIN_SCORE` 재교정.
 **변경 파일**: ingestion/gen_examples.py, eval/gate_set.json, eval/gate_eval.py, tests/test_gate_coverage.py(신규), WORKLOG.md
+
+## [2026-11-25] gen_examples 백엔드 선택을 GEN_PRIMARY 추종으로
+**목적**: 맥북에서 예시 생성 실행 시 `groq.PermissionDeniedError 403 — Access denied. Please check your network settings`(네트워크·지역 차단)로 전체 실패.
+**Before**: `_LLM` 은 GROQ_API_KEY 가 있으면 무조건 groq — 운영 `.env` 의 GEN_PRIMARY=gemini 를 무시(eval 쪽은 2026-11-03 에 이미 고침).
+**After**: `pick_backend()` — `--backend` > GEN_PRIMARY(명시 시 그 키 필수) > 종전 규칙. CLI `--backend groq|gemini` 추가.
+**검증**: `pytest tests` 341 passed(+4 백엔드 선택), ruff 통과.

@@ -29,7 +29,7 @@ gen_examples.py
     python -m ingestion.gen_examples --from-jsonl data/curated/examples_extra.jsonl
                                                          # 검수한 파일만 적재(--replace 금지)
 
-LLM 백엔드는 generator.py 와 동일 규칙: GROQ_API_KEY → GEMINI_API_KEY 자동 선택.
+LLM 백엔드: --backend > GEN_PRIMARY > GROQ_API_KEY 유무(eval/uplift_eval 과 같은 규칙).
 """
 
 from __future__ import annotations
@@ -238,22 +238,39 @@ class Example:
 
 
 # ── LLM 백엔드 (generator/ingest 와 동일 자동선택) ────────────
+def pick_backend(explicit: str | None = None) -> str:
+    """생성 백엔드 선택 — eval/uplift_eval._pick_backend 와 같은 규칙.
+
+    --backend > GEN_PRIMARY(명시 시 그 키 필수) > 종전 규칙(GROQ 키 있으면 groq, 없으면 gemini).
+    2026-11-25: 운영(.env GEN_PRIMARY=gemini)과 달리 여기만 'GROQ 키 있으면 groq' 고정이라,
+    Groq 가 403(Access denied — 네트워크·지역 차단)을 내는 환경에서 생성이 통째로 실패했다."""
+    primary = (explicit or os.environ.get("GEN_PRIMARY", "")).strip().lower()
+    if primary:
+        backend = "gemini" if primary == "gemini" else "groq"
+        if not os.environ.get(f"{backend.upper()}_API_KEY"):
+            raise EnvironmentError(f"{backend.upper()}_API_KEY 가 필요합니다 (백엔드={primary}).")
+        return backend
+    if os.environ.get("GROQ_API_KEY"):
+        return "groq"
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    raise EnvironmentError("GROQ_API_KEY 또는 GEMINI_API_KEY 가 필요합니다.")
+
+
 class _LLM:
-    def __init__(self, model: str | None = None):
-        if os.environ.get("GROQ_API_KEY"):
+    def __init__(self, model: str | None = None, backend: str | None = None):
+        if pick_backend(backend) == "groq":
             from groq import Groq
             self.backend = "groq"
             self.client = Groq(api_key=os.environ["GROQ_API_KEY"], timeout=GEN_SECONDS)
             self.model = model or default_model("groq")
-        elif os.environ.get("GEMINI_API_KEY"):
+        else:
             from google import genai
             from google.genai import types
             self.backend = "gemini"
             self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                                        http_options=types.HttpOptions(timeout=GEN_MILLIS))
             self.model = model or default_model("gemini")
-        else:
-            raise EnvironmentError("GROQ_API_KEY 또는 GEMINI_API_KEY 가 필요합니다.")
         print(f"[gen_examples] LLM 백엔드={self.backend} model={self.model}")
 
     @staticmethod
@@ -429,6 +446,8 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="DB 저장 없이 생성·검수만")
     ap.add_argument("--replace", action="store_true", help="인덱싱 전 컬렉션 비우기")
     ap.add_argument("--model", default=None)
+    ap.add_argument("--backend", choices=["groq", "gemini"], default=None,
+                    help="생성 백엔드(비우면 GEN_PRIMARY, 그것도 없으면 GROQ 키 유무)")
     args = ap.parse_args()
 
     # ── JSONL 재인덱싱 경로 (LLM 불필요) ──
@@ -452,7 +471,7 @@ def main() -> None:
             print(f"❌ 알 수 없는 유형: {args.types}")
             sys.exit(1)
 
-    llm = _LLM(model=args.model)
+    llm = _LLM(model=args.model, backend=args.backend)
     print(f"▶ {len(types)}개 유형 × {args.per_type}개 생성 시작")
 
     raw: list[Example] = []

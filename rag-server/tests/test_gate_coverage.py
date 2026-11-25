@@ -102,3 +102,40 @@ def test_short_realistic_before_passes_curation():
     assert ok
     ok, reason = passes_gate(Example(before="글 써줘", after=after, technique="Role Prompting"))
     assert not ok and "짧음" in reason
+
+
+# ── 생성 백엔드 선택 (2026-11-25: Groq 403 환경에서 GEN_PRIMARY=gemini 를 무시하던 문제) ──
+import pytest  # noqa: E402
+
+from ingestion.gen_examples import pick_backend  # noqa: E402
+
+
+@pytest.fixture
+def both_keys(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "g")
+    monkeypatch.setenv("GEMINI_API_KEY", "m")
+    monkeypatch.delenv("GEN_PRIMARY", raising=False)
+    return monkeypatch
+
+
+def test_backend_follows_gen_primary(both_keys):
+    both_keys.setenv("GEN_PRIMARY", "gemini")
+    assert pick_backend() == "gemini"
+
+
+def test_backend_explicit_overrides_gen_primary(both_keys):
+    both_keys.setenv("GEN_PRIMARY", "gemini")
+    assert pick_backend("groq") == "groq"
+
+
+def test_backend_legacy_rule_without_gen_primary(both_keys):
+    assert pick_backend() == "groq"
+    both_keys.delenv("GROQ_API_KEY")
+    assert pick_backend() == "gemini"
+
+
+def test_backend_missing_key_for_primary(both_keys):
+    both_keys.setenv("GEN_PRIMARY", "gemini")
+    both_keys.delenv("GEMINI_API_KEY")
+    with pytest.raises(EnvironmentError):
+        pick_backend()
