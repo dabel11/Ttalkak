@@ -1,9 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+import { build } from "vite";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../public/background.js", import.meta.url), "utf8");
+const [bundle] = await build({
+  configFile: false, publicDir: false, logLevel: "silent",
+  build: { write: false, lib: {
+    entry: fileURLToPath(new URL("../background.js", import.meta.url)),
+    formats: ["iife"], name: "TTalkakBackground",
+  } },
+});
+const source = bundle.output[0].code;
 async function requestInline({ status = 200, body = { improvedPrompt: "개선안" }, token = "member" } = {}) {
   const listeners = [];
   let request;
@@ -48,4 +56,20 @@ test("inline errors distinguish member quota, guest trial and provider throttlin
   assert.doesNotMatch(requestLimit.reply.error, /잠시 후/);
   assert.match(guest.reply.error, /체험 횟수/);
   assert.match(provider.reply.error, /잠시 후/);
+});
+
+test("inline preserves first-turn evidence and asks without offering the source as a rewrite", async () => {
+  const explanation = "관련 프롬프트 기법 근거를 찾지 못했습니다.";
+  const missing = await requestInline({ body: { result: {
+    improvedPrompt: "원본", ragStatus: "no_evidence", answer: explanation,
+  } } });
+  assert.equal(missing.reply.improvedPrompt, "");
+  assert.equal(missing.reply.explanation, explanation);
+  assert.equal(missing.reply.ragStatus, "no_evidence");
+  const ask = await requestInline({ body: { data: {
+    mode: "ask", improvedPrompt: "원본", followUpQuestions: ["독자는 누구인가요?"],
+  } } });
+  assert.equal(ask.reply.improvedPrompt, "");
+  assert.equal(ask.reply.mode, "ask");
+  assert.equal(ask.reply.questions[0], "독자는 누구인가요?");
 });

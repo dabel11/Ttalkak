@@ -21,7 +21,7 @@
     "#tt-panel{display:none;position:fixed;pointer-events:auto;width:min(420px,calc(100vw - 24px));max-height:50vh;overflow:auto;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#1e293b;box-shadow:0 12px 30px #0003;font:13px/1.6 system-ui,sans-serif}",
     ".tt-title,.tt-change{color:#2563eb}.tt-title{font-weight:700;margin:0 0 8px}.tt-change{font-weight:600}",
     "#tt-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow-y:auto}",
-    "#tt-message{font-size:12px;color:#64748b;margin:5px 0}",
+    "#tt-message{white-space:pre-line;font-size:12px;color:#64748b;margin:5px 0}",
     ".tt-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:12px}",
     ".tt-actions button{padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1e293b;font-size:12px}",
     "#tt-apply{background:#111827;color:white;border-color:#111827}",
@@ -160,7 +160,7 @@
   }
   function preview(original, improved) {
     text.replaceChildren();
-    if (!improved) { text.textContent = "프롬프트를 개선하려면 필요한 정보를 더 입력해 주세요."; return; }
+    if (!improved) return;
     let cursor = 0;
     for (const range of keyPhraseRanges(original, improved)) {
       text.append(document.createTextNode(improved.slice(cursor, range.start)));
@@ -197,6 +197,7 @@
     const source = input, original = getText(source);
     if (!original.trim() || original.length > 12000) {
       dismiss(); panel.style.display = "block";
+      title.textContent = "입력 확인";
       text.textContent = !original.trim() ? "개선할 문장을 먼저 작성해 주세요." : "12,000자 이내로 입력해 주세요.";
       apply.hidden = true; restore.hidden = true; position(); return;
     }
@@ -210,11 +211,27 @@
       const improved = unchanged ? "" : candidate;
       snapshot = { source, original, improved, applied:false };
       preview(original, improved);
-      if (error) text.textContent = "개선에 실패했습니다. 잠시 후 다시 시도해 주세요.";
       const changed = getText(source) !== original;
-      message.textContent = error ? String(error) : changed ? "입력 내용이 변경되어 적용할 수 없습니다. 다시 개선해 주세요." :
-        unchanged ? "적용할 변경 사항이 없습니다. 프롬프트를 더 구체적으로 작성해 주세요." :
-        improved ? "" : "추가 정보가 필요한 요청입니다.";
+      const questions = reply?.questions || [];
+      const needsAnswer = reply?.mode === "ask";
+      title.textContent = improved ? "✨ 개선된 프롬프트" : needsAnswer ? "추가 질문" : "개선 결과";
+      const notices = [];
+      if (error) {
+        notices.push(String(error));
+      } else {
+        if (reply?.ragStatus === "no_evidence") {
+          notices.push(improved ? "참고 근거 없이 기본 방식으로 다듬었습니다." :
+            reply.explanation || "관련 프롬프트 기법 근거를 찾지 못했습니다.");
+        } else if (!improved && !questions.length) {
+          notices.push(needsAnswer ? reply.explanation || "추가 정보가 필요합니다." : "적용할 변경 사항이 없습니다.");
+        }
+        if (questions.length) {
+          notices.push(needsAnswer ? "원문에 답을 덧붙인 뒤 다시 개선해 주세요." : "추가 질문 (선택)");
+          notices.push(...questions.map((question, index) => (index + 1) + ". " + question));
+        }
+        if (improved && changed) notices.push("입력 내용이 변경되어 적용할 수 없습니다. 다시 개선해 주세요.");
+      }
+      message.textContent = notices.join("\n");
       apply.hidden = !improved; apply.disabled = changed; restore.hidden = true;
       panel.style.display = "block"; position();
     });

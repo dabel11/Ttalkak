@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 const inlineSource = fs.readFileSync(new URL("../public/inline-improve.js", import.meta.url), "utf8");
 
-async function setup({ improved = "개선 문단 하나\n개선 문단 둘", command = "success" } = {}) {
+async function setup({ improved = "개선 문단 하나\n개선 문단 둘", command = "success", reply = {} } = {}) {
   const dom = new JSDOM(
     '<!doctype html><html><body><main><form><div id="prompt-textarea" contenteditable="true"><p>원본 프롬프트</p></div></form></main></body></html>',
     { url: "https://chatgpt.com/", pretendToBeVisual: true, runScripts: "outside-only" },
@@ -51,7 +51,7 @@ async function setup({ improved = "개선 문단 하나\n개선 문단 둘", com
   window.chrome = {
     runtime: {
       id: "test-extension",
-      sendMessage(_message, callback) { callback({ ok: true, improvedPrompt: improved }); },
+      sendMessage(_message, callback) { callback({ ok: true, improvedPrompt: improved, ...reply }); },
       lastError: undefined,
     },
     storage: {
@@ -162,4 +162,14 @@ test("a real user edit after preview is never overwritten", async (t) => {
   assert.equal(h.writes, 0);
   assert.equal(h.editor.textContent, "사용자가 직접 수정한 문장");
   assert.match(h.shadow.getElementById("tt-message").textContent, /문장을 보호하기 위해 적용하지 않았/);
+});
+test("unchanged no-evidence response explains why and preserves the editor", async (t) => {
+  const explanation = "관련 프롬프트 기법 근거를 찾지 못했습니다.";
+  const h = await setup({ improved: "", reply: { ragStatus: "no_evidence", explanation } });
+  t.after(async () => { h.disable(); await new Promise((resolve) => setTimeout(resolve, 80)); h.dom.window.close(); });
+  h.trigger();
+  assert.equal(h.shadow.getElementById("tt-message").textContent, explanation);
+  assert.equal(h.shadow.getElementById("tt-text").textContent, "");
+  assert.equal(h.shadow.getElementById("tt-apply").hidden, true);
+  assert.equal(h.writes, 0);
 });

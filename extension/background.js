@@ -1,3 +1,5 @@
+import { normalizeImproveResult } from "./src/utils/normalizeImproveResult.js";
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "INLINE_IMPROVE") return false;
   (async () => {
@@ -44,8 +46,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (res.status === 401) throw Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
       throw Error(String(body.code || "개선 요청에 실패했습니다."));
     }
-    const data = body.result || body.data || body;
-    sendResponse({ ok: true, improvedPrompt: String(data.improvedPrompt || data.improved_prompt || data.finalPrompt || "").trim() });
+    const result = normalizeImproveResult(body, prompt);
+    sendResponse({
+      ok: true,
+      improvedPrompt: result.improvedPrompt,
+      mode: result.mode,
+      ragStatus: result.ragStatus,
+      explanation: result.ragMessage || (result.answer === "프롬프트를 개선했습니다." ? "" : result.answer),
+      questions: result.questions.map((item) => item.question),
+    });
   })().catch((err) => sendResponse({ ok: false, error: err.name === "AbortError" ? "요청 시간이 초과되었습니다." : String(err.message || err) }));
   return true;
 });
