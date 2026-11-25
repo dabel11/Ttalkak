@@ -4864,3 +4864,14 @@ backend 가 `sources`(기법) 0건이면 no_evidence 로 표시(PromptController
 "010-1234-5678" → ok(측정대로 누설).
 **주의**: 영어 예시 1건으로는 영어 요청 점수가 안 오름(0.510 그대로) — 코퍼스가 한국어라 교차언어 유사도 한계. 평가셋 맞춤 보강이라 수치는 낙관적.
 **변경 파일**: ingestion/gen_examples.py(hint), WORKLOG.md
+
+## [2026-11-25] /query 응답에 rag_status — 예시만 근거인 개선이 '근거 없음'으로 표시·기록 제외되던 문제
+**Before**: QueryResponse 에 상태 필드가 없어 백엔드가 `sources`(기법) 비면 `ragStatus=no_evidence`(PromptController `sources.isEmpty()`).
+게이트는 예시로 통과했는데 기법 카드가 없는 요청(예: "김치찌개 레시피 알려줘")은 개선안이 정상 생성돼도 화면에 "참고 근거 없이 기본 방식으로 다듬었습니다",
+웹·확장은 no_evidence 메시지를 `excludeFromHistory` 로 후속 턴 기록에서도 뺐다.
+**After**: `app/core/gate.rag_status(retrieved, examples)` — 기법이든 예시든 있으면 `ok`, 둘 다 없으면(게이트를 건너뛰는 후속 턴) `no_evidence`.
+`QueryResponse.rag_status` 로 내려주고, 백엔드는 이미 `firstNonBlank(..., "ragStatus", "rag_status")` 로 sources 보다 먼저 읽음 → 백엔드·프론트 수정 없음.
+예시를 sources 에 섞지 않은 이유: 화면의 '참고한 프롬프트 기법' 목록에 예시가 기법처럼 뜬다.
+**검증**: `pytest tests` 343 passed(+1). 인프로세스 `/query` "김치찌개 레시피 알려줘" → rag_status=ok · sources 0 · 개선안 478자.
+**배포**: rag-server 재배포 필요(운영 반영 전까지 기존 라벨 유지).
+**변경 파일**: app/core/gate.py, app/main.py, tests/test_gate.py, WORKLOG.md

@@ -28,3 +28,10 @@ def no_evidence_gate(retrieved: list[dict], examples: list[dict],
         best = max((e.get("score", 0.0) for e in examples), default=0.0)
         return best < gate_min_score
     return not retrieved
+
+
+def rag_status(retrieved: list, examples: list) -> str:
+    """200 응답의 근거 상태. 백엔드는 이 값이 없으면 sources(기법)가 비었을 때 no_evidence 로 표시하고,
+    프론트는 no_evidence 메시지를 대화 기록에서 뺀다 — 예시만으로 근거가 있는 개선(예: 레시피)이
+    '근거 없음'으로 잘못 표시·제외되던 문제. 기법이든 예시든 하나라도 있으면 ok."""
+    return "ok" if retrieved or examples else "no_evidence"
