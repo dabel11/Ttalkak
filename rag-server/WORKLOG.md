@@ -4831,3 +4831,12 @@ chunk_id 는 task_type+before 해시라 after 수정과 무관. 적재: `--from-
 운영 DB 적재 대상: `examples_extra_20261125.jsonl`(40) + `examples_extra_20261125_c.jsonl`(26), 둘 다 `--from-jsonl`(--replace 금지).
 **검증**: `pytest tests` 342 passed. 운영 경로 측정 7분 45초(종전 리랭크 경로 약 15분).
 **변경 파일**: ingestion/gen_examples.py, eval/gate_eval.py, tests/test_gate_coverage.py, WORKLOG.md
+
+## [2026-11-25] 운영(Railway) prompt_examples 적재
+**Before**: 운영 `railway` DB prompt_examples 131 · prompt_techniques 170. 운영 `/api/prompts/improve` 첫 턴 "크롤링 프로그램 작성해줘" → `ragStatus=no_evidence`.
+**After**: `examples_extra_20261125.jsonl`(40) + `examples_extra_20261125_c.jsonl`(26)을 공개 TCP 프록시로 `--from-jsonl` 적재(--replace 없음) → prompt_examples **197**.
+rag-server 재시작 불필요(요청마다 컬렉션을 다시 읽음).
+**검증**(운영, 새 게스트 세션 첫 턴): "크롤링 프로그램 작성해줘"·"크롤링 프로그램 작성해붜" → `ok`(약 21초), "ㅁㄴㅇㄹ" → `no_evidence`.
+**참고**: 웹에서 같은 요청이 되던 건 같은 대화방 두 번째 턴이라 게이트를 건너뛴 것(history 있으면 미판정). 운영 rag-server 는 Jina 잔액 부족(403
+`AUTHZ_INSUFFICIENT_BALANCE`)으로 매 요청 torch 리랭커 폴백 중 — 충전 또는 RAG_RERANK_BACKEND 정리 필요(별도).
+**롤백**: 두 JSONL 의 chunk_id 목록으로 prompt_examples 컬렉션의 해당 행만 삭제(전체 삭제인 --replace 금지).
