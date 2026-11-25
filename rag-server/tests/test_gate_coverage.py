@@ -139,3 +139,27 @@ def test_backend_missing_key_for_primary(both_keys):
     both_keys.delenv("GEMINI_API_KEY")
     with pytest.raises(EnvironmentError):
         pick_backend()
+
+
+def test_generate_for_type_retries_once_when_response_unparsable():
+    """잘린 JSON(0건)이면 경고 후 한 번 더 시도한다 — 예전엔 유형이 오류 없이 통째로 빠졌다."""
+    from ingestion.gen_examples import generate_for_type
+
+    class _Fake:
+        def __init__(self, replies):
+            self.replies, self.calls = list(replies), []
+
+        def complete(self, system, user, **kw):
+            self.calls.append(kw)
+            return self.replies.pop(0)
+
+    good = json.dumps({"examples": [{"before": "크롤러 짜줘", "after": "당신은 개발자입니다. 크롤러를 작성하세요."}]},
+                      ensure_ascii=False)
+    llm = _Fake(['{"examples": [{"before": "잘린', good])
+    out = generate_for_type(llm, TASK_TYPES[0], 1)
+    assert [e.before for e in out] == ["크롤러 짜줘"]
+    assert len(llm.calls) == 2 and llm.calls[0]["max_tokens"] >= 8192
+
+    llm = _Fake(["garbage", "garbage"])
+    assert generate_for_type(llm, TASK_TYPES[0], 1) == []
+    assert len(llm.calls) == 2

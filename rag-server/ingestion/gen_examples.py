@@ -346,8 +346,13 @@ def generate_for_type(llm: _LLM, tt: TaskType, per_type: int) -> list[Example]:
     rule = _MATERIAL_RULE if tt.needs_material else _PLAIN_RULE
     system = _GEN_SYSTEM % rule
     user = build_user_message(tt, per_type)
-    raw = llm.complete(system, user)
-    data = _loads_loose(raw)
+    # Gemini 는 생각 토큰도 출력 한도에 들어가 2200 이면 JSON 이 잘려 0건이 되곤 했다(오류 없이 유형 누락) → 넉넉히 + 1회 재시도.
+    for attempt in (1, 2):
+        raw = llm.complete(system, user, max_tokens=8192)
+        data = _loads_loose(raw)
+        if data.get("examples"):
+            break
+        print(f"    ⚠️ {tt.key}: 응답에서 예시를 못 읽음(시도 {attempt}/2) 끝부분={raw[-60:]!r}")
     out: list[Example] = []
     for d in (data.get("examples") or []):
         if not isinstance(d, dict):

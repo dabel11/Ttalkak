@@ -80,10 +80,10 @@ def blocked_report(pos_scored: list[tuple[str, str, float]],
     return {"blocked": blocked, "leaked": leaked, "by_domain": by_domain}
 
 
-def _best(retriever, query: str, collection: str) -> float:
+def _best(retriever, query: str, collection: str, **kw) -> float:
     try:
         r = retriever.search(query=query, collection_name=collection,
-                             top_k=5, fetch_k=50, min_score=0.0)
+                             top_k=5, fetch_k=50, min_score=0.0, **kw)
         return max((x["score"] for x in r), default=0.0)
     except Exception:
         return -1.0
@@ -101,12 +101,15 @@ def main():
 
     pos, neg = load_gate_set(json.loads(SET_PATH.read_text(encoding="utf-8")))
     scores = {"tech": {"pos": [], "neg": []}, "ex": {"pos": [], "neg": []}}
+    # 예시 게이트는 운영(app/main.py retrieve_contexts)과 같은 경로 — 리랭크·하이브리드 없이 dense 최고점.
+    # 종전엔 리랭크 top5 안의 최고점이라 운영보다 낮게 나왔고, 리랭커(Jina/torch)에 따라 값이 흔들렸다.
+    ex_path = {"use_reranker": False, "use_hybrid": False}
     for _d, q in pos:
         scores["tech"]["pos"].append(_best(retriever, q, "prompt_techniques"))
-        scores["ex"]["pos"].append(_best(retriever, q, "prompt_examples"))
+        scores["ex"]["pos"].append(_best(retriever, q, "prompt_examples", **ex_path))
     for q in neg:
         scores["tech"]["neg"].append(_best(retriever, q, "prompt_techniques"))
-        scores["ex"]["neg"].append(_best(retriever, q, "prompt_examples"))
+        scores["ex"]["neg"].append(_best(retriever, q, "prompt_examples", **ex_path))
 
     print(f"양성 {len(pos)} · 음성 {len(neg)}")
     for key, name in [("tech", "기법 게이트"), ("ex", "예시 게이트")]:
