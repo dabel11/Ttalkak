@@ -213,3 +213,12 @@ test("shared compatibility fixtures normalize consistently in the web client", (
   const legacy = model.migrateMakeMessage(fixtures.legacyAssistant);
   assert.match(legacy.content, /구형 저장 응답/);
 });
+
+test("field values replace repeated slots literally and append missing information once", () => {
+  const prompt = "[대상]을 위한 [형식], 대상은 [대상]";
+  const fields = ["대상", "분량"];
+  assert.deepEqual(model.promptFieldNames(prompt, fields), ["대상", "형식", "분량"]);
+  const result = model.fillPromptFields(prompt, fields, new Map([["대상", "$&"], ["분량", "3줄"]]));
+  assert.equal(result.prompt, "$&을 위한 [형식], 대상은 $&\n분량: 3줄");
+  assert.deepEqual(model.promptFieldNames(result.prompt, result.fields), ["형식"]);
+});

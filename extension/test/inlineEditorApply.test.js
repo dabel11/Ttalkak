@@ -204,3 +204,19 @@ test("inline answers keep the editor untouched until apply and errors preserve t
   h.shadow.getElementById("tt-restore").click();
   assert.equal(h.editor.textContent, "원본 프롬프트");
 });
+
+test("fills repeated slots before applying and preserves empty slots", async (t) => {
+  const h = await setup({ improved: "[대상]에게 [대상]용 [형식] 작성", reply: { missingFieldNames: ["분량"] } });
+  t.after(async () => {
+    h.disable();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    h.dom.window.close();
+  });
+  h.trigger();
+  const inputs = h.shadow.querySelectorAll("fieldset input");
+  inputs[0].value = "초보자";
+  inputs[2].value = "3줄";
+  inputs[2].dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  h.shadow.getElementById("tt-apply").click();
+  assert.equal(h.editor.innerText, "초보자에게 초보자용 [형식] 작성\n\n분량: 3줄");
+});

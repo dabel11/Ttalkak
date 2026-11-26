@@ -1,6 +1,17 @@
+import { fillPromptFields } from "../utils/make-message-model.mjs";
 "use strict";
 export function createMakeExecutionWorkflows(ctx) {
     const { state, savedPrompts, promptTemplates, document, window, render, renderPreservingMakeScroll, showNotice, openConfirmAction, navigateTo, guardAdminUserAction, findPromptById, getFinalPromptText, copyTextToClipboard, makePromptTitle, getMakeMutationStateContext, toggleSavedMakeMessageState, getMakeControllerContext, autosizeTextarea, startNewMakeChatState, makeController, makeState, persistState } = ctx;
+    function fillPrompt(id, values) {
+      const message = state.messages.find(item => String(item.id) === id && item.role === "assistant");
+      if (!message) return;
+      const template = getFinalPromptText(message);
+      const result = fillPromptFields(template, message.fields, values);
+      if (result.prompt === template) return;
+      Object.assign(message, { content: result.prompt, improvedPrompt: result.prompt, executablePrompt: result.prompt, fields: result.fields });
+      renderPreservingMakeScroll();
+    }
+
     async function copyMakeMessage(messageId) {
       const message = state.messages.find((item) => item.id === messageId);
       if (!message) return;
@@ -190,5 +201,5 @@ export function createMakeExecutionWorkflows(ctx) {
       persistState?.();
     }
 
-    return Object.freeze({ copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, requestPlaceholderConfirmation, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
+    return Object.freeze({ fillPrompt, copyMakeMessage, saveMakeMessage, resendEditedMessage, openShareFromMakeMessage, openExecuteModal, openPromptExecuteModal, requestPlaceholderConfirmation, hasPromptPlaceholders, executeMakeMessage, getExecuteTarget, applyTemplate, performTemplateApply, toggleTemplateBar });
   }

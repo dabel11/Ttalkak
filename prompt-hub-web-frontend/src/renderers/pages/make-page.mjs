@@ -1,3 +1,4 @@
+import { promptFieldNames } from "../../utils/make-message-model.mjs";
 import { parts } from "./make-message-parts.mjs";
 
   "use strict";
@@ -382,6 +383,10 @@ import { parts } from "./make-message-parts.mjs";
     const safeContent = escapeHtml(content);
     const recoveredContent = String(content || answer || summary || improvedPrompt || "").trim();
     const resultPrompt = hasExecutablePrompt ? String(improvedPrompt || content || answer || summary || "").trim() : "";
+    const fieldNames = resultPrompt ? promptFieldNames(resultPrompt, fields) : [];
+    const fieldForm = fieldNames.length ? `<form class="prompt-field-form" data-fill-prompt="${safeMessageId}">
+      ${fieldNames.map(name => `<label>${escapeHtml(name)}<input name="${escapeAttr(name)}"></label>`).join("")}
+      <button type="submit">입력값 반영</button></form>` : "";
     const explanationText = String(summary || answer || "").trim();
     const leadText = normalizedQuestions.length
       ? String(summary || legacyAsk.leadText || answer || (effectiveIsAsk ? "정확한 프롬프트를 만들기 위해 아래 정보를 보완해주세요." : content) || "")
@@ -412,6 +417,7 @@ import { parts } from "./make-message-parts.mjs";
             ${leadText ? `<p>${renderPromptTextWithPlaceholders(leadText, escapeHtml)}</p>` : ""}
             ${isUnchanged ? `<div class="unchanged-followup"><button type="button" data-refine-unchanged="${safeMessageId}">내용을 구체화하기</button><small>대상, 목적, 형식처럼 필요한 조건을 덧붙여 보세요.</small></div>` : ""}
             ${resultPrompt ? `<section class="message-result-prompt" aria-label="개선된 프롬프트"><strong>개선된 프롬프트</strong><div>${renderPromptTextWithPlaceholders(resultPrompt, escapeHtml)}</div></section>` : ""}
+            ${fieldForm}
             ${hasExecutablePrompt ? MessageActionsView(ctx, { isCopied, isSaved, messageId: safeMessageId }) : ""}
             ${fieldSection}
             ${changeSection}

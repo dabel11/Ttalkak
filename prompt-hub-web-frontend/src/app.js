@@ -1767,6 +1767,7 @@ function bindDelegatedMakeEvents() {
           input?.setSelectionRange?.(prompt.length, prompt.length);
         }, 0);
       },
+      fillPrompt: makeWorkflows.fillPrompt,
       submitAnswers: submitAskAnswerForm, resend: resendEditedMessage,
       retryConcurrent: (message) => {
         const prompt = String(message?.content || "").trim(), currentView = captureMakeView(state);

@@ -40,6 +40,7 @@ from pathlib import Path
 # 그 탓에 gen_eval 이 judge 응답을 기다리며 **5시간 42분을 멈춰** 있었다(캐시 13/18 에서
 # 2시간 9분간 무진전, ESTABLISHED 소켓 4개 점유). 예외가 안 나므로 _retry 도 못 잡는다.
 from app.core.timeouts import GEN_SECONDS
+from app.core.gate import is_noise_only
 from app.main import retriever, run_generation, retrieve_contexts, QueryRequest
 from app.rag import analyzer
 from app.rag.postprocess import extract_improved_prompt
@@ -288,7 +289,7 @@ def main():
     fabricated_known = 0  # fabricated 판정이 있는 개선 모드 건수
     structured_n = 0     # 구조화 JSON 파싱 성공(정규식 폴백 미발동) 건수
     structured_known = 0  # structured 필드가 있는 건수(구형 캐시는 알 수 없음)
-    no_evidence = 0       # 운영이라면 404 가 났을 건수(검색 0건 + 첫 턴)
+    no_evidence = 0       # 검색 근거가 없는 건수
     applied_total = 0     # 개선안에 적용된 기법 수
     applied_unusable = 0  # 그중 검색 대상 자격이 없는 층(meta·system·degenerate)
     tech_by_mode: dict[str, list] = {}
@@ -309,10 +310,9 @@ def main():
         example_ids = [str((e.get("metadata") or {}).get("chunk_id") or e.get("text", "")[:40])
                        for e in examples]
 
-        if not retrieved:
-            # 운영에서는 첫 턴 + 검색 0건이면 404 — 생성 자체가 일어나지 않는다
+        if not retrieved and not examples:
             no_evidence += 1
-            print(f"  [{i:>2}] 404(근거 없음) — 운영에서는 생성하지 않음  | {query[:30]}")
+        if is_noise_only(query):
             continue
 
         # 분석(1단계)을 **생성 전에** 돌려야 캐시 키에 넣을 수 있다. 운영(/query)은 run_generation
@@ -426,7 +426,7 @@ def main():
         cnt = len([v for v in vals if isinstance(v, (int, float))])
         label = f"technique_grounding({m_})"
         print(f"  {label:<26}: {a:.2f}  (n={cnt})" if a is not None else f"  {label:<26}: N/A")
-    print(f"  {'404(근거 없음)':<20}: {no_evidence}/{n}  (운영이라면 생성 자체가 안 됨)")
+    print(f"  {'검색 근거 없음':<20}: {no_evidence}/{n}")
     print("═" * 52)
 
 

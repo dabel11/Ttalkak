@@ -2921,3 +2921,18 @@
   .make-side-panel > *,
   .make-drawer-backdrop { transition: none; }
 }
+
+.prompt-field-form, .prompt-field-form label {
+  display: grid;
+  gap: 0.4rem;
+}
+.prompt-field-form {
+  margin: 0.75rem 0;
+}
+.prompt-field-form input {
+  min-width: 0;
+  padding: 0.4rem;
+}
+.prompt-field-form button {
+  justify-self: start;
+}
