@@ -9,7 +9,7 @@ from typing import Optional
 # .env 는 app/__init__.py 에서 로드됨
 from app.core import usage
 from app.core.concurrency import GateBusy, GateTimeout, generation_gate
-from app.core.gate import no_evidence_gate, rag_status
+from app.core.gate import is_noise_only, select_examples, rag_status
 from app.rag.indexer import Indexer
 from app.rag.retriever import Retriever
 from app.rag.generator import Generator
@@ -102,7 +102,7 @@ class QueryRequest(BaseModel):
     use_hyde:            bool = False   # HyDE — 기본 off (2026-07-30 재평가).
     # HyDE는 dense 코사인/404는 개선하지만 R@5 정확도를 크게 해친다(170코퍼스 실측: raw R@5 0.763
     # vs +HyDE 0.441, Hit@1 0.627 vs 0.271). 카드 장르로 재작성하는 성질이 제네릭 카드 오회수를
-    # 유발. 404(장르 미스매치) 문제는 min_score 하향 또는 하드404 폐지로 별도 해결 예정(미결).
+    # 유발.
     min_score:           float = 0.40   # 유효 유사도 컷(dense 코사인). 측정상 recall 무손실 지점
     # ── C(타입별 멀티 컬렉션): 기법 카드에 더해 '유사 요청 개선 사례'를 함께 주입 ──
     # A안 헤드투헤드 검증(2026-07-23): 예시 승률 66.7%·Δ+0.83(방향 신호). min_score 미달 시
@@ -111,9 +111,7 @@ class QueryRequest(BaseModel):
     example_collection:  str  = "prompt_examples"
     n_examples:          int  = 2       # 주입할 예시 수(상한 — min_score 컷으로 줄 수 있음)
     example_min_score:   float = 0.40   # 예시 유효 유사도 컷(dense 코사인)
-    # 무의미 입력 게이트 임계치(예시 코퍼스 dense). 0 이면 비활성(종전 '기법 0건' 404).
-    # 예시 코퍼스는 쿼리와 같은 한국어 말투라 관련/무관을 깨끗이 분리한다(실측 AUC 1.000 vs
-    # 기법 0.694, 2026-10-01 eval/gate_set.json). 미설정 시 RAG_GATE_MIN_SCORE(기본 0.53).
+    # 첫 턴에서 생성기에 전달할 예시의 최소 유사도. 0이면 추가 필터를 끈다.
     gate_min_score:      float = Field(default_factory=lambda: _env_float("RAG_GATE_MIN_SCORE", 0.53))
     # 사용량 로깅용 요청 식별자(선택). 다중턴을 한 대화로 묶으려면 클라이언트가 같은 값을 넘긴다.
     # 미지정 시 서버가 발급. 응답 usage.request_id 로 되돌려준다.
@@ -207,7 +205,7 @@ def retrieve_contexts(req: "QueryRequest",
     운영과 다른 파이프라인을 재고 있었다. 모델 기본값·타임아웃·예산 드리프트와 같은
     원인(중복)이라, 복제 대신 이 한 곳을 양쪽이 부르게 한다.
 
-    404 판정(검색 0건 + 첫 턴)은 HTTP 관심사라 여기서 하지 않는다 — 호출자가 판단한다.
+    검색 결과가 없어도 호출자는 기본 개선을 진행한다.
     """
     history = history or []
 
@@ -244,18 +242,12 @@ def retrieve_contexts(req: "QueryRequest",
                 use_hybrid=False,
                 min_score=req.example_min_score,
             )
-            # 빈-코퍼스 안전장치: 예시 0건이 '매칭 없음'인지 '코퍼스 자체가 비었는지' 구분한다.
-            # 코퍼스가 비어 있으면(미적재 MySQL 등) 게이트에서 예시 신호를 빼 기법 폴백 —
-            # 안 그러면 best=0 < 임계치로 **정상 요청도 전건 404**가 된다. 코퍼스에 데이터가
-            # 있는데 0건이면(무의미 입력) examples_ok 유지 → 게이트 정상 작동(404).
-            if not examples and retriever.collection_size(req.example_collection) == 0:
-                print(f"[Main] 예시 코퍼스 비어 있음({req.example_collection}) → 게이트에서 제외(기법 폴백)")
-                examples_ok = False
         except Exception as e:                       # 예시 실패가 본 개선을 막지 않게
             print(f"[Main] 예시 검색 실패(무시하고 기법만으로 진행): {e}")
             examples = []
             examples_ok = False                      # 실패≠'예시 0건' — 게이트에서 제외
 
+    examples = select_examples(examples, history, req.gate_min_score)
     return retrieved, examples, examples_ok
 
 
@@ -265,23 +257,10 @@ def query(req: QueryRequest):
     # 사용량 창구 열기 — 이 요청의 모든 LLM 호출(분석기·생성기)이 여기로 기록된다.
     # turn_index = 이전 대화 턴 수(user+assistant), 다중턴을 request_id 로 묶어 집계.
     usage.start(request_id=req.request_id, turn_index=len(history))
-    retrieved, examples, examples_ok = retrieve_contexts(req, history)
+    if not history and is_noise_only(req.query):
+        raise HTTPException(status_code=404, detail={"code": "NO_EVIDENCE"})
 
-    # 첫 턴(대화 기록 없음)에 매칭 결과가 0건일 때만 404.
-    # 기본은 원본 쿼리 그대로 검색(use_hyde=False)이라 dense 점수가 좁은 띠에 눌려, 정상 요청도
-    # min_score(0.40) 아래로 떨어지면 여기서 막힌다(실사용 약 6% — RAG_PIPELINE.md §4).
-    # 무의미 입력 게이트 — 예시 코퍼스 기준(AUC 1.000). 종전 '기법 0건'(AUC 0.694)은
-    # 무관 입력을 통과시키고 정상 요청을 404 내던 것(RAG_PIPELINE §4·eval/gate_set.json).
-    # 후속 피드백 턴은 대화 맥락으로 이어가므로 게이트하지 않는다.
-    # 예시 검색이 '실패'(인프라 장애)면 예시 신호를 게이트에서 빼고 기법 기준으로 폴백한다
-    # — 실패를 '예시 0건'으로 오인해 정상 요청을 404 내는 버그 방지(examples_ok).
-    if no_evidence_gate(retrieved, examples, history, req.gate_min_score,
-                        examples_enabled=req.use_examples and req.n_examples > 0 and examples_ok):
-        raise HTTPException(
-            status_code=404,
-            detail="입력한 프롬프트와 관련된 개선 기법을 찾지 못했습니다."
-        )
-
+    retrieved, examples, _ = retrieve_contexts(req, history)
     try:
         # 기법 + 예시를 함께 생성기에 전달(generator 가 [참고 기법]/[참고 예시] 블록으로 분리 렌더)
         gen = run_generation(req.query, retrieved + examples, req.model, history)

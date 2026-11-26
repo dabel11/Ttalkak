@@ -116,6 +116,7 @@ function App() {
     openRecentThread,
     startNewChat,
     copyMessage,
+    fillMessage,
     toggleSave,
     executeMessage,
     submitPrompt,
@@ -301,6 +302,7 @@ function App() {
             canEditUserMessages={canEditUserMessages}
             editingMessageId={editingMessageId}
             editingDraft={editingDraft}
+            onFill={fillMessage}
             onCopy={copyMessage}
             onSave={toggleSave}
             onExecute={(message) => executeMessage(message, setConfirmAction)}

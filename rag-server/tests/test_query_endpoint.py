@@ -6,7 +6,7 @@ tests/test_query_endpoint.py
 fastapi·라우팅·app.core.gate(게이트)·concurrency(GateBusy)·usage 는 real → 실제 ASGI 경로.
 실행: pytest tests/test_query_endpoint.py
 
-정책(2026-10): 무의미 입력은 404(예시 코퍼스 게이트, AUC 1.000). 단
+정책(2026-10): 명백한 무의미 입력은 404, 처음 보는 요청은 검색 근거 없이도 생성한다.
 - 예시 '검색 실패'(인프라 장애)는 404 아님 → 기법 기반 생성으로 폴백(examples_ok)
 - 후속 턴(history 있음)은 게이트하지 않음
 - 생성 실패 503, 동시성 제한 503 + Retry-After
@@ -64,10 +64,12 @@ def _post(**body):
 
 
 def test_garbage_input_is_404():
-    """기법 0건 + 예시 약함 → 무근거 게이트 404 (HTTP)."""
-    with patch.object(main.retriever, "search", side_effect=[[], [WEAK_EX]]):
-        r = _post()
+    with patch.object(main.retriever, "search") as search, patch.object(main, "run_generation") as gen:
+        r = _post(query="ㅋㅋㅋㅋ")
     assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "NO_EVIDENCE"
+    search.assert_not_called()
+    gen.assert_not_called()
 
 
 def test_valid_request_generates():
@@ -119,19 +121,21 @@ def test_concurrency_limit_is_503_with_retry_after():
 def test_empty_examples_corpus_falls_back_to_technique():
     """예시 코퍼스가 비어 있으면(미적재) 게이트에서 예시 제외 → 기법 폴백(전건 404 방지)."""
     with patch.object(main.retriever, "search", side_effect=[[TECH], []]), \
-         patch.object(main.retriever, "collection_size", return_value=0), \
          patch.object(main, "run_generation", return_value=GEN):
         r = _post()
     assert r.status_code == 200
     assert r.json()["improved_prompt"] == IMPROVED
 
 
-def test_garbage_with_populated_corpus_still_404():
-    """코퍼스에 데이터가 있는데 매칭 0건(무의미 입력)이면 여전히 404 — 안전장치가 게이트를 약화시키지 않음."""
-    with patch.object(main.retriever, "search", side_effect=[[], []]), \
-         patch.object(main.retriever, "collection_size", return_value=20):
-        r = _post()
-    assert r.status_code == 404
+def test_unfamiliar_first_turn_generates_without_weak_examples():
+    for examples in [[], [WEAK_EX]]:
+        with patch.object(main.retriever, "search", side_effect=[[], examples]), \
+             patch.object(main, "run_generation", return_value=GEN) as gen:
+            r = _post(query="빙하 코어 층별 기포 관찰 기록지")
+        assert r.status_code == 200
+        assert r.json()["improved_prompt"] == IMPROVED
+        assert r.json()["rag_status"] == "no_evidence"
+        assert gen.call_args.args[1] == []
 
 
 def test_technique_evidence_preserved_in_sources():

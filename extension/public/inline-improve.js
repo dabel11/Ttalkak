@@ -49,6 +49,8 @@
   message.id = "tt-message";
   const text = document.createElement("div");
   text.id = "tt-text";
+  const fields = document.createElement("fieldset");
+  fields.hidden = true;
   const actions = document.createElement("div");
   actions.className = "tt-actions";
   const close = button("tt-close", "닫기");
@@ -66,7 +68,7 @@
   answer.setAttribute("aria-label", "추가 질문 답변");
   const submit = button("tt-submit", "답변으로 개선");
   followup.append(answer, submit);
-  panel.append(title, message, text, followup, actions);
+  panel.append(title, message, text, fields, followup, actions);
   shadow.append(style, trigger, panel);
   const getText = (el) => el?.matches?.("textarea,input") ? el.value : (el?.innerText ?? el?.textContent ?? "");
   // Rich-text editors render paragraph breaks differently from plain text. Only
@@ -101,7 +103,7 @@
     panel.style.left = Math.round(Math.max(12, Math.min(innerWidth - w - 12, r.right - w))) + "px";
     panel.style.top = Math.round(bTop + 225 < innerHeight ? bTop + 43 : Math.max(8, r.top - Math.min(245, innerHeight / 2))) + "px";
   }
-  function dismiss() { snapshot = null; followup.hidden = true; answer.value = ""; panel.style.display = "none"; message.textContent = ""; }
+  function dismiss() { snapshot = null; fields.hidden = true; followup.hidden = true; answer.value = ""; panel.style.display = "none"; message.textContent = ""; }
   function refresh() {
     scheduled = false;
     if (!enabled || !document.body) return;
@@ -183,6 +185,34 @@
     }
     text.append(document.createTextNode(improved.slice(cursor)));
   }
+  function showFields(turn, template, extraNames) {
+    fields.replaceChildren();
+    fields.disabled = false;
+    const pattern = /\[([^\]\n]{1,80})\]/g;
+    const slots = Array.from(template.matchAll(pattern), match => match[1]);
+    const names = new Set([...slots, ...extraNames]);
+    fields.hidden = !template || !names.size;
+    if (fields.hidden) return;
+    const controls = new Map();
+    const legend = document.createElement("legend");
+    legend.textContent = "채워 넣을 정보";
+    fields.append(legend);
+    for (const name of names) {
+      const label = document.createElement("label");
+      label.style.display = "block";
+      const control = document.createElement("input");
+      controls.set(name, control);
+      label.append(name, control);
+      fields.append(label);
+    }
+    fields.oninput = () => {
+      const value = name => controls.get(name).value.trim();
+      const filled = template.replace(pattern, (token, name) => value(name) || token);
+      const additions = [...names].filter(name => !slots.includes(name) && value(name));
+      turn.improved = [filled, ...additions.map(name => `${name}: ${value(name)}`)].join("\n");
+      preview(turn.original, turn.improved);
+    };
+  }
   function writeValue(el, value) {
     if (!el?.isConnected) return false;
     el.focus();
@@ -245,6 +275,7 @@
       answer.value = "";
       submit.disabled = true;
       preview(original, improved);
+      showFields(turn, improved, reply?.missingFieldNames || []);
       const changed = getText(source) !== original;
       const questions = reply?.questions || [];
       const needsAnswer = reply?.mode === "ask";
@@ -275,7 +306,10 @@
   }
   answer.addEventListener("input", () => { submit.disabled = busy || !answer.value.trim(); });
   // Keep keystrokes inside the extension from triggering host-page shortcuts.
-  for (const event of ["keydown", "keyup", "keypress"]) answer.addEventListener(event, (e) => e.stopPropagation());
+  for (const event of ["keydown", "keyup", "keypress"]) {
+    answer.addEventListener(event, (e) => e.stopPropagation());
+    fields.addEventListener(event, (e) => e.stopPropagation());
+  }
   submit.addEventListener("click", () => {
     if (busy || !snapshot || !answer.value.trim()) return;
     if (getText(snapshot.source) !== snapshot.original) {
@@ -295,7 +329,7 @@
       message.textContent = "입력창 교체에 실패했습니다.";
       return;
     }
-    snapshot.applied = true; followup.hidden = true; apply.hidden = true; restore.hidden = false;
+    fields.disabled = true; snapshot.applied = true; followup.hidden = true; apply.hidden = true; restore.hidden = false;
     message.textContent = "개선 적용 완료 · AI 전송은 직접 해 주세요.";
   });
   restore.addEventListener("click", () => {
@@ -306,7 +340,7 @@
     if (!writeValue(snapshot.source, snapshot.original)) {
       message.textContent = "원본 복원에 실패했습니다."; return;
     }
-    snapshot.applied = false; followup.hidden = !snapshot.canAnswer; apply.hidden = false; apply.disabled = false; restore.hidden = true;
+    fields.disabled = false; snapshot.applied = false; followup.hidden = !snapshot.canAnswer; apply.hidden = false; apply.disabled = false; restore.hidden = true;
     message.textContent = "원본 프롬프트를 복원했습니다.";
   });
   close.addEventListener("click", dismiss);

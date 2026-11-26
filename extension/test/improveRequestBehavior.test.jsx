@@ -789,3 +789,17 @@ describe("Extension clarification UI", () => {
     expect(input.style.overflowY).toBe("auto");
   });
 });
+
+test("side panel fills the assistant result without another improve request", () => {
+  const onFill = vi.fn();
+  const message = createAssistantMessage("안내문", {
+    improvedPrompt: "[대상]에게 보낼 [형식]", fields: [{ name: "분량", status: "empty" }],
+  });
+  render(createElement(AssistantResponse, { isAsk: false, message, onFill }));
+  fireEvent.change(screen.getByLabelText("대상"), { target: { value: "신입생" } });
+  fireEvent.change(screen.getByLabelText("분량"), { target: { value: "3줄" } });
+  fireEvent.click(screen.getByRole("button", { name: "입력값 반영" }));
+  expect(onFill).toHaveBeenCalledWith(message.id, expect.objectContaining({
+    prompt: "신입생에게 보낼 [형식]\n분량: 3줄",
+  }));
+});

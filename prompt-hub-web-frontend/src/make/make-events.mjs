@@ -195,6 +195,7 @@
         if (!form) return;
         const data = () => new FormData(form);
         if (form.matches("[data-composer]")) { event.preventDefault(); actions.submitPrompt(form); }
+        else if (form.matches("[data-fill-prompt]")) { event.preventDefault(); actions.fillPrompt(form.dataset.fillPrompt, data()); }
         else if (form.matches("[data-ask-answer-form]")) { event.preventDefault(); actions.submitAnswers(form); }
         else if (form.matches("[data-edit-message-form]")) { event.preventDefault(); actions.resend(form.dataset.editMessageForm, data().get("message")); }
         else if (form.matches("[data-folder-create-form]")) { event.preventDefault(); actions.createFolder(data().get("folderName")); }

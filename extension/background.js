@@ -64,6 +64,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       ok: true,
       continuation: { owner, threadId: result.threadId || continuation?.threadId, history },
       improvedPrompt: result.improvedPrompt,
+      missingFieldNames: result.fields.filter(field => field.status !== "filled").map(field => field.name),
       mode: result.mode,
       ragStatus: result.ragStatus,
       explanation: result.ragMessage || (result.answer === "프롬프트를 개선했습니다." ? "" : result.answer),

@@ -29,6 +29,7 @@ export function ChatFeed({
   canEditUserMessages,
   editingMessageId,
   editingDraft,
+  onFill,
   onCopy,
   onSave,
   onExecute,
@@ -68,6 +69,7 @@ export function ChatFeed({
               canEditUserMessages={canEditUserMessages}
               isEditing={editingMessageId === message.id}
               editingDraft={editingDraft}
+              onFill={onFill}
               onCopy={onCopy}
               onSave={onSave}
               onExecute={onExecute}
@@ -125,6 +127,7 @@ function MessageCard({
   canEditUserMessages,
   isEditing,
   editingDraft,
+  onFill,
   onCopy,
   onSave,
   onExecute,
@@ -186,7 +189,7 @@ function MessageCard({
             </div>
           </form>
         ) : isAssistant ? (
-          <AssistantResponse message={message} isAsk={isAsk} />
+          <AssistantResponse onFill={onFill} message={message} isAsk={isAsk} />
         ) : (
           <p style={{ whiteSpace: "pre-wrap" }}><PromptText text={message.content} /></p>
         )}

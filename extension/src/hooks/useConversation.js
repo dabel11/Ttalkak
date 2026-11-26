@@ -146,6 +146,12 @@ export function useConversation({
     window.setTimeout(() => setCopiedId(""), 1100);
   }
 
+  function fillMessage(id, result) {
+    setMessages(items => items.map(item => item.id === id
+      ? { ...item, content: result.prompt, executablePrompt: result.prompt, improvedPrompt: result.prompt, fields: result.fields }
+      : item));
+  }
+
   function toggleSave(messageId) {
     const message = messages.find((m) => m.id === messageId);
     if (!message) return;
@@ -480,6 +486,7 @@ export function useConversation({
     openRecentThread,
     startNewChat,
     copyMessage,
+    fillMessage,
     toggleSave,
     executeMessage,
     submitPrompt,

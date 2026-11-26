@@ -34,7 +34,7 @@ export function createAssistantMessage(prompt, data) {
     executablePrompt, improvedPrompt: String(data.improvedPrompt || "").trim(), sourcePrompt: prompt, sources: data.sources || [], saved: false,
     requestId: data.requestId || "", replayed: data.replayed === true,
     ...(unchangedNoEvidence ? { isUnchanged: true } : {}),
-    ...(noEvidence ? { excludeFromHistory: true } : {}),
+    ...(noEvidence && !isAsk && !executablePrompt ? { excludeFromHistory: true } : {}),
   };
 }
 

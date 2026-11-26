@@ -1,3 +1,4 @@
+import { promptFieldNames, fillPromptFields } from "../../../shared/make-message-model.js";
 import { parseLegacyImproveAnswer } from "../utils/legacyImproveAnswer";
 import {
   normalizeImproveChanges as normalizeMessageChanges,
@@ -7,7 +8,7 @@ import {
   normalizeImproveTechniques as normalizeMessageTechniques,
 } from "../utils/normalizeImproveResult";
 
-export function AssistantResponse({ message, isAsk }) {
+export function AssistantResponse({ message, isAsk, onFill }) {
   const parsed = parseAssistantSections(message);
   const content =
     parsed.improvedPrompt ||
@@ -30,6 +31,9 @@ export function AssistantResponse({ message, isAsk }) {
   const techniques = mergeLists(message.techniques || message.techniquesApplied, parsed.techniques);
   const detailCount = [message.fields, changes, techniques].reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
 
+  const template = !isAsk && !message.isUnchanged && (message.executablePrompt || message.improvedPrompt);
+  const fieldNames = template ? promptFieldNames(template, message.fields) : [];
+
   return (
     <>
       {!isAsk && <EvidenceNotice ragStatus={message.ragStatus} />}
@@ -37,6 +41,16 @@ export function AssistantResponse({ message, isAsk }) {
         <p className="assistant-result-prompt" style={{ whiteSpace: "pre-wrap" }}>
           <PromptText text={content} />
         </p>
+      )}
+      {fieldNames.length > 0 && onFill && (
+        <form className="prompt-field-form" onSubmit={event => {
+          event.preventDefault();
+          const result = fillPromptFields(template, message.fields, new FormData(event.currentTarget));
+          if (result.prompt !== template) onFill(message.id, result);
+        }}>
+          {fieldNames.map(name => <label key={name}>{name}<input name={name} /></label>)}
+          <button type="submit">입력값 반영</button>
+        </form>
       )}
       {isAsk ? (
         <div className="assistant-details ask-details">

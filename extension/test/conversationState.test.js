@@ -24,7 +24,7 @@ test("conversation state preserves no-evidence status for assistant rendering", 
   assert.equal(message.ragStatus, "no_evidence");
   assert.equal(message.content, "fallback result");
   assert.equal(message.executablePrompt, "fallback result");
-  assert.equal(message.excludeFromHistory, true);
+  assert.equal(Boolean(message.excludeFromHistory), false);
 });
 
 test("unchanged no-evidence results explain the outcome and expose no actions", () => {
