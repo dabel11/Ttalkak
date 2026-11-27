@@ -67,7 +67,20 @@
   answer.placeholder = "추가 질문에 답해 주세요";
   answer.setAttribute("aria-label", "추가 질문 답변");
   const submit = button("tt-submit", "답변으로 개선");
-  followup.append(answer, submit);
+  // Page-level capture shortcuts run before listeners inside a shadow root.
+  // A separate editing document keeps native keyboard and IME events local.
+  const answerFrame = document.createElement("iframe");
+  answerFrame.title = "추가 질문 답변";
+  answerFrame.style.cssText = "display:block;width:100%;height:64px;border:0;margin:8px 0;color-scheme:light dark";
+  function mountAnswer() {
+    const body = answerFrame.contentDocument?.body;
+    if (!body || answer.parentNode === body) return;
+    body.style.cssText = "margin:0";
+    answer.style.cssText = "display:block;box-sizing:border-box;width:100%;height:64px;padding:6px;font:13px/1.6 system-ui,sans-serif;resize:none;border:1px solid #94a3b8;border-radius:5px";
+    body.append(answer);
+  }
+  answerFrame.addEventListener("load", mountAnswer);
+  followup.append(answerFrame, submit);
   panel.append(title, message, text, fields, followup, actions);
   shadow.append(style, trigger, panel);
   const getText = (el) => el?.matches?.("textarea,input") ? el.value : (el?.innerText ?? el?.textContent ?? "");
@@ -300,6 +313,7 @@
       message.textContent = turn.notice;
       followup.hidden = !!error || !(questions.length || needsAnswer) || !turn.continuation;
       turn.canAnswer = !followup.hidden;
+      if (turn.canAnswer) mountAnswer();
       apply.hidden = !improved; apply.disabled = changed; restore.hidden = true;
       panel.style.display = "block"; position();
     });
